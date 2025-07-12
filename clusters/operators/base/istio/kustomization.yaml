@@ -1,0 +1,20 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# =============================================================================
+# Istio Service Mesh Operator Configuration
+# =============================================================================
+# Istio provides the service mesh foundation for customer isolation and
+# traffic management in the KibaCloud PaaS platform
+
+namespace: istio-system
+
+resources:
+  - namespace.yaml
+  - istio-operator.yaml
+  - istio-control-plane.yaml
+
+# Istio-specific labels
+commonLabels:
+  app.kubernetes.io/name: istio
+  app.kubernetes.io/component: service-mesh

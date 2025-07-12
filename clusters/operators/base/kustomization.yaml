@@ -1,0 +1,26 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# =============================================================================
+# Platform Operators Base Configuration
+# =============================================================================
+# This kustomization includes all platform operators that form the foundation
+# of the KibaCloud PaaS. Each operator is defined in its own subdirectory.
+
+resources:
+  # Service Mesh - Istio Operator (Primary operator for customer isolation)
+  - istio/
+  
+  # CI/CD Pipeline Operator (Placeholder for future implementation)
+  - tekton/
+  
+  # Database Operator (Placeholder for future implementation)
+  - database-operator/
+  
+  # Monitoring Operator (Placeholder for future implementation)
+  - monitoring-operator/
+
+# Common labels applied to all platform operators
+commonLabels:
+  app.kubernetes.io/part-of: kibacloud-platform
+  managed-by: argocd

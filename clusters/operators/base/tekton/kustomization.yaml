@@ -1,0 +1,18 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# =============================================================================
+# Tekton CI/CD Pipeline Operator (Placeholder)
+# =============================================================================
+# This is a placeholder for the Tekton operator that will provide CI/CD
+# pipeline capabilities for the KibaCloud PaaS platform
+
+namespace: tekton-pipelines
+
+resources:
+  - namespace.yaml
+  - placeholder.yaml
+
+commonLabels:
+  app.kubernetes.io/name: tekton
+  app.kubernetes.io/component: ci-cd

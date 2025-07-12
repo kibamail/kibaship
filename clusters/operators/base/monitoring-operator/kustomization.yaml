@@ -1,0 +1,18 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# =============================================================================
+# Monitoring Operator (Placeholder)
+# =============================================================================
+# This is a placeholder for the monitoring operator that will provide
+# observability and monitoring capabilities for the KibaCloud PaaS platform
+
+namespace: monitoring
+
+resources:
+  - namespace.yaml
+  - placeholder.yaml
+
+commonLabels:
+  app.kubernetes.io/name: monitoring-operator
+  app.kubernetes.io/component: monitoring

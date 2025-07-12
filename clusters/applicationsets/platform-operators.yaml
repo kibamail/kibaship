@@ -1,0 +1,55 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: platform-operators
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: platform-operators
+    app.kubernetes.io/part-of: kibacloud-platform
+spec:
+  # =============================================================================
+  # Platform Operators ApplicationSet
+  # =============================================================================
+  # This ApplicationSet automatically deploys platform operators to all
+  # environments (staging and production) based on the directory structure
+  
+  generators:
+  - git:
+      repoURL: https://github.com/kibamail/kibacloud
+      revision: HEAD
+      directories:
+      - path: clusters/operators/overlays/*
+
+  template:
+    metadata:
+      name: '{{path.basename}}-operators'
+      labels:
+        environment: '{{path.basename}}'
+        app.kubernetes.io/name: platform-operators
+        app.kubernetes.io/part-of: kibacloud-platform
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/kibamail/kibacloud
+        targetRevision: HEAD
+        path: '{{path}}'
+      destination:
+        # This will need to be updated to point to the correct cluster
+        # For now, using the default cluster (where Argo CD is installed)
+        server: https://kubernetes.default.svc
+        namespace: default
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+        - CreateNamespace=true
+        - PrunePropagationPolicy=foreground
+        - PruneLast=true
+      # Retry configuration for robust deployments
+      retry:
+        limit: 5
+        backoff:
+          duration: 5s
+          factor: 2
+          maxDuration: 3m

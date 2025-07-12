@@ -1,0 +1,20 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# =============================================================================
+# Argo CD Base Installation
+# =============================================================================
+# This kustomization provides the base Argo CD installation that will be
+# customized by environment-specific overlays for staging and production
+
+namespace: argocd
+
+resources:
+  - namespace.yaml
+  # Official Argo CD stable installation
+  - https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+
+# Common labels applied to all resources
+commonLabels:
+  app.kubernetes.io/name: argocd
+  app.kubernetes.io/part-of: kibacloud-platform

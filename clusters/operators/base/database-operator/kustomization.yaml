@@ -1,0 +1,18 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# =============================================================================
+# Database Operator (Placeholder)
+# =============================================================================
+# This is a placeholder for the database operator that will provide managed
+# database services for customers on the KibaCloud PaaS platform
+
+namespace: database-operator
+
+resources:
+  - namespace.yaml
+  - placeholder.yaml
+
+commonLabels:
+  app.kubernetes.io/name: database-operator
+  app.kubernetes.io/component: database

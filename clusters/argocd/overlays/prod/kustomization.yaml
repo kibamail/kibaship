@@ -1,0 +1,21 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# =============================================================================
+# Argo CD Production Environment Overlay
+# =============================================================================
+# This overlay customizes the base Argo CD installation for production
+# environments with production-grade security and resource configurations
+
+namespace: argocd
+
+resources:
+  - ../../base
+
+patchesStrategicMerge:
+  - argocd-server-patch.yaml
+
+# Production-specific labels
+commonLabels:
+  environment: production
+  cluster: production

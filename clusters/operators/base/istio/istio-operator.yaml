@@ -1,0 +1,34 @@
+# =============================================================================
+# Istio Operator Installation
+# =============================================================================
+# This installs the Istio operator which will manage the Istio control plane
+# The operator provides a declarative way to manage Istio installations
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: istio-operator
+  namespace: istio-operator
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: istio-operator
+  labels:
+    name: istio-operator
+    app.kubernetes.io/name: istio-operator
+    app.kubernetes.io/part-of: kibacloud-platform
+---
+# Install Istio Operator using the official installation
+# This will be replaced with the actual operator manifests
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: istio-operator-install
+  namespace: istio-operator
+data:
+  install.sh: |
+    #!/bin/bash
+    # Install Istio operator
+    curl -L https://istio.io/downloadIstio | sh -
+    istioctl operator init
