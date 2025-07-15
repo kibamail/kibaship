@@ -2,7 +2,7 @@
 # Monitoring Operator Placeholder
 # =============================================================================
 # This is a placeholder configuration for the monitoring operator that will
-# provide comprehensive observability for the KibaCloud PaaS platform
+# provide comprehensive observability for the kibaship PaaS platform
 
 apiVersion: v1
 kind: ConfigMap

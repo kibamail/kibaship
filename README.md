@@ -1,6 +1,6 @@
-# KibaCloud - Production-Grade PaaS on Kubernetes
+# kibaship - Production-Grade PaaS on Kubernetes
 
-KibaCloud is a production-grade Platform-as-a-Service (PaaS) built on Kubernetes using GitOps principles with ArgoCD. This repository contains both infrastructure provisioning and application deployment configurations.
+kibaship is a production-grade Platform-as-a-Service (PaaS) built on Kubernetes using GitOps principles with ArgoCD. This repository contains both infrastructure provisioning and application deployment configurations.
 
 ## Repository Structure
 
@@ -50,8 +50,8 @@ The staging environment consists of:
 
 ```bash
 # Clone the repository
-git clone https://github.com/kibamail/kibacloud.git
-cd kibacloud
+git clone https://github.com/kibamail/kibaship.git
+cd kibaship
 
 # Copy environment configuration
 cp .env.example .env

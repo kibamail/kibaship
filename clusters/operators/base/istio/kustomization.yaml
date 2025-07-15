@@ -5,7 +5,7 @@ kind: Kustomization
 # Istio Service Mesh Operator Configuration
 # =============================================================================
 # Istio provides the service mesh foundation for customer isolation and
-# traffic management in the KibaCloud PaaS platform
+# traffic management in the kibaship PaaS platform
 
 namespace: istio-system
 

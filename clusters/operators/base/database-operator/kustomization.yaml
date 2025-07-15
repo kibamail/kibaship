@@ -5,7 +5,7 @@ kind: Kustomization
 # Database Operator (Placeholder)
 # =============================================================================
 # This is a placeholder for the database operator that will provide managed
-# database services for customers on the KibaCloud PaaS platform
+# database services for customers on the kibaship PaaS platform
 
 namespace: database-operator
 

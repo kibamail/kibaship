@@ -5,7 +5,7 @@ kind: Kustomization
 # Monitoring Operator (Placeholder)
 # =============================================================================
 # This is a placeholder for the monitoring operator that will provide
-# observability and monitoring capabilities for the KibaCloud PaaS platform
+# observability and monitoring capabilities for the kibaship PaaS platform
 
 namespace: monitoring
 

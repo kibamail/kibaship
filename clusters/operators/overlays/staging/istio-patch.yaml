@@ -1,7 +1,7 @@
 apiVersion: install.istio.io/v1alpha1
 kind: IstioOperator
 metadata:
-  name: kibacloud-control-plane
+  name: kibaship-control-plane
   namespace: istio-system
 spec:
   # =============================================================================

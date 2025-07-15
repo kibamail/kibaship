@@ -5,4 +5,4 @@ metadata:
   labels:
     name: database-operator
     app.kubernetes.io/name: database-operator
-    app.kubernetes.io/part-of: kibacloud-platform
+    app.kubernetes.io/part-of: kibaship-platform

@@ -5,4 +5,4 @@ metadata:
   labels:
     name: tekton-pipelines
     app.kubernetes.io/name: tekton
-    app.kubernetes.io/part-of: kibacloud-platform
+    app.kubernetes.io/part-of: kibaship-platform

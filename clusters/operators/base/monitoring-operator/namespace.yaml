@@ -5,4 +5,4 @@ metadata:
   labels:
     name: monitoring
     app.kubernetes.io/name: monitoring-operator
-    app.kubernetes.io/part-of: kibacloud-platform
+    app.kubernetes.io/part-of: kibaship-platform

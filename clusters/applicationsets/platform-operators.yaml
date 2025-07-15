@@ -5,7 +5,7 @@ metadata:
   namespace: argocd
   labels:
     app.kubernetes.io/name: platform-operators
-    app.kubernetes.io/part-of: kibacloud-platform
+    app.kubernetes.io/part-of: kibaship-platform
 spec:
   # =============================================================================
   # Platform Operators ApplicationSet
@@ -15,7 +15,7 @@ spec:
   
   generators:
   - git:
-      repoURL: https://github.com/kibamail/kibacloud
+      repoURL: https://github.com/kibamail/kibaship
       revision: HEAD
       directories:
       - path: clusters/operators/overlays/*
@@ -26,11 +26,11 @@ spec:
       labels:
         environment: '{{path.basename}}'
         app.kubernetes.io/name: platform-operators
-        app.kubernetes.io/part-of: kibacloud-platform
+        app.kubernetes.io/part-of: kibaship-platform
     spec:
       project: default
       source:
-        repoURL: https://github.com/kibamail/kibacloud
+        repoURL: https://github.com/kibamail/kibaship
         targetRevision: HEAD
         path: '{{path}}'
       destination:

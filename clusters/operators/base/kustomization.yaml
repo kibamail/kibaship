@@ -5,7 +5,7 @@ kind: Kustomization
 # Platform Operators Base Configuration
 # =============================================================================
 # This kustomization includes all platform operators that form the foundation
-# of the KibaCloud PaaS. Each operator is defined in its own subdirectory.
+# of the kibaship PaaS. Each operator is defined in its own subdirectory.
 
 resources:
   # Service Mesh - Istio Operator (Primary operator for customer isolation)
@@ -22,5 +22,5 @@ resources:
 
 # Common labels applied to all platform operators
 commonLabels:
-  app.kubernetes.io/part-of: kibacloud-platform
+  app.kubernetes.io/part-of: kibaship-platform
   managed-by: argocd

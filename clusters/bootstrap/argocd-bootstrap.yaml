@@ -5,7 +5,7 @@ metadata:
   namespace: argocd
   labels:
     app.kubernetes.io/name: argocd-bootstrap
-    app.kubernetes.io/part-of: kibacloud-platform
+    app.kubernetes.io/part-of: kibaship-platform
 spec:
   # =============================================================================
   # Argo CD Bootstrap Application
@@ -15,7 +15,7 @@ spec:
   
   project: default
   source:
-    repoURL: https://github.com/kibamail/kibacloud
+    repoURL: https://github.com/kibamail/kibaship
     targetRevision: HEAD
     path: clusters/bootstrap/manifests
   destination:

@@ -17,7 +17,7 @@ metadata:
   labels:
     name: istio-operator
     app.kubernetes.io/name: istio-operator
-    app.kubernetes.io/part-of: kibacloud-platform
+    app.kubernetes.io/part-of: kibaship-platform
 ---
 # Install Istio Operator using the official installation
 # This will be replaced with the actual operator manifests

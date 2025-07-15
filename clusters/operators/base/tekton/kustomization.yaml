@@ -5,7 +5,7 @@ kind: Kustomization
 # Tekton CI/CD Pipeline Operator (Placeholder)
 # =============================================================================
 # This is a placeholder for the Tekton operator that will provide CI/CD
-# pipeline capabilities for the KibaCloud PaaS platform
+# pipeline capabilities for the kibaship PaaS platform
 
 namespace: tekton-pipelines
 

@@ -5,7 +5,7 @@ metadata:
   namespace: argocd
   labels:
     app.kubernetes.io/name: argocd
-    app.kubernetes.io/part-of: kibacloud-platform
+    app.kubernetes.io/part-of: kibaship-platform
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
@@ -17,7 +17,7 @@ spec:
   
   project: default
   source:
-    repoURL: https://github.com/kibamail/kibacloud
+    repoURL: https://github.com/kibamail/kibaship
     targetRevision: HEAD
     path: clusters/argocd/overlays/staging
   destination:

@@ -17,4 +17,4 @@ resources:
 # Common labels applied to all resources
 commonLabels:
   app.kubernetes.io/name: argocd
-  app.kubernetes.io/part-of: kibacloud-platform
+  app.kubernetes.io/part-of: kibaship-platform

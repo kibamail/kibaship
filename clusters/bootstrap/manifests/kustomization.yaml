@@ -5,12 +5,12 @@ kind: Kustomization
 # Bootstrap Manifests
 # =============================================================================
 # This kustomization includes all the ApplicationSets and configurations
-# needed to bootstrap the entire KibaCloud platform
+# needed to bootstrap the entire kibaship platform
 
 resources:
   # ApplicationSet for platform operators
   - ../../applicationsets/platform-operators.yaml
 
 commonLabels:
-  app.kubernetes.io/part-of: kibacloud-platform
+  app.kubernetes.io/part-of: kibaship-platform
   managed-by: argocd-bootstrap
