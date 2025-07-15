@@ -50,9 +50,11 @@ Thumbs.db
 
 # Kubernetes
 kubeconfig*
+talosconfig*
 !kubeconfig.example
 
 # Backup files
 *.backup
 *.bak
 venv/
+
