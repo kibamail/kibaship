@@ -1,10 +1,10 @@
 # =============================================================================
-# KibaShip Staging Kubernetes Cluster Configuration
+# Servers Module
 # =============================================================================
-# This configuration provisions a 6-node Kubernetes cluster using Talos OS
-# on Hetzner Cloud, including:
-# - 3 control plane nodes (role=control-plane)
-# - 3 worker nodes (role=worker)
+# This module provisions a Kubernetes cluster using Talos OS on Hetzner Cloud,
+# including:
+# - Control plane nodes (role=control-plane)
+# - Worker nodes (role=worker)
 # - Automatic cluster bootstrapping
 # - Cilium CNI with native routing
 
@@ -18,13 +18,15 @@ terraform {
       source  = "siderolabs/talos"
       version = "~> 0.8.1"
     }
-    helm = {
-      source  = "hashicorp/helm"
-      version = "~> 3.0.2"
-    }
+
     kubectl = {
       source  = "gavinbunney/kubectl"
       version = "~> 1.19.0"
+    }
+
+    http = {
+      source  = "hashicorp/http"
+      version = "~> 3.4.0"
     }
   }
 }
@@ -33,10 +35,35 @@ terraform {
 # Variables
 # =============================================================================
 
-variable "hcloud_token" {
-  description = "Hetzner Cloud API Token"
+variable "cluster_name" {
+  description = "Name of the Kubernetes cluster"
   type        = string
-  sensitive   = true
+}
+
+variable "environment" {
+  description = "Environment name (staging, production, etc.)"
+  type        = string
+}
+
+variable "network_id" {
+  description = "ID of the private network"
+  type        = string
+}
+
+variable "cluster_endpoint" {
+  description = "Kubernetes API endpoint URL"
+  type        = string
+}
+
+variable "k8s_api_public_ip" {
+  description = "Public IP of the Kubernetes API load balancer"
+  type        = string
+}
+
+variable "k8s_api_private_ip" {
+  description = "Private IP of the Kubernetes API load balancer"
+  type        = string
+  default     = "10.0.1.100"
 }
 
 variable "talos_version" {
@@ -57,32 +84,39 @@ variable "cilium_version" {
   default     = "1.17.5"
 }
 
-# =============================================================================
-# Provider Configuration
-# =============================================================================
-
-provider "hcloud" {
-  token = var.hcloud_token
+variable "server_type" {
+  description = "Hetzner Cloud server type"
+  type        = string
+  default     = "cx22"
 }
 
-provider "talos" {}
+variable "location" {
+  description = "Hetzner Cloud location"
+  type        = string
+  default     = "nbg1"
+}
 
-provider "helm" {}
+variable "control_plane_count" {
+  description = "Number of control plane nodes"
+  type        = number
+  default     = 3
+}
 
-provider "kubectl" {
-  host                   = yamldecode(talos_cluster_kubeconfig.this.kubeconfig_raw).clusters[0].cluster.server
-  client_certificate     = base64decode(yamldecode(talos_cluster_kubeconfig.this.kubeconfig_raw).users[0].user.client-certificate-data)
-  client_key             = base64decode(yamldecode(talos_cluster_kubeconfig.this.kubeconfig_raw).users[0].user.client-key-data)
-  cluster_ca_certificate = base64decode(yamldecode(talos_cluster_kubeconfig.this.kubeconfig_raw).clusters[0].cluster.certificate-authority-data)
+variable "worker_count" {
+  description = "Number of worker nodes"
+  type        = number
+  default     = 3
+}
+
+variable "api_port_kube_prism" {
+  description = "Port for KubePrism local API proxy"
+  type        = number
+  default     = 7445
 }
 
 # =============================================================================
 # Data Sources
 # =============================================================================
-
-data "hcloud_network" "kibaship_staging" {
-  name = "kibaship-staging-network"
-}
 
 data "hcloud_image" "talos" {
   with_selector = "os=talos"
@@ -90,49 +124,43 @@ data "hcloud_image" "talos" {
 }
 
 # =============================================================================
-# Network Configuration
+# Local Values
 # =============================================================================
 
 locals {
-  cluster_name          = "kibaship-staging"
-  cluster_domain        = "cluster.local"
-  cluster_api_host      = "staging.k8s.kibaship.com"
-  cluster_api_port      = "6443"
-  cluster_endpoint      = "https://${local.cluster_api_host}:${local.cluster_api_port}"
+  cluster_domain        = "kibaship.internal"
   network_ipv4_cidr     = "10.0.0.0/16"
   node_ipv4_cidr        = "10.0.1.0/24"
   pod_ipv4_cidr         = "10.0.16.0/20"
   service_ipv4_cidr     = "10.0.8.0/21"
 
   control_plane_ips = [
-    "10.0.1.10",
-    "10.0.1.11",
-    "10.0.1.12"
+    for i in range(var.control_plane_count) : "10.0.1.${10 + i}"
   ]
 
   worker_ips = [
-    "10.0.1.20",
-    "10.0.1.21",
-    "10.0.1.22"
+    for i in range(var.worker_count) : "10.0.1.${20 + i}"
   ]
 
-  control_plane_public_ipv4_list = [
-    for i in range(3) : hcloud_server.control_planes[i].ipv4_address
+control_plane_public_ipv4_list = [
+    for i in range(var.control_plane_count) : hcloud_server.control_planes[i].ipv4_address
   ]
+  
   worker_public_ipv4_list = [
-    for i in range(3) : hcloud_server.workers[i].ipv4_address
+    for i in range(var.worker_count) : hcloud_server.workers[i].ipv4_address
   ]
 
   cert_SANs = distinct(
     concat(
-      local.control_plane_ips,               # All control plane private IPs
+      local.control_plane_ips,
       [
-        local.cluster_api_host,               # Load balancer DNS name
-        "127.0.0.1",                         # Localhost
-        "kubernetes",                        # Service name
-        "kubernetes.default",                # Service FQDN
-        "kubernetes.default.svc",            # Service FQDN
-        "kubernetes.default.svc.cluster.local" # Full service FQDN
+        var.k8s_api_public_ip,                                    # Load balancer public IP
+        var.k8s_api_private_ip,                                   # Load balancer private IP
+        "127.0.0.1",                                             # Localhost & KubePrism
+        "kubernetes",                                            # Service name
+        "kubernetes.default",                                    # Service FQDN
+        "kubernetes.default.svc",                                # Service FQDN
+        "kubernetes.default.svc.${local.cluster_domain}"         # Full service FQDN
       ]
     )
   )
@@ -147,7 +175,7 @@ resource "talos_machine_secrets" "this" {
 }
 
 data "talos_client_configuration" "this" {
-  cluster_name         = local.cluster_name
+  cluster_name         = var.cluster_name
   client_configuration = talos_machine_secrets.this.client_configuration
   endpoints            = local.control_plane_public_ipv4_list
   nodes                = concat(
@@ -161,16 +189,16 @@ data "talos_client_configuration" "this" {
 # =============================================================================
 
 resource "hcloud_server" "control_planes" {
-  count       = 3
-  name        = "${local.cluster_name}-control-plane-${count.index + 1}"
+  count       = var.control_plane_count
+  name        = "${var.cluster_name}-control-plane-${count.index + 1}"
   image       = data.hcloud_image.talos.id
-  server_type = "cx22"
-  location    = "nbg1"
+  server_type = var.server_type
+  location    = var.location
   user_data   = data.talos_machine_configuration.control_plane[count.index].machine_configuration
 
   labels = {
-    environment = "staging"
-    cluster     = local.cluster_name
+    environment = var.environment
+    cluster     = var.cluster_name
     role        = "control-plane"
   }
 
@@ -180,7 +208,7 @@ resource "hcloud_server" "control_planes" {
   }
 
   network {
-    network_id = data.hcloud_network.kibaship_staging.id
+    network_id = var.network_id
     ip         = local.control_plane_ips[count.index]
   }
 
@@ -194,16 +222,16 @@ resource "hcloud_server" "control_planes" {
 # =============================================================================
 
 resource "hcloud_server" "workers" {
-  count       = 3
-  name        = "${local.cluster_name}-worker-${count.index + 1}"
+  count       = var.worker_count
+  name        = "${var.cluster_name}-worker-${count.index + 1}"
   image       = data.hcloud_image.talos.id
-  server_type = "cx22"
-  location    = "nbg1"
+  server_type = var.server_type
+  location    = var.location
   user_data   = data.talos_machine_configuration.worker[count.index].machine_configuration
 
   labels = {
-    environment = "staging"
-    cluster     = local.cluster_name
+    environment = var.environment
+    cluster     = var.cluster_name
     role        = "worker"
   }
 
@@ -213,7 +241,7 @@ resource "hcloud_server" "workers" {
   }
 
   network {
-    network_id = data.hcloud_network.kibaship_staging.id
+    network_id = var.network_id
     ip         = local.worker_ips[count.index]
   }
 
@@ -227,9 +255,9 @@ resource "hcloud_server" "workers" {
 # =============================================================================
 
 data "talos_machine_configuration" "control_plane" {
-  count              = 3
-  cluster_name       = local.cluster_name
-  cluster_endpoint   = local.cluster_endpoint
+  count              = var.control_plane_count
+  cluster_name       = var.cluster_name
+  cluster_endpoint   = var.cluster_endpoint
   machine_type       = "controlplane"
   machine_secrets    = talos_machine_secrets.this.machine_secrets
   talos_version      = var.talos_version
@@ -295,6 +323,10 @@ data "talos_machine_configuration" "control_plane" {
             forwardKubeDNSToHost = true
             resolveMemberNames   = true
           }
+          kubePrism = {
+            enabled = true
+            port    = var.api_port_kube_prism
+          }
         }
       }
       cluster = {
@@ -347,9 +379,9 @@ data "talos_machine_configuration" "control_plane" {
 # =============================================================================
 
 data "talos_machine_configuration" "worker" {
-  count              = 3
-  cluster_name       = local.cluster_name
-  cluster_endpoint   = local.cluster_endpoint
+  count              = var.worker_count
+  cluster_name       = var.cluster_name
+  cluster_endpoint   = var.cluster_endpoint
   machine_type       = "worker"
   machine_secrets    = talos_machine_secrets.this.machine_secrets
   talos_version      = var.talos_version
@@ -419,6 +451,10 @@ data "talos_machine_configuration" "worker" {
             forwardKubeDNSToHost = true
             resolveMemberNames   = true
           }
+          kubePrism = {
+            enabled = true
+            port    = var.api_port_kube_prism
+          }
         }
         nodeLabels = {
           "openebs.io/engine" = "mayastor"
@@ -429,31 +465,72 @@ data "talos_machine_configuration" "worker" {
 }
 
 # =============================================================================
+# Machine Configuration Apply
+# =============================================================================
+
+resource "talos_machine_configuration_apply" "control_plane" {
+  count                       = var.control_plane_count
+  client_configuration        = talos_machine_secrets.this.client_configuration
+  machine_configuration_input = data.talos_machine_configuration.control_plane[count.index].machine_configuration
+  node                        = local.control_plane_public_ipv4_list[count.index]
+  endpoint                    = local.control_plane_public_ipv4_list[count.index]
+
+  depends_on = [hcloud_server.control_planes]
+}
+
+resource "talos_machine_configuration_apply" "worker" {
+  count                       = var.worker_count
+  client_configuration        = talos_machine_secrets.this.client_configuration
+  machine_configuration_input = data.talos_machine_configuration.worker[count.index].machine_configuration
+  node                        = local.worker_public_ipv4_list[count.index]
+  endpoint                    = local.worker_public_ipv4_list[count.index]
+
+  depends_on = [
+    hcloud_server.workers,
+    talos_machine_bootstrap.this
+  ]
+}
+
+# =============================================================================
 # Cluster Bootstrap
 # =============================================================================
 
+# Wait for control plane nodes to be ready before bootstrap
+resource "time_sleep" "wait_for_control_plane" {
+  depends_on = [talos_machine_configuration_apply.control_plane]
+  create_duration = "60s"
+}
+
 resource "talos_machine_bootstrap" "this" {
   depends_on = [
-    talos_machine_configuration_apply.control_plane
+    time_sleep.wait_for_control_plane
   ]
   client_configuration = talos_machine_secrets.this.client_configuration
   node                 = local.control_plane_public_ipv4_list[0]
   endpoint             = local.control_plane_public_ipv4_list[0]
 }
 
-# Wait for cluster to be fully ready before extracting kubeconfig
+# Wait for bootstrap to complete
+resource "time_sleep" "wait_for_bootstrap" {
+  depends_on = [talos_machine_bootstrap.this]
+  create_duration = "120s"
+}
+
 resource "talos_cluster_kubeconfig" "this" {
   depends_on = [
-    talos_machine_bootstrap.this
+    time_sleep.wait_for_bootstrap
   ]
   client_configuration = talos_machine_secrets.this.client_configuration
   node                 = local.control_plane_public_ipv4_list[0]
   endpoint             = local.control_plane_public_ipv4_list[0]
 }
 
-# Check cluster health using HTTP endpoint with proper certificate validation
+# =============================================================================
+# Cluster Health Check
+# =============================================================================
+
 data "http" "talos_health" {
-  url = "https://${local.cluster_api_host}:${local.cluster_api_port}/version"
+  url = "https://${local.control_plane_public_ipv4_list[0]}:6443/version"
 
   ca_cert_pem = base64decode(
     yamldecode(talos_cluster_kubeconfig.this.kubeconfig_raw)
@@ -472,120 +549,19 @@ data "http" "talos_health" {
 # Cilium CNI Configuration
 # =============================================================================
 
-# Generate Cilium manifests only after cluster is ready
-data "helm_template" "cilium" {
-  depends_on = [
-    data.http.talos_health
-  ]
 
-  name         = "cilium"
-  namespace    = "kube-system"
-  repository   = "https://helm.cilium.io"
-  chart        = "cilium"
-  version      = var.cilium_version
-  kube_version = var.kubernetes_version
 
-  # Skip Kubernetes version validation since we're generating templates
-  skip_crds = false
-
-  values = [
-    yamlencode({
-      operator = {
-        replicas = 2
-      }
-      ipam = {
-        mode = "kubernetes"
-      }
-      routingMode = "native"
-      ipv4NativeRoutingCIDR = local.pod_ipv4_cidr
-      kubeProxyReplacement = true
-      bpf = {
-        masquerade = false
-      }
-      loadBalancer = {
-        acceleration = "native"
-      }
-      encryption = {
-        enabled = false
-      }
-      securityContext = {
-        capabilities = {
-          ciliumAgent = [
-            "CHOWN", "KILL", "NET_ADMIN", "NET_RAW", "IPC_LOCK",
-            "SYS_ADMIN", "SYS_RESOURCE", "DAC_OVERRIDE", "FOWNER",
-            "SETGID", "SETUID"
-          ]
-          cleanCiliumState = ["NET_ADMIN", "SYS_ADMIN", "SYS_RESOURCE"]
-        }
-      }
-      cgroup = {
-        autoMount = {
-          enabled = false
-        }
-        hostRoot = "/sys/fs/cgroup"
-      }
-      k8sServiceHost = local.cluster_api_host
-      k8sServicePort = local.cluster_api_port
-      hubble = {
-        enabled = false
-      }
-    })
-  ]
-}
-
-# =============================================================================
-# Cluster Readiness Verification
-# =============================================================================
-# Note: Mayastor configuration is prepared but not deployed in this bootstrap.
-# The cluster is Mayastor-ready with:
-# - Huge pages configured (vm.nr_hugepages = 1024)
-# - Node labels (openebs.io/engine = mayastor)
-# - Extra mounts (/var/local with rshared)
-# - Pod security exemptions for openebs namespace
-# Deploy Mayastor separately after cluster is healthy.
-
-# =============================================================================
-# Cilium Deployment
-# =============================================================================
-
-resource "talos_machine_configuration_apply" "control_plane" {
-  count                       = 3
-  client_configuration        = talos_machine_secrets.this.client_configuration
-  machine_configuration_input = data.talos_machine_configuration.control_plane[count.index].machine_configuration
-  node                        = local.control_plane_public_ipv4_list[count.index]
-  endpoint                    = local.control_plane_public_ipv4_list[count.index]
-
-  depends_on = [hcloud_server.control_planes]
-}
-
-resource "talos_machine_configuration_apply" "worker" {
-  count                       = 3
-  client_configuration        = talos_machine_secrets.this.client_configuration
-  machine_configuration_input = data.talos_machine_configuration.worker[count.index].machine_configuration
-  node                        = local.worker_public_ipv4_list[count.index]
-  endpoint                    = local.worker_public_ipv4_list[count.index]
-
-  depends_on = [
-    hcloud_server.workers,
-    talos_machine_bootstrap.this
-  ]
-}
-
-# =============================================================================
-# Cilium Installation
-# =============================================================================
-
-data "kubectl_file_documents" "cilium" {
-  content = data.helm_template.cilium.manifest
-}
-
-# Deploy Cilium only after cluster is fully bootstrapped
-resource "kubectl_manifest" "apply_cilium" {
-  for_each   = data.kubectl_file_documents.cilium.manifests
-  yaml_body  = each.value
-  apply_only = true
+# Wait for cluster to be healthy before installing Cilium
+resource "time_sleep" "wait_for_cluster_health" {
   depends_on = [data.http.talos_health]
+  create_duration = "60s"
 }
+
+
+
+
+
+
 
 # =============================================================================
 # Outputs
@@ -594,11 +570,11 @@ resource "kubectl_manifest" "apply_cilium" {
 output "cluster_info" {
   description = "Kubernetes cluster information"
   value = {
-    name             = local.cluster_name
-    endpoint         = local.cluster_endpoint
+    name               = var.cluster_name
+    endpoint           = var.cluster_endpoint
     kubernetes_version = var.kubernetes_version
-    talos_version    = var.talos_version
-    cilium_version   = var.cilium_version
+    talos_version      = var.talos_version
+    cilium_version     = var.cilium_version
   }
 }
 
@@ -640,38 +616,4 @@ output "talosconfig" {
   sensitive   = true
 }
 
-output "cluster_summary" {
-  description = "Complete cluster deployment summary"
-  value = {
-    cluster = {
-      name     = local.cluster_name
-      endpoint = local.cluster_endpoint
-      network  = {
-        cidr         = local.network_ipv4_cidr
-        nodes        = local.node_ipv4_cidr
-        pods         = local.pod_ipv4_cidr
-        services     = local.service_ipv4_cidr
-      }
-    }
-    servers = {
-      control_planes = [
-        for i, server in hcloud_server.control_planes : {
-          name       = server.name
-          public_ip  = server.ipv4_address
-          private_ip = local.control_plane_ips[i]
-        }
-      ]
-      workers = [
-        for i, server in hcloud_server.workers : {
-          name       = server.name
-          public_ip  = server.ipv4_address
-          private_ip = local.worker_ips[i]
-        }
-      ]
-    }
-    load_balancers = {
-      k8s_api = "staging.k8s.kibaship.com:6443"
-      apps    = "*.staging.kibaship.app:80/443"
-    }
-  }
-}
+

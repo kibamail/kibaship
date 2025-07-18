@@ -1,10 +1,10 @@
 # =============================================================================
-# KibaShip Staging Storage Configuration
+# Storage Module
 # =============================================================================
-# This configuration provisions persistent storage volumes for the staging
-# Kubernetes cluster worker nodes, including:
-# - 3 x 40GB volumes for worker nodes
-# - Automatic attachment to worker nodes using label selectors
+# This module provisions persistent storage volumes for Kubernetes cluster
+# worker nodes, including:
+# - Storage volumes for each worker node
+# - Automatic attachment to worker nodes
 # - Health checks to verify volume accessibility
 # - Optimized for OpenEBS Mayastor storage engine
 
@@ -21,10 +21,24 @@ terraform {
 # Variables
 # =============================================================================
 
-variable "hcloud_token" {
-  description = "Hetzner Cloud API Token"
+variable "cluster_name" {
+  description = "Name of the Kubernetes cluster"
   type        = string
-  sensitive   = true
+}
+
+variable "environment" {
+  description = "Environment name (staging, production, etc.)"
+  type        = string
+}
+
+variable "worker_servers" {
+  description = "Map of worker server details"
+  type = map(object({
+    id          = string
+    public_ip   = string
+    private_ip  = string
+    role        = string
+  }))
 }
 
 variable "volume_size" {
@@ -39,26 +53,10 @@ variable "volume_type" {
   default     = "network-ssd"
 }
 
-# =============================================================================
-# Provider Configuration
-# =============================================================================
-
-provider "hcloud" {
-  token = var.hcloud_token
-}
-
-# =============================================================================
-# Data Sources
-# =============================================================================
-
-# Discover worker servers using label selectors
-data "hcloud_servers" "staging_workers" {
-  with_selector = "environment=staging,cluster=kibaship-staging,role=worker"
-}
-
-# Get location information from the first worker server
-data "hcloud_server" "worker_reference" {
-  id = data.hcloud_servers.staging_workers.servers[0].id
+variable "location" {
+  description = "Hetzner Cloud location"
+  type        = string
+  default     = "nbg1"
 }
 
 # =============================================================================
@@ -66,37 +64,31 @@ data "hcloud_server" "worker_reference" {
 # =============================================================================
 
 locals {
-  cluster_name = "kibaship-staging"
-  location     = data.hcloud_server.worker_reference.location
-
-  # Create a map of worker servers for easier reference
-  worker_servers = {
-    for idx, server in data.hcloud_servers.staging_workers.servers :
-    idx => {
-      id       = server.id
-      name     = server.name
-      location = server.location
+  worker_list = [
+    for name, server in var.worker_servers : {
+      name      = name
+      id        = server.id
+      public_ip = server.public_ip
     }
-  }
+  ]
 }
 
 # =============================================================================
 # Storage Volumes
 # =============================================================================
 
-# Create 40GB volumes for each worker node
 resource "hcloud_volume" "worker_storage" {
-  count    = length(data.hcloud_servers.staging_workers.servers)
-  name     = "${local.cluster_name}-worker-${count.index + 1}-storage"
+  count    = length(local.worker_list)
+  name     = "${var.cluster_name}-worker-${count.index + 1}-storage"
   size     = var.volume_size
-  location = local.location
+  location = var.location
   format   = "ext4"
 
   labels = {
-    environment = "staging"
-    cluster     = local.cluster_name
+    environment = var.environment
+    cluster     = var.cluster_name
     role        = "worker-storage"
-    worker_node = "${local.cluster_name}-worker-${count.index + 1}"
+    worker_node = "${var.cluster_name}-worker-${count.index + 1}"
   }
 }
 
@@ -104,21 +96,16 @@ resource "hcloud_volume" "worker_storage" {
 # Volume Attachments
 # =============================================================================
 
-# Attach each volume to its corresponding worker node
-# Note: Hetzner Cloud consistently mounts volumes to /mnt/HC_Volume_<volume-id>
-# This provides a predictable path for all worker nodes
 resource "hcloud_volume_attachment" "worker_storage" {
-  count     = length(data.hcloud_servers.staging_workers.servers)
+  count     = length(local.worker_list)
   volume_id = hcloud_volume.worker_storage[count.index].id
-  server_id = data.hcloud_servers.staging_workers.servers[count.index].id
+  server_id = local.worker_list[count.index].id
   automount = false
 
   depends_on = [
     hcloud_volume.worker_storage
   ]
 }
-
-
 
 # =============================================================================
 # Outputs
@@ -135,8 +122,8 @@ output "storage_volumes" {
       location    = volume.location
       device_path = "/dev/disk/by-id/scsi-0HC_Volume_${volume.id}"
       mount_path  = "/mnt/HC_Volume_${volume.id}"
-      worker_node = data.hcloud_servers.staging_workers.servers[idx].name
-      server_id   = data.hcloud_servers.staging_workers.servers[idx].id
+      worker_node = local.worker_list[idx].name
+      server_id   = local.worker_list[idx].id
     }
   }
 }
@@ -165,7 +152,7 @@ output "storage_summary" {
       for idx, volume in hcloud_volume.worker_storage : {
         name        = volume.name
         size        = "${volume.size}GB"
-        worker_node = data.hcloud_servers.staging_workers.servers[idx].name
+        worker_node = local.worker_list[idx].name
         device_path = "/dev/disk/by-id/scsi-0HC_Volume_${volume.id}"
         mount_path  = "/mnt/HC_Volume_${volume.id}"
         ready       = true
@@ -184,7 +171,7 @@ output "storage_summary" {
       ]
       notes = [
         "Volumes are formatted with ext4 and auto-mounted",
-        "Each worker node has a dedicated 40GB storage volume",
+        "Each worker node has a dedicated storage volume",
         "Volumes are consistently mounted at /mnt/HC_Volume_<volume-id>",
         "Volumes are ready for OpenEBS Mayastor configuration",
         "Use device paths in Mayastor DiskPool configuration",
