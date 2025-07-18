@@ -351,7 +351,7 @@ data "talos_machine_configuration" "control_plane" {
           }
         }
         coreDNS = {
-          disabled = true
+          disabled = false
         }
         proxy = {
           disabled = true

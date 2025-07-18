@@ -56,3 +56,25 @@ cilium install \
     --set gatewayAPI.enableAlpn=true \
     --set gatewayAPI.enableAppProtocol=true
 ```
+
+# How to setup fluxcd for gitops in staging cluster
+
+1. Install fluxcd command line :
+
+2. Set Github personal access token and user in command line:
+
+```bash
+export GITHUB_TOKEN=your-github-token-here
+export GITHUB_USER=your-github-username-here
+```
+
+3. Run bootstrap command:
+
+```bash
+flux bootstrap github \
+  --token-auth \
+  --owner=kibamail \
+  --repository=kibaship \
+  --branch=main \
+  --path=clusters/staging
+```
