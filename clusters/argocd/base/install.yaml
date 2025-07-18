@@ -1,8 +1,0 @@
-# =============================================================================
-# Argo CD Installation Reference
-# =============================================================================
-# This file references the official Argo CD installation manifest
-# The actual installation will be handled by the kustomization.yaml
-
-# Note: The actual Argo CD resources will be pulled from the official
-# stable release URL in the kustomization.yaml file

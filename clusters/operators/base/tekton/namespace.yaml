@@ -1,8 +1,0 @@
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: tekton-pipelines
-  labels:
-    name: tekton-pipelines
-    app.kubernetes.io/name: tekton
-    app.kubernetes.io/part-of: kibaship-platform

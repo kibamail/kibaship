@@ -1,8 +1,0 @@
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: database-operator
-  labels:
-    name: database-operator
-    app.kubernetes.io/name: database-operator
-    app.kubernetes.io/part-of: kibaship-platform

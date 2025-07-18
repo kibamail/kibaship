@@ -78,12 +78,6 @@ variable "kubernetes_version" {
   default     = "1.32.0"
 }
 
-variable "cilium_version" {
-  description = "Cilium CNI version to install"
-  type        = string
-  default     = "1.17.5"
-}
-
 variable "server_type" {
   description = "Hetzner Cloud server type"
   type        = string
@@ -574,7 +568,6 @@ output "cluster_info" {
     endpoint           = var.cluster_endpoint
     kubernetes_version = var.kubernetes_version
     talos_version      = var.talos_version
-    cilium_version     = var.cilium_version
   }
 }
 

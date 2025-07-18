@@ -83,12 +83,6 @@ variable "kubernetes_version" {
   default     = "1.32.0"
 }
 
-variable "cilium_version" {
-  description = "Cilium CNI version to install"
-  type        = string
-  default     = "1.17.5"
-}
-
 variable "volume_size" {
   description = "Size of each storage volume in GB"
   type        = number
@@ -163,7 +157,6 @@ module "servers" {
   k8s_api_private_ip   = "10.0.1.100"
   talos_version        = var.talos_version
   kubernetes_version   = var.kubernetes_version
-  cilium_version       = var.cilium_version
   server_type          = var.server_type
   location             = var.location
   control_plane_count  = 3
@@ -225,7 +218,6 @@ output "cluster_info" {
     endpoint           = module.load_balancers.k8s_api_endpoint
     kubernetes_version = var.kubernetes_version
     talos_version      = var.talos_version
-    cilium_version     = var.cilium_version
   }
 }
 
