@@ -91,5 +91,6 @@ flux bootstrap github \
   --owner=kibamail \
   --repository=kibaship \
   --branch=main \
-  --path=clusters/staging
+  --path=clusters/staging \
+  --cluster-domain=kibaship.internal
 ```
