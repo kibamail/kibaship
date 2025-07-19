@@ -352,7 +352,7 @@ data "talos_machine_configuration" "control_plane" {
           }
         }
         coreDNS = {
-          disabled = true
+          disabled = false
         }
         proxy = {
           disabled = true
@@ -454,6 +454,20 @@ data "talos_machine_configuration" "worker" {
         }
         nodeLabels = {
           "openebs.io/engine" = "mayastor"
+        }
+      }
+      cluster = {
+        network = {
+           cni = {
+            name = "none"
+          }
+          podSubnets     = [
+            local.pod_ipv4_cidr
+          ]
+          serviceSubnets = [
+            local.service_ipv4_cidr
+          ]
+          dnsDomain = local.cluster_domain
         }
       }
     })

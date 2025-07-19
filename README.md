@@ -23,7 +23,14 @@ Run the command `terraform output talosconfig > /path/to/secret/store` to copy t
 
 Run the command `kubectl get nodes` to verify the cluster is up and running.
 
-4. Setup CNI (Cilium)
+
+# How to approve kubelet-serving CSRs
+
+```bash
+kubectl get csr -o name | xargs kubectl certificate approve
+```
+
+# How to setup cilium CNI
 
 Follow this guide to install cilium cli:
 
@@ -57,10 +64,12 @@ cilium install \
     --set gatewayAPI.enableAppProtocol=true
 ```
 
-# How to approve kubelet-serving CSRs
+# How to label cilium test namespace to allow running connectivity tests
 
 ```bash
-kubectl get csr -o name | xargs kubectl certificate approve
+kubectl create namespace cilium-test-1
+
+kubectl label namespace cilium-test-1 pod-security.kubernetes.io/enforce=privileged
 ```
 
 # How to setup fluxcd for gitops in staging cluster
