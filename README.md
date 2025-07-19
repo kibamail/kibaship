@@ -57,6 +57,12 @@ cilium install \
     --set gatewayAPI.enableAppProtocol=true
 ```
 
+# How to approve kubelet-serving CSRs
+
+```bash
+kubectl get csr -o name | xargs kubectl certificate approve
+```
+
 # How to setup fluxcd for gitops in staging cluster
 
 1. Install fluxcd command line :

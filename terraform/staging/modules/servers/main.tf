@@ -314,7 +314,7 @@ data "talos_machine_configuration" "control_plane" {
           }
           hostDNS = {
             enabled              = true
-            forwardKubeDNSToHost = true
+            forwardKubeDNSToHost = false
             resolveMemberNames   = true
           }
           kubePrism = {
@@ -339,6 +339,7 @@ data "talos_machine_configuration" "control_plane" {
             }
           ]
         }
+        allowSchedulingOnControlPlanes = true
         etcd = {
           advertisedSubnets = [local.node_ipv4_cidr]
           extraArgs = {
@@ -351,7 +352,7 @@ data "talos_machine_configuration" "control_plane" {
           }
         }
         coreDNS = {
-          disabled = false
+          disabled = true
         }
         proxy = {
           disabled = true
@@ -362,6 +363,7 @@ data "talos_machine_configuration" "control_plane" {
           }
           podSubnets     = [local.pod_ipv4_cidr]
           serviceSubnets = [local.service_ipv4_cidr]
+          dnsDomain = local.cluster_domain
         }
       }
     })
@@ -442,7 +444,7 @@ data "talos_machine_configuration" "worker" {
         features = {
           hostDNS = {
             enabled              = true
-            forwardKubeDNSToHost = true
+            forwardKubeDNSToHost = false
             resolveMemberNames   = true
           }
           kubePrism = {
