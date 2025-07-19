@@ -399,9 +399,9 @@ data "talos_machine_configuration" "worker" {
           }
           extraMounts = [
             {
-              destination = "/var/local"
+              destination = "/var/openebs/local"
               type        = "bind"
-              source      = "/var/local"
+              source      = "/var/openebs/local"
               options     = ["bind", "rshared", "rw"]
             }
           ]
