@@ -58,3 +58,4 @@ talosconfig*
 *.bak
 venv/
 
+kubespray/

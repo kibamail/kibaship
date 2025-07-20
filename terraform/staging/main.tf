@@ -31,22 +31,7 @@ terraform {
       source  = "hashicorp/null"
       version = "~> 3.2.0"
     }
-    time = {
-      source  = "hashicorp/time"
-      version = "~> 0.12.0"
-    }
-    helm = {
-      source  = "hashicorp/helm"
-      version = "~> 3.0.2"
-    }
-    kubectl = {
-      source  = "gavinbunney/kubectl"
-      version = "~> 1.19.0"
-    }
-    http = {
-      source  = "hashicorp/http"
-      version = "~> 3.4.0"
-    }
+
   }
 }
 
@@ -96,6 +81,18 @@ variable "ubuntu_version" {
   default     = "24.04"
 }
 
+variable "kube_pods_subnet" {
+  description = "Kubernetes pod subnet CIDR"
+  type        = string
+  default     = "10.0.16.0/20"
+}
+
+variable "kube_service_addresses" {
+  description = "Kubernetes service subnet CIDR"
+  type        = string
+  default     = "10.0.8.0/21"
+}
+
 
 
 variable "volume_size" {
@@ -107,13 +104,13 @@ variable "volume_size" {
 variable "ssh_public_key_path" {
   description = "Path to store the generated SSH public key"
   type        = string
-  default     = ".secrets/staging/ssh_key.pub"
+  default     = ".secrets/staging/id_ed25519.pub"
 }
 
 variable "ssh_private_key_path" {
   description = "Path to store the generated SSH private key"
   type        = string
-  default     = ".secrets/staging/ssh_key"
+  default     = ".secrets/staging/id_ed25519"
 }
 
 # =============================================================================
@@ -161,6 +158,26 @@ module "networking" {
 }
 
 # =============================================================================
+# Jump Server Module
+# =============================================================================
+
+module "jump_server" {
+  source = "./modules/jump-server"
+
+  cluster_name     = var.cluster_name
+  environment      = var.environment
+  network_id       = module.networking.network_id
+  server_type      = var.server_type
+  location         = var.location
+  ubuntu_version   = var.ubuntu_version
+  ssh_key_id       = module.ssh_keys.ssh_key_id
+  ssh_private_key  = module.ssh_keys.ssh_private_key
+  ssh_public_key   = module.ssh_keys.ssh_public_key
+
+  depends_on = [module.networking, module.ssh_keys]
+}
+
+# =============================================================================
 # Load Balancers Module
 # =============================================================================
 
@@ -199,8 +216,9 @@ module "servers" {
   ssh_key_id           = module.ssh_keys.ssh_key_id
   ssh_private_key      = module.ssh_keys.ssh_private_key
   ssh_public_key       = module.ssh_keys.ssh_public_key
+  jump_server_public_ip = module.jump_server.jump_server_public_ip
 
-  depends_on = [module.load_balancers, module.ssh_keys]
+  depends_on = [module.load_balancers, module.ssh_keys, module.jump_server]
 }
 
 # =============================================================================
@@ -210,15 +228,16 @@ module "servers" {
 module "storage" {
   source = "./modules/storage"
 
-  cluster_name     = var.cluster_name
-  environment      = var.environment
-  worker_servers   = module.servers.worker_servers
-  volume_size      = var.volume_size
-  volume_type      = "network-ssd"
-  location         = var.location
-  ssh_private_key  = module.ssh_keys.ssh_private_key
+  cluster_name          = var.cluster_name
+  environment           = var.environment
+  worker_servers        = module.servers.worker_servers
+  volume_size           = var.volume_size
+  volume_type           = "network-ssd"
+  location              = var.location
+  ssh_private_key       = module.ssh_keys.ssh_private_key
+  jump_server_public_ip = module.jump_server.jump_server_public_ip
 
-  depends_on = [module.servers]
+  depends_on = [module.servers, module.jump_server]
 }
 
 # =============================================================================
@@ -251,6 +270,161 @@ resource "hcloud_load_balancer_target" "app_targets" {
   depends_on = [module.servers]
 }
 
+# =============================================================================
+# Kubespray Inventory Generation
+# =============================================================================
+
+locals {
+  # Generate connection strings for control plane nodes
+  connection_strings_master = join("\n", [
+    for name, server in module.servers.control_plane_servers :
+    "${replace(name, var.cluster_name, "default")} ansible_user=ubuntu ansible_host=${server.private_ip} ip=${server.private_ip} etcd_member_name=etcd${index(keys(module.servers.control_plane_servers), name) + 1}"
+  ])
+
+  # Generate connection strings for worker nodes
+  connection_strings_worker = join("\n", [
+    for name, server in module.servers.worker_servers :
+    "${replace(name, var.cluster_name, "default")} ansible_user=ubuntu ansible_host=${server.private_ip} ip=${server.private_ip}"
+  ])
+
+  # Generate list of control plane node names
+  list_master = join("\n", [
+    for name, server in module.servers.control_plane_servers :
+    replace(name, var.cluster_name, "default")
+  ])
+
+  # Generate list of worker node names
+  list_worker = join("\n", [
+    for name, server in module.servers.worker_servers :
+    replace(name, var.cluster_name, "default")
+  ])
+}
+
+# Ensure secrets and group_vars directories exist
+resource "null_resource" "create_secrets_dir" {
+  provisioner "local-exec" {
+    command = "mkdir -p ${path.module}/.secrets/staging/group_vars/all ${path.module}/.secrets/staging/group_vars/k8s_cluster"
+  }
+}
+
+# Generate inventory file from template
+resource "local_file" "kubespray_inventory" {
+  content = templatefile("${path.module}/templates/inventory.ini.tpl", {
+    connection_strings_master = local.connection_strings_master
+    connection_strings_worker = local.connection_strings_worker
+    list_master              = local.list_master
+    list_worker              = local.list_worker
+  })
+  filename = "${path.module}/.secrets/staging/inventory.ini"
+
+  depends_on = [module.servers, null_resource.create_secrets_dir]
+}
+
+# Generate Kubespray group_vars configuration files
+resource "local_file" "kubespray_all_config" {
+  content = templatefile("${path.module}/templates/group_vars/all/all.yml.tpl", {
+    k8s_api_public_ip       = module.load_balancers.k8s_api_public_ip
+    cluster_name            = var.cluster_name
+    kube_pods_subnet        = var.kube_pods_subnet
+    kube_service_addresses  = var.kube_service_addresses
+  })
+  filename = "${path.module}/.secrets/staging/group_vars/all/all.yml"
+
+  depends_on = [module.load_balancers, null_resource.create_secrets_dir]
+}
+
+resource "local_file" "kubespray_cloud_config" {
+  content  = file("${path.module}/templates/group_vars/all/cloud.yml.tpl")
+  filename = "${path.module}/.secrets/staging/group_vars/all/cloud.yml"
+
+  depends_on = [null_resource.create_secrets_dir]
+}
+
+resource "local_file" "kubespray_addons_config" {
+  content  = file("${path.module}/templates/group_vars/k8s_cluster/addons.yml.tpl")
+  filename = "${path.module}/.secrets/staging/group_vars/k8s_cluster/addons.yml"
+
+  depends_on = [null_resource.create_secrets_dir]
+}
+
+resource "local_file" "kubespray_cilium_config" {
+  content  = file("${path.module}/templates/group_vars/k8s_cluster/k8s-net-cilium.yml.tpl")
+  filename = "${path.module}/.secrets/staging/group_vars/k8s_cluster/k8s-net-cilium.yml"
+
+  depends_on = [null_resource.create_secrets_dir]
+}
+
+# Copy Kubespray configuration files to jump server
+resource "null_resource" "copy_kubespray_config_to_jump_server" {
+  connection {
+    type        = "ssh"
+    user        = "ubuntu"
+    private_key = module.ssh_keys.ssh_private_key
+    host        = module.jump_server.jump_server_public_ip
+    timeout     = "5m"
+  }
+
+  # Create directory structure on jump server
+  provisioner "remote-exec" {
+    inline = [
+      "mkdir -p /home/ubuntu/kubespray-config/group_vars/all",
+      "mkdir -p /home/ubuntu/kubespray-config/group_vars/k8s_cluster"
+    ]
+  }
+
+  # Copy inventory file
+  provisioner "file" {
+    source      = local_file.kubespray_inventory.filename
+    destination = "/home/ubuntu/inventory.ini"
+  }
+
+  # Copy group_vars configuration files
+  provisioner "file" {
+    source      = local_file.kubespray_all_config.filename
+    destination = "/home/ubuntu/kubespray-config/group_vars/all/all.yml"
+  }
+
+  provisioner "file" {
+    source      = local_file.kubespray_cloud_config.filename
+    destination = "/home/ubuntu/kubespray-config/group_vars/all/cloud.yml"
+  }
+
+  provisioner "file" {
+    source      = local_file.kubespray_addons_config.filename
+    destination = "/home/ubuntu/kubespray-config/group_vars/k8s_cluster/addons.yml"
+  }
+
+  provisioner "file" {
+    source      = local_file.kubespray_cilium_config.filename
+    destination = "/home/ubuntu/kubespray-config/group_vars/k8s_cluster/k8s-net-cilium.yml"
+  }
+
+  # Set proper permissions and log completion
+  provisioner "remote-exec" {
+    inline = [
+      "chmod 644 /home/ubuntu/inventory.ini",
+      "chmod -R 644 /home/ubuntu/kubespray-config/group_vars/",
+      "chmod 755 /home/ubuntu/kubespray-config/group_vars/",
+      "chmod 755 /home/ubuntu/kubespray-config/group_vars/all/",
+      "chmod 755 /home/ubuntu/kubespray-config/group_vars/k8s_cluster/",
+      "echo 'Kubespray configuration files copied successfully' >> /var/log/jump-server-setup.log",
+      "echo 'Files available at:' >> /var/log/jump-server-setup.log",
+      "echo '  - /home/ubuntu/inventory.ini' >> /var/log/jump-server-setup.log",
+      "echo '  - /home/ubuntu/kubespray-config/group_vars/' >> /var/log/jump-server-setup.log"
+    ]
+  }
+
+  depends_on = [
+    local_file.kubespray_inventory,
+    local_file.kubespray_all_config,
+    local_file.kubespray_cloud_config,
+    local_file.kubespray_addons_config,
+    local_file.kubespray_cilium_config,
+    module.jump_server,
+    module.servers
+  ]
+}
+
 
 
 # =============================================================================
@@ -280,9 +454,15 @@ output "load_balancers" {
   }
 }
 
+output "jump_server" {
+  description = "Jump server details"
+  value       = module.jump_server.jump_server
+}
+
 output "servers" {
   description = "Server details"
   value = {
+    jump_server    = module.jump_server.jump_server
     control_planes = module.servers.control_plane_servers
     workers        = module.servers.worker_servers
   }
@@ -309,13 +489,32 @@ output "ssh_public_key" {
   value       = module.ssh_keys.ssh_public_key
 }
 
+output "kubespray_config" {
+  description = "Kubespray configuration information"
+  value = {
+    inventory_local_path     = local_file.kubespray_inventory.filename
+    inventory_jump_server_path = "/home/ubuntu/inventory.ini"
+    group_vars_local_path    = "${path.module}/.secrets/staging/group_vars/"
+    group_vars_jump_server_path = "/home/ubuntu/kubespray-config/group_vars/"
+    jump_server_ip          = module.jump_server.jump_server_public_ip
+    setup_instructions = [
+      "1. SSH to jump server: ssh -i .secrets/staging/id_ed25519 ubuntu@${module.jump_server.jump_server_public_ip}",
+      "2. Clone Kubespray: git clone https://github.com/kubernetes-sigs/kubespray.git",
+      "3. Copy config: cp -r /home/ubuntu/kubespray-config/group_vars/* kubespray/inventory/mycluster/",
+      "4. Copy inventory: cp /home/ubuntu/inventory.ini kubespray/inventory/mycluster/",
+      "5. Install deps: cd kubespray && pip3 install -r requirements.txt",
+      "6. Deploy cluster: ansible-playbook -i inventory/mycluster/inventory.ini cluster.yml -b"
+    ]
+  }
+}
+
 output "control_plane_ips" {
-  description = "Public IP addresses of control plane nodes"
+  description = "Private IP addresses of control plane nodes"
   value       = module.servers.control_plane_ips
 }
 
 output "worker_ips" {
-  description = "Public IP addresses of worker nodes"
+  description = "Private IP addresses of worker nodes"
   value       = module.servers.worker_ips
 }
 
@@ -324,12 +523,23 @@ output "deployment_info" {
   value = <<-EOT
     Infrastructure provisioned successfully!
 
-    Server Details:
+    Jump Server (Bastion Host):
+    - Public IP: ${module.jump_server.jump_server_public_ip}
+    - SSH Access: ssh -i .secrets/staging/id_ed25519 ubuntu@${module.jump_server.jump_server_public_ip}
+
+    Server Details (Private IPs - accessible via jump server):
     - Control Plane IPs: ${join(", ", module.servers.control_plane_ips)}
     - Worker IPs: ${join(", ", module.servers.worker_ips)}
-    - SSH Key: .secrets/staging/ssh_key
+    - SSH Key: .secrets/staging/id_ed25519
 
-    Infrastructure is ready for application deployment.
+    Kubespray Setup:
+    - Inventory file: /home/ubuntu/inventory.ini
+    - Configuration files: /home/ubuntu/kubespray-config/group_vars/
+    - Local files: ${path.module}/.secrets/staging/
+    - Ready for Kubernetes deployment with Cilium CNI and minimal configuration
+
+    Infrastructure is ready for Kubernetes cluster deployment via Kubespray.
+    All cluster nodes are accessible only through the jump server.
   EOT
 }
 
@@ -355,9 +565,10 @@ output "cluster_summary" {
       total_storage = module.storage.storage_summary.total_storage
     }
     access = {
+      jump_server    = "SSH to jump server: ssh -i .secrets/staging/id_ed25519 ubuntu@${module.jump_server.jump_server_public_ip}"
       kubernetes_api = "Use load balancer IP: ${module.load_balancers.k8s_api_public_ip}:6443"
       applications   = "Use load balancer IP: ${module.load_balancers.app_public_ip} (ports 80/443)"
-      note          = "No DNS configuration required - direct IP access"
+      note          = "All cluster nodes accessible only through jump server"
     }
   }
 }

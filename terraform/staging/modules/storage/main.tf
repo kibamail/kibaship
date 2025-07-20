@@ -37,7 +37,6 @@ variable "worker_servers" {
   description = "Map of worker server details"
   type = map(object({
     id          = string
-    public_ip   = string
     private_ip  = string
     role        = string
   }))
@@ -67,6 +66,11 @@ variable "ssh_private_key" {
   sensitive   = true
 }
 
+variable "jump_server_public_ip" {
+  description = "Public IP address of the jump server for SSH access"
+  type        = string
+}
+
 # =============================================================================
 # Local Values
 # =============================================================================
@@ -74,9 +78,9 @@ variable "ssh_private_key" {
 locals {
   worker_list = [
     for name, server in var.worker_servers : {
-      name      = name
-      id        = server.id
-      public_ip = server.public_ip
+      name       = name
+      id         = server.id
+      private_ip = server.private_ip
     }
   ]
 }
@@ -126,7 +130,12 @@ resource "null_resource" "verify_raw_devices" {
     type        = "ssh"
     user        = "ubuntu"
     private_key = var.ssh_private_key
-    host        = local.worker_list[count.index].public_ip
+    host        = local.worker_list[count.index].private_ip
+    timeout     = "10m"
+
+    bastion_host        = var.jump_server_public_ip
+    bastion_user        = "ubuntu"
+    bastion_private_key = var.ssh_private_key
   }
 
   provisioner "remote-exec" {
