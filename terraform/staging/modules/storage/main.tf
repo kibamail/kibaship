@@ -1,18 +1,20 @@
 # =============================================================================
 # Storage Module
 # =============================================================================
-# This module provisions persistent storage volumes for Kubernetes cluster
-# worker nodes, including:
+# This module provisions persistent storage volumes for worker nodes, including:
 # - Storage volumes for each worker node
 # - Automatic attachment to worker nodes
-# - Health checks to verify volume accessibility
-# - Optimized for OpenEBS Mayastor storage engine
+# - Raw block devices ready for storage configuration
 
 terraform {
   required_providers {
     hcloud = {
       source  = "hetznercloud/hcloud"
       version = "~> 1.51.0"
+    }
+    null = {
+      source  = "hashicorp/null"
+      version = "~> 3.2.0"
     }
   }
 }
@@ -59,6 +61,12 @@ variable "location" {
   default     = "nbg1"
 }
 
+variable "ssh_private_key" {
+  description = "SSH private key for server access"
+  type        = string
+  sensitive   = true
+}
+
 # =============================================================================
 # Local Values
 # =============================================================================
@@ -82,13 +90,13 @@ resource "hcloud_volume" "worker_storage" {
   name     = "${var.cluster_name}-worker-${count.index + 1}-storage"
   size     = var.volume_size
   location = var.location
-  format   = "ext4"
 
   labels = {
     environment = var.environment
     cluster     = var.cluster_name
     role        = "worker-storage"
     worker_node = "${var.cluster_name}-worker-${count.index + 1}"
+    purpose     = "mayastor-storage"
   }
 }
 
@@ -108,6 +116,59 @@ resource "hcloud_volume_attachment" "worker_storage" {
 }
 
 # =============================================================================
+# Volume Formatting and Mounting
+# =============================================================================
+
+resource "null_resource" "verify_raw_devices" {
+  count = length(local.worker_list)
+
+  connection {
+    type        = "ssh"
+    user        = "ubuntu"
+    private_key = var.ssh_private_key
+    host        = local.worker_list[count.index].public_ip
+  }
+
+  provisioner "remote-exec" {
+    inline = [
+      # Verify the device is available
+      "sudo lsblk /dev/disk/by-id/scsi-0HC_Volume_${hcloud_volume.worker_storage[count.index].id}",
+
+      # Wait a moment for device to be fully ready
+      "sleep 5",
+
+      # Format the volume with ext4
+      "sudo mkfs.ext4 -F /dev/disk/by-id/scsi-0HC_Volume_${hcloud_volume.worker_storage[count.index].id}",
+
+      # Create mount point for OpenEBS Local PV
+      "sudo mkdir -p /mnt/openebs-local",
+
+      # Mount the volume
+      "sudo mount /dev/disk/by-id/scsi-0HC_Volume_${hcloud_volume.worker_storage[count.index].id} /mnt/openebs-local",
+
+      # Add to fstab for persistence across reboots
+      "echo '/dev/disk/by-id/scsi-0HC_Volume_${hcloud_volume.worker_storage[count.index].id} /mnt/openebs-local ext4 defaults 0 2' | sudo tee -a /etc/fstab",
+
+      # Create OpenEBS Local PV directory structure
+      "sudo mkdir -p /mnt/openebs-local/local",
+      "sudo chown root:root /mnt/openebs-local/local",
+      "sudo chmod 755 /mnt/openebs-local/local",
+
+      # Verify mount and directory
+      "df -h /mnt/openebs-local",
+      "ls -la /mnt/openebs-local/",
+
+      # Mark as ready for OpenEBS Local PV
+      "echo 'OpenEBS Local PV storage ready at /mnt/openebs-local/local'"
+    ]
+  }
+
+  depends_on = [
+    hcloud_volume_attachment.worker_storage
+  ]
+}
+
+# =============================================================================
 # Outputs
 # =============================================================================
 
@@ -121,11 +182,16 @@ output "storage_volumes" {
       size        = volume.size
       location    = volume.location
       device_path = "/dev/disk/by-id/scsi-0HC_Volume_${volume.id}"
-      mount_path  = "/mnt/HC_Volume_${volume.id}"
+      mount_path  = "/mnt/openebs-local"
       worker_node = local.worker_list[idx].name
       server_id   = local.worker_list[idx].id
+      formatted   = true
+      mounted     = true
+      filesystem  = "ext4"
+      openebs_path = "/mnt/openebs-local/local"
     }
   }
+  depends_on = [null_resource.verify_raw_devices]
 }
 
 output "volume_attachments" {
@@ -159,23 +225,26 @@ output "storage_summary" {
       }
     ]
 
-    mayastor_ready = {
-      description = "Volumes are configured for OpenEBS Mayastor"
+    openebs_local_pv_ready = {
+      description = "Volumes are formatted, mounted, and ready for OpenEBS Local PV"
       device_paths = [
         for volume in hcloud_volume.worker_storage :
         "/dev/disk/by-id/scsi-0HC_Volume_${volume.id}"
       ]
       mount_paths = [
-        for volume in hcloud_volume.worker_storage :
-        "/mnt/HC_Volume_${volume.id}"
+        for idx in range(length(hcloud_volume.worker_storage)) :
+        "/mnt/openebs-local"
+      ]
+      openebs_base_paths = [
+        for idx in range(length(hcloud_volume.worker_storage)) :
+        "/mnt/openebs-local/local"
       ]
       notes = [
-        "Volumes are formatted with ext4 and auto-mounted",
-        "Each worker node has a dedicated storage volume",
-        "Volumes are consistently mounted at /mnt/HC_Volume_<volume-id>",
-        "Volumes are ready for OpenEBS Mayastor configuration",
-        "Use device paths in Mayastor DiskPool configuration",
-        "Run manual health checks to verify volume accessibility"
+        "Volumes are formatted with ext4 and mounted at /mnt/openebs-local",
+        "Each worker node has a dedicated 40GB storage volume",
+        "OpenEBS Local PV base path: /mnt/openebs-local/local",
+        "Volumes are persistent across reboots (added to /etc/fstab)",
+        "Ready for OpenEBS Local PV Hostpath provisioning"
       ]
     }
   }

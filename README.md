@@ -1,96 +1,128 @@
-# How to setup a staging cluster
+# Staging Infrastructure Setup
 
-1. Setup all infrastructure needed.
+## Infrastructure Provisioning
 
-In the `infrastructure/staging` folder, run `terraform apply`. This will:
+In the `terraform/staging` folder, run `terraform apply`. This will provision:
 
-- Create a private network
-- Create a load balancer for the Kubernetes API
-- Create a load balancer for the application ingress
-- Create 3 control plane nodes
-- Create 3 worker nodes
-- Bootstrap the Talos linux kubernetes cluster
-- Install KubePrism
-- Create storage volumes for the worker nodes
-- Attach these volumes to worker nodes
+### **Networking**
+- Private network (10.0.0.0/16)
+- Subnet for servers (10.0.1.0/24)
+- Load balancer for API access (port 6443)
+- Load balancer for application traffic (ports 30080/30443)
 
-2. Copy secret configuration files
+### **Servers**
+- 3 control plane nodes running Ubuntu 24.04
+- 3 worker nodes running Ubuntu 24.04
+- SSH key generation and configuration
+- Basic system preparation (networking, swap disabled, etc.)
 
-Run the command `terraform output kubeconfig > /path/to/secret/store` to copy the Kubernetes configuration file to your local machine.
-Run the command `terraform output talosconfig > /path/to/secret/store` to copy the Talos configuration file to your local machine.
+### **Storage**
+- 40GB storage volumes attached to each worker node
+- Raw block devices ready for storage configuration
+- Consistent device paths across nodes
 
-3. Verify the cluster is up and running
+## Server Configuration
 
-Run the command `kubectl get nodes` to verify the cluster is up and running.
+Each server is prepared with:
+- **Operating System**: Ubuntu 24.04 LTS
+- **SSH Access**: Configured with generated SSH keys
+- **Networking**: Basic kernel modules loaded, IP forwarding enabled
+- **System**: Swap disabled, basic packages installed
+- **Storage**: Raw block devices attached (workers only)
+
+## Access Information
+
+After deployment:
+- **SSH Key**: `.secrets/staging/ssh_key`
+- **Control Plane IPs**: Listed in Terraform output
+- **Worker IPs**: Listed in Terraform output
+- **Load Balancer Endpoints**: Available for API and application traffic
+
+## Next Steps
+
+The infrastructure is ready for application deployment. You can:
+- Deploy container orchestration platforms
+- Configure storage solutions
+- Set up monitoring and logging
+- Deploy applications and services
 
 
 # How to approve kubelet-serving CSRs
 
 ```bash
-kubectl get csr -o name | xargs kubectl certificate approve
+kubectl --kubeconfig=.secrets/staging/kubeconfig get csr -o name | xargs kubectl --kubeconfig=.secrets/staging/kubeconfig certificate approve
 ```
 
-# How to setup cilium CNI
+# Cilium CNI Setup
 
-Follow this guide to install cilium cli:
+Cilium CNI is automatically installed during cluster bootstrap with the following features:
+- Native routing mode for optimal performance
+- Gateway API support enabled
+- Load balancer acceleration
+- Kubernetes IPAM mode
 
-https://docs.cilium.io/en/v1.16/network/servicemesh/gateway-api/gateway-api/#gs-gateway-host-network-mode
+The installation includes Gateway API CRDs and is optimized for Ubuntu 24.04 nodes.
 
-Next, install the CRDs for k8s Gateway support:
-
-```bash
-kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.1.0/config/crd/standard/gateway.networking.k8s.io_gatewayclasses.yaml
-kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.1.0/config/crd/standard/gateway.networking.k8s.io_gateways.yaml
-kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.1.0/config/crd/standard/gateway.networking.k8s.io_httproutes.yaml
-kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.1.0/config/crd/standard/gateway.networking.k8s.io_referencegrants.yaml
-kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.1.0/config/crd/standard/gateway.networking.k8s.io_grpcroutes.yaml
-kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.1.0/config/crd/experimental/gateway.networking.k8s.io_tlsroutes.yaml
-```
-
-Finally, run the following command to install cilium:
+To verify Cilium installation:
 
 ```bash
-cilium install \
-    --set ipam.mode=kubernetes \
-    --set kubeProxyReplacement=true \
-    --set securityContext.capabilities.ciliumAgent="{CHOWN,KILL,NET_ADMIN,NET_RAW,IPC_LOCK,SYS_ADMIN,SYS_RESOURCE,DAC_OVERRIDE,FOWNER,SETGID,SETUID}" \
-    --set securityContext.capabilities.cleanCiliumState="{NET_ADMIN,SYS_ADMIN,SYS_RESOURCE}" \
-    --set cgroup.autoMount.enabled=false \
-    --set cgroup.hostRoot=/sys/fs/cgroup \
-    --set k8sServiceHost=localhost \
-    --set k8sServicePort=7445 \
-    --set gatewayAPI.enabled=true \
-    --set gatewayAPI.enableAlpn=true \
-    --set gatewayAPI.enableAppProtocol=true
+kubectl --kubeconfig=.secrets/staging/kubeconfig get pods -n kube-system -l k8s-app=cilium
 ```
 
 # How to label cilium test namespace to allow running connectivity tests
 
 ```bash
-kubectl create namespace cilium-test-1
+kubectl --kubeconfig=.secrets/staging/kubeconfig create namespace cilium-test-1
 
-kubectl label namespace cilium-test-1 pod-security.kubernetes.io/enforce=privileged
+kubectl --kubeconfig=.secrets/staging/kubeconfig label namespace cilium-test-1 pod-security.kubernetes.io/enforce=privileged
 ```
 
-# How to setup fluxcd for gitops in staging cluster
+# SSH Access to Nodes
 
-1. Install fluxcd command line :
-
-2. Set Github personal access token and user in command line:
+To access cluster nodes via SSH:
 
 ```bash
-export GITHUB_TOKEN=your-github-token-here
-export GITHUB_USER=your-github-username-here
+# Access control plane nodes
+ssh -i .secrets/staging/ssh_key ubuntu@<control-plane-ip>
+
+# Access worker nodes
+ssh -i .secrets/staging/ssh_key ubuntu@<worker-ip>
 ```
 
-3. Run bootstrap command:
+Node IPs can be found in the Terraform output or Hetzner Cloud console.
+
+# How to install OpenEBS replicated storage with Mayastor
+
+First add the OpenEBS Helm repository:
 
 ```bash
-flux bootstrap github \
-  --token-auth \
-  --owner=kibamail \
-  --repository=kibaship \
-  --branch=main \
-  --path=clusters/staging \
-  --cluster-domain=kibaship.internal
+helm repo add openebs https://openebs.github.io/openebs
+helm repo update
 ```
+
+Then install OpenEBS with Mayastor enabled, optimized for Ubuntu nodes:
+
+```bash
+helm install openebs openebs/openebs \
+  --namespace openebs --create-namespace \
+  --set mayastor.enabled=true \
+  -f terraform/staging/mayastor/values.yaml \
+  --kubeconfig=.secrets/staging/kubeconfig
+```
+
+After installation, create DiskPools using the configured storage volumes:
+
+1. Update `terraform/staging/mayastor/diskpools.yaml` with actual node names and volume device paths
+2. Apply the DiskPool configuration:
+
+```bash
+kubectl --kubeconfig=.secrets/staging/kubeconfig apply -f terraform/staging/mayastor/diskpools.yaml
+```
+
+Verify Mayastor installation:
+
+```bash
+kubectl --kubeconfig=.secrets/staging/kubeconfig get pods -n openebs
+kubectl --kubeconfig=.secrets/staging/kubeconfig get diskpools -n openebs
+```
+

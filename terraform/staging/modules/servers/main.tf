@@ -1,12 +1,11 @@
 # =============================================================================
 # Servers Module
 # =============================================================================
-# This module provisions a Kubernetes cluster using Talos OS on Hetzner Cloud,
-# including:
+# This module provisions Ubuntu 24.04 servers on Hetzner Cloud, including:
 # - Control plane nodes (role=control-plane)
 # - Worker nodes (role=worker)
-# - Automatic cluster bootstrapping
-# - Cilium CNI with native routing
+# - Basic system preparation
+# - SSH key management and secure access
 
 terraform {
   required_providers {
@@ -14,16 +13,14 @@ terraform {
       source  = "hetznercloud/hcloud"
       version = "~> 1.51.0"
     }
-    talos = {
-      source  = "siderolabs/talos"
-      version = "~> 0.8.1"
+    null = {
+      source  = "hashicorp/null"
+      version = "~> 3.2.0"
     }
-
-    kubectl = {
-      source  = "gavinbunney/kubectl"
-      version = "~> 1.19.0"
+    local = {
+      source  = "hashicorp/local"
+      version = "~> 2.5.0"
     }
-
     http = {
       source  = "hashicorp/http"
       version = "~> 3.4.0"
@@ -66,16 +63,10 @@ variable "k8s_api_private_ip" {
   default     = "10.0.1.100"
 }
 
-variable "talos_version" {
-  description = "Talos OS version to use"
+variable "ubuntu_version" {
+  description = "Ubuntu version to use"
   type        = string
-  default     = "1.10.15"
-}
-
-variable "kubernetes_version" {
-  description = "Kubernetes version to install"
-  type        = string
-  default     = "1.32.0"
+  default     = "24.04"
 }
 
 variable "server_type" {
@@ -102,19 +93,28 @@ variable "worker_count" {
   default     = 3
 }
 
-variable "api_port_kube_prism" {
-  description = "Port for KubePrism local API proxy"
-  type        = number
-  default     = 7445
+variable "ssh_key_id" {
+  description = "Hetzner Cloud SSH key ID"
+  type        = string
+}
+
+variable "ssh_private_key" {
+  description = "SSH private key for server access"
+  type        = string
+  sensitive   = true
+}
+
+variable "ssh_public_key" {
+  description = "SSH public key content"
+  type        = string
 }
 
 # =============================================================================
 # Data Sources
 # =============================================================================
 
-data "hcloud_image" "talos" {
-  with_selector = "os=talos"
-  most_recent   = true
+data "hcloud_image" "ubuntu" {
+  name = "ubuntu-${var.ubuntu_version}"
 }
 
 # =============================================================================
@@ -136,10 +136,10 @@ locals {
     for i in range(var.worker_count) : "10.0.1.${20 + i}"
   ]
 
-control_plane_public_ipv4_list = [
+  control_plane_public_ipv4_list = [
     for i in range(var.control_plane_count) : hcloud_server.control_planes[i].ipv4_address
   ]
-  
+
   worker_public_ipv4_list = [
     for i in range(var.worker_count) : hcloud_server.workers[i].ipv4_address
   ]
@@ -148,34 +148,63 @@ control_plane_public_ipv4_list = [
     concat(
       local.control_plane_ips,
       [
-        var.k8s_api_public_ip,                                    # Load balancer public IP
-        var.k8s_api_private_ip,                                   # Load balancer private IP
-        "127.0.0.1",                                             # Localhost & KubePrism
-        "kubernetes",                                            # Service name
-        "kubernetes.default",                                    # Service FQDN
-        "kubernetes.default.svc",                                # Service FQDN
-        "kubernetes.default.svc.${local.cluster_domain}"         # Full service FQDN
+        var.k8s_api_public_ip,
+        var.k8s_api_private_ip,
+        "127.0.0.1",
+        "kubernetes",
+        "kubernetes.default",
+        "kubernetes.default.svc",
+        "kubernetes.default.svc.${local.cluster_domain}"
       ]
     )
   )
 }
 
 # =============================================================================
-# Talos Machine Secrets
+# Cloud-Init Configuration
 # =============================================================================
 
-resource "talos_machine_secrets" "this" {
-  talos_version = var.talos_version
-}
+locals {
+  # Load setup scripts from YAML files
+  common_setup_yaml = yamldecode(file("${path.module}/../../scripts/common-setup.yaml"))
+  worker_specific_yaml = yamldecode(file("${path.module}/../../scripts/worker-specific.yaml"))
+  post_reboot_yaml = yamldecode(file("${path.module}/../../scripts/post-reboot-verification.yaml"))
 
-data "talos_client_configuration" "this" {
-  cluster_name         = var.cluster_name
-  client_configuration = talos_machine_secrets.this.client_configuration
-  endpoints            = local.control_plane_public_ipv4_list
-  nodes                = concat(
-    local.control_plane_public_ipv4_list,
-    local.worker_public_ipv4_list
-  )
+  # Build script arrays and filter out empty strings
+  common_setup_steps = [for cmd in flatten([
+    local.common_setup_yaml.common_setup.user_management,
+    local.common_setup_yaml.common_setup.ssh_key_setup,
+    local.common_setup_yaml.common_setup.system_update,
+    local.common_setup_yaml.common_setup.package_installation,
+    local.common_setup_yaml.common_setup.networking_modules,
+    local.common_setup_yaml.common_setup.sysctl_networking,
+    local.common_setup_yaml.common_setup.disable_swap,
+    local.common_setup_yaml.common_setup.time_sync,
+    local.common_setup_yaml.common_setup.helm_installation,
+    local.common_setup_yaml.common_setup.ssh_security,
+    local.common_setup_yaml.common_setup.completion_message
+  ]) : cmd if cmd != ""]
+
+  worker_specific_steps = [for cmd in flatten([
+    local.worker_specific_yaml.worker_specific.storage_modules,
+    local.worker_specific_yaml.worker_specific.hugepages_sysctl,
+    local.worker_specific_yaml.worker_specific.hugepages_immediate,
+    local.worker_specific_yaml.worker_specific.grub_configuration,
+    local.worker_specific_yaml.worker_specific.verification,
+    local.worker_specific_yaml.worker_specific.reboot_message
+  ]) : cmd if cmd != ""]
+
+  post_reboot_steps = [for cmd in flatten([
+    local.post_reboot_yaml.post_reboot.connection_test,
+    local.post_reboot_yaml.post_reboot.hugepages_check,
+    local.post_reboot_yaml.post_reboot.modules_check,
+    local.post_reboot_yaml.post_reboot.time_sync_check,
+    local.post_reboot_yaml.post_reboot.final_verification
+  ]) : cmd if cmd != ""]
+
+  # Complete script arrays
+  control_plane_script = concat(local.common_setup_steps, ["echo 'Rebooting server to apply all configurations...'", "reboot"])
+  worker_script = concat(local.common_setup_steps, local.worker_specific_steps, ["reboot"])
 }
 
 # =============================================================================
@@ -185,10 +214,11 @@ data "talos_client_configuration" "this" {
 resource "hcloud_server" "control_planes" {
   count       = var.control_plane_count
   name        = "${var.cluster_name}-control-plane-${count.index + 1}"
-  image       = data.hcloud_image.talos.id
+  image       = data.hcloud_image.ubuntu.id
   server_type = var.server_type
   location    = var.location
-  user_data   = data.talos_machine_configuration.control_plane[count.index].machine_configuration
+  ssh_keys    = [var.ssh_key_id]
+  # No user_data - using remote-exec for setup
 
   labels = {
     environment = var.environment
@@ -206,9 +236,29 @@ resource "hcloud_server" "control_planes" {
     ip         = local.control_plane_ips[count.index]
   }
 
-  depends_on = [
-    data.talos_machine_configuration.control_plane
-  ]
+
+}
+
+# =============================================================================
+# Control Plane Server Setup
+# =============================================================================
+
+resource "null_resource" "control_plane_setup" {
+  count = var.control_plane_count
+
+  connection {
+    type        = "ssh"
+    user        = "root"
+    private_key = var.ssh_private_key
+    host        = hcloud_server.control_planes[count.index].ipv4_address
+    timeout     = "10m"
+  }
+
+  provisioner "remote-exec" {
+    inline = [for cmd in local.control_plane_script : replace(cmd, "$${ssh_public_key}", var.ssh_public_key)]
+  }
+
+  depends_on = [hcloud_server.control_planes]
 }
 
 # =============================================================================
@@ -218,10 +268,11 @@ resource "hcloud_server" "control_planes" {
 resource "hcloud_server" "workers" {
   count       = var.worker_count
   name        = "${var.cluster_name}-worker-${count.index + 1}"
-  image       = data.hcloud_image.talos.id
+  image       = data.hcloud_image.ubuntu.id
   server_type = var.server_type
   location    = var.location
-  user_data   = data.talos_machine_configuration.worker[count.index].machine_configuration
+  ssh_keys    = [var.ssh_key_id]
+  # No user_data - using remote-exec for setup
 
   labels = {
     environment = var.environment
@@ -239,338 +290,84 @@ resource "hcloud_server" "workers" {
     ip         = local.worker_ips[count.index]
   }
 
-  depends_on = [
-    data.talos_machine_configuration.worker
-  ]
+
 }
 
 # =============================================================================
-# Talos Machine Configuration - Control Plane
+# Worker Server Setup
 # =============================================================================
 
-data "talos_machine_configuration" "control_plane" {
-  count              = var.control_plane_count
-  cluster_name       = var.cluster_name
-  cluster_endpoint   = var.cluster_endpoint
-  machine_type       = "controlplane"
-  machine_secrets    = talos_machine_secrets.this.machine_secrets
-  talos_version      = var.talos_version
-  kubernetes_version = var.kubernetes_version
+resource "null_resource" "worker_setup" {
+  count = var.worker_count
 
-  config_patches = [
-    yamlencode({
-      machine = {
-        install = {
-          image = "ghcr.io/siderolabs/installer:${var.talos_version}"
-        }
-        certSANs = local.cert_SANs
-        kubelet = {
-          extraArgs = {
-            "rotate-server-certificates" = true
-          }
-          nodeIP = {
-            validSubnets = [local.node_ipv4_cidr]
-          }
-        }
-        network = {
-          interfaces = [
-            {
-              interface = "eth0"
-              dhcp      = true
-            },
-            {
-              interface = "eth1"
-              dhcp      = true
-            }
-          ]
-        }
-        sysctls = {
-          "net.core.somaxconn"          = "65535"
-          "net.core.netdev_max_backlog" = "4096"
-        }
-        kernel = {
-          modules = [
-            {
-              name = "br_netfilter"
-            },
-            {
-              name = "overlay"
-            }
-          ]
-        }
-        time = {
-          servers = [
-            "ntp1.hetzner.de",
-            "ntp2.hetzner.com",
-            "ntp3.hetzner.net",
-            "time.cloudflare.com"
-          ]
-        }
-        features = {
-          kubernetesTalosAPIAccess = {
-            enabled = true
-            allowedRoles = ["os:reader"]
-            allowedKubernetesNamespaces = ["kube-system"]
-          }
-          hostDNS = {
-            enabled              = true
-            forwardKubeDNSToHost = false
-            resolveMemberNames   = true
-          }
-          kubePrism = {
-            enabled = true
-            port    = var.api_port_kube_prism
-          }
-        }
-      }
-      cluster = {
-        apiServer = {
-          certSANs = local.cert_SANs
-          admissionControl = [
-            {
-              name = "PodSecurity"
-              configuration = {
-                apiVersion = "pod-security.admission.config.k8s.io/v1beta1"
-                kind = "PodSecurityConfiguration"
-                exemptions = {
-                  namespaces = ["openebs"]
-                }
-              }
-            }
-          ]
-        }
-        allowSchedulingOnControlPlanes = true
-        etcd = {
-          advertisedSubnets = [local.node_ipv4_cidr]
-          extraArgs = {
-            "listen-metrics-urls" = "http://0.0.0.0:2381"
-          }
-        }
-        scheduler = {
-          extraArgs = {
-            "bind-address" = "0.0.0.0"
-          }
-        }
-        coreDNS = {
-          disabled = false
-        }
-        proxy = {
-          disabled = true
-        }
-        network = {
-          cni = {
-            name = "none"
-          }
-          podSubnets     = [local.pod_ipv4_cidr]
-          serviceSubnets = [local.service_ipv4_cidr]
-          dnsDomain = local.cluster_domain
-        }
-      }
-    })
-  ]
-}
-
-# =============================================================================
-# Talos Machine Configuration - Worker
-# =============================================================================
-
-data "talos_machine_configuration" "worker" {
-  count              = var.worker_count
-  cluster_name       = var.cluster_name
-  cluster_endpoint   = var.cluster_endpoint
-  machine_type       = "worker"
-  machine_secrets    = talos_machine_secrets.this.machine_secrets
-  talos_version      = var.talos_version
-  kubernetes_version = var.kubernetes_version
-
-  config_patches = [
-    yamlencode({
-      machine = {
-        install = {
-          image = "ghcr.io/siderolabs/installer:${var.talos_version}"
-        }
-        certSANs = local.cert_SANs
-        kubelet = {
-          extraArgs = {
-            "rotate-server-certificates" = true
-          }
-          nodeIP = {
-            validSubnets = [local.node_ipv4_cidr]
-          }
-          extraMounts = [
-            {
-              destination = "/var/openebs/local"
-              type        = "bind"
-              source      = "/var/openebs/local"
-              options     = ["bind", "rshared", "rw"]
-            }
-          ]
-        }
-        network = {
-          interfaces = [
-            {
-              interface = "eth0"
-              dhcp      = true
-            },
-            {
-              interface = "eth1"
-              dhcp      = true
-            }
-          ]
-        }
-        sysctls = {
-          "net.core.somaxconn"          = "65535"
-          "net.core.netdev_max_backlog" = "4096"
-          "vm.nr_hugepages"             = "1024"
-        }
-        kernel = {
-          modules = [
-            {
-              name = "br_netfilter"
-            },
-            {
-              name = "overlay"
-            }
-          ]
-        }
-        time = {
-          servers = [
-            "ntp1.hetzner.de",
-            "ntp2.hetzner.com",
-            "ntp3.hetzner.net",
-            "time.cloudflare.com"
-          ]
-        }
-        features = {
-          hostDNS = {
-            enabled              = true
-            forwardKubeDNSToHost = false
-            resolveMemberNames   = true
-          }
-          kubePrism = {
-            enabled = true
-            port    = var.api_port_kube_prism
-          }
-        }
-        nodeLabels = {
-          "openebs.io/engine" = "mayastor"
-        }
-      }
-      cluster = {
-        network = {
-           cni = {
-            name = "none"
-          }
-          podSubnets     = [
-            local.pod_ipv4_cidr
-          ]
-          serviceSubnets = [
-            local.service_ipv4_cidr
-          ]
-          dnsDomain = local.cluster_domain
-        }
-      }
-    })
-  ]
-}
-
-# =============================================================================
-# Machine Configuration Apply
-# =============================================================================
-
-resource "talos_machine_configuration_apply" "control_plane" {
-  count                       = var.control_plane_count
-  client_configuration        = talos_machine_secrets.this.client_configuration
-  machine_configuration_input = data.talos_machine_configuration.control_plane[count.index].machine_configuration
-  node                        = local.control_plane_public_ipv4_list[count.index]
-  endpoint                    = local.control_plane_public_ipv4_list[count.index]
-
-  depends_on = [hcloud_server.control_planes]
-}
-
-resource "talos_machine_configuration_apply" "worker" {
-  count                       = var.worker_count
-  client_configuration        = talos_machine_secrets.this.client_configuration
-  machine_configuration_input = data.talos_machine_configuration.worker[count.index].machine_configuration
-  node                        = local.worker_public_ipv4_list[count.index]
-  endpoint                    = local.worker_public_ipv4_list[count.index]
-
-  depends_on = [
-    hcloud_server.workers,
-    talos_machine_bootstrap.this
-  ]
-}
-
-# =============================================================================
-# Cluster Bootstrap
-# =============================================================================
-
-# Wait for control plane nodes to be ready before bootstrap
-resource "time_sleep" "wait_for_control_plane" {
-  depends_on = [talos_machine_configuration_apply.control_plane]
-  create_duration = "60s"
-}
-
-resource "talos_machine_bootstrap" "this" {
-  depends_on = [
-    time_sleep.wait_for_control_plane
-  ]
-  client_configuration = talos_machine_secrets.this.client_configuration
-  node                 = local.control_plane_public_ipv4_list[0]
-  endpoint             = local.control_plane_public_ipv4_list[0]
-}
-
-# Wait for bootstrap to complete
-resource "time_sleep" "wait_for_bootstrap" {
-  depends_on = [talos_machine_bootstrap.this]
-  create_duration = "120s"
-}
-
-resource "talos_cluster_kubeconfig" "this" {
-  depends_on = [
-    time_sleep.wait_for_bootstrap
-  ]
-  client_configuration = talos_machine_secrets.this.client_configuration
-  node                 = local.control_plane_public_ipv4_list[0]
-  endpoint             = local.control_plane_public_ipv4_list[0]
-}
-
-# =============================================================================
-# Cluster Health Check
-# =============================================================================
-
-data "http" "talos_health" {
-  url = "https://${local.control_plane_public_ipv4_list[0]}:6443/version"
-
-  ca_cert_pem = base64decode(
-    yamldecode(talos_cluster_kubeconfig.this.kubeconfig_raw)
-    .clusters[0].cluster["certificate-authority-data"]
-  )
-
-  retry {
-    attempts     = 60
-    min_delay_ms = 5000
-    max_delay_ms = 5000
+  connection {
+    type        = "ssh"
+    user        = "root"
+    private_key = var.ssh_private_key
+    host        = hcloud_server.workers[count.index].ipv4_address
+    timeout     = "10m"
   }
-  depends_on = [talos_cluster_kubeconfig.this]
+
+  provisioner "remote-exec" {
+    inline = [for cmd in local.worker_script : replace(cmd, "$${ssh_public_key}", var.ssh_public_key)]
+  }
+
+  depends_on = [hcloud_server.workers]
 }
 
 # =============================================================================
-# Cilium CNI Configuration
+# Server Readiness Check
 # =============================================================================
 
-
-
-# Wait for cluster to be healthy before installing Cilium
-resource "time_sleep" "wait_for_cluster_health" {
-  depends_on = [data.http.talos_health]
+resource "time_sleep" "wait_for_reboot_delay" {
   create_duration = "60s"
+
+  depends_on = [
+    null_resource.control_plane_setup,
+    null_resource.worker_setup
+  ]
+}
+
+resource "null_resource" "wait_for_reboot" {
+  count = var.control_plane_count + var.worker_count
+
+  connection {
+    type        = "ssh"
+    user        = "ubuntu"
+    private_key = var.ssh_private_key
+    host        = count.index < var.control_plane_count ? local.control_plane_public_ipv4_list[count.index] : local.worker_public_ipv4_list[count.index - var.control_plane_count]
+    timeout     = "10m"
+  }
+
+  provisioner "remote-exec" {
+    inline = local.post_reboot_steps
+  }
+
+  depends_on = [
+    time_sleep.wait_for_reboot_delay
+  ]
 }
 
 
+# =============================================================================
+# Infrastructure Ready
+# =============================================================================
 
+resource "null_resource" "infrastructure_ready" {
+  triggers = {
+    control_planes_ready = join(",", [for i in range(var.control_plane_count) : hcloud_server.control_planes[i].id])
+    workers_ready        = join(",", [for i in range(var.worker_count) : hcloud_server.workers[i].id])
+    reboot_complete      = join(",", null_resource.wait_for_reboot[*].id)
+  }
 
+  provisioner "local-exec" {
+    command = "echo 'Infrastructure provisioning completed.'"
+  }
 
+  depends_on = [
+    null_resource.wait_for_reboot
+  ]
+}
 
 
 # =============================================================================
@@ -578,12 +375,11 @@ resource "time_sleep" "wait_for_cluster_health" {
 # =============================================================================
 
 output "cluster_info" {
-  description = "Kubernetes cluster information"
+  description = "Infrastructure cluster information"
   value = {
-    name               = var.cluster_name
-    endpoint           = var.cluster_endpoint
-    kubernetes_version = var.kubernetes_version
-    talos_version      = var.talos_version
+    name           = var.cluster_name
+    endpoint       = var.cluster_endpoint
+    ubuntu_version = var.ubuntu_version
   }
 }
 
@@ -613,16 +409,36 @@ output "worker_servers" {
   }
 }
 
-output "kubeconfig" {
-  description = "Kubernetes configuration for cluster access"
-  value       = talos_cluster_kubeconfig.this.kubeconfig_raw
-  sensitive   = true
+output "servers_ready" {
+  description = "Indicates when servers are ready"
+  value       = "Infrastructure provisioned successfully."
 }
 
-output "talosconfig" {
-  description = "Talos configuration for cluster management"
-  value       = data.talos_client_configuration.this.talos_config
-  sensitive   = true
+output "infrastructure_ready" {
+  description = "Indicates when the infrastructure is ready"
+  value       = true
+  depends_on  = [null_resource.infrastructure_ready]
+}
+
+output "control_plane_ips" {
+  description = "Public IP addresses of control plane nodes"
+  value       = local.control_plane_public_ipv4_list
+}
+
+output "worker_ips" {
+  description = "Public IP addresses of worker nodes"
+  value       = local.worker_public_ipv4_list
+}
+
+output "script_debug" {
+  description = "Debug information about generated scripts"
+  value = {
+    common_setup_steps_count = length(local.common_setup_steps)
+    worker_specific_steps_count = length(local.worker_specific_steps)
+    post_reboot_steps_count = length(local.post_reboot_steps)
+    control_plane_script_count = length(local.control_plane_script)
+    worker_script_count = length(local.worker_script)
+  }
 }
 
 

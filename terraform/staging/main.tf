@@ -5,9 +5,10 @@
 # for the KibaShip staging environment on Hetzner Cloud, including:
 # - Private networking infrastructure
 # - Load balancers for Kubernetes API and application traffic
-# - Talos OS Kubernetes cluster with Cilium CNI
+# - Ubuntu 24.04 Kubernetes cluster with kubeadm and Cilium CNI
 # - Persistent storage volumes for worker nodes
 # - OpenEBS Mayastor preparation
+# - SSH key management for secure server access
 
 terraform {
   # Remote state backend - temporarily disabled due to S3 credential issues
@@ -18,9 +19,21 @@ terraform {
       source  = "hetznercloud/hcloud"
       version = "~> 1.51.0"
     }
-    talos = {
-      source  = "siderolabs/talos"
-      version = "~> 0.8.1"
+    tls = {
+      source  = "hashicorp/tls"
+      version = "~> 4.0.0"
+    }
+    local = {
+      source  = "hashicorp/local"
+      version = "~> 2.5.0"
+    }
+    null = {
+      source  = "hashicorp/null"
+      version = "~> 3.2.0"
+    }
+    time = {
+      source  = "hashicorp/time"
+      version = "~> 0.12.0"
     }
     helm = {
       source  = "hashicorp/helm"
@@ -71,22 +84,36 @@ variable "server_type" {
   default     = "cx22"
 }
 
-variable "talos_version" {
-  description = "Talos OS version to use"
+variable "api_load_balancer_private_ip" {
+  description = "Private IP address for the API load balancer"
   type        = string
-  default     = "1.10.15"
+  default     = "10.0.1.100"
 }
 
-variable "kubernetes_version" {
-  description = "Kubernetes version to install"
+variable "ubuntu_version" {
+  description = "Ubuntu version to use"
   type        = string
-  default     = "1.32.0"
+  default     = "24.04"
 }
+
+
 
 variable "volume_size" {
   description = "Size of each storage volume in GB"
   type        = number
   default     = 40
+}
+
+variable "ssh_public_key_path" {
+  description = "Path to store the generated SSH public key"
+  type        = string
+  default     = ".secrets/staging/ssh_key.pub"
+}
+
+variable "ssh_private_key_path" {
+  description = "Path to store the generated SSH private key"
+  type        = string
+  default     = ".secrets/staging/ssh_key"
 }
 
 # =============================================================================
@@ -97,17 +124,26 @@ provider "hcloud" {
   token = var.hcloud_token
 }
 
+provider "tls" {}
 
+provider "local" {}
 
-provider "talos" {}
+provider "null" {}
 
+# kubectl provider configuration is handled in individual modules
+# that need it, since the kubeconfig file doesn't exist at plan time
 
+# =============================================================================
+# SSH Key Management Module
+# =============================================================================
 
-provider "kubectl" {
-  host                   = module.servers.kubeconfig != null ? yamldecode(module.servers.kubeconfig).clusters[0].cluster.server : null
-  client_certificate     = module.servers.kubeconfig != null ? base64decode(yamldecode(module.servers.kubeconfig).users[0].user.client-certificate-data) : null
-  client_key             = module.servers.kubeconfig != null ? base64decode(yamldecode(module.servers.kubeconfig).users[0].user.client-key-data) : null
-  cluster_ca_certificate = module.servers.kubeconfig != null ? base64decode(yamldecode(module.servers.kubeconfig).clusters[0].cluster.certificate-authority-data) : null
+module "ssh_keys" {
+  source = "./modules/ssh-keys"
+
+  cluster_name         = var.cluster_name
+  environment          = var.environment
+  ssh_public_key_path  = var.ssh_public_key_path
+  ssh_private_key_path = var.ssh_private_key_path
 }
 
 # =============================================================================
@@ -154,15 +190,17 @@ module "servers" {
   network_id           = module.networking.network_id
   cluster_endpoint     = module.load_balancers.k8s_api_endpoint
   k8s_api_public_ip    = module.load_balancers.k8s_api_public_ip
-  k8s_api_private_ip   = "10.0.1.100"
-  talos_version        = var.talos_version
-  kubernetes_version   = var.kubernetes_version
+  k8s_api_private_ip   = var.api_load_balancer_private_ip
+  ubuntu_version       = var.ubuntu_version
   server_type          = var.server_type
   location             = var.location
   control_plane_count  = 3
   worker_count         = 3
+  ssh_key_id           = module.ssh_keys.ssh_key_id
+  ssh_private_key      = module.ssh_keys.ssh_private_key
+  ssh_public_key       = module.ssh_keys.ssh_public_key
 
-  depends_on = [module.load_balancers]
+  depends_on = [module.load_balancers, module.ssh_keys]
 }
 
 # =============================================================================
@@ -172,15 +210,24 @@ module "servers" {
 module "storage" {
   source = "./modules/storage"
 
-  cluster_name    = var.cluster_name
-  environment     = var.environment
-  worker_servers  = module.servers.worker_servers
-  volume_size     = var.volume_size
-  volume_type     = "network-ssd"
-  location        = var.location
+  cluster_name     = var.cluster_name
+  environment      = var.environment
+  worker_servers   = module.servers.worker_servers
+  volume_size      = var.volume_size
+  volume_type      = "network-ssd"
+  location         = var.location
+  ssh_private_key  = module.ssh_keys.ssh_private_key
 
   depends_on = [module.servers]
 }
+
+# =============================================================================
+# Infrastructure Complete
+# =============================================================================
+# This configuration provisions the complete infrastructure including:
+# - Servers, networking, load balancers, and storage
+# - Servers are prepared with basic system configuration
+# - Ready for application deployment
 
 # =============================================================================
 # Load Balancer Targets (After Servers)
@@ -211,13 +258,12 @@ resource "hcloud_load_balancer_target" "app_targets" {
 # =============================================================================
 
 output "cluster_info" {
-  description = "Complete cluster information"
+  description = "Complete infrastructure information"
   value = {
-    name               = var.cluster_name
-    environment        = var.environment
-    endpoint           = module.load_balancers.k8s_api_endpoint
-    kubernetes_version = var.kubernetes_version
-    talos_version      = var.talos_version
+    name           = var.cluster_name
+    environment    = var.environment
+    endpoint       = module.load_balancers.k8s_api_endpoint
+    ubuntu_version = var.ubuntu_version
   }
 }
 
@@ -247,16 +293,44 @@ output "storage" {
   value = module.storage.storage_summary
 }
 
-output "kubeconfig" {
-  description = "Kubernetes configuration for cluster access"
-  value       = module.servers.kubeconfig
+output "servers_ready" {
+  description = "Server deployment status"
+  value       = module.servers.servers_ready
+}
+
+output "ssh_private_key" {
+  description = "SSH private key for server access"
+  value       = module.ssh_keys.ssh_private_key
   sensitive   = true
 }
 
-output "talosconfig" {
-  description = "Talos configuration for cluster management"
-  value       = module.servers.talosconfig
-  sensitive   = true
+output "ssh_public_key" {
+  description = "SSH public key for server access"
+  value       = module.ssh_keys.ssh_public_key
+}
+
+output "control_plane_ips" {
+  description = "Public IP addresses of control plane nodes"
+  value       = module.servers.control_plane_ips
+}
+
+output "worker_ips" {
+  description = "Public IP addresses of worker nodes"
+  value       = module.servers.worker_ips
+}
+
+output "deployment_info" {
+  description = "Infrastructure deployment information"
+  value = <<-EOT
+    Infrastructure provisioned successfully!
+
+    Server Details:
+    - Control Plane IPs: ${join(", ", module.servers.control_plane_ips)}
+    - Worker IPs: ${join(", ", module.servers.worker_ips)}
+    - SSH Key: .secrets/staging/ssh_key
+
+    Infrastructure is ready for application deployment.
+  EOT
 }
 
 output "cluster_summary" {
