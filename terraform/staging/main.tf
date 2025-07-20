@@ -70,7 +70,7 @@ variable "location" {
 variable "server_type" {
   description = "Hetzner Cloud server type"
   type        = string
-  default     = "cx22"
+  default     = "cpx21"
 }
 
 variable "api_load_balancer_private_ip" {
@@ -368,54 +368,62 @@ resource "null_resource" "copy_kubespray_config_to_jump_server" {
     timeout     = "5m"
   }
 
-  # Create directory structure on jump server
+  # Wait for Kubespray to be cloned and set up
   provisioner "remote-exec" {
     inline = [
-      "mkdir -p /home/ubuntu/kubespray-config/group_vars/all",
-      "mkdir -p /home/ubuntu/kubespray-config/group_vars/k8s_cluster"
+      "while [ ! -d /home/ubuntu/kubespray ]; do echo 'Waiting for Kubespray clone...'; sleep 5; done",
+      "echo 'Kubespray directory found, proceeding with configuration copy'"
     ]
   }
 
-  # Copy inventory file
-  provisioner "file" {
-    source      = local_file.kubespray_inventory.filename
-    destination = "/home/ubuntu/inventory.ini"
+  # Create Kubespray inventory directory structure
+  provisioner "remote-exec" {
+    inline = [
+      "mkdir -p /home/ubuntu/kubespray/inventory/kibaship-staging/group_vars/all",
+      "mkdir -p /home/ubuntu/kubespray/inventory/kibaship-staging/group_vars/k8s_cluster"
+    ]
   }
 
-  # Copy group_vars configuration files
+  # Copy inventory file to Kubespray directory
+  provisioner "file" {
+    source      = local_file.kubespray_inventory.filename
+    destination = "/home/ubuntu/kubespray/inventory/kibaship-staging/inventory.ini"
+  }
+
+  # Copy group_vars configuration files to Kubespray directory
   provisioner "file" {
     source      = local_file.kubespray_all_config.filename
-    destination = "/home/ubuntu/kubespray-config/group_vars/all/all.yml"
+    destination = "/home/ubuntu/kubespray/inventory/kibaship-staging/group_vars/all/all.yml"
   }
 
   provisioner "file" {
     source      = local_file.kubespray_cloud_config.filename
-    destination = "/home/ubuntu/kubespray-config/group_vars/all/cloud.yml"
+    destination = "/home/ubuntu/kubespray/inventory/kibaship-staging/group_vars/all/cloud.yml"
   }
 
   provisioner "file" {
     source      = local_file.kubespray_addons_config.filename
-    destination = "/home/ubuntu/kubespray-config/group_vars/k8s_cluster/addons.yml"
+    destination = "/home/ubuntu/kubespray/inventory/kibaship-staging/group_vars/k8s_cluster/addons.yml"
   }
 
   provisioner "file" {
     source      = local_file.kubespray_cilium_config.filename
-    destination = "/home/ubuntu/kubespray-config/group_vars/k8s_cluster/k8s-net-cilium.yml"
+    destination = "/home/ubuntu/kubespray/inventory/kibaship-staging/group_vars/k8s_cluster/k8s-net-cilium.yml"
   }
 
   # Set proper permissions and log completion
   provisioner "remote-exec" {
     inline = [
-      # Set file permissions
-      "chmod 644 /home/ubuntu/inventory.ini",
-      "find /home/ubuntu/kubespray-config -type f -exec chmod 644 {} \\;",
-      "find /home/ubuntu/kubespray-config -type d -exec chmod 755 {} \\;",
+      # Set file permissions for Kubespray inventory
+      "find /home/ubuntu/kubespray/inventory/kibaship-staging -type f -exec chmod 644 {} \\;",
+      "find /home/ubuntu/kubespray/inventory/kibaship-staging -type d -exec chmod 755 {} \\;",
 
-      # Log completion to user's home directory (not system log)
+      # Log completion to user's home directory
       "echo 'Kubespray configuration files copied successfully' >> /home/ubuntu/setup.log",
       "echo 'Files available at:' >> /home/ubuntu/setup.log",
-      "echo '  - /home/ubuntu/inventory.ini' >> /home/ubuntu/setup.log",
-      "echo '  - /home/ubuntu/kubespray-config/group_vars/' >> /home/ubuntu/setup.log",
+      "echo '  - /home/ubuntu/kubespray/inventory/kibaship-staging/inventory.ini' >> /home/ubuntu/setup.log",
+      "echo '  - /home/ubuntu/kubespray/inventory/kibaship-staging/group_vars/' >> /home/ubuntu/setup.log",
+      "echo 'Kubespray cloned to: /home/ubuntu/kubespray' >> /home/ubuntu/setup.log",
       "echo 'Setup completed at: $(date)' >> /home/ubuntu/setup.log"
     ]
   }
@@ -501,12 +509,12 @@ output "kubespray_config" {
     inventory_local_path     = local_file.kubespray_inventory.filename
     inventory_jump_server_path = "/home/ubuntu/inventory.ini"
     group_vars_local_path    = "${path.module}/.secrets/staging/group_vars/"
-    group_vars_jump_server_path = "/home/ubuntu/kubespray-config/group_vars/"
+    group_vars_jump_server_path = "/home/ubuntu/kibaship-staging/group_vars/"
     jump_server_ip          = module.jump_server.jump_server_public_ip
     setup_instructions = [
       "1. SSH to jump server: ssh -i .secrets/staging/id_ed25519 ubuntu@${module.jump_server.jump_server_public_ip}",
       "2. Clone Kubespray: git clone https://github.com/kubernetes-sigs/kubespray.git",
-      "3. Copy config: cp -r /home/ubuntu/kubespray-config/group_vars/* kubespray/inventory/mycluster/",
+      "3. Copy config: cp -r /home/ubuntu/kibaship-staging/group_vars/* kubespray/inventory/mycluster/",
       "4. Copy inventory: cp /home/ubuntu/inventory.ini kubespray/inventory/mycluster/",
       "5. Install deps: cd kubespray && pip3 install -r requirements.txt",
       "6. Deploy cluster: ansible-playbook -i inventory/mycluster/inventory.ini cluster.yml -b"
@@ -540,7 +548,7 @@ output "deployment_info" {
 
     Kubespray Setup:
     - Inventory file: /home/ubuntu/inventory.ini
-    - Configuration files: /home/ubuntu/kubespray-config/group_vars/
+    - Configuration files: /home/ubuntu/kibaship-staging/group_vars/
     - Local files: ${path.module}/.secrets/staging/
     - Ready for Kubernetes deployment with Cilium CNI and minimal configuration
 

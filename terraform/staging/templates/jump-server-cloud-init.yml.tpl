@@ -42,9 +42,25 @@ runcmd:
   - chown -R ubuntu:ubuntu /home/ubuntu
   - chmod 755 /home/ubuntu
   - chmod 700 /home/ubuntu/.ssh
-  - chmod -R ubuntu:ubuntu /home/ubuntu/.ssh
+  - chown -R ubuntu:ubuntu /home/ubuntu/.ssh
   - systemctl enable ssh
   - systemctl start ssh
+
+  # Install Python3 and pip3
+  - apt-get update
+  - apt-get install -y python3 python3-pip git
+
+  # Clone Kubespray and checkout specific version
+  - cd /home/ubuntu
+  - git clone https://github.com/kubernetes-sigs/kubespray.git
+  - cd kubespray
+  - git checkout v2.28.0
+  - chown -R ubuntu:ubuntu /home/ubuntu/kubespray
+
+  # Install Kubespray requirements
+  - cd /home/ubuntu/kubespray
+  - pip3 install -r requirements.txt
+
   - echo 'Jump server setup completed successfully' > /var/log/jump-server-setup.log
 
 final_message: "Jump server setup completed successfully"

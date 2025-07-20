@@ -143,7 +143,7 @@ sudo apt install -y python3 python3-pip ansible
 # Deploy Kubernetes with Kubespray
 git clone https://github.com/kubernetes-sigs/kubespray.git
 cd kubespray
-cp -r /home/ubuntu/kubespray-config/group_vars/* inventory/mycluster/
+cp -r /home/ubuntu/kibaship-staging/group_vars/* inventory/mycluster/
 cp /home/ubuntu/inventory.ini inventory/mycluster/
 pip3 install -r requirements.txt
 ansible-playbook -i inventory/mycluster/inventory.ini cluster.yml -b

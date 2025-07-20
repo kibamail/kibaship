@@ -34,8 +34,8 @@ cd kubespray
 mkdir -p inventory/mycluster
 
 # Copy pre-generated configuration
-cp -r /home/ubuntu/kubespray-config/group_vars/* inventory/mycluster/
-cp /home/ubuntu/inventory.ini inventory/mycluster/
+cd /home/ubuntu/kubespray
+ansible-playbook -i inventory/kibaship-staging/inventory.ini cluster.yml -b
 
 # Install Python dependencies
 pip3 install -r requirements.txt
@@ -144,15 +144,15 @@ journalctl -u kubelet -f
 
 ### Enable Additional Features
 
-To enable additional features, modify the configuration files in `/home/ubuntu/kubespray-config/group_vars/`:
+To enable additional features, modify the configuration files in `/home/ubuntu/kibaship-staging/group_vars/`:
 
 ```bash
 # Enable ingress controller
-echo "ingress_nginx_enabled: true" >> kubespray-config/group_vars/k8s_cluster/addons.yml
+echo "ingress_nginx_enabled: true" >> kibaship-staging/group_vars/k8s_cluster/addons.yml
 
 # Enable monitoring
-echo "prometheus_enabled: true" >> kubespray-config/group_vars/k8s_cluster/addons.yml
-echo "grafana_enabled: true" >> kubespray-config/group_vars/k8s_cluster/addons.yml
+echo "prometheus_enabled: true" >> kibaship-staging/group_vars/k8s_cluster/addons.yml
+echo "grafana_enabled: true" >> kibaship-staging/group_vars/k8s_cluster/addons.yml
 ```
 
 ### Scale the Cluster
@@ -176,4 +176,4 @@ To add more nodes:
 - **Kubespray Documentation**: https://kubespray.io/
 - **Cilium Documentation**: https://docs.cilium.io/
 - **Kubernetes Documentation**: https://kubernetes.io/docs/
-- **Configuration Files**: Located in `/home/ubuntu/kubespray-config/group_vars/`
+- **Configuration Files**: Located in `/home/ubuntu/kibaship-staging/group_vars/`
