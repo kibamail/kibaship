@@ -16,6 +16,10 @@ terraform {
       source  = "hashicorp/null"
       version = "~> 3.2.0"
     }
+    time = {
+      source  = "hashicorp/time"
+      version = "~> 0.12.0"
+    }
   }
 }
 
@@ -123,6 +127,13 @@ resource "hcloud_volume_attachment" "worker_storage" {
 # Volume Formatting and Mounting
 # =============================================================================
 
+# Wait for worker nodes to complete cloud-init and reboot
+resource "time_sleep" "wait_for_worker_setup" {
+  create_duration = "300s"  # 5 minutes for cloud-init + reboot + startup
+
+  depends_on = [hcloud_volume_attachment.worker_storage]
+}
+
 resource "null_resource" "verify_raw_devices" {
   count = length(local.worker_list)
 
@@ -140,6 +151,22 @@ resource "null_resource" "verify_raw_devices" {
 
   provisioner "remote-exec" {
     inline = [
+      # Test connectivity and wait for system readiness
+      "echo 'Testing system connectivity...'",
+      "uptime",
+
+      # Wait for cloud-init to complete
+      "echo 'Waiting for cloud-init to complete...'",
+      "sudo cloud-init status --wait || echo 'Cloud-init completed with warnings'",
+
+      # Wait a bit more for system to stabilize after reboot
+      "echo 'Allowing system to stabilize after reboot...'",
+      "sleep 30",
+
+      # Verify system is ready
+      "echo 'System ready, checking storage device...'",
+      "sudo lsblk",
+
       # Verify the device is available
       "sudo lsblk /dev/disk/by-id/scsi-0HC_Volume_${hcloud_volume.worker_storage[count.index].id}",
 

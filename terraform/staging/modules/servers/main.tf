@@ -123,7 +123,6 @@ data "hcloud_image" "ubuntu" {
 # =============================================================================
 
 locals {
-  cluster_domain        = "kibaship.internal"
   network_ipv4_cidr     = "10.0.0.0/16"
   node_ipv4_cidr        = "10.0.1.0/24"
   pod_ipv4_cidr         = "10.0.16.0/20"
@@ -136,23 +135,6 @@ locals {
   worker_ips = [
     for i in range(var.worker_count) : "10.0.1.${20 + i}"
   ]
-
-
-
-  cert_SANs = distinct(
-    concat(
-      local.control_plane_ips,
-      [
-        var.k8s_api_public_ip,
-        var.k8s_api_private_ip,
-        "127.0.0.1",
-        "kubernetes",
-        "kubernetes.default",
-        "kubernetes.default.svc",
-        "kubernetes.default.svc.${local.cluster_domain}"
-      ]
-    )
-  )
 }
 
 # =============================================================================

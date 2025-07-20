@@ -31,6 +31,10 @@ terraform {
       source  = "hashicorp/null"
       version = "~> 3.2.0"
     }
+    time = {
+      source  = "hashicorp/time"
+      version = "~> 0.12.0"
+    }
 
   }
 }
@@ -402,15 +406,17 @@ resource "null_resource" "copy_kubespray_config_to_jump_server" {
   # Set proper permissions and log completion
   provisioner "remote-exec" {
     inline = [
+      # Set file permissions
       "chmod 644 /home/ubuntu/inventory.ini",
-      "chmod -R 644 /home/ubuntu/kubespray-config/group_vars/",
-      "chmod 755 /home/ubuntu/kubespray-config/group_vars/",
-      "chmod 755 /home/ubuntu/kubespray-config/group_vars/all/",
-      "chmod 755 /home/ubuntu/kubespray-config/group_vars/k8s_cluster/",
-      "echo 'Kubespray configuration files copied successfully' >> /var/log/jump-server-setup.log",
-      "echo 'Files available at:' >> /var/log/jump-server-setup.log",
-      "echo '  - /home/ubuntu/inventory.ini' >> /var/log/jump-server-setup.log",
-      "echo '  - /home/ubuntu/kubespray-config/group_vars/' >> /var/log/jump-server-setup.log"
+      "find /home/ubuntu/kubespray-config -type f -exec chmod 644 {} \\;",
+      "find /home/ubuntu/kubespray-config -type d -exec chmod 755 {} \\;",
+
+      # Log completion to user's home directory (not system log)
+      "echo 'Kubespray configuration files copied successfully' >> /home/ubuntu/setup.log",
+      "echo 'Files available at:' >> /home/ubuntu/setup.log",
+      "echo '  - /home/ubuntu/inventory.ini' >> /home/ubuntu/setup.log",
+      "echo '  - /home/ubuntu/kubespray-config/group_vars/' >> /home/ubuntu/setup.log",
+      "echo 'Setup completed at: $(date)' >> /home/ubuntu/setup.log"
     ]
   }
 
