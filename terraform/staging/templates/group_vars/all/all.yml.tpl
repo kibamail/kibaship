@@ -54,7 +54,8 @@ kube_service_addresses: ${kube_service_addresses}  # Service CIDR range
 # =============================================================================
 # Use CoreDNS for cluster DNS resolution
 dns_mode: coredns
-cluster_name: ${cluster_name}
+cluster_name: cluster.local
+ndots: 5
 
 # =============================================================================
 # Certificate Configuration

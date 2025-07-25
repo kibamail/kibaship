@@ -75,18 +75,32 @@ ansible-playbook -i inventory/mycluster/inventory.ini cluster.yml -b
 
 ## Post-Deployment
 
-### 1. Verify Cluster
+### 1. Copy Kubeconfig to Local Machine
 
 ```bash
-# Copy kubeconfig from control plane
-scp ubuntu@10.0.1.10:/etc/kubernetes/admin.conf ~/.kube/config
+# Copy kubeconfig from jump server to local machine
+# Replace 49.13.226.88 with your actual jump server public IP
+scp -i .secrets/staging/id_ed25519 ubuntu@49.13.226.88:/home/ubuntu/kubespray/inventory/kibaship-staging/artifacts/admin.conf .secrets/staging/kubeconfig
 
+# Set KUBECONFIG environment variable to use the copied config
+export KUBECONFIG=.secrets/staging/kubeconfig
+
+# Or copy to default kubectl location
+# cp .secrets/staging/kubeconfig ~/.kube/config
+```
+
+### 2. Verify Cluster
+
+```bash
 # Check cluster status
 kubectl get nodes
 kubectl get pods --all-namespaces
+
+# Verify cluster info
+kubectl cluster-info
 ```
 
-### 2. Verify Cilium
+### 3. Verify Cilium
 
 ```bash
 # Check Cilium status
@@ -96,7 +110,21 @@ kubectl get pods -n kube-system -l k8s-app=cilium
 kubectl get pods -n kube-system -l k8s-app=hubble-ui
 ```
 
-### 3. Test Connectivity
+### 4. Verify ArgoCD
+
+```bash
+# Check ArgoCD status
+kubectl get pods -n argocd
+
+# Get ArgoCD initial admin password
+kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
+
+# Port-forward to access ArgoCD UI (run in separate terminal)
+kubectl port-forward svc/argocd-server -n argocd 8080:443
+# Then access https://localhost:8080 with username: admin
+```
+
+### 5. Test Connectivity
 
 ```bash
 # Test DNS resolution

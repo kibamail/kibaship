@@ -367,6 +367,16 @@ resource "local_file" "kubespray_k8s_cluster_config" {
   depends_on = [null_resource.create_secrets_dir]
 }
 
+# Generate Kubernetes installation script from template
+resource "local_file" "kubespray_install_script" {
+  content = templatefile("${path.module}/templates/install-k8s.sh.tpl", {
+    cluster_name = var.cluster_name
+  })
+  filename = "${path.module}/.secrets/staging/install-k8s.sh"
+
+  depends_on = [null_resource.create_secrets_dir]
+}
+
 # Copy Kubespray configuration files to jump server
 resource "null_resource" "copy_kubespray_config_to_jump_server" {
   connection {
@@ -425,6 +435,12 @@ resource "null_resource" "copy_kubespray_config_to_jump_server" {
     destination = "/home/ubuntu/kubespray/inventory/${var.cluster_name}/group_vars/k8s_cluster/k8s-cluster.yml"
   }
 
+  # Copy Kubernetes installation script to Kubespray directory
+  provisioner "file" {
+    source      = local_file.kubespray_install_script.filename
+    destination = "/home/ubuntu/kubespray/install-k8s.sh"
+  }
+
   # Set proper permissions and log completion
   provisioner "remote-exec" {
     inline = [
@@ -432,12 +448,16 @@ resource "null_resource" "copy_kubespray_config_to_jump_server" {
       "find /home/ubuntu/kubespray/inventory/${var.cluster_name} -type f -exec chmod 644 {} \\;",
       "find /home/ubuntu/kubespray/inventory/${var.cluster_name} -type d -exec chmod 755 {} \\;",
 
+      # Make install script executable
+      "chmod +x /home/ubuntu/kubespray/install-k8s.sh",
+
       # Log completion to user's home directory
       "echo 'Kubespray configuration files copied successfully' >> /home/ubuntu/setup.log",
       "echo 'Files available at:' >> /home/ubuntu/setup.log",
       "echo '  - /home/ubuntu/kubespray/inventory/${var.cluster_name}/inventory.ini' >> /home/ubuntu/setup.log",
       "echo '  - /home/ubuntu/kubespray/inventory/${var.cluster_name}/group_vars/all/' >> /home/ubuntu/setup.log",
       "echo '  - /home/ubuntu/kubespray/inventory/${var.cluster_name}/group_vars/k8s_cluster/' >> /home/ubuntu/setup.log",
+      "echo '  - /home/ubuntu/kubespray/install-k8s.sh (executable)' >> /home/ubuntu/setup.log",
       "echo 'Key configuration: kube_owner set to root for Cilium compatibility' >> /home/ubuntu/setup.log",
       "echo 'Kubespray cloned to: /home/ubuntu/kubespray' >> /home/ubuntu/setup.log",
       "echo 'Setup completed at: $(date)' >> /home/ubuntu/setup.log"
@@ -451,6 +471,7 @@ resource "null_resource" "copy_kubespray_config_to_jump_server" {
     local_file.kubespray_addons_config,
     local_file.kubespray_cilium_config,
     local_file.kubespray_k8s_cluster_config,
+    local_file.kubespray_install_script,
     module.jump_server,
     module.servers
   ]

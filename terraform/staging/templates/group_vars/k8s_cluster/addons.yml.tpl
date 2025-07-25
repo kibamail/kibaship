@@ -79,3 +79,11 @@ gateway_api_enabled: true
 # =============================================================================
 # Enable metrics server for basic cluster metrics (required for HPA)
 metrics_server_enabled: true
+
+# =============================================================================
+# ArgoCD - ENABLED
+# =============================================================================
+# Enable ArgoCD for GitOps-based application deployment and management
+# ArgoCD provides declarative, GitOps continuous delivery for Kubernetes
+argocd_enabled: true
+argocd_namespace: argocd
