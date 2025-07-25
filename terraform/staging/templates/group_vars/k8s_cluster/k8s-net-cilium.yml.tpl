@@ -6,11 +6,17 @@
 # Only variables that are actually supported by Kubespray are included.
 
 # =============================================================================
+# Cilium Version Configuration
+# =============================================================================
+# Use Cilium version 1.17.5 for latest features and bug fixes
+cilium_version: 1.17.5
+
+# =============================================================================
 # Tunnel Mode Configuration
 # =============================================================================
-# Disable tunneling for better performance in private networks
-# Use native routing since all nodes are in the same private network
-cilium_tunnel_mode: disabled
+# Use VXLAN tunneling for reliable pod-to-pod communication
+# VXLAN works well in private networks and doesn't require additional routing configuration
+cilium_tunnel_mode: vxlan
 
 # =============================================================================
 # Gateway API Support

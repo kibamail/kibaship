@@ -55,3 +55,24 @@ kube_service_addresses: ${kube_service_addresses}  # Service CIDR range
 # Use CoreDNS for cluster DNS resolution
 dns_mode: coredns
 cluster_name: ${cluster_name}
+
+# =============================================================================
+# Certificate Configuration
+# =============================================================================
+# Add public IP addresses to Kubernetes API server certificates
+# This allows kubectl to connect directly to control plane nodes via public IPs
+supplementary_addresses_in_ssl_keys:
+  - ${k8s_api_public_ip}  # Load balancer public IP
+%{ for ip in control_plane_public_ips ~}
+  - ${ip}  # Control plane public IP
+%{ endfor ~}
+%{ for ip in worker_public_ips ~}
+  - ${ip}  # Worker public IP
+%{ endfor ~}
+
+# =============================================================================
+# kubectl and kubeconfig Configuration
+# =============================================================================
+# Enable kubectl installation and kubeconfig setup on the Ansible control host (jump server)
+kubectl_localhost: true                    # Install kubectl on jump server
+kubeconfig_localhost: true                 # Copy kubeconfig to jump server

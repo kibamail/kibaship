@@ -110,6 +110,12 @@ variable "jump_server_public_ip" {
   type        = string
 }
 
+variable "jump_server_private_ip" {
+  description = "Private IP address of the jump server for routing"
+  type        = string
+  default     = "10.0.1.5"
+}
+
 # =============================================================================
 # Data Sources
 # =============================================================================
@@ -142,15 +148,23 @@ locals {
 # =============================================================================
 
 locals {
-  # Control plane cloud-init configuration
-  control_plane_cloud_init = templatefile("${path.module}/../../templates/control-plane-cloud-init.yml.tpl", {
-    ssh_public_key = var.ssh_public_key
-  })
+  # Control plane cloud-init configurations (one per server)
+  control_plane_cloud_init_configs = [
+    for i in range(var.control_plane_count) : templatefile("${path.module}/../../templates/control-plane-cloud-init.yml.tpl", {
+      ssh_public_key           = var.ssh_public_key
+      control_plane_private_ip = local.control_plane_ips[i]
+      jump_server_private_ip   = var.jump_server_private_ip
+    })
+  ]
 
-  # Worker cloud-init configuration
-  worker_cloud_init = templatefile("${path.module}/../../templates/worker-cloud-init.yml.tpl", {
-    ssh_public_key = var.ssh_public_key
-  })
+  # Worker cloud-init configurations (one per server)
+  worker_cloud_init_configs = [
+    for i in range(var.worker_count) : templatefile("${path.module}/../../templates/worker-cloud-init.yml.tpl", {
+      ssh_public_key         = var.ssh_public_key
+      worker_private_ip      = local.worker_ips[i]
+      jump_server_private_ip = var.jump_server_private_ip
+    })
+  ]
 }
 
 # =============================================================================
@@ -164,7 +178,7 @@ resource "hcloud_server" "control_planes" {
   server_type = var.server_type
   location    = var.location
   ssh_keys    = [var.ssh_key_id]
-  user_data   = local.control_plane_cloud_init
+  user_data   = local.control_plane_cloud_init_configs[count.index]
 
   labels = {
     environment = var.environment
@@ -173,7 +187,7 @@ resource "hcloud_server" "control_planes" {
   }
 
   public_net {
-    ipv4_enabled = false
+    ipv4_enabled = true
     ipv6_enabled = false
   }
 
@@ -196,7 +210,7 @@ resource "hcloud_server" "workers" {
   server_type = var.server_type
   location    = var.location
   ssh_keys    = [var.ssh_key_id]
-  user_data   = local.worker_cloud_init
+  user_data   = local.worker_cloud_init_configs[count.index]
 
   labels = {
     environment = var.environment
@@ -205,7 +219,7 @@ resource "hcloud_server" "workers" {
   }
 
   public_net {
-    ipv4_enabled = false
+    ipv4_enabled = true
     ipv6_enabled = false
   }
 
@@ -258,6 +272,7 @@ output "control_plane_servers" {
     server.name => {
       id          = server.id
       private_ip  = local.control_plane_ips[i]
+      public_ip   = server.ipv4_address
       role        = "control-plane"
     }
   }
@@ -270,6 +285,7 @@ output "worker_servers" {
     server.name => {
       id          = server.id
       private_ip  = local.worker_ips[i]
+      public_ip   = server.ipv4_address
       role        = "worker"
     }
   }
@@ -296,11 +312,21 @@ output "worker_ips" {
   value       = local.worker_ips
 }
 
+output "control_plane_public_ips" {
+  description = "Public IP addresses of control plane nodes"
+  value       = [for server in hcloud_server.control_planes : server.ipv4_address]
+}
+
+output "worker_public_ips" {
+  description = "Public IP addresses of worker nodes"
+  value       = [for server in hcloud_server.workers : server.ipv4_address]
+}
+
 output "cloud_init_debug" {
   description = "Debug information about cloud-init configuration"
   value = {
-    control_plane_cloud_init_configured = local.control_plane_cloud_init != null
-    worker_cloud_init_configured = local.worker_cloud_init != null
+    control_plane_cloud_init_configured = length(local.control_plane_cloud_init_configs) > 0
+    worker_cloud_init_configured = length(local.worker_cloud_init_configs) > 0
     setup_method = "cloud-init"
   }
 }

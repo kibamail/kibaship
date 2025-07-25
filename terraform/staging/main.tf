@@ -250,7 +250,7 @@ module "storage" {
 # This configuration provisions the complete infrastructure including:
 # - Servers, networking, load balancers, and storage
 # - Servers are prepared with basic system configuration
-# - Ready for application deployment
+# - Kubernetes cluster deployed and ready for application deployment
 
 # =============================================================================
 # Load Balancer Targets (After Servers)
@@ -327,14 +327,16 @@ resource "local_file" "kubespray_inventory" {
 # Generate Kubespray group_vars configuration files
 resource "local_file" "kubespray_all_config" {
   content = templatefile("${path.module}/templates/group_vars/all/all.yml.tpl", {
-    k8s_api_public_ip       = module.load_balancers.k8s_api_public_ip
-    cluster_name            = var.cluster_name
-    kube_pods_subnet        = var.kube_pods_subnet
-    kube_service_addresses  = var.kube_service_addresses
+    k8s_api_public_ip         = module.load_balancers.k8s_api_public_ip
+    cluster_name              = var.cluster_name
+    kube_pods_subnet          = var.kube_pods_subnet
+    kube_service_addresses    = var.kube_service_addresses
+    control_plane_public_ips  = module.servers.control_plane_public_ips
+    worker_public_ips         = module.servers.worker_public_ips
   })
   filename = "${path.module}/.secrets/staging/group_vars/all/all.yml"
 
-  depends_on = [module.load_balancers, null_resource.create_secrets_dir]
+  depends_on = [module.load_balancers, module.servers, null_resource.create_secrets_dir]
 }
 
 resource "local_file" "kubespray_cloud_config" {
@@ -354,6 +356,13 @@ resource "local_file" "kubespray_addons_config" {
 resource "local_file" "kubespray_cilium_config" {
   content  = file("${path.module}/templates/group_vars/k8s_cluster/k8s-net-cilium.yml.tpl")
   filename = "${path.module}/.secrets/staging/group_vars/k8s_cluster/k8s-net-cilium.yml"
+
+  depends_on = [null_resource.create_secrets_dir]
+}
+
+resource "local_file" "kubespray_k8s_cluster_config" {
+  content  = file("${path.module}/templates/group_vars/k8s_cluster/k8s-cluster.yml.tpl")
+  filename = "${path.module}/.secrets/staging/group_vars/k8s_cluster/k8s-cluster.yml"
 
   depends_on = [null_resource.create_secrets_dir]
 }
@@ -379,50 +388,57 @@ resource "null_resource" "copy_kubespray_config_to_jump_server" {
   # Create Kubespray inventory directory structure
   provisioner "remote-exec" {
     inline = [
-      "mkdir -p /home/ubuntu/kubespray/inventory/kibaship-staging/group_vars/all",
-      "mkdir -p /home/ubuntu/kubespray/inventory/kibaship-staging/group_vars/k8s_cluster"
+      "mkdir -p /home/ubuntu/kubespray/inventory/${var.cluster_name}/group_vars/all",
+      "mkdir -p /home/ubuntu/kubespray/inventory/${var.cluster_name}/group_vars/k8s_cluster"
     ]
   }
 
   # Copy inventory file to Kubespray directory
   provisioner "file" {
     source      = local_file.kubespray_inventory.filename
-    destination = "/home/ubuntu/kubespray/inventory/kibaship-staging/inventory.ini"
+    destination = "/home/ubuntu/kubespray/inventory/${var.cluster_name}/inventory.ini"
   }
 
   # Copy group_vars configuration files to Kubespray directory
   provisioner "file" {
     source      = local_file.kubespray_all_config.filename
-    destination = "/home/ubuntu/kubespray/inventory/kibaship-staging/group_vars/all/all.yml"
+    destination = "/home/ubuntu/kubespray/inventory/${var.cluster_name}/group_vars/all/all.yml"
   }
 
   provisioner "file" {
     source      = local_file.kubespray_cloud_config.filename
-    destination = "/home/ubuntu/kubespray/inventory/kibaship-staging/group_vars/all/cloud.yml"
+    destination = "/home/ubuntu/kubespray/inventory/${var.cluster_name}/group_vars/all/cloud.yml"
   }
 
   provisioner "file" {
     source      = local_file.kubespray_addons_config.filename
-    destination = "/home/ubuntu/kubespray/inventory/kibaship-staging/group_vars/k8s_cluster/addons.yml"
+    destination = "/home/ubuntu/kubespray/inventory/${var.cluster_name}/group_vars/k8s_cluster/addons.yml"
   }
 
   provisioner "file" {
     source      = local_file.kubespray_cilium_config.filename
-    destination = "/home/ubuntu/kubespray/inventory/kibaship-staging/group_vars/k8s_cluster/k8s-net-cilium.yml"
+    destination = "/home/ubuntu/kubespray/inventory/${var.cluster_name}/group_vars/k8s_cluster/k8s-net-cilium.yml"
+  }
+
+  provisioner "file" {
+    source      = local_file.kubespray_k8s_cluster_config.filename
+    destination = "/home/ubuntu/kubespray/inventory/${var.cluster_name}/group_vars/k8s_cluster/k8s-cluster.yml"
   }
 
   # Set proper permissions and log completion
   provisioner "remote-exec" {
     inline = [
       # Set file permissions for Kubespray inventory
-      "find /home/ubuntu/kubespray/inventory/kibaship-staging -type f -exec chmod 644 {} \\;",
-      "find /home/ubuntu/kubespray/inventory/kibaship-staging -type d -exec chmod 755 {} \\;",
+      "find /home/ubuntu/kubespray/inventory/${var.cluster_name} -type f -exec chmod 644 {} \\;",
+      "find /home/ubuntu/kubespray/inventory/${var.cluster_name} -type d -exec chmod 755 {} \\;",
 
       # Log completion to user's home directory
       "echo 'Kubespray configuration files copied successfully' >> /home/ubuntu/setup.log",
       "echo 'Files available at:' >> /home/ubuntu/setup.log",
-      "echo '  - /home/ubuntu/kubespray/inventory/kibaship-staging/inventory.ini' >> /home/ubuntu/setup.log",
-      "echo '  - /home/ubuntu/kubespray/inventory/kibaship-staging/group_vars/' >> /home/ubuntu/setup.log",
+      "echo '  - /home/ubuntu/kubespray/inventory/${var.cluster_name}/inventory.ini' >> /home/ubuntu/setup.log",
+      "echo '  - /home/ubuntu/kubespray/inventory/${var.cluster_name}/group_vars/all/' >> /home/ubuntu/setup.log",
+      "echo '  - /home/ubuntu/kubespray/inventory/${var.cluster_name}/group_vars/k8s_cluster/' >> /home/ubuntu/setup.log",
+      "echo 'Key configuration: kube_owner set to root for Cilium compatibility' >> /home/ubuntu/setup.log",
       "echo 'Kubespray cloned to: /home/ubuntu/kubespray' >> /home/ubuntu/setup.log",
       "echo 'Setup completed at: $(date)' >> /home/ubuntu/setup.log"
     ]
@@ -434,6 +450,7 @@ resource "null_resource" "copy_kubespray_config_to_jump_server" {
     local_file.kubespray_cloud_config,
     local_file.kubespray_addons_config,
     local_file.kubespray_cilium_config,
+    local_file.kubespray_k8s_cluster_config,
     module.jump_server,
     module.servers
   ]
@@ -503,25 +520,6 @@ output "ssh_public_key" {
   value       = module.ssh_keys.ssh_public_key
 }
 
-output "kubespray_config" {
-  description = "Kubespray configuration information"
-  value = {
-    inventory_local_path     = local_file.kubespray_inventory.filename
-    inventory_jump_server_path = "/home/ubuntu/inventory.ini"
-    group_vars_local_path    = "${path.module}/.secrets/staging/group_vars/"
-    group_vars_jump_server_path = "/home/ubuntu/kibaship-staging/group_vars/"
-    jump_server_ip          = module.jump_server.jump_server_public_ip
-    setup_instructions = [
-      "1. SSH to jump server: ssh -i .secrets/staging/id_ed25519 ubuntu@${module.jump_server.jump_server_public_ip}",
-      "2. Clone Kubespray: git clone https://github.com/kubernetes-sigs/kubespray.git",
-      "3. Copy config: cp -r /home/ubuntu/kibaship-staging/group_vars/* kubespray/inventory/mycluster/",
-      "4. Copy inventory: cp /home/ubuntu/inventory.ini kubespray/inventory/mycluster/",
-      "5. Install deps: cd kubespray && pip3 install -r requirements.txt",
-      "6. Deploy cluster: ansible-playbook -i inventory/mycluster/inventory.ini cluster.yml -b"
-    ]
-  }
-}
-
 output "control_plane_ips" {
   description = "Private IP addresses of control plane nodes"
   value       = module.servers.control_plane_ips
@@ -530,6 +528,16 @@ output "control_plane_ips" {
 output "worker_ips" {
   description = "Private IP addresses of worker nodes"
   value       = module.servers.worker_ips
+}
+
+output "control_plane_public_ips" {
+  description = "Public IP addresses of control plane nodes"
+  value       = module.servers.control_plane_public_ips
+}
+
+output "worker_public_ips" {
+  description = "Public IP addresses of worker nodes"
+  value       = module.servers.worker_public_ips
 }
 
 output "deployment_info" {
@@ -541,19 +549,22 @@ output "deployment_info" {
     - Public IP: ${module.jump_server.jump_server_public_ip}
     - SSH Access: ssh -i .secrets/staging/id_ed25519 ubuntu@${module.jump_server.jump_server_public_ip}
 
-    Server Details (Private IPs - accessible via jump server):
-    - Control Plane IPs: ${join(", ", module.servers.control_plane_ips)}
-    - Worker IPs: ${join(", ", module.servers.worker_ips)}
+    Server Details:
+    - Control Plane Private IPs: ${join(", ", module.servers.control_plane_ips)}
+    - Control Plane Public IPs: ${join(", ", module.servers.control_plane_public_ips)}
+    - Worker Private IPs: ${join(", ", module.servers.worker_ips)}
+    - Worker Public IPs: ${join(", ", module.servers.worker_public_ips)}
     - SSH Key: .secrets/staging/id_ed25519
 
-    Kubespray Setup:
-    - Inventory file: /home/ubuntu/inventory.ini
-    - Configuration files: /home/ubuntu/kibaship-staging/group_vars/
-    - Local files: ${path.module}/.secrets/staging/
-    - Ready for Kubernetes deployment with Cilium CNI and minimal configuration
+    Kubernetes Cluster:
+    - Status: Automatically deployed via Kubespray
+    - Inventory file: /home/ubuntu/kubespray/inventory/${var.cluster_name}/inventory.ini
+    - Configuration files: /home/ubuntu/kubespray/inventory/${var.cluster_name}/group_vars/
+    - Kubeconfig: /home/ubuntu/.kube/config (on jump server)
+    - CNI: Cilium with Gateway API and Hubble enabled
 
-    Infrastructure is ready for Kubernetes cluster deployment via Kubespray.
-    All cluster nodes are accessible only through the jump server.
+    Kubernetes cluster is fully deployed and ready for application deployment.
+    All cluster nodes have public IP addresses and can be accessed directly or through the jump server.
   EOT
 }
 
@@ -582,7 +593,7 @@ output "cluster_summary" {
       jump_server    = "SSH to jump server: ssh -i .secrets/staging/id_ed25519 ubuntu@${module.jump_server.jump_server_public_ip}"
       kubernetes_api = "Use load balancer IP: ${module.load_balancers.k8s_api_public_ip}:6443"
       applications   = "Use load balancer IP: ${module.load_balancers.app_public_ip} (ports 80/443)"
-      note          = "All cluster nodes accessible only through jump server"
+      note          = "All cluster nodes have public IPs and can be accessed directly or through jump server"
     }
   }
 }

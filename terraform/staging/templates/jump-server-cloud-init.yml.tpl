@@ -58,9 +58,7 @@ runcmd:
   - chown -R ubuntu:ubuntu /home/ubuntu/kubespray
 
   # Install Kubespray requirements
-  - cd /home/ubuntu/kubespray
-  - pip3 install -r requirements.txt
-
+  - cd /home/ubuntu/kubespray 
   - echo 'Jump server setup completed successfully' > /var/log/jump-server-setup.log
 
 final_message: "Jump server setup completed successfully"
