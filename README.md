@@ -126,3 +126,31 @@ kubectl --kubeconfig=.secrets/staging/kubeconfig get pods -n openebs
 kubectl --kubeconfig=.secrets/staging/kubeconfig get diskpools -n openebs
 ```
 
+# Cilium gateway crds
+
+The following commmands are needed to setup the gateway crds for the cluster. Run this before setting up the ingress gateway
+
+```bash
+ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.3.0/standard-install.yaml
+```
+
+# Label nodes
+
+The following command will label all worker nodes as ingress gateways, receiving incoming traffic from the load balancer. Run this before setting up the ingress gateway.
+
+```bash
+# For ingress
+ kubectl label nodes --selector='node-role.kubernetes.io/worker=' ingress-ready=true
+
+ # For mayastor storage nodes <todo>
+
+```
+## On staging
+
+```bash
+kubectl label nodes --selector='kubernetes.io/hostname=default-worker-1' ingress-ready=true
+
+kubectl label nodes --selector='kubernetes.io/hostname=default-worker-2' ingress-ready=true
+
+kubectl label nodes --selector='kubernetes.io/hostname=default-worker-3' ingress-ready=true
+```
