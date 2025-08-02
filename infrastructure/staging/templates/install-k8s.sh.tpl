@@ -101,12 +101,16 @@ deploy_kubernetes_cluster() {
     log "Inventory: $${INVENTORY_PATH}"
     log "Cluster: $${CLUSTER_NAME}"
 
-    ansible-playbook \
-        -i "$${INVENTORY_PATH}" \
+    # Force Ansible to output colors and preserve them while logging
+    export ANSIBLE_FORCE_COLOR=true
+    export ANSIBLE_STDOUT_CALLBACK=default
+
+    # Use script command to preserve colors while logging
+    script -q -c "ansible-playbook \
+        -i '$${INVENTORY_PATH}' \
         cluster.yml \
         -b \
-        -vv \
-        2>&1 | tee -a "$${LOG_FILE}"
+        -vv" /dev/null | tee -a "$${LOG_FILE}"
 
     if [[ $${PIPESTATUS[0]} -eq 0 ]]; then
         log_success "Kubernetes cluster deployment completed successfully"

@@ -85,5 +85,4 @@ metrics_server_enabled: true
 # =============================================================================
 # Enable ArgoCD for GitOps-based application deployment and management
 # ArgoCD provides declarative, GitOps continuous delivery for Kubernetes
-argocd_enabled: true
-argocd_namespace: argocd
+argocd_enabled: false
