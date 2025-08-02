@@ -16,15 +16,15 @@ Make sure you are in the `/infrastructure/staging` folder, and then run the foll
 ```bash
 export JUMP_SERVER_IP=<jump_server_ip>
 
- scp -i .secrets/staging/id_ed25519 ubuntu@$JUMP_SERVER_IP:/home/ubuntu/kubespray/inventory/kibaship-staging/artifacts/admin.conf .secrets/staging/kubeconfig
+scp -i infrastructure/staging/.secrets/staging/id_ed25519 ubuntu@$JUMP_SERVER_IP:/home/ubuntu/kubespray/inventory/kibaship-staging/artifacts/admin.conf infrastructure/staging/.secrets/staging/kubeconfig
 ```
 
 ### Setup kubeconfig in environment
 
-Make sure you are in the `/infrastructure/staging` folder, then run the following command to set the kubeconfig in the environment:
+From the root of the repository, run:
 
 ```bash
-export KUBECONFIG=$(pwd)/.secrets/staging/kubeconfig
+export KUBECONFIG=$(pwd)/infrastructure/staging/.secrets/staging/kubeconfig
 ```
 
 ### Install argocd for gitops
@@ -54,3 +54,6 @@ kubectl port-forward svc/argocd-server -n argocd 8080:443
 
 ### Apply the default app of apps
 
+```bash
+kubectl apply -f argocd/app-of-apps/staging.yaml
+```
