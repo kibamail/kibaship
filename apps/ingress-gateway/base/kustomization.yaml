@@ -5,6 +5,5 @@ namespace: ingress-gateway
 
 resources:
   - namespace.yaml
-  - gateway-class-config.yaml
   - gateway-class.yaml
   - gateway.yaml
