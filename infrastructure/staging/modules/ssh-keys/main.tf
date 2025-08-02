@@ -42,13 +42,13 @@ variable "environment" {
 variable "ssh_public_key_path" {
   description = "Path to store the generated SSH public key"
   type        = string
-  default     = ".secrets/staging/id_ed25519.pub"
+  default     = ".secrets/ssh/id_ed25519.pub"
 }
 
 variable "ssh_private_key_path" {
   description = "Path to store the generated SSH private key"
   type        = string
-  default     = ".secrets/staging/id_ed25519"
+  default     = ".secrets/ssh/id_ed25519"
 }
 
 # =============================================================================

@@ -1,5 +1,0 @@
-id_ed25519
-id_ed25519.pub
-group_vars/
-inventory.ini
-install-k8s.sh

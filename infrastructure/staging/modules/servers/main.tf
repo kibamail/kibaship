@@ -1,11 +1,11 @@
 # =============================================================================
 # Servers Module
 # =============================================================================
-# This module provisions Ubuntu 24.04 servers on Hetzner Cloud, including:
+# This module provisions Talos OS servers on Hetzner Cloud, including:
 # - Control plane nodes (role=control-plane)
 # - Worker nodes (role=worker)
-# - Basic system preparation
-# - SSH key management and secure access
+# - Talos OS configuration and bootstrapping
+# - Network configuration for Kubernetes cluster
 
 terraform {
   required_providers {
@@ -21,6 +21,7 @@ terraform {
       source  = "hashicorp/local"
       version = "~> 2.5.0"
     }
+
   }
 }
 
@@ -59,11 +60,7 @@ variable "k8s_api_private_ip" {
   default     = "10.0.1.100"
 }
 
-variable "ubuntu_version" {
-  description = "Ubuntu version to use"
-  type        = string
-  default     = "24.04"
-}
+
 
 variable "server_type" {
   description = "Hetzner Cloud server type"
@@ -90,38 +87,56 @@ variable "worker_count" {
 }
 
 variable "ssh_key_id" {
-  description = "Hetzner Cloud SSH key ID"
+  description = "Hetzner Cloud SSH key ID for server access"
   type        = string
 }
 
-variable "ssh_private_key" {
-  description = "SSH private key for server access"
-  type        = string
-  sensitive   = true
+variable "control_plane_machine_configurations" {
+  description = "Talos machine configurations for control plane nodes"
+  type        = map(string)
+  default     = {}
 }
 
-variable "ssh_public_key" {
-  description = "SSH public key content"
-  type        = string
-}
-
-variable "jump_server_public_ip" {
-  description = "Public IP address of the jump server for SSH access"
-  type        = string
-}
-
-variable "jump_server_private_ip" {
-  description = "Private IP address of the jump server for routing"
-  type        = string
-  default     = "10.0.1.5"
+variable "worker_machine_configurations" {
+  description = "Talos machine configurations for worker nodes"
+  type        = map(string)
+  default     = {}
 }
 
 # =============================================================================
 # Data Sources
 # =============================================================================
 
-data "hcloud_image" "ubuntu" {
-  name = "ubuntu-${var.ubuntu_version}"
+data "hcloud_image" "talos" {
+  with_selector = "os=talos"
+  with_architecture = "x86"
+  most_recent   = true
+}
+
+# =============================================================================
+# Placement Groups
+# =============================================================================
+
+resource "hcloud_placement_group" "control_plane" {
+  name = "${var.cluster_name}-control-plane-pg"
+  type = "spread"
+
+  labels = {
+    environment = var.environment
+    cluster     = var.cluster_name
+    role        = "control-plane"
+  }
+}
+
+resource "hcloud_placement_group" "workers" {
+  name = "${var.cluster_name}-workers-pg"
+  type = "spread"
+
+  labels = {
+    environment = var.environment
+    cluster     = var.cluster_name
+    role        = "worker"
+  }
 }
 
 # =============================================================================
@@ -141,30 +156,22 @@ locals {
   worker_ips = [
     for i in range(var.worker_count) : "10.0.1.${20 + i}"
   ]
-}
 
-# =============================================================================
-# Cloud-Init Configuration
-# =============================================================================
+  control_plane_nodes = {
+    for i in range(var.control_plane_count) :
+    "${var.cluster_name}-control-plane-${i + 1}" => {
+      name       = "${var.cluster_name}-control-plane-${i + 1}"
+      private_ip = local.control_plane_ips[i]
+    }
+  }
 
-locals {
-  # Control plane cloud-init configurations (one per server)
-  control_plane_cloud_init_configs = [
-    for i in range(var.control_plane_count) : templatefile("${path.module}/../../templates/control-plane-cloud-init.yml.tpl", {
-      ssh_public_key           = var.ssh_public_key
-      control_plane_private_ip = local.control_plane_ips[i]
-      jump_server_private_ip   = var.jump_server_private_ip
-    })
-  ]
-
-  # Worker cloud-init configurations (one per server)
-  worker_cloud_init_configs = [
-    for i in range(var.worker_count) : templatefile("${path.module}/../../templates/worker-cloud-init.yml.tpl", {
-      ssh_public_key         = var.ssh_public_key
-      worker_private_ip      = local.worker_ips[i]
-      jump_server_private_ip = var.jump_server_private_ip
-    })
-  ]
+  worker_nodes = {
+    for i in range(var.worker_count) :
+    "${var.cluster_name}-worker-${i + 1}" => {
+      name       = "${var.cluster_name}-worker-${i + 1}"
+      private_ip = local.worker_ips[i]
+    }
+  }
 }
 
 # =============================================================================
@@ -172,13 +179,14 @@ locals {
 # =============================================================================
 
 resource "hcloud_server" "control_planes" {
-  count       = var.control_plane_count
-  name        = "${var.cluster_name}-control-plane-${count.index + 1}"
-  image       = data.hcloud_image.ubuntu.id
-  server_type = var.server_type
-  location    = var.location
-  ssh_keys    = [var.ssh_key_id]
-  user_data   = local.control_plane_cloud_init_configs[count.index]
+  for_each         = local.control_plane_nodes
+  name             = each.value.name
+  image            = data.hcloud_image.talos.id
+  server_type      = var.server_type
+  location         = var.location
+  ssh_keys         = [var.ssh_key_id]
+  placement_group_id = hcloud_placement_group.control_plane.id
+  user_data        = lookup(var.control_plane_machine_configurations, each.key, "")
 
   labels = {
     environment = var.environment
@@ -193,24 +201,23 @@ resource "hcloud_server" "control_planes" {
 
   network {
     network_id = var.network_id
-    ip         = local.control_plane_ips[count.index]
+    ip         = each.value.private_ip
   }
 }
-
-
 
 # =============================================================================
 # Worker Servers
 # =============================================================================
 
 resource "hcloud_server" "workers" {
-  count       = var.worker_count
-  name        = "${var.cluster_name}-worker-${count.index + 1}"
-  image       = data.hcloud_image.ubuntu.id
-  server_type = var.server_type
-  location    = var.location
-  ssh_keys    = [var.ssh_key_id]
-  user_data   = local.worker_cloud_init_configs[count.index]
+  for_each         = local.worker_nodes
+  name             = each.value.name
+  image            = data.hcloud_image.talos.id
+  server_type      = var.server_type
+  location         = var.location
+  ssh_keys         = [var.ssh_key_id]
+  placement_group_id = hcloud_placement_group.workers.id
+  user_data        = lookup(var.worker_machine_configurations, each.key, "")
 
   labels = {
     environment = var.environment
@@ -225,14 +232,9 @@ resource "hcloud_server" "workers" {
 
   network {
     network_id = var.network_id
-    ip         = local.worker_ips[count.index]
+    ip         = each.value.private_ip
   }
 }
-
-
-
-
-
 
 # =============================================================================
 # Infrastructure Ready
@@ -240,12 +242,12 @@ resource "hcloud_server" "workers" {
 
 resource "null_resource" "infrastructure_ready" {
   triggers = {
-    control_planes_ready = join(",", [for i in range(var.control_plane_count) : hcloud_server.control_planes[i].id])
-    workers_ready        = join(",", [for i in range(var.worker_count) : hcloud_server.workers[i].id])
+    control_planes_ready = join(",", [for server in hcloud_server.control_planes : server.id])
+    workers_ready        = join(",", [for server in hcloud_server.workers : server.id])
   }
 
   provisioner "local-exec" {
-    command = "echo 'All servers are ready and configured via cloud-init'"
+    command = "echo 'All servers are ready'"
   }
 
   depends_on = [hcloud_server.control_planes, hcloud_server.workers]
@@ -259,19 +261,19 @@ resource "null_resource" "infrastructure_ready" {
 output "cluster_info" {
   description = "Infrastructure cluster information"
   value = {
-    name           = var.cluster_name
-    endpoint       = var.cluster_endpoint
-    ubuntu_version = var.ubuntu_version
+    name     = var.cluster_name
+    endpoint = var.cluster_endpoint
+    os       = "talos"
   }
 }
 
 output "control_plane_servers" {
   description = "Control plane server details"
   value = {
-    for i, server in hcloud_server.control_planes :
-    server.name => {
+    for name, server in hcloud_server.control_planes :
+    name => {
       id          = server.id
-      private_ip  = local.control_plane_ips[i]
+      private_ip  = server.network[0].ip
       public_ip   = server.ipv4_address
       role        = "control-plane"
     }
@@ -281,10 +283,10 @@ output "control_plane_servers" {
 output "worker_servers" {
   description = "Worker server details"
   value = {
-    for i, server in hcloud_server.workers :
-    server.name => {
+    for name, server in hcloud_server.workers :
+    name => {
       id          = server.id
-      private_ip  = local.worker_ips[i]
+      private_ip  = server.network[0].ip
       public_ip   = server.ipv4_address
       role        = "worker"
     }
@@ -304,12 +306,12 @@ output "infrastructure_ready" {
 
 output "control_plane_ips" {
   description = "Private IP addresses of control plane nodes"
-  value       = local.control_plane_ips
+  value       = [for server in hcloud_server.control_planes : server.network[0].ip]
 }
 
 output "worker_ips" {
   description = "Private IP addresses of worker nodes"
-  value       = local.worker_ips
+  value       = [for server in hcloud_server.workers : server.network[0].ip]
 }
 
 output "control_plane_public_ips" {
@@ -322,13 +324,14 @@ output "worker_public_ips" {
   value       = [for server in hcloud_server.workers : server.ipv4_address]
 }
 
-output "cloud_init_debug" {
-  description = "Debug information about cloud-init configuration"
-  value = {
-    control_plane_cloud_init_configured = length(local.control_plane_cloud_init_configs) > 0
-    worker_cloud_init_configured = length(local.worker_cloud_init_configs) > 0
-    setup_method = "cloud-init"
-  }
+output "control_plane_nodes" {
+  description = "Control plane node details for Talos configuration"
+  value       = local.control_plane_nodes
+}
+
+output "worker_nodes" {
+  description = "Worker node details for Talos configuration"
+  value       = local.worker_nodes
 }
 
 

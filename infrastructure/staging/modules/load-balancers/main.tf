@@ -41,8 +41,6 @@ variable "location" {
   default     = "nbg1"
 }
 
-
-
 variable "load_balancer_type" {
   description = "Type of load balancer"
   type        = string
@@ -98,6 +96,15 @@ resource "hcloud_load_balancer_service" "k8s_api_service" {
   }
 }
 
+resource "hcloud_load_balancer_target" "k8s_api_targets" {
+  type             = "label_selector"
+  load_balancer_id = hcloud_load_balancer.k8s_api.id
+  label_selector   = "role=control-plane"
+  use_private_ip   = true
+
+  depends_on = [hcloud_load_balancer_network.k8s_api_network]
+}
+
 
 
 # =============================================================================
@@ -150,6 +157,15 @@ resource "hcloud_load_balancer_service" "app_https_service" {
     timeout  = 5
     retries  = 3
   }
+}
+
+resource "hcloud_load_balancer_target" "app_targets" {
+  type             = "label_selector"
+  load_balancer_id = hcloud_load_balancer.app.id
+  label_selector   = "role=worker"
+  use_private_ip   = true
+
+  depends_on = [hcloud_load_balancer_network.app_network]
 }
 
 
