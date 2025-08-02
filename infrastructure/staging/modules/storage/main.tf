@@ -61,7 +61,7 @@ variable "volume_type" {
 variable "location" {
   description = "Hetzner Cloud location"
   type        = string
-  default     = "nbg1"
+  default     = "hel1"
 }
 
 variable "ssh_private_key" {

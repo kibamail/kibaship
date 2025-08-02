@@ -38,7 +38,7 @@ variable "network_id" {
 variable "location" {
   description = "Hetzner Cloud location"
   type        = string
-  default     = "nbg1"
+  default     = "hel1"
 }
 
 

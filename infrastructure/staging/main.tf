@@ -64,7 +64,7 @@ variable "environment" {
 variable "location" {
   description = "Hetzner Cloud location"
   type        = string
-  default     = "nbg1"
+  default     = "hel1"
 }
 
 variable "server_type" {

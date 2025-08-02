@@ -68,13 +68,13 @@ variable "ubuntu_version" {
 variable "server_type" {
   description = "Hetzner Cloud server type"
   type        = string
-  default     = "cx22"
+  default     = "CPX21"
 }
 
 variable "location" {
   description = "Hetzner Cloud location"
   type        = string
-  default     = "nbg1"
+  default     = "hel1"
 }
 
 variable "control_plane_count" {

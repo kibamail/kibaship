@@ -48,13 +48,13 @@ variable "network_id" {
 variable "server_type" {
   description = "Hetzner Cloud server type for the jump server"
   type        = string
-  default     = "cx22"
+  default     = "CPX21"
 }
 
 variable "location" {
   description = "Hetzner Cloud location"
   type        = string
-  default     = "nbg1"
+  default     = "hel1"
 }
 
 variable "ubuntu_version" {
