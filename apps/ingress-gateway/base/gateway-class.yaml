@@ -4,3 +4,8 @@ metadata:
   name: ingress
 spec:
   controllerName: io.cilium/gateway-controller
+  parametersRef:
+    group: cilium.io
+    kind: CiliumGatewayClassConfig
+    name: ingress-gateway-config
+    namespace: ingress-gateway
