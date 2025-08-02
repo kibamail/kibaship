@@ -52,12 +52,6 @@ Run the following command to port forward the argocd server to your local machin
 kubectl port-forward svc/argocd-server -n argocd 8080:443
 ```
 
-### Apply the default app of apps
-
-```bash
-kubectl apply -f argocd/app-of-apps/staging.yaml
-```
-
 ### Label worker nodes for ingress gateway
 
 ```bash
@@ -65,5 +59,12 @@ kubectl label nodes --selector='kubernetes.io/hostname=default-worker-1' ingress
 kubectl label nodes --selector='kubernetes.io/hostname=default-worker-2' ingress-ready=true
 kubectl label nodes --selector='kubernetes.io/hostname=default-worker-3' ingress-ready=true
 ```
+
+### Apply the default app of apps
+
+```bash
+kubectl apply -f argocd/app-of-apps/staging.yaml
+```
+
 
 ### Now on argocd dashboard, go ahead and sync the apps manually.

@@ -8,8 +8,8 @@
 # =============================================================================
 # Cilium Version Configuration
 # =============================================================================
-# Use Cilium version 1.17.5 for latest features and bug fixes
-cilium_version: 1.17.5
+# Use Cilium version 1.18.0 for latest features and bug fixes
+cilium_version: 1.18.0
 
 # =============================================================================
 # Tunnel Mode Configuration
