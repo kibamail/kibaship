@@ -4,29 +4,480 @@ kind: ClusterRole
 metadata:
   name: manager-role
 rules:
-- apiGroups:
-  - platform.operator.kibaship.com
-  resources:
-  - projects
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - platform.operator.kibaship.com
-  resources:
-  - projects/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - platform.operator.kibaship.com
-  resources:
-  - projects/status
-  verbs:
-  - get
-  - patch
-  - update
+  # ==========================================
+  # KIBASHIP OPERATOR PERMISSIONS
+  # ==========================================
+  # This ClusterRole defines all permissions needed for the Kibaship PaaS operator
+  # to manage customer projects, applications, and infrastructure resources.
+
+  # ------------------------------------------
+  # CUSTOM RESOURCES (Project CRDs)
+  # ------------------------------------------
+  # Full CRUD access to Project custom resources
+  - apiGroups:
+      - platform.operator.kibaship.com
+    resources:
+      - projects
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+
+  # Finalizer management for Project resources (cleanup coordination)
+  - apiGroups:
+      - platform.operator.kibaship.com
+    resources:
+      - projects/finalizers
+    verbs:
+      - update
+
+  # Status updates for Project resources (phase, conditions, etc.)
+  - apiGroups:
+      - platform.operator.kibaship.com
+    resources:
+      - projects/status
+    verbs:
+      - get
+      - patch
+      - update
+
+  # ------------------------------------------
+  # NAMESPACE MANAGEMENT
+  # ------------------------------------------
+  # Create and manage customer namespaces for project isolation
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+
+  # ------------------------------------------
+  # SECRETS & CONFIGURATION
+  # ------------------------------------------
+  # Manage secrets (TLS certificates, API keys, database credentials)
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+
+  # Manage configuration data for applications
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+
+  # ------------------------------------------
+  # SERVICE & NETWORKING
+  # ------------------------------------------
+  # Manage services for application networking
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+
+  # Manage endpoints for service discovery
+  - apiGroups: [""]
+    resources: ["endpoints"]
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+
+  # ------------------------------------------
+  # GATEWAY API (Modern Ingress)
+  # ------------------------------------------
+  # Manage Gateway API HTTPRoutes for customer applications
+  - apiGroups: ["gateway.networking.k8s.io"]
+    resources: ["httproutes"]
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+
+  # Manage Gateway API Gateways
+  - apiGroups: ["gateway.networking.k8s.io"]
+    resources: ["gateways"]
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+
+  # Manage Gateway API ReferenceGrants for cross-namespace access
+  - apiGroups: ["gateway.networking.k8s.io"]
+    resources: ["referencegrants"]
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+
+  # ------------------------------------------
+  # CERT-MANAGER INTEGRATION
+  # ------------------------------------------
+  # Manage TLS certificates via cert-manager
+  - apiGroups: ["cert-manager.io"]
+    resources: ["certificates"]
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+
+  # Manage certificate issuers
+  - apiGroups: ["cert-manager.io"]
+    resources: ["issuers", "clusterissuers"]
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+
+  # Manage certificate requests
+  - apiGroups: ["cert-manager.io"]
+    resources: ["certificaterequests"]
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+
+  # ------------------------------------------
+  # APPLICATION WORKLOADS
+  # ------------------------------------------
+  # Manage Deployments (stateless applications)
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+
+  # Manage ReplicaSets (created by Deployments)
+  - apiGroups: ["apps"]
+    resources: ["replicasets"]
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+
+  # Manage StatefulSets (stateful applications like databases)
+  - apiGroups: ["apps"]
+    resources: ["statefulsets"]
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+
+  # Manage DaemonSets (node-level services)
+  - apiGroups: ["apps"]
+    resources: ["daemonsets"]
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+
+  # Manage individual Pods
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+
+  # Access Pod logs for debugging
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs:
+      - get
+      - list
+
+  # ------------------------------------------
+  # BATCH WORKLOADS
+  # ------------------------------------------
+  # Manage Jobs (one-time tasks)
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+
+  # Manage CronJobs (scheduled tasks)
+  - apiGroups: ["batch"]
+    resources: ["cronjobs"]
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+
+  # ------------------------------------------
+  # TEKTON CI/CD PIPELINE
+  # ------------------------------------------
+  # Manage Tekton Pipelines
+  - apiGroups: ["tekton.dev"]
+    resources: ["pipelines"]
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+
+  # Manage Tekton PipelineRuns (pipeline executions)
+  - apiGroups: ["tekton.dev"]
+    resources: ["pipelineruns"]
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+
+  # Manage Tekton Tasks
+  - apiGroups: ["tekton.dev"]
+    resources: ["tasks"]
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+
+  # Manage Tekton TaskRuns (task executions)
+  - apiGroups: ["tekton.dev"]
+    resources: ["taskruns"]
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+
+  # Manage Tekton ClusterTasks (shared tasks)
+  - apiGroups: ["tekton.dev"]
+    resources: ["clustertasks"]
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+
+  # Manage Tekton Triggers
+  - apiGroups: ["triggers.tekton.dev"]
+    resources:
+      ["triggers", "triggertemplates", "triggerbindings", "eventlisteners"]
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+
+  # ------------------------------------------
+  # RBAC MANAGEMENT
+  # ------------------------------------------
+  # Create and manage ServiceAccounts for customer applications
+  - apiGroups: [""]
+    resources: ["serviceaccounts"]
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+
+  # Create and manage Roles for namespace-scoped permissions
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["roles"]
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+
+  # Create and manage RoleBindings for namespace-scoped permissions
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["rolebindings"]
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+
+  # Create and manage ClusterRoles for cluster-wide permissions
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["clusterroles"]
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+
+  # Create and manage ClusterRoleBindings for cluster-wide permissions
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["clusterrolebindings"]
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+
+  # ------------------------------------------
+  # RESOURCE MANAGEMENT
+  # ------------------------------------------
+  # Manage resource quotas for customer namespace limits
+  - apiGroups: [""]
+    resources: ["resourcequotas"]
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+
+  # Manage limit ranges for default resource limits
+  - apiGroups: [""]
+    resources: ["limitranges"]
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+
+  # ------------------------------------------
+  # PERSISTENT STORAGE
+  # ------------------------------------------
+  # Manage PersistentVolumeClaims for application storage
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+
+  # Manage PersistentVolumes (cluster-wide storage resources)
+  - apiGroups: [""]
+    resources: ["persistentvolumes"]
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
