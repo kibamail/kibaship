@@ -12,7 +12,7 @@ spec:
     listKind: ProjectList
     plural: projects
     singular: project
-  scope: Namespaced
+  scope: Cluster
   versions:
   - name: v1alpha1
     schema:

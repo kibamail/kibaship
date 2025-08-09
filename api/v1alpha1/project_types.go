@@ -156,6 +156,7 @@ type ProjectStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:resource:scope=Cluster
 // +kubebuilder:webhook:path=/validate-platform-operator-kibaship-com-v1alpha1-project,mutating=false,failurePolicy=fail,sideEffects=None,groups=platform.operator.kibaship.com,resources=projects,verbs=create;update,versions=v1alpha1,name=vproject.kb.io,admissionReviewVersions=v1
 
 // Project is the Schema for the projects API.

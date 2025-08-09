@@ -21,6 +21,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -37,8 +38,7 @@ var _ = Describe("Project Controller", func() {
 		ctx := context.Background()
 
 		typeNamespacedName := types.NamespacedName{
-			Name:      resourceName,
-			Namespace: "default", // TODO(user):Modify as needed
+			Name: resourceName,
 		}
 		project := &platformv1alpha1.Project{}
 
@@ -48,8 +48,7 @@ var _ = Describe("Project Controller", func() {
 			if err != nil && errors.IsNotFound(err) {
 				resource := &platformv1alpha1.Project{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      resourceName,
-						Namespace: "default",
+						Name: resourceName,
 						Labels: map[string]string{
 							"platform.kibaship.com/uuid":           "550e8400-e29b-41d4-a716-446655440000",
 							"platform.kibaship.com/workspace-uuid": "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
@@ -72,23 +71,38 @@ var _ = Describe("Project Controller", func() {
 		})
 		It("should successfully reconcile the resource", func() {
 			By("Reconciling the created resource")
-			controllerReconciler := &ProjectReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
-			}
+			controllerReconciler := NewProjectReconciler(k8sClient, k8sClient.Scheme())
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: typeNamespacedName,
 			})
 			Expect(err).NotTo(HaveOccurred())
+
+			By("Verifying that a namespace was created for the project")
+			expectedNamespaceName := NamespacePrefix + resourceName
+			namespace := &corev1.Namespace{}
+			err = k8sClient.Get(ctx, types.NamespacedName{Name: expectedNamespaceName}, namespace)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Verifying namespace has correct labels")
+			Expect(namespace.Labels[ManagedByLabel]).To(Equal(ManagedByValue))
+			Expect(namespace.Labels[ProjectNameLabel]).To(Equal(resourceName))
+			Expect(namespace.Labels[ProjectUUIDLabel]).To(Equal("550e8400-e29b-41d4-a716-446655440000"))
+			Expect(namespace.Labels[WorkspaceUUIDLabel]).To(Equal("6ba7b810-9dad-11d1-80b4-00c04fd430c8"))
+
+			By("Verifying namespace has correct annotations")
+			Expect(namespace.Annotations["platform.kibaship.com/created-by"]).To(Equal("kibaship-operator"))
+			Expect(namespace.Annotations["platform.kibaship.com/project"]).To(Equal(resourceName))
+
+			By("Cleaning up the created namespace")
+			Expect(k8sClient.Delete(ctx, namespace)).To(Succeed())
 		})
 
 		It("should fail validation when platform.kibaship.com/uuid label is missing", func() {
 			By("Creating a project without the required UUID label")
 			invalidResource := &platformv1alpha1.Project{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "invalid-resource",
-					Namespace: "default",
+					Name: "invalid-resource",
 					Labels: map[string]string{
 						"platform.kibaship.com/workspace-uuid": "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
 					},
@@ -97,15 +111,11 @@ var _ = Describe("Project Controller", func() {
 			}
 			Expect(k8sClient.Create(ctx, invalidResource)).To(Succeed())
 
-			controllerReconciler := &ProjectReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
-			}
+			controllerReconciler := NewProjectReconciler(k8sClient, k8sClient.Scheme())
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: types.NamespacedName{
-					Name:      "invalid-resource",
-					Namespace: "default",
+					Name: "invalid-resource",
 				},
 			})
 			Expect(err).To(HaveOccurred())
@@ -119,8 +129,7 @@ var _ = Describe("Project Controller", func() {
 			By("Creating a project with invalid UUID format")
 			invalidResource := &platformv1alpha1.Project{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "invalid-uuid-resource",
-					Namespace: "default",
+					Name: "invalid-uuid-resource",
 					Labels: map[string]string{
 						"platform.kibaship.com/uuid":           "invalid-uuid",
 						"platform.kibaship.com/workspace-uuid": "also-invalid",
@@ -130,15 +139,11 @@ var _ = Describe("Project Controller", func() {
 			}
 			Expect(k8sClient.Create(ctx, invalidResource)).To(Succeed())
 
-			controllerReconciler := &ProjectReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
-			}
+			controllerReconciler := NewProjectReconciler(k8sClient, k8sClient.Scheme())
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: types.NamespacedName{
-					Name:      "invalid-uuid-resource",
-					Namespace: "default",
+					Name: "invalid-uuid-resource",
 				},
 			})
 			Expect(err).To(HaveOccurred())
@@ -146,6 +151,88 @@ var _ = Describe("Project Controller", func() {
 
 			// Cleanup
 			Expect(k8sClient.Delete(ctx, invalidResource)).To(Succeed())
+		})
+
+		It("should fail when project name conflicts with existing namespace", func() {
+			By("Creating a conflicting namespace first")
+			conflictingNamespace := &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: NamespacePrefix + "conflicting-project",
+					Labels: map[string]string{
+						ManagedByLabel:   ManagedByValue,
+						ProjectNameLabel: "conflicting-project",
+						ProjectUUIDLabel: "different-uuid-1234-5678-9abc-def012345678",
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, conflictingNamespace)).To(Succeed())
+
+			By("Attempting to create a project with conflicting name")
+			conflictingProject := &platformv1alpha1.Project{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "conflicting-project",
+					Labels: map[string]string{
+						ProjectUUIDLabel:   "550e8400-e29b-41d4-a716-446655440001",
+						WorkspaceUUIDLabel: "6ba7b810-9dad-11d1-80b4-00c04fd430c9",
+					},
+				},
+				Spec: platformv1alpha1.ProjectSpec{},
+			}
+			Expect(k8sClient.Create(ctx, conflictingProject)).To(Succeed())
+
+			controllerReconciler := NewProjectReconciler(k8sClient, k8sClient.Scheme())
+
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name: "conflicting-project",
+				},
+			})
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("conflicting namespace"))
+
+			// Cleanup
+			Expect(k8sClient.Delete(ctx, conflictingProject)).To(Succeed())
+			Expect(k8sClient.Delete(ctx, conflictingNamespace)).To(Succeed())
+		})
+
+		It("should create namespace and add finalizer to project", func() {
+			By("Creating a project")
+			testProject := &platformv1alpha1.Project{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "owner-ref-project",
+					Labels: map[string]string{
+						ProjectUUIDLabel:   "550e8400-e29b-41d4-a716-446655440002",
+						WorkspaceUUIDLabel: "6ba7b810-9dad-11d1-80b4-00c04fd430ca",
+					},
+				},
+				Spec: platformv1alpha1.ProjectSpec{},
+			}
+			Expect(k8sClient.Create(ctx, testProject)).To(Succeed())
+
+			By("Reconciling the project")
+			controllerReconciler := NewProjectReconciler(k8sClient, k8sClient.Scheme())
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name: "owner-ref-project",
+				},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Verifying namespace was created")
+			namespaceName := NamespacePrefix + "owner-ref-project"
+			namespace := &corev1.Namespace{}
+			err = k8sClient.Get(ctx, types.NamespacedName{Name: namespaceName}, namespace)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Verifying project has finalizer")
+			updatedProject := &platformv1alpha1.Project{}
+			err = k8sClient.Get(ctx, types.NamespacedName{Name: "owner-ref-project"}, updatedProject)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(updatedProject.Finalizers).To(ContainElement(ProjectFinalizerName))
+
+			// Cleanup
+			Expect(k8sClient.Delete(ctx, testProject)).To(Succeed())
+			Expect(k8sClient.Delete(ctx, namespace)).To(Succeed())
 		})
 	})
 })

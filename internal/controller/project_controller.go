@@ -18,27 +18,35 @@ package controller
 
 import (
 	"context"
-	"fmt"
-	"regexp"
+	"time"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	platformv1alpha1 "github.com/kibamail/kibaship-operator/api/v1alpha1"
 )
 
+const (
+	// ProjectFinalizerName is the finalizer name for project cleanup
+	ProjectFinalizerName = "platform.kibaship.com/project-finalizer"
+)
+
 // ProjectReconciler reconciles a Project object
 type ProjectReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme           *runtime.Scheme
+	NamespaceManager *NamespaceManager
+	Validator        *ProjectValidator
 }
 
 // +kubebuilder:rbac:groups=platform.operator.kibaship.com,resources=projects,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=platform.operator.kibaship.com,resources=projects/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=platform.operator.kibaship.com,resources=projects/finalizers,verbs=update
+// +kubebuilder:rbac:groups="",resources=namespaces,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -57,7 +65,6 @@ func (r *ProjectReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	if err := r.Get(ctx, req.NamespacedName, &project); err != nil {
 		if errors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
-			// Owned objects are automatically garbage collected.
 			log.Info("Project resource not found. Ignoring since object must be deleted")
 			return ctrl.Result{}, nil
 		}
@@ -66,35 +73,82 @@ func (r *ProjectReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, err
 	}
 
-	// Validate required labels
-	if err := r.validateLabels(&project); err != nil {
+	// Handle deletion
+	if project.DeletionTimestamp != nil {
+		return r.handleProjectDeletion(ctx, &project)
+	}
+
+	// Validate project labels (always check these)
+	if err := r.Validator.ValidateRequiredLabels(&project); err != nil {
 		log.Error(err, "Project label validation failed")
 		return ctrl.Result{}, err
 	}
 
-	log.Info("Successfully reconciled Project", "name", project.Name)
-	return ctrl.Result{}, nil
-}
+	// Check if this is a new project (no status or recent creation)
+	isNewProject := project.CreationTimestamp.Time.Add(time.Minute).After(time.Now())
 
-// validateLabels validates that the project has the required UUID labels
-func (r *ProjectReconciler) validateLabels(project *platformv1alpha1.Project) error {
-	uuidRegex := regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
-
-	// Check if platform.kibaship.com/uuid label exists and is valid
-	if uuid, exists := project.Labels["platform.kibaship.com/uuid"]; !exists {
-		return fmt.Errorf("required label 'platform.kibaship.com/uuid' is missing")
-	} else if !uuidRegex.MatchString(uuid) {
-		return fmt.Errorf("label 'platform.kibaship.com/uuid' must be a valid UUID, got: %s", uuid)
-	}
-
-	// Check if platform.kibaship.com/workspace-uuid label exists and is valid (if present)
-	if workspaceUUID, exists := project.Labels["platform.kibaship.com/workspace-uuid"]; exists {
-		if !uuidRegex.MatchString(workspaceUUID) {
-			return fmt.Errorf("label 'platform.kibaship.com/workspace-uuid' must be a valid UUID, got: %s", workspaceUUID)
+	if isNewProject {
+		// Validate uniqueness for new projects (exclude this project)
+		if err := r.Validator.CheckProjectNameUniqueness(ctx, project.Name, &project); err != nil {
+			log.Error(err, "Project name uniqueness validation failed")
+			return ctrl.Result{}, err
 		}
 	}
 
-	return nil
+	// Add finalizer if not present
+	if !controllerutil.ContainsFinalizer(&project, ProjectFinalizerName) {
+		controllerutil.AddFinalizer(&project, ProjectFinalizerName)
+		if err := r.Update(ctx, &project); err != nil {
+			log.Error(err, "Failed to add finalizer")
+			return ctrl.Result{}, err
+		}
+	}
+
+	// Create or update project namespace
+	namespace, err := r.NamespaceManager.CreateProjectNamespace(ctx, &project)
+	if err != nil {
+		log.Error(err, "Failed to create project namespace")
+		return ctrl.Result{}, err
+	}
+
+	log.Info("Successfully reconciled Project",
+		"name", project.Name,
+		"namespace", namespace.Name,
+		"uuid", project.Labels[ProjectUUIDLabel])
+	return ctrl.Result{}, nil
+}
+
+// handleProjectDeletion handles the deletion of a project and its resources
+func (r *ProjectReconciler) handleProjectDeletion(ctx context.Context, project *platformv1alpha1.Project) (ctrl.Result, error) {
+	log := logf.FromContext(ctx)
+
+	log.Info("Handling project deletion", "project", project.Name)
+
+	// Delete the project namespace
+	if err := r.NamespaceManager.DeleteProjectNamespace(ctx, project); err != nil {
+		log.Error(err, "Failed to delete project namespace")
+		return ctrl.Result{}, err
+	}
+
+	// Remove finalizer
+	controllerutil.RemoveFinalizer(project, ProjectFinalizerName)
+	if err := r.Update(ctx, project); err != nil {
+		log.Error(err, "Failed to remove finalizer")
+		return ctrl.Result{}, err
+	}
+
+	log.Info("Successfully deleted project", "project", project.Name)
+	return ctrl.Result{}, nil
+}
+
+// NewProjectReconciler creates a new ProjectReconciler with required dependencies
+func NewProjectReconciler(client client.Client, scheme *runtime.Scheme) *ProjectReconciler {
+	return &ProjectReconciler{
+		Client:           client,
+		Scheme:           scheme,
+		NamespaceManager: NewNamespaceManager(client),
+		Validator:        NewProjectValidator(client),
+	}
 }
 
 // SetupWithManager sets up the controller with the Manager.

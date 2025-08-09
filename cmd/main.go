@@ -86,10 +86,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := (&controller.ProjectReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
+	if err := controller.NewProjectReconciler(
+		mgr.GetClient(),
+		mgr.GetScheme(),
+	).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Project")
 		os.Exit(1)
 	}
