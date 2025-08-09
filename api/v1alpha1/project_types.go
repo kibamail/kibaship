@@ -32,10 +32,120 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
+// ResourceLimits defines resource constraints for applications
+type ResourceLimits struct {
+	// CPU limit in cores (e.g., "2", "0.5")
+	// +kubebuilder:validation:Pattern=^[0-9]+(\.[0-9]+)?$
+	CPU string `json:"cpu,omitempty"`
+
+	// Memory limit (e.g., "4Gi", "512Mi")
+	// +kubebuilder:validation:Pattern=^[0-9]+(\.[0-9]+)?(Mi|Gi|Ti)$
+	Memory string `json:"memory,omitempty"`
+
+	// Storage limit (e.g., "20Gi", "100Mi")
+	// +kubebuilder:validation:Pattern=^[0-9]+(\.[0-9]+)?(Mi|Gi|Ti)$
+	Storage string `json:"storage,omitempty"`
+}
+
+// ResourceBounds defines minimum and maximum resource constraints
+type ResourceBounds struct {
+	// Minimum resource limits
+	Min ResourceLimits `json:"min,omitempty"`
+
+	// Maximum resource limits
+	Max ResourceLimits `json:"max,omitempty"`
+}
+
+// ClusterResourceLimits defines resource constraints for cluster-type applications
+type ClusterResourceLimits struct {
+	// CPU limit per node in cores (e.g., "2", "0.5")
+	// +kubebuilder:validation:Pattern=^[0-9]+(\.[0-9]+)?$
+	CPU string `json:"cpu,omitempty"`
+
+	// Memory limit per node (e.g., "4Gi", "512Mi")
+	// +kubebuilder:validation:Pattern=^[0-9]+(\.[0-9]+)?(Mi|Gi|Ti)$
+	Memory string `json:"memory,omitempty"`
+
+	// Storage limit per node (e.g., "20Gi", "100Mi")
+	// +kubebuilder:validation:Pattern=^[0-9]+(\.[0-9]+)?(Mi|Gi|Ti)$
+	Storage string `json:"storage,omitempty"`
+
+	// Default number of nodes in the cluster
+	// +kubebuilder:validation:Minimum=1
+	Nodes int32 `json:"nodes,omitempty"`
+}
+
+// ClusterResourceBounds defines minimum and maximum resource constraints for clusters
+type ClusterResourceBounds struct {
+	// Minimum resource limits per node
+	Min ClusterResourceLimits `json:"min,omitempty"`
+
+	// Maximum resource limits per node
+	Max ClusterResourceLimits `json:"max,omitempty"`
+}
+
+// ApplicationTypeConfig defines configuration for a specific application type
+type ApplicationTypeConfig struct {
+	// Whether this application type is enabled in the project
+	// +kubebuilder:default=true
+	Enabled bool `json:"enabled"`
+
+	// Default resource limits for applications of this type
+	DefaultLimits ResourceLimits `json:"defaultLimits,omitempty"`
+
+	// Resource bounds (min/max) for applications of this type
+	ResourceBounds ResourceBounds `json:"resourceBounds,omitempty"`
+}
+
+// ClusterApplicationTypeConfig defines configuration for cluster-type applications
+type ClusterApplicationTypeConfig struct {
+	// Whether this application type is enabled in the project
+	// +kubebuilder:default=false
+	Enabled bool `json:"enabled"`
+
+	// Default resource limits for cluster applications of this type
+	DefaultLimits ClusterResourceLimits `json:"defaultLimits,omitempty"`
+
+	// Resource bounds (min/max) for cluster applications of this type
+	ResourceBounds ClusterResourceBounds `json:"resourceBounds,omitempty"`
+}
+
+// VolumeConfig defines volume-related configuration
+type VolumeConfig struct {
+	// Maximum storage size for volumes (e.g., "100Gi", "1Ti")
+	// +kubebuilder:validation:Pattern=^[0-9]+(\.[0-9]+)?(Mi|Gi|Ti)$
+	MaxStorageSize string `json:"maxStorageSize,omitempty"`
+}
+
 // ProjectSpec defines the desired state of Project.
 type ProjectSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// Application type configurations defining resource limits and policies
+	// for different types of applications that can be deployed in this project
+	ApplicationTypes ApplicationTypesConfig `json:"applicationTypes,omitempty"`
+
+	// Volume configuration for the project
+	Volumes VolumeConfig `json:"volumes,omitempty"`
+}
+
+// ApplicationTypesConfig defines configurations for all supported application types
+type ApplicationTypesConfig struct {
+	// MySQL single-instance database configuration
+	MySQL ApplicationTypeConfig `json:"mysql,omitempty"`
+
+	// MySQL cluster configuration (disabled by default)
+	MySQLCluster ClusterApplicationTypeConfig `json:"mysqlCluster,omitempty"`
+
+	// PostgreSQL single-instance database configuration
+	Postgres ApplicationTypeConfig `json:"postgres,omitempty"`
+
+	// PostgreSQL cluster configuration (disabled by default)
+	PostgresCluster ClusterApplicationTypeConfig `json:"postgresCluster,omitempty"`
+
+	// Docker image application configuration
+	DockerImage ApplicationTypeConfig `json:"dockerImage,omitempty"`
+
+	// Git repository application configuration
+	GitRepository ApplicationTypeConfig `json:"gitRepository,omitempty"`
 }
 
 // ProjectStatus defines the observed state of Project.

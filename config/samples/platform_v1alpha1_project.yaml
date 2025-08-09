@@ -7,4 +7,77 @@ metadata:
     platform.kibaship.com/uuid: "550e8400-e29b-41d4-a716-446655440000"
     platform.kibaship.com/workspace-uuid: "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
   name: project-sample
-spec: {}
+spec:
+  applicationTypes:
+    mysql:
+      enabled: true
+      defaultLimits:
+        cpu: "2"
+        memory: "4Gi"
+        storage: "20Gi"
+      resourceBounds:
+        min:
+          cpu: "0.5"
+          memory: "1Gi"
+          storage: "10Gi"
+        max:
+          cpu: "8"
+          memory: "16Gi"
+          storage: "100Gi"
+
+    mysqlCluster:
+      enabled: false
+
+    postgres:
+      enabled: true
+      defaultLimits:
+        cpu: "2"
+        memory: "4Gi"
+        storage: "20Gi"
+      resourceBounds:
+        min:
+          cpu: "0.5"
+          memory: "1Gi"
+          storage: "10Gi"
+        max:
+          cpu: "8"
+          memory: "16Gi"
+          storage: "100Gi"
+
+    postgresCluster:
+      enabled: false
+
+    dockerImage:
+      enabled: true
+      defaultLimits:
+        cpu: "1"
+        memory: "2Gi"
+        storage: "10Gi"
+      resourceBounds:
+        min:
+          cpu: "0.1"
+          memory: "128Mi"
+          storage: "1Gi"
+        max:
+          cpu: "10"
+          memory: "32Gi"
+          storage: "50Gi"
+
+    gitRepository:
+      enabled: true
+      defaultLimits:
+        cpu: "0.5"
+        memory: "1Gi"
+        storage: "5Gi"
+      resourceBounds:
+        min:
+          cpu: "0.1"
+          memory: "256Mi"
+          storage: "1Gi"
+        max:
+          cpu: "2"
+          memory: "4Gi"
+          storage: "20Gi"
+
+  volumes:
+    maxStorageSize: "500Gi"
