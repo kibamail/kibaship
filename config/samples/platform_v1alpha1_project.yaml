@@ -4,6 +4,7 @@ metadata:
   labels:
     app.kubernetes.io/name: kibaship-operator
     app.kubernetes.io/managed-by: kustomize
+    platform.kibaship.com/uuid: "550e8400-e29b-41d4-a716-446655440000"
+    platform.kibaship.com/workspace-uuid: "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
   name: project-sample
-spec:
-  # TODO(user): Add fields here
+spec: {}

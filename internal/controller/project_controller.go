@@ -18,7 +18,10 @@ package controller
 
 import (
 	"context"
+	"fmt"
+	"regexp"
 
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -47,11 +50,51 @@ type ProjectReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.21.0/pkg/reconcile
 func (r *ProjectReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = logf.FromContext(ctx)
+	log := logf.FromContext(ctx)
 
-	// TODO(user): your logic here
+	// Fetch the Project instance
+	var project platformv1alpha1.Project
+	if err := r.Get(ctx, req.NamespacedName, &project); err != nil {
+		if errors.IsNotFound(err) {
+			// Request object not found, could have been deleted after reconcile request.
+			// Owned objects are automatically garbage collected.
+			log.Info("Project resource not found. Ignoring since object must be deleted")
+			return ctrl.Result{}, nil
+		}
+		// Error reading the object - requeue the request.
+		log.Error(err, "Failed to get Project")
+		return ctrl.Result{}, err
+	}
 
+	// Validate required labels
+	if err := r.validateLabels(&project); err != nil {
+		log.Error(err, "Project label validation failed")
+		return ctrl.Result{}, err
+	}
+
+	log.Info("Successfully reconciled Project", "name", project.Name)
 	return ctrl.Result{}, nil
+}
+
+// validateLabels validates that the project has the required UUID labels
+func (r *ProjectReconciler) validateLabels(project *platformv1alpha1.Project) error {
+	uuidRegex := regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+
+	// Check if platform.kibaship.com/uuid label exists and is valid
+	if uuid, exists := project.Labels["platform.kibaship.com/uuid"]; !exists {
+		return fmt.Errorf("required label 'platform.kibaship.com/uuid' is missing")
+	} else if !uuidRegex.MatchString(uuid) {
+		return fmt.Errorf("label 'platform.kibaship.com/uuid' must be a valid UUID, got: %s", uuid)
+	}
+
+	// Check if platform.kibaship.com/workspace-uuid label exists and is valid (if present)
+	if workspaceUUID, exists := project.Labels["platform.kibaship.com/workspace-uuid"]; exists {
+		if !uuidRegex.MatchString(workspaceUUID) {
+			return fmt.Errorf("label 'platform.kibaship.com/workspace-uuid' must be a valid UUID, got: %s", workspaceUUID)
+		}
+	}
+
+	return nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
