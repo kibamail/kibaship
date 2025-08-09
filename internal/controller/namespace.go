@@ -129,6 +129,10 @@ func (nm *NamespaceManager) DeleteProjectNamespace(ctx context.Context, project 
 	}
 
 	if err := nm.Delete(ctx, namespace); err != nil {
+		if errors.IsNotFound(err) {
+			log.Info("Namespace was already deleted during deletion attempt", "namespace", namespaceName)
+			return nil
+		}
 		return fmt.Errorf("failed to delete namespace: %w", err)
 	}
 

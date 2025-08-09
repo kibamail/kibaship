@@ -152,6 +152,19 @@ type ApplicationTypesConfig struct {
 type ProjectStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
+
+	// Phase represents the current phase of the project lifecycle
+	// +kubebuilder:validation:Enum=Pending;Ready;Failed
+	Phase string `json:"phase,omitempty"`
+
+	// NamespaceName is the name of the namespace created for this project
+	NamespaceName string `json:"namespaceName,omitempty"`
+
+	// Message provides additional information about the current status
+	Message string `json:"message,omitempty"`
+
+	// LastReconcileTime is the timestamp of the last successful reconciliation
+	LastReconcileTime *metav1.Time `json:"lastReconcileTime,omitempty"`
 }
 
 // +kubebuilder:object:root=true

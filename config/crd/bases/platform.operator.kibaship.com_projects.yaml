@@ -485,6 +485,27 @@ spec:
             type: object
           status:
             description: ProjectStatus defines the observed state of Project.
+            properties:
+              lastReconcileTime:
+                description: LastReconcileTime is the timestamp of the last successful
+                  reconciliation
+                format: date-time
+                type: string
+              message:
+                description: Message provides additional information about the current
+                  status
+                type: string
+              namespaceName:
+                description: NamespaceName is the name of the namespace created for
+                  this project
+                type: string
+              phase:
+                description: Phase represents the current phase of the project lifecycle
+                enum:
+                - Pending
+                - Ready
+                - Failed
+                type: string
             type: object
         type: object
     served: true

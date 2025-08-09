@@ -18,9 +18,9 @@ package controller
 
 import (
 	"context"
-	"time"
 
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -78,28 +78,41 @@ func (r *ProjectReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return r.handleProjectDeletion(ctx, &project)
 	}
 
-	// Validate project labels (always check these)
-	if err := r.Validator.ValidateRequiredLabels(&project); err != nil {
-		log.Error(err, "Project label validation failed")
-		return ctrl.Result{}, err
-	}
-
-	// Check if this is a new project (no status or recent creation)
-	isNewProject := project.CreationTimestamp.Time.Add(time.Minute).After(time.Now())
-
-	if isNewProject {
-		// Validate uniqueness for new projects (exclude this project)
-		if err := r.Validator.CheckProjectNameUniqueness(ctx, project.Name, &project); err != nil {
-			log.Error(err, "Project name uniqueness validation failed")
-			return ctrl.Result{}, err
-		}
-	}
-
-	// Add finalizer if not present
+	// Add finalizer as the very first step (critical for cleanup)
 	if !controllerutil.ContainsFinalizer(&project, ProjectFinalizerName) {
 		controllerutil.AddFinalizer(&project, ProjectFinalizerName)
 		if err := r.Update(ctx, &project); err != nil {
 			log.Error(err, "Failed to add finalizer")
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{Requeue: true}, nil
+	}
+
+	// Validate project labels (always check these)
+	if err := r.Validator.ValidateRequiredLabels(&project); err != nil {
+		log.Error(err, "Project label validation failed")
+		r.updateStatusWithError(ctx, &project, "Failed", err.Error())
+		return ctrl.Result{}, err
+	}
+
+	// Check if this is a new project by looking at status
+	isNewProject := project.Status.Phase == "" || project.Status.Phase == "Pending"
+
+	if isNewProject {
+		// Set status to Pending for new projects
+		if project.Status.Phase == "" {
+			project.Status.Phase = "Pending"
+			project.Status.Message = "Initializing project"
+			if err := r.Status().Update(ctx, &project); err != nil {
+				log.Error(err, "Failed to update project status to Pending")
+				return ctrl.Result{}, err
+			}
+		}
+
+		// Validate uniqueness for new projects (exclude this project)
+		if err := r.Validator.CheckProjectNameUniqueness(ctx, project.Name, &project); err != nil {
+			log.Error(err, "Project name uniqueness validation failed")
+			r.updateStatusWithError(ctx, &project, "Failed", err.Error())
 			return ctrl.Result{}, err
 		}
 	}
@@ -108,12 +121,27 @@ func (r *ProjectReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	namespace, err := r.NamespaceManager.CreateProjectNamespace(ctx, &project)
 	if err != nil {
 		log.Error(err, "Failed to create project namespace")
+		r.updateStatusWithError(ctx, &project, "Failed", err.Error())
 		return ctrl.Result{}, err
+	}
+
+	// Update status to indicate project is ready
+	if project.Status.Phase != "Ready" {
+		project.Status.Phase = "Ready"
+		project.Status.NamespaceName = namespace.Name
+		project.Status.Message = "Project is ready"
+		now := metav1.Now()
+		project.Status.LastReconcileTime = &now
+		if err := r.Status().Update(ctx, &project); err != nil {
+			log.Error(err, "Failed to update project status to Ready")
+			return ctrl.Result{}, err
+		}
 	}
 
 	log.Info("Successfully reconciled Project",
 		"name", project.Name,
 		"namespace", namespace.Name,
+		"phase", project.Status.Phase,
 		"uuid", project.Labels[ProjectUUIDLabel])
 	return ctrl.Result{}, nil
 }
@@ -124,10 +152,13 @@ func (r *ProjectReconciler) handleProjectDeletion(ctx context.Context, project *
 
 	log.Info("Handling project deletion", "project", project.Name)
 
-	// Delete the project namespace
+	// Delete the project namespace (ignore NotFound errors for idempotency)
 	if err := r.NamespaceManager.DeleteProjectNamespace(ctx, project); err != nil {
-		log.Error(err, "Failed to delete project namespace")
-		return ctrl.Result{}, err
+		if !errors.IsNotFound(err) {
+			log.Error(err, "Failed to delete project namespace")
+			return ctrl.Result{}, err
+		}
+		log.Info("Project namespace was already deleted", "project", project.Name)
 	}
 
 	// Remove finalizer
@@ -139,6 +170,19 @@ func (r *ProjectReconciler) handleProjectDeletion(ctx context.Context, project *
 
 	log.Info("Successfully deleted project", "project", project.Name)
 	return ctrl.Result{}, nil
+}
+
+// updateStatusWithError updates the project status with error information
+func (r *ProjectReconciler) updateStatusWithError(ctx context.Context, project *platformv1alpha1.Project, phase, message string) {
+	project.Status.Phase = phase
+	project.Status.Message = message
+	now := metav1.Now()
+	project.Status.LastReconcileTime = &now
+
+	if err := r.Status().Update(ctx, project); err != nil {
+		log := logf.FromContext(ctx)
+		log.Error(err, "Failed to update project status with error")
+	}
 }
 
 // NewProjectReconciler creates a new ProjectReconciler with required dependencies

@@ -70,13 +70,26 @@ var _ = Describe("Project Controller", func() {
 			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
 		})
 		It("should successfully reconcile the resource", func() {
-			By("Reconciling the created resource")
+			By("Reconciling the created resource - first time (adds finalizer)")
 			controllerReconciler := NewProjectReconciler(k8sClient, k8sClient.Scheme())
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: typeNamespacedName,
 			})
 			Expect(err).NotTo(HaveOccurred())
+
+			By("Reconciling again to complete initialization")
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Verifying project status is Ready")
+			updatedProject := &platformv1alpha1.Project{}
+			err = k8sClient.Get(ctx, typeNamespacedName, updatedProject)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(updatedProject.Status.Phase).To(Equal("Ready"))
+			Expect(updatedProject.Status.NamespaceName).To(ContainSubstring("kibaship-project-"))
 
 			By("Verifying that a namespace was created for the project")
 			expectedNamespaceName := NamespacePrefix + resourceName
@@ -113,7 +126,16 @@ var _ = Describe("Project Controller", func() {
 
 			controllerReconciler := NewProjectReconciler(k8sClient, k8sClient.Scheme())
 
+			// First reconcile adds finalizer
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name: "invalid-resource",
+				},
+			})
+			Expect(err).NotTo(HaveOccurred()) // First reconcile just adds finalizer
+
+			// Second reconcile should fail validation
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: types.NamespacedName{
 					Name: "invalid-resource",
 				},
@@ -141,7 +163,16 @@ var _ = Describe("Project Controller", func() {
 
 			controllerReconciler := NewProjectReconciler(k8sClient, k8sClient.Scheme())
 
+			// First reconcile adds finalizer
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name: "invalid-uuid-resource",
+				},
+			})
+			Expect(err).NotTo(HaveOccurred()) // First reconcile just adds finalizer
+
+			// Second reconcile should fail validation
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: types.NamespacedName{
 					Name: "invalid-uuid-resource",
 				},
@@ -182,7 +213,16 @@ var _ = Describe("Project Controller", func() {
 
 			controllerReconciler := NewProjectReconciler(k8sClient, k8sClient.Scheme())
 
+			// First reconcile adds finalizer
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name: "conflicting-project",
+				},
+			})
+			Expect(err).NotTo(HaveOccurred()) // First reconcile just adds finalizer
+
+			// Second reconcile should fail due to namespace conflict
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: types.NamespacedName{
 					Name: "conflicting-project",
 				},
@@ -209,9 +249,23 @@ var _ = Describe("Project Controller", func() {
 			}
 			Expect(k8sClient.Create(ctx, testProject)).To(Succeed())
 
-			By("Reconciling the project")
+			By("Reconciling the project - first time (adds finalizer)")
 			controllerReconciler := NewProjectReconciler(k8sClient, k8sClient.Scheme())
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name: "owner-ref-project",
+				},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Verifying project has finalizer after first reconcile")
+			updatedProject := &platformv1alpha1.Project{}
+			err = k8sClient.Get(ctx, types.NamespacedName{Name: "owner-ref-project"}, updatedProject)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(updatedProject.Finalizers).To(ContainElement(ProjectFinalizerName))
+
+			By("Reconciling again to complete initialization")
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: types.NamespacedName{
 					Name: "owner-ref-project",
 				},
@@ -224,11 +278,10 @@ var _ = Describe("Project Controller", func() {
 			err = k8sClient.Get(ctx, types.NamespacedName{Name: namespaceName}, namespace)
 			Expect(err).NotTo(HaveOccurred())
 
-			By("Verifying project has finalizer")
-			updatedProject := &platformv1alpha1.Project{}
+			By("Verifying project status is Ready")
 			err = k8sClient.Get(ctx, types.NamespacedName{Name: "owner-ref-project"}, updatedProject)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(updatedProject.Finalizers).To(ContainElement(ProjectFinalizerName))
+			Expect(updatedProject.Status.Phase).To(Equal("Ready"))
 
 			// Cleanup
 			Expect(k8sClient.Delete(ctx, testProject)).To(Succeed())
