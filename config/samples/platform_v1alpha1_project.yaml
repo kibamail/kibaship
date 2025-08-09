@@ -1,0 +1,9 @@
+apiVersion: platform.operator.kibaship.com/v1alpha1
+kind: Project
+metadata:
+  labels:
+    app.kubernetes.io/name: kibaship-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: project-sample
+spec:
+  # TODO(user): Add fields here
