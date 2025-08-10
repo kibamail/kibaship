@@ -592,5 +592,143 @@ var _ = Describe("Application Controller", func() {
 				Expect(k8sClient.Delete(ctx, testApp)).To(Succeed())
 			}()
 		})
+
+		It("should efficiently delete Deployments using label selector", func() {
+			By("Creating multiple applications to test label selector efficiency")
+
+			// Create first application and deployment
+			app1 := &platformv1alpha1.Application{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-label-selector-1",
+					Namespace: "default",
+					Labels: map[string]string{
+						"platform.kibaship.com/uuid": "550e8400-e29b-41d4-a716-446655440000",
+					},
+				},
+				Spec: platformv1alpha1.ApplicationSpec{
+					ProjectRef: corev1.LocalObjectReference{
+						Name: "test-project",
+					},
+					Type: "GitRepository",
+					GitRepository: &platformv1alpha1.GitRepositoryConfig{
+						Provider:   "github.com",
+						Repository: "user/repo1",
+						Branch:     "main",
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, app1)).To(Succeed())
+
+			// Create second application and deployment
+			app2 := &platformv1alpha1.Application{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-label-selector-2",
+					Namespace: "default",
+					Labels: map[string]string{
+						"platform.kibaship.com/uuid": "550e8400-e29b-41d4-a716-446655440001",
+					},
+				},
+				Spec: platformv1alpha1.ApplicationSpec{
+					ProjectRef: corev1.LocalObjectReference{
+						Name: "test-project",
+					},
+					Type: "GitRepository",
+					GitRepository: &platformv1alpha1.GitRepositoryConfig{
+						Provider:   "github.com",
+						Repository: "user/repo2",
+						Branch:     "main",
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, app2)).To(Succeed())
+
+			// Create reconciler instance
+			controllerReconciler := &ApplicationReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+
+			// Reconcile both applications to create their deployments
+			// First reconcile adds finalizer for app1
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      app1.Name,
+					Namespace: app1.Namespace,
+				},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Second reconcile creates deployment for app1
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      app1.Name,
+					Namespace: app1.Namespace,
+				},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			// First reconcile adds finalizer for app2
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      app2.Name,
+					Namespace: app2.Namespace,
+				},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Second reconcile creates deployment for app2
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      app2.Name,
+					Namespace: app2.Namespace,
+				},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Verify both deployments exist
+			var deployment1 platformv1alpha1.Deployment
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name:      "test-label-selector-1-deployment",
+				Namespace: app1.Namespace,
+			}, &deployment1)).To(Succeed())
+
+			var deployment2 platformv1alpha1.Deployment
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name:      "test-label-selector-2-deployment",
+				Namespace: app2.Namespace,
+			}, &deployment2)).To(Succeed())
+
+			// Verify deployments have correct labels
+			Expect(deployment1.Labels["platform.operator.kibaship.com/application"]).To(Equal("test-label-selector-1"))
+			Expect(deployment2.Labels["platform.operator.kibaship.com/application"]).To(Equal("test-label-selector-2"))
+
+			// Delete first application - this should only delete its associated deployment
+			Expect(k8sClient.Delete(ctx, app1)).To(Succeed())
+
+			// Reconcile deletion
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      app1.Name,
+					Namespace: app1.Namespace,
+				},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Verify only deployment1 is deleted, deployment2 still exists
+			err = k8sClient.Get(ctx, types.NamespacedName{
+				Name:      "test-label-selector-1-deployment",
+				Namespace: app1.Namespace,
+			}, &deployment1)
+			Expect(errors.IsNotFound(err)).To(BeTrue())
+
+			// deployment2 should still exist
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name:      "test-label-selector-2-deployment",
+				Namespace: app2.Namespace,
+			}, &deployment2)).To(Succeed())
+
+			// Cleanup
+			Expect(k8sClient.Delete(ctx, app2)).To(Succeed())
+		})
 	})
 })

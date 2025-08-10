@@ -131,19 +131,19 @@ func (r *ApplicationReconciler) handleDeletion(ctx context.Context, app *platfor
 func (r *ApplicationReconciler) deleteAssociatedDeployments(ctx context.Context, app *platformv1alpha1.Application) error {
 	log := logf.FromContext(ctx).WithValues("application", app.Name, "namespace", app.Namespace)
 
-	// List all Deployments in the same namespace
+	// Use label selector to efficiently find only Deployments associated with this Application
 	var deploymentList platformv1alpha1.DeploymentList
-	if err := r.List(ctx, &deploymentList, client.InNamespace(app.Namespace)); err != nil {
+	if err := r.List(ctx, &deploymentList,
+		client.InNamespace(app.Namespace),
+		client.MatchingLabels{"platform.operator.kibaship.com/application": app.Name}); err != nil {
 		return fmt.Errorf("failed to list Deployments: %w", err)
 	}
 
-	// Delete Deployments that reference this Application
+	// Delete all matching Deployments
 	for _, deployment := range deploymentList.Items {
-		if deployment.Spec.ApplicationRef.Name == app.Name {
-			log.Info("Deleting associated Deployment", "deployment", deployment.Name)
-			if err := r.Delete(ctx, &deployment); err != nil && !errors.IsNotFound(err) {
-				return fmt.Errorf("failed to delete Deployment %s: %w", deployment.Name, err)
-			}
+		log.Info("Deleting associated Deployment", "deployment", deployment.Name)
+		if err := r.Delete(ctx, &deployment); err != nil && !errors.IsNotFound(err) {
+			return fmt.Errorf("failed to delete Deployment %s: %w", deployment.Name, err)
 		}
 	}
 
