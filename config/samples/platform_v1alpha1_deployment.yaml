@@ -1,0 +1,23 @@
+apiVersion: platform.operator.kibaship.com/v1alpha1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: kibaship-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: deployment-sample
+  namespace: default
+spec:
+  applicationRef:
+    name: application-sample-gitrepo-full
+---
+apiVersion: platform.operator.kibaship.com/v1alpha1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: kibaship-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: deployment-sample-minimal
+  namespace: default
+spec:
+  applicationRef:
+    name: application-sample-gitrepo-minimal

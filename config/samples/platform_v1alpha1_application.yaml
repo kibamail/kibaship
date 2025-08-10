@@ -1,0 +1,138 @@
+# GitRepository Application with all available fields
+apiVersion: platform.operator.kibaship.com/v1alpha1
+kind: Application
+metadata:
+  labels:
+    app.kubernetes.io/name: kibaship-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: application-sample-gitrepo-full
+  namespace: default
+spec:
+  projectRef:
+    name: my-project
+  type: GitRepository
+  gitRepository:
+    provider: github.com
+    repository: myorg/myapp
+    branch: main
+    path: "/backend"
+    rootDirectory: "./"
+    buildCommand: "npm install && npm run build"
+    startCommand: "npm start"
+    spaOutputDirectory: "dist"
+    secretRef:
+      name: git-access-token
+    env:
+      name: app-env-secret
+---
+# GitRepository Application with minimal required fields (using defaults)
+apiVersion: platform.operator.kibaship.com/v1alpha1
+kind: Application
+metadata:
+  labels:
+    app.kubernetes.io/name: kibaship-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: application-sample-gitrepo-minimal
+  namespace: default
+spec:
+  projectRef:
+    name: my-project
+  type: GitRepository
+  gitRepository:
+    provider: gitlab.com
+    repository: myorg/simple-app
+    secretRef:
+      name: git-access-token
+    # rootDirectory defaults to "./"
+    # buildCommand, startCommand, and env are optional
+---
+apiVersion: platform.operator.kibaship.com/v1alpha1
+kind: Application
+metadata:
+  labels:
+    app.kubernetes.io/name: kibaship-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: application-sample-docker
+  namespace: default
+spec:
+  projectRef:
+    name: my-project
+  type: DockerImage
+  dockerImage:
+    image: nginx:1.21
+    imagePullSecretRef:
+      name: docker-registry-secret
+---
+apiVersion: platform.operator.kibaship.com/v1alpha1
+kind: Application
+metadata:
+  labels:
+    app.kubernetes.io/name: kibaship-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: application-sample-mysql
+  namespace: default
+spec:
+  projectRef:
+    name: my-project
+  type: MySQL
+  mysql:
+    version: "8.0"
+    database: myapp
+    secretRef:
+      name: mysql-credentials
+---
+apiVersion: platform.operator.kibaship.com/v1alpha1
+kind: Application
+metadata:
+  labels:
+    app.kubernetes.io/name: kibaship-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: application-sample-mysql-cluster
+  namespace: default
+spec:
+  projectRef:
+    name: my-project
+  type: MySQLCluster
+  mysqlCluster:
+    version: "8.0"
+    replicas: 3
+    database: myapp
+    secretRef:
+      name: mysql-cluster-credentials
+---
+apiVersion: platform.operator.kibaship.com/v1alpha1
+kind: Application
+metadata:
+  labels:
+    app.kubernetes.io/name: kibaship-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: application-sample-postgres
+  namespace: default
+spec:
+  projectRef:
+    name: my-project
+  type: Postgres
+  postgres:
+    version: "14"
+    database: myapp
+    secretRef:
+      name: postgres-credentials
+---
+apiVersion: platform.operator.kibaship.com/v1alpha1
+kind: Application
+metadata:
+  labels:
+    app.kubernetes.io/name: kibaship-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: application-sample-postgres-cluster
+  namespace: default
+spec:
+  projectRef:
+    name: my-project
+  type: PostgresCluster
+  postgresCluster:
+    version: "14"
+    replicas: 3
+    database: myapp
+    secretRef:
+      name: postgres-cluster-credentials

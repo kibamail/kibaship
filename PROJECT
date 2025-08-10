@@ -20,4 +20,22 @@ resources:
   kind: Project
   path: github.com/kibamail/kibaship-operator/api/v1alpha1
   version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: operator.kibaship.com
+  group: platform
+  kind: Application
+  path: github.com/kibamail/kibaship-operator/api/v1alpha1
+  version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: operator.kibaship.com
+  group: platform
+  kind: Deployment
+  path: github.com/kibamail/kibaship-operator/api/v1alpha1
+  version: v1alpha1
 version: "3"

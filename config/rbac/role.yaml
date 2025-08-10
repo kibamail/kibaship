@@ -19,6 +19,8 @@ rules:
 - apiGroups:
   - platform.operator.kibaship.com
   resources:
+  - applications
+  - deployments
   - projects
   verbs:
   - create
@@ -31,12 +33,16 @@ rules:
 - apiGroups:
   - platform.operator.kibaship.com
   resources:
+  - applications/finalizers
+  - deployments/finalizers
   - projects/finalizers
   verbs:
   - update
 - apiGroups:
   - platform.operator.kibaship.com
   resources:
+  - applications/status
+  - deployments/status
   - projects/status
   verbs:
   - get
