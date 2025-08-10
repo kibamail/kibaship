@@ -5,6 +5,7 @@ metadata:
   labels:
     app.kubernetes.io/name: kibaship-operator
     app.kubernetes.io/managed-by: kustomize
+    platform.kibaship.com/uuid: "550e8400-e29b-41d4-a716-446655440001"
   name: application-sample-gitrepo-full
   namespace: default
 spec:
@@ -32,6 +33,7 @@ metadata:
   labels:
     app.kubernetes.io/name: kibaship-operator
     app.kubernetes.io/managed-by: kustomize
+    platform.kibaship.com/uuid: "550e8400-e29b-41d4-a716-446655440002"
   name: application-sample-gitrepo-minimal
   namespace: default
 spec:
@@ -52,6 +54,7 @@ metadata:
   labels:
     app.kubernetes.io/name: kibaship-operator
     app.kubernetes.io/managed-by: kustomize
+    platform.kibaship.com/uuid: "550e8400-e29b-41d4-a716-446655440003"
   name: application-sample-docker
   namespace: default
 spec:
@@ -69,6 +72,7 @@ metadata:
   labels:
     app.kubernetes.io/name: kibaship-operator
     app.kubernetes.io/managed-by: kustomize
+    platform.kibaship.com/uuid: "550e8400-e29b-41d4-a716-446655440004"
   name: application-sample-mysql
   namespace: default
 spec:
@@ -87,6 +91,7 @@ metadata:
   labels:
     app.kubernetes.io/name: kibaship-operator
     app.kubernetes.io/managed-by: kustomize
+    platform.kibaship.com/uuid: "550e8400-e29b-41d4-a716-446655440005"
   name: application-sample-mysql-cluster
   namespace: default
 spec:
@@ -106,6 +111,7 @@ metadata:
   labels:
     app.kubernetes.io/name: kibaship-operator
     app.kubernetes.io/managed-by: kustomize
+    platform.kibaship.com/uuid: "550e8400-e29b-41d4-a716-446655440006"
   name: application-sample-postgres
   namespace: default
 spec:
@@ -124,6 +130,7 @@ metadata:
   labels:
     app.kubernetes.io/name: kibaship-operator
     app.kubernetes.io/managed-by: kustomize
+    platform.kibaship.com/uuid: "550e8400-e29b-41d4-a716-446655440007"
   name: application-sample-postgres-cluster
   namespace: default
 spec:

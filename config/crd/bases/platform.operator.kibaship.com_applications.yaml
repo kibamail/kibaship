@@ -274,8 +274,8 @@ spec:
                     type: string
                 type: object
               projectRef:
-                description: ProjectRef is a reference to the project this application
-                  belongs to
+                description: ProjectRef references the Project this application belongs
+                  to
                 properties:
                   name:
                     default: ""

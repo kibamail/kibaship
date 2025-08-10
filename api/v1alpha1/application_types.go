@@ -185,7 +185,7 @@ type PostgresClusterConfig struct {
 
 // ApplicationSpec defines the desired state of Application.
 type ApplicationSpec struct {
-	// ProjectRef is a reference to the project this application belongs to
+	// ProjectRef references the Project this application belongs to
 	// +kubebuilder:validation:Required
 	ProjectRef corev1.LocalObjectReference `json:"projectRef"`
 
