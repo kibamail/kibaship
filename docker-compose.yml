@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  kibaship_mysql:
+    image: mysql:8.0
+    container_name: kibaship_mysql
+    restart: unless-stopped
+    ports:
+      - '32234:3306'
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: kibaship
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./database/init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ['CMD', 'mysqladmin', 'ping', '-h', 'localhost']
+      timeout: 20s
+      retries: 10
+      interval: 10s
+      start_period: 30s
+
+volumes:
+  mysql_data:
+    driver: local
