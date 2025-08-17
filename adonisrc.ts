@@ -52,7 +52,9 @@ export default defineConfig({
     () => import('@adonisjs/cors/cors_provider'),
     () => import('@adonisjs/lucid/database_provider'),
     () => import('@adonisjs/auth/auth_provider'),
-    () => import('@adonisjs/inertia/inertia_provider')
+    () => import('@adonisjs/inertia/inertia_provider'),
+    () => import('#providers/Auth/kibaauth_provider'),
+    () => import('@adonisjs/redis/redis_provider')
   ],
 
   /*

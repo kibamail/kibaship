@@ -8,7 +8,12 @@ import { defineConfig } from '@adonisjs/cors'
  */
 const corsConfig = defineConfig({
   enabled: true,
-  origin: [],
+  origin: [
+    'staging.kibaauth.com',
+    'kibaauth.com',
+    'auth.staging.kibaship.com',
+    'auth.kibaship.com',
+  ],
   methods: ['GET', 'HEAD', 'POST', 'PUT', 'DELETE'],
   headers: true,
   exposeHeaders: [],
