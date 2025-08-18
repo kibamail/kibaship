@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   kibaship_mysql:
     image: mysql:8.0
@@ -35,9 +33,59 @@ services:
       retries: 10
       interval: 10s
       start_period: 30s
+  kibaship_vault:
+    image: hashicorp/vault:1.15
+    container_name: kibaship_vault
+    restart: unless-stopped
+    ports:
+      - '8200:8200'
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: myroot
+      VAULT_DEV_LISTEN_ADDRESS: 0.0.0.0:8200
+    cap_add:
+      - IPC_LOCK
+    networks:
+      - kibaship_network
+    healthcheck:
+      test: ['CMD', 'sh', '-c', 'VAULT_ADDR=http://127.0.0.1:8200 vault status']
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
+  kibaship_vault_setup:
+    image: hashicorp/vault:1.15
+    container_name: kibaship_vault_setup
+    depends_on:
+      kibaship_vault:
+        condition: service_healthy
+    environment:
+      VAULT_ADDR: http://kibaship_vault:8200
+      VAULT_TOKEN: myroot
+      VAULT_READ_SECRET_ID: 7c4a2e8f-9b1d-4a3c-8e5f-2d7b9c1a4e6f
+      VAULT_WRITE_SECRET_ID: 3f8e1c9a-5d2b-4e7f-9a1c-6b8d4f2e7a9c
+    volumes:
+      - ./scripts/services/vault.sh:/vault-setup.sh:ro
+    networks:
+      - kibaship_network
+    command: ['sh', '/vault-setup.sh']
+    restart: 'no'
+
+  ngrok:
+    image: ngrok/ngrok:latest
+    environment:
+      - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN}
+    command:
+      - 'http'
+      - '--domain=fully-notable-fowl.ngrok-free.app'
+      - 'host.docker.internal:3333'
+    ports:
+      - '4040:4040'
 volumes:
   mysql_data:
     driver: local
   redis_data:
     driver: local
+
+networks:
+  kibaship_network:
+    driver: bridge

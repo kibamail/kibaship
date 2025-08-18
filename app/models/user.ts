@@ -6,38 +6,47 @@ import encryption from '@adonisjs/core/services/encryption'
 import app from '@adonisjs/core/services/app'
 import { randomUUID } from 'node:crypto'
 
+/**
+ * User model for OAuth-authenticated users with cached profiles and encrypted tokens
+ */
 export default class User extends BaseModel {
+  /** Auto-generated UUID primary key */
   @column({ isPrimary: true })
   declare id: string
 
+  /** OAuth ID from KibaMail auth service */
   @column()
   declare oauthId: string
 
+  /** Email from OAuth provider */
   @column()
   declare email: string
 
+  /** Creation timestamp */
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime
 
+  /** Last update timestamp */
   @column.dateTime({ autoCreate: true, autoUpdate: true })
   declare updatedAt: DateTime | null
 
+  /** Generate UUID before creating user */
   @beforeCreate()
   public static async generateId(user: User) {
     user.id = randomUUID()
   }
 
   /**
-   * Store the user object alongside teams and workspaces in redis
-   *
-   * @param user {UserProfile}
-   * @param accessToken {string}
+   * Cache user profile in Redis and store encrypted OAuth token
+   * @param user UserProfile from KibaMail API
+   * @param accessToken OAuth access token to encrypt and store
    */
   public async cache(user: UserProfile, accessToken: string) {
     await redis.set(`users:${this.id}`, JSON.stringify(user))
     await redis.set(`oauth_tokens:${this.id}`, encryption.encrypt(accessToken))
   }
 
+  /** Get cached user profile from Redis, returns null if not found */
   public async profile() {
     const profile = await redis.get(`users:${this.id}`)
 
@@ -48,6 +57,7 @@ export default class User extends BaseModel {
     return JSON.parse(profile) as UserProfile
   }
 
+  /** Create authenticated KibaMail API client using stored OAuth token */
   public async authClient() {
     const kibaauth = await app.container.make('auth.kibaauth')
 
@@ -60,6 +70,7 @@ export default class User extends BaseModel {
     return kibaauth.accessToken(accessToken)
   }
 
+  /** Retrieve and decrypt OAuth access token from Redis */
   private async getOauthAccessToken() {
     const encryptedAccessToken = await redis.get(`oauth_tokens:${this.id}`)
 
@@ -76,6 +87,7 @@ export default class User extends BaseModel {
     return accessToken
   }
 
+  /** Fetch fresh profile from KibaMail API and update Redis cache */
   public async refreshProfile() {
     const encryptedAccessToken = await redis.get(`oauth_tokens:${this.id}`)
 

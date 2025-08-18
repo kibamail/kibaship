@@ -4,6 +4,8 @@ import { PlusIcon } from '~/Components/Icons/plus.svg'
 import { Text } from '@kibamail/owly/text'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import cn from 'classnames'
+import { Link, usePage } from '@inertiajs/react'
+import { PageProps } from '~/types'
 
 interface ProjectsDropdownMenuProps {
   rootId: string
@@ -11,32 +13,10 @@ interface ProjectsDropdownMenuProps {
 }
 
 export function ProjectsDropdownMenu({ rootId, onCreateProjectClick }: ProjectsDropdownMenuProps) {
-  const { projects, activeProject } = {
-    projects: [
-      {
-        name: 'Project 1',
-        id: 'project-1',
-        color: '#FF5733',
-        icon: 'icon-1',
-        description: 'This is project 1',
-        members: ['user-1', 'user-2'],
-        tasks: ['task-1', 'task-2'],
-        createdAt: new Date('2023-01-01'),
-        updatedAt: new Date('2023-01-02'),
-      },
-    ],
-    activeProject: {
-      id: 'project-1',
-      name: 'Project 1',
-      color: '#FF5733',
-      icon: 'icon-1',
-      description: 'This is project 1',
-      members: ['user-1', 'user-2'],
-      tasks: ['task-1', 'task-2'],
-      createdAt: new Date('2023-01-01'),
-      updatedAt: new Date('2023-01-02'),
-    },
-  }
+  const { props, url } = usePage<PageProps>()
+
+  const activeProjectIndex = props.projects?.findIndex((project) => url.includes(project.id))
+  const activeProject = props.projects?.[activeProjectIndex] || props.projects?.[0]
 
   const handleCreateProjectClick = () => {
     if (onCreateProjectClick) {
@@ -45,7 +25,7 @@ export function ProjectsDropdownMenu({ rootId, onCreateProjectClick }: ProjectsD
   }
 
   return (
-    <DropdownMenu.Root>
+    <DropdownMenu.Root modal={false}>
       <DropdownMenu.Trigger asChild>
         <button
           type="button"
@@ -72,11 +52,11 @@ export function ProjectsDropdownMenu({ rootId, onCreateProjectClick }: ProjectsD
         className="border projects-dropdown-menu kb-border-tertiary absolute rounded-xl p-1 shadow-[0px_16px_24px_-8px_var(--black-10)] kb-background-primary w-70 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 z-50"
       >
         <DropdownMenu.RadioGroup value={activeProject?.id.toString()}>
-          {projects.map((project) => (
+          {props.projects.map((project) => (
             <DropdownMenu.RadioItem key={project.id} value={project.id.toString()} asChild>
-              <a
+              <Link
                 data-testid={`${rootId}-switch-project-id-${project.id}`}
-                href={'/projects/1'}
+                href={`/w/${props?.workspace?.slug}/${project?.id}`}
                 className="p-2 flex items-center hover:bg-(--background-secondary) rounded-lg cursor-pointer"
               >
                 <ProjectAvatar name={project.name} size="sm" />
@@ -85,7 +65,7 @@ export function ProjectsDropdownMenu({ rootId, onCreateProjectClick }: ProjectsD
                 <DropdownMenu.ItemIndicator className="ml-auto">
                   <CheckIcon className="w-5 h-5 kb-content-secondary" />
                 </DropdownMenu.ItemIndicator>
-              </a>
+              </Link>
             </DropdownMenu.RadioItem>
           ))}
         </DropdownMenu.RadioGroup>

@@ -7,10 +7,14 @@ import { CreateWorkspaceFlow } from './CreateWorkspaceFlow'
 import { ProjectsDropdownMenu } from './ProjectsDropdownMenu'
 import { SearchBoxTrigger } from './SearchBoxTrigger'
 import { WorkspacesDropdownMenu } from './WorkspaceDropdownMenu'
+import { usePage } from '@inertiajs/react'
+import { PageProps } from '~/types'
 
 export function Topbar() {
   const [isCreateWorkspaceOpen, setIsCreateWorkspaceOpen] = useState(false)
   const [isCreateProjectOpen, setIsCreateProjectOpen] = useState(false)
+
+  const { props } = usePage<PageProps>()
 
   const handleCreateWorkspaceClick = () => {
     setIsCreateWorkspaceOpen(true)
@@ -35,12 +39,16 @@ export function Topbar() {
             onCreateWorkspaceClick={handleCreateWorkspaceClick}
           />
 
-          <SlashesIcon width={24} height={24} viewBox="0 0 24 24" />
+          {props?.projects?.length > 0 && (
+            <>
+              <SlashesIcon width={24} height={24} viewBox="0 0 24 24" />
 
-          <ProjectsDropdownMenu
-            rootId="topbar-projects"
-            onCreateProjectClick={handleCreateProjectClick}
-          />
+              <ProjectsDropdownMenu
+                rootId="topbar-projects"
+                onCreateProjectClick={handleCreateProjectClick}
+              />
+            </>
+          )}
         </div>
 
         <div className="max-w-md hidden lg:flex w-full absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 justify-center items-center">

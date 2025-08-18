@@ -5,13 +5,22 @@ import redis from '@adonisjs/redis/services/main'
 import encryption from '@adonisjs/core/services/encryption'
 import { UserProfile } from '@kibamail/auth-sdk'
 
+/**
+ * OAuth2 controller for KibaMail authentication flow
+ * Handles authorization redirect, callback, token exchange, and user setup
+ */
 export default class Oauth2Controller {
+  /** Redirect user to KibaMail authorization server for OAuth login */
   public async redirect(ctx: HttpContext) {
     const auth = await app.container.make('auth.kibaauth')
 
     return ctx.response.redirect(auth.api().auth().authorizationUrl())
   }
 
+  /**
+   * Handle OAuth callback: exchange code for token, create/update user, login
+   * Creates default workspace for new users, redirects to /w on success
+   */
   public async callback(ctx: HttpContext) {
     const { code } = ctx.request.qs()
 

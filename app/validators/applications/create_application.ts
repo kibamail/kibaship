@@ -5,10 +5,10 @@ export const createApplicationValidator = vine.compile(
     type: vine.enum(['mysql', 'postgres', 'git', 'docker_image']),
     gitConfiguration: vine
       .object({
-        provider: vine.enum(['github.com', 'gitlab.com', 'bitbucket.com']),
+        sourceCodeRepositoryId: vine.string().uuid(),
       })
       .optional()
-      .requiredWhen('tpye', '=', 'git'),
+      .requiredWhen('type', '=', 'git'),
     dockerImageConfiguration: vine
       .object({
         image: vine.string().url(),

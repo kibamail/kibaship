@@ -2,25 +2,24 @@ import { DateTime } from 'luxon'
 import { BaseModel, beforeCreate, column } from '@adonisjs/lucid/orm'
 import { randomUUID } from 'node:crypto'
 
-/**
- * Application model for messaging endpoints with unique identification
- */
-export default class Application extends BaseModel {
-  /** Auto-generated UUID primary key */
+export default class Environment extends BaseModel {
   @column({ isPrimary: true })
   declare id: string
 
-  /** Creation timestamp */
+  @column()
+  declare name: string
+
+  @column()
+  declare projectId: string
+
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime
 
-  /** Last update timestamp */
   @column.dateTime({ autoCreate: true, autoUpdate: true })
   declare updatedAt: DateTime
 
-  /** Generate UUID before creating application */
   @beforeCreate()
-  public static async generateId(application: Application) {
-    application.id = randomUUID()
+  public static async generateId(environment: Environment) {
+    environment.id = randomUUID()
   }
 }

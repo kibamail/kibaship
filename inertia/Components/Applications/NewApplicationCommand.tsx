@@ -1,5 +1,9 @@
 import { Command } from 'cmdk'
 
+import dayjs from 'dayjs'
+import relativeTime from 'dayjs/plugin/relativeTime'
+dayjs.extend(relativeTime)
+
 import { MySQLIcon } from '~/Components/Icons/mysql.svg'
 import { DockerIcon } from '~/Components/Icons/docker.svg'
 import { GitIcon } from '~/Components/Icons/git.svg'
@@ -13,6 +17,12 @@ import { JSX } from 'react/jsx-runtime'
 import classNames from 'classnames'
 import { OpenNewWindowIcon } from '../Icons/open-new-window.svg'
 import { Button } from '@kibamail/owly'
+import { useMutation, useQuery } from '@tanstack/react-query'
+import { useForm, usePage } from '@inertiajs/react'
+import { PageProps, SourceCodeProvider, SourceCodeRepository } from '~/types'
+import { axios } from '~/app/axios'
+import Spinner from '../Icons/Spinner'
+import { AxiosError } from 'axios'
 
 interface NewApplicationCommandProps {
   open?: boolean
@@ -27,12 +37,16 @@ enum CommandType {
   CONNECT_GITHUB = 'connect_github',
   CONNECT_GITLAB = 'connect_gitlab',
   CONNECT_BITBUCKET = 'connect_bitbucket',
+  REPOSITORY = 'repository',
+  COMPLETE = 'complete',
 }
 
 type Command = {
   id: CommandType
-  label: string
+  key?: string
+  label: string | JSX.Element
   href?: string
+  onClick?: () => void
   icon: JSX.Element
   commands?: Command[]
 }
@@ -40,32 +54,60 @@ type Command = {
 export function NewApplicationCommand({ open, onOpenChange }: NewApplicationCommandProps) {
   const [pages, setPages] = useState<CommandType[]>([])
   const [search, setSearch] = useState('')
+  const [selectedProvider, setSelectedProvider] = useState<SourceCodeProvider | null>(null)
+  const [selectedRepository, setSelectedRepository] = useState<SourceCodeRepository | null>(null)
+
+  const form = useForm({
+    type: 'git',
+    gitConfiguration: {
+      sourceCodeRepositoryId: '',
+    },
+  })
+
+  const page = pages[pages.length - 1]
+
+  const providersQuery = useQuery<SourceCodeProvider[]>({
+    queryKey: ['connections/source-code-providers'],
+    async queryFn() {
+      const response = await axios.get('/connections/source-code-providers')
+      return response.data
+    },
+    enabled: page === CommandType.GIT,
+    refetchOnWindowFocus: true,
+  })
+
+  const repositoriesQuery = useQuery<SourceCodeRepository[]>({
+    queryKey: ['connections/source-code-providers', selectedProvider?.id],
+    async queryFn() {
+      const response = await axios.get(`/connections/source-code-providers/${selectedProvider?.id}`)
+      return response.data
+    },
+    enabled: page === CommandType.REPOSITORY && Boolean(selectedProvider),
+  })
+
+  const createApplicationMutation = useMutation<
+    unknown,
+    AxiosError,
+    {
+      sourceCodeRepositoryId: string
+    }
+  >({
+    async mutationFn({ sourceCodeRepositoryId }) {
+      const response = await axios.post('/w/applications', {
+        type: 'git',
+        gitConfiguration: {
+          sourceCodeRepositoryId,
+        },
+      })
+      return response.data
+    },
+  })
 
   const commands: Command[] = [
     {
       id: CommandType.GIT,
       label: 'Deploy git repository',
       icon: <GitIcon className="size-5" />,
-      commands: [
-        {
-          id: CommandType.CONNECT_GITHUB,
-          label: 'Connect github app',
-          icon: <GitHubIcon className="size-5" />,
-          href: 'https://github.com',
-        },
-        {
-          id: CommandType.CONNECT_GITLAB,
-          label: 'Connect gitlab app',
-          icon: <GitLabIcon className="size-5" />,
-          href: 'https://gitlab.com',
-        },
-        {
-          id: CommandType.CONNECT_BITBUCKET,
-          label: 'Connect bitbucket app',
-          icon: <BitbucketIcon className="size-5" />,
-          href: 'https://bitbucket.org',
-        },
-      ],
     },
     {
       id: CommandType.MYSQL,
@@ -84,30 +126,80 @@ export function NewApplicationCommand({ open, onOpenChange }: NewApplicationComm
     },
   ]
 
-  const gitCommands = [
+  const hasAtLeastOneGithubConnection = providersQuery.data?.some(
+    (provider) => provider.provider === 'github'
+  )
+
+  const gitCommands: Command[] = [
+    ...(providersQuery.data?.map((provider) => ({
+      id: CommandType.REPOSITORY,
+      label: (
+        <span>
+          <span className="capitalize">{provider.name}</span> repositories
+        </span>
+      ),
+      icon: <img src={provider?.avatar} alt={provider?.name} className="size-6 rounded-md" />,
+      onClick() {
+        setSelectedProvider(provider)
+        setPages((current) => [...current, CommandType.REPOSITORY])
+      },
+    })) || []),
     {
       id: CommandType.CONNECT_GITHUB,
-      label: 'Connect github app',
+      label: hasAtLeastOneGithubConnection
+        ? 'Configure github app installation'
+        : 'Connect github app',
       icon: <GitHubIcon className="size-5" />,
-      href: 'https://github.com',
+      href: '/connections/github/redirect',
     },
     {
       id: CommandType.CONNECT_GITLAB,
       label: 'Connect gitlab app',
       icon: <GitLabIcon className="size-5" />,
-      href: 'https://gitlab.com',
+      href: '/connections/gitlab/redirect',
     },
     {
       id: CommandType.CONNECT_BITBUCKET,
       label: 'Connect bitbucket app',
       icon: <BitbucketIcon className="size-5" />,
-      href: 'https://bitbucket.org',
+      href: '/connections/bitbucket/redirect',
     },
   ]
 
-  const page = pages[pages.length - 1]
+  const repositories = repositoriesQuery?.data?.map((repository) => ({
+    id: CommandType.COMPLETE,
+    label: (
+      <div className="flex items-center gap-0.5">
+        <span>{selectedProvider?.name}</span>
+        <div className="h-3.5 mx-0.5 w-px bg-(--border-primary) transform rotate-20"></div>
+        <span>{repository.repository}</span>
 
-  const commandsWithSubItems = [CommandType.GIT, CommandType.DOCKER]
+        <GitHubIcon className="size-3 ml-2 opacity-45" />
+
+        <span className="text-sm kb-content-tertiary ml-2">
+          {repository.lastUpdatedAt ? dayjs(repository.lastUpdatedAt).fromNow() : 'Never'}
+        </span>
+      </div>
+    ),
+    key: repository?.id,
+    icon: (
+      <img
+        className="size-6 rounded-md"
+        src={selectedProvider?.avatar}
+        alt={selectedProvider?.name}
+      />
+    ),
+    onClick() {
+      setSelectedRepository(repository)
+      form.setData('gitConfiguration.sourceCodeRepositoryId', repository.id)
+
+      setTimeout(() => {
+        form.post('/w/applications')
+      }, 0)
+    },
+  }))
+
+  const commandsWithSubItems = [CommandType.GIT, CommandType.DOCKER, CommandType.REPOSITORY]
 
   useEffect(() => {
     setSearch('')
@@ -138,7 +230,7 @@ export function NewApplicationCommand({ open, onOpenChange }: NewApplicationComm
         }}
       >
         <div className="flex flex-col bg-white shadow-lg max-w-xl mx-auto mt-64 rounded-xl">
-          <div className="w-full flex items-center h-15 kb-background-secondary rounded-t-2xl px-6">
+          <div className="w-full flex items-center h-15 kb-background-secondary rounded-t-2xl px-4">
             {page && (
               <Button
                 variant="secondary"
@@ -161,7 +253,7 @@ export function NewApplicationCommand({ open, onOpenChange }: NewApplicationComm
               onValueChange={setSearch}
             />
           </div>
-          <Command.List className="p-2">
+          <Command.List className="p-2 max-h-80 overflow-y-auto">
             <Command.Empty className="w-full py-6 kb-content-tertiary text-sm text-center max-w-sm mx-auto">
               We probably don't deploy this way yet. Ping us with feedback if you think we should.
             </Command.Empty>
@@ -173,6 +265,7 @@ export function NewApplicationCommand({ open, onOpenChange }: NewApplicationComm
                   value={command.id}
                   onSelect={(value) => setPages((current) => [...current, value as CommandType])}
                   className={itemClassNames}
+                  onClick={command?.onClick}
                 >
                   <div className="flex items-center w-full justify-between">
                     <div className="flex items-center gap-3">
@@ -191,25 +284,76 @@ export function NewApplicationCommand({ open, onOpenChange }: NewApplicationComm
 
             {page === CommandType.GIT && (
               <>
-                {gitCommands.map((command) => (
-                  <Command.Item key={command.id} value={command.id} className={itemClassNames}>
-                    <a
-                      href={command?.href}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center w-full justify-between"
-                    >
-                      <div className="flex items-center gap-3">
-                        {command.icon}
-                        <span className="kb-content-secondary font-sans text-sm">
-                          {command.label}
-                        </span>
-                      </div>
+                {providersQuery.isLoading ? (
+                  <div className="w-full flex items-center justify-center py-4">
+                    <Spinner className="w-5 h-5" />
+                  </div>
+                ) : null}
+                {gitCommands.map((command) => {
+                  const Container = command?.href ? 'a' : 'button'
 
-                      <OpenNewWindowIcon className="size-4 kb-content-tertiary" />
-                    </a>
-                  </Command.Item>
-                ))}
+                  return (
+                    <Command.Item key={command.id} value={command.id} className={itemClassNames}>
+                      <Container
+                        href={command?.href}
+                        onClick={command?.onClick}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center w-full justify-between"
+                      >
+                        <div className="flex items-center gap-3">
+                          {command.icon}
+                          <span className="kb-content-secondary font-sans text-sm">
+                            {command.label}
+                          </span>
+                        </div>
+
+                        {command?.href ? (
+                          <OpenNewWindowIcon className="size-4 kb-content-tertiary" />
+                        ) : null}
+                        {commandsWithSubItems.includes(command.id) ? (
+                          <NavArrowRightIcon className="size-5 kb-content-tertiary" />
+                        ) : null}
+                      </Container>
+                    </Command.Item>
+                  )
+                })}
+              </>
+            )}
+
+            {page === CommandType.REPOSITORY && (
+              <>
+                {repositoriesQuery.isLoading ? (
+                  <div className="w-full flex items-center justify-center py-4">
+                    <Spinner className="w-5 h-5" />
+                  </div>
+                ) : null}
+
+                {repositories?.map((repository) => {
+                  return (
+                    <Command.Item key={repository.key} className={itemClassNames}>
+                      <button
+                        className="flex items-center w-full cursor-pointer h-full justify-between"
+                        onClick={repository.onClick}
+                        disabled={form?.processing}
+                      >
+                        <div className="flex items-center gap-3">
+                          {repository.icon}
+                          <span className="kb-content-secondary font-sans text-sm">
+                            {repository.label}
+                          </span>
+                        </div>
+
+                        {form?.processing &&
+                        form?.data?.gitConfiguration?.sourceCodeRepositoryId === repository?.key ? (
+                          <Spinner className="size-5 kb-content-tertiary" />
+                        ) : (
+                          <NavArrowRightIcon className="size-4 kb-content-tertiary" />
+                        )}
+                      </button>
+                    </Command.Item>
+                  )
+                })}
               </>
             )}
           </Command.List>

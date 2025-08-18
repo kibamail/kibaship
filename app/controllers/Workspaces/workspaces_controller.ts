@@ -1,7 +1,12 @@
 import { createWorkspaceValidator } from '#validators/create_workspace'
 import type { HttpContext } from '@adonisjs/core/http'
 
+/**
+ * Workspaces controller for creating and managing workspace containers
+ * Integrates with KibaMail API for workspace operations
+ */
 export default class WorkspacesController {
+  /** Create new workspace via KibaMail API, refresh profile, redirect to workspace */
   public async store(ctx: HttpContext) {
     const payload = await createWorkspaceValidator.validate(ctx.request.all())
 
@@ -18,8 +23,6 @@ export default class WorkspacesController {
     }
 
     await ctx.auth.user?.refreshProfile()
-
-    console.log({ workspace })
 
     return ctx.response.redirect(`/w/${workspace?.slug}`)
   }

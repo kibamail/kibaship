@@ -54,4 +54,36 @@ export default await Env.create(new URL('../', import.meta.url), {
   REDIS_HOST: Env.schema.string({ format: 'host' }),
   REDIS_PORT: Env.schema.number(),
   REDIS_PASSWORD: Env.schema.string.optional(),
+
+  /*
+  |----------------------------------------------------------
+  | HashiCorp Vault variables
+  |----------------------------------------------------------
+  */
+  VAULT_ADDR: Env.schema.string({ format: 'url', tld: false }),
+  VAULT_TOKEN: Env.schema.string(),
+  VAULT_READ_ROLE_ID: Env.schema.string(),
+  VAULT_READ_SECRET_ID: Env.schema.string(),
+  VAULT_WRITE_ROLE_ID: Env.schema.string(),
+  VAULT_WRITE_SECRET_ID: Env.schema.string(),
+
+  /*
+  |----------------------------------------------------------
+  | Ngrok tunnel variables
+  |----------------------------------------------------------
+  */
+  NGROK_AUTHTOKEN: Env.schema.string(),
+
+  /*
+  |----------------------------------------------------------
+  | GitHub App integration variables
+  |----------------------------------------------------------
+  */
+  SOURCE_GITHUB_APP_NAME: Env.schema.string(),
+  SOURCE_GITHUB_APP_ID: Env.schema.string(),
+  SOURCE_GITHUB_CALLBACK_URL: Env.schema.string({ format: 'url', tld: false }),
+  SOURCE_GITHUB_WEBHOOK_URL: Env.schema.string({ format: 'url', tld: false }),
+  SOURCE_GITHUB_APP_WEBHOOKS_SECRET: Env.schema.string(),
+  SOURCE_GITHUB_APP_SECRET: Env.schema.string(),
+  SOURCE_GITHUB_APP_PRIVATE_KEY: Env.schema.string(),
 })

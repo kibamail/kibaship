@@ -1,7 +1,12 @@
+import Project from '#models/project'
 import { errors as authErrors } from '@adonisjs/auth'
 import type { HttpContext } from '@adonisjs/core/http'
 
+/**
+ * Base controller with shared authentication and profile retrieval methods
+ */
 export class BaseController {
+  /** Get authenticated user's cached profile, throws E_UNAUTHORIZED_ACCESS if invalid */
   public async profile(ctx: HttpContext) {
     const user = ctx.auth.user
 
@@ -15,5 +20,40 @@ export class BaseController {
     }
 
     return profile
+  }
+
+  public async workspace(ctx: HttpContext) {
+    const workspaceSlug = ctx.session.get('workspace')
+    const profile = await this.profile(ctx)
+
+    const workspace = profile.workspaces.find((workspace) => workspace.slug === workspaceSlug)
+
+    if (!workspace) {
+      throw new authErrors.E_UNAUTHORIZED_ACCESS(
+        'You must select an active workspace to use this endpoint.',
+        {
+          redirectTo: '/',
+          guardDriverName: 'web',
+        }
+      )
+    }
+
+    return workspace
+  }
+
+  public async pageProps(ctx: HttpContext, extraProps?: Record<string, any>) {
+    const profile = await this.profile(ctx)
+    const workspace = await this.workspace(ctx)
+    const projects = await Project.query()
+      .where('workspace_id', workspace.id)
+      .orderBy('created_at', 'desc')
+      .preload('cluster')
+
+    return {
+      profile,
+      workspace,
+      projects,
+      ...extraProps,
+    }
   }
 }

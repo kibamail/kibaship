@@ -7,6 +7,10 @@ export default class extends BaseSchema {
     this.schema.createTable(this.tableName, (table) => {
       table.uuid('id').primary()
 
+      table.uuid('workspace_id').notNullable()
+      table.uuid('cluster_id').notNullable().references('id').inTable('clusters')
+      table.string('name')
+
       table.timestamp('created_at')
       table.timestamp('updated_at')
     })

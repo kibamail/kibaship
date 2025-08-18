@@ -148,7 +148,28 @@ export interface CloudProviderInfo {
   credentialFields: CloudProviderCredentialField[]
 }
 
+export interface SourceCodeRepository {
+  id: string
+  repository: string
+  visibility: 'public' | 'private'
+  lastUpdatedAt: string
+}
+
+export interface SourceCodeProvider {
+  id: string
+  name: string
+  avatar: string
+  provider: 'github' | 'gitlab' | 'bitbucket'
+  type: 'user' | 'organization'
+}
+
+export interface Project {
+  id: string
+  name: string
+}
+
 export type PageProps<T extends Record<string, unknown> = Record<string, unknown>> = T & {
   profile: UserProfile
+  projects: Project[]
   workspace: UserProfile['workspaces'][number]
 }

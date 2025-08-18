@@ -9,7 +9,7 @@ import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import cn from 'classnames'
 import { SignoutForm } from './SignoutForm'
 import { PageProps } from '~/types'
-import { usePage } from '@inertiajs/react'
+import { Link, usePage } from '@inertiajs/react'
 
 interface WorkspacesDropdownMenuProps {
   rootId: string
@@ -59,9 +59,9 @@ export function WorkspacesDropdownMenu({
         <DropdownMenu.RadioGroup value={activeWorkspace?.id.toString()}>
           {pageProps?.props?.profile?.workspaces?.map((workspace) => (
             <DropdownMenu.RadioItem key={workspace.slug} value={workspace.slug} asChild>
-              <a
-                data-testid={`${rootId}-switch-workspace-id-${workspace.slug}`}
+              <Link
                 href={`/w/${workspace.slug}`}
+                data-testid={`${rootId}-switch-workspace-id-${workspace.slug}`}
                 className="p-2 flex items-center hover:bg-(--background-secondary) rounded-lg cursor-pointer"
               >
                 <TeamAvatar name={workspace.name} size="sm" />
@@ -70,7 +70,7 @@ export function WorkspacesDropdownMenu({
                 <DropdownMenu.ItemIndicator className="ml-auto">
                   <CheckIcon className="w-5 h-5 kb-content-secondary" />
                 </DropdownMenu.ItemIndicator>
-              </a>
+              </Link>
             </DropdownMenu.RadioItem>
           ))}
         </DropdownMenu.RadioGroup>
