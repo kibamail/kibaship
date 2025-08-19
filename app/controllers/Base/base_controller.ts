@@ -23,8 +23,16 @@ export class BaseController {
   }
 
   public async workspace(ctx: HttpContext) {
-    const workspaceSlug = ctx.session.get('workspace')
     const profile = await this.profile(ctx)
+
+    let workspaceSlug = ctx.session.get('workspace')
+
+    if (ctx.params.workspace && ctx.params.workspace !== ctx.session.get('workspace')) {
+      ctx.session.put('workspace', ctx.params.workspace)
+
+      workspaceSlug = ctx.params.workspace
+    }
+
 
     const workspace = profile.workspaces.find((workspace) => workspace.slug === workspaceSlug)
 
@@ -44,6 +52,7 @@ export class BaseController {
   public async pageProps(ctx: HttpContext, extraProps?: Record<string, any>) {
     const profile = await this.profile(ctx)
     const workspace = await this.workspace(ctx)
+
     const projects = await Project.query()
       .where('workspace_id', workspace.id)
       .orderBy('created_at', 'desc')

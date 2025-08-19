@@ -1,20 +1,24 @@
-import User from '#models/user'
+import { OauthService } from '#services/auth/oauth_service'
+import { UserAuthService } from '#services/auth/user_auth_service'
+import { inject } from '@adonisjs/core'
 import type { HttpContext } from '@adonisjs/core/http'
-import app from '@adonisjs/core/services/app'
-import redis from '@adonisjs/redis/services/main'
-import encryption from '@adonisjs/core/services/encryption'
 import { UserProfile } from '@kibamail/auth-sdk'
 
 /**
  * OAuth2 controller for KibaMail authentication flow
  * Handles authorization redirect, callback, token exchange, and user setup
  */
+@inject()
 export default class Oauth2Controller {
+
+  constructor(
+    protected auth: OauthService,
+    protected userAuth: UserAuthService
+  ) {}
+
   /** Redirect user to KibaMail authorization server for OAuth login */
   public async redirect(ctx: HttpContext) {
-    const auth = await app.container.make('auth.kibaauth')
-
-    return ctx.response.redirect(auth.api().auth().authorizationUrl())
+    return ctx.response.redirect(this.auth.api().auth().authorizationUrl())
   }
 
   /**
@@ -25,66 +29,76 @@ export default class Oauth2Controller {
     const { code } = ctx.request.qs()
 
     if (!code) {
-      console.error('Failed, no code provided from auth server.')
       return ctx.response.redirect('/')
     }
 
-    const auth = await app.container.make('auth.kibaauth')
-
-    const [response, accessTokenError] = await auth.api().auth().accessToken(code)
+    const [response, accessTokenError] = await this.auth.api().auth().accessToken(code)
 
     if (accessTokenError) {
-      console.error('Failed to get access token from auth server.', accessTokenError?.cause)
-      return ctx.response.redirect('/')
+      return ctx.response.redirect(`/?error=Failed to authenticate. Please try again.`)
     }
 
-    const authenticatedApi = auth.accessToken(response?.access_token as string)
+    const authenticatedApi = this.auth.accessToken(response?.access_token as string)
 
     let [user, profileError] = await authenticatedApi.user().profile()
 
     if (profileError) {
-      console.error('Failed to get profile from auth server.', profileError?.cause)
+      return ctx.response.redirect('/?error=Failed to get your profile information. Please try again.')
+    }
+
+    const localUser = await this.userAuth.findOrCreateUser(user!)
+
+    if (localUser.isExisting) {
+      await this.userAuth.loginUser(ctx, localUser.user)
+      return ctx.response.redirect('/w')
+    }
+
+    await this.userAuth.loginUser(ctx, localUser.user)
+
+    const workspaceCreated = await this.setupNewUser(localUser.user, user!, response?.access_token as string)
+    if (!workspaceCreated) {
       return ctx.response.redirect('/')
     }
 
-    let localUser = await User.findBy('oauthId', user?.id)
-
-    if (localUser) {
-      localUser.email = user?.email || localUser.email
-      await localUser.save()
-
-      await ctx.auth.use('web').login(localUser)
-
-      return ctx.response.redirect('/w')
-    } else {
-      localUser = await User.create({
-        email: user?.email,
-        oauthId: user?.id,
-      })
+    const profileRefreshed = await this.refreshUserProfile(response?.access_token as string)
+    if (!profileRefreshed) {
+      return ctx.response.redirect('/')
     }
 
-    await ctx.auth.use('web').login(localUser)
+    return ctx.response.redirect('/w')
+  }
 
-    await localUser.cache(user as UserProfile, response?.access_token as string)
+  /**
+   * Setup new user by caching profile and creating default workspace
+   */
+  private async setupNewUser(localUser: any, oauthUser: any, accessToken: string) {
+    await this.userAuth.cacheUserProfile(localUser, oauthUser as UserProfile, accessToken)
 
-    const [email, domain] = user?.email?.split('@') || ['', '']
+    const [email, domain] = oauthUser?.email?.split('@') || ['', '']
+    const authenticatedApi = this.auth.accessToken(accessToken)
 
     const [, workspaceError] = await authenticatedApi.workspaces().create({
       name: `${email} ${domain}'s Workspace`,
     })
 
     if (workspaceError) {
-      console.error('Failed to create workspace.', workspaceError?.cause)
-      return ctx.response.redirect('/')
+      return false
     }
 
-    ;[user, profileError] = await authenticatedApi.user().profile()
+    return true
+  }
+
+  /**
+   * Refresh user profile after workspace creation
+   */
+  private async refreshUserProfile(accessToken: string) {
+    const authenticatedApi = this.auth.accessToken(accessToken)
+    const [, profileError] = await authenticatedApi.user().profile()
 
     if (profileError) {
-      console.error('Failed to get profile from auth server.', profileError?.cause)
-      return ctx.response.redirect('/')
+      return false
     }
 
-    return ctx.response.redirect('/w')
+    return true
   }
 }

@@ -10,3 +10,12 @@ export const oauth = {
   callbackUrl: env.get('OAUTH_CALLBACK_URL'),
   clientBaseUrl: env.get('OAUTH_CLIENT_BASE_URL'),
 }
+
+export type OauthConfig = {
+  oauth: {
+  clientId: string
+  clientSecret: string
+  callbackUrl: string
+  clientBaseUrl: string
+}
+}

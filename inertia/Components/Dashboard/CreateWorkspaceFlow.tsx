@@ -20,8 +20,7 @@ export function CreateWorkspaceFlow({ isOpen, onOpenChange }: CreateWorkspaceFlo
     event.preventDefault()
 
     post('/w/workspaces', {
-      onSuccess(response) {
-        console.log({ response })
+      onSuccess() {
         reset()
         onOpenChange(false)
         window.location.reload()

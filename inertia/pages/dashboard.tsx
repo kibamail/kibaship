@@ -5,6 +5,7 @@ import { PageProps } from '~/types'
 
 export default function Dashboard() {
   const { props } = usePage<PageProps>()
+
   return (
     <AuthenticatedLayout>
       <Head title="Dashboard" />

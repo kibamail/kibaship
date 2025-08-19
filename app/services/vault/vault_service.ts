@@ -47,12 +47,11 @@ export class VaultService {
       return
     }
 
-    const response = await this.client.approleLogin({
+    await this.client.approleLogin({
       role_id: this.config.readRole.roleId,
       secret_id: this.config.writeRole.secretId,
     })
 
-    console.log({ response })
   }
 
   private async requestWriteAccessToken() {
@@ -60,11 +59,10 @@ export class VaultService {
       return
     }
 
-    const response = await this.client.approleLogin({
+    await this.client.approleLogin({
       role_id: this.config.writeRole.roleId,
       secret_id: this.config.writeRole.secretId,
     })
 
-    console.log({ response })
   }
 }

@@ -5,6 +5,7 @@ import redis from '@adonisjs/redis/services/main'
 import encryption from '@adonisjs/core/services/encryption'
 import app from '@adonisjs/core/services/app'
 import { randomUUID } from 'node:crypto'
+import { OauthService } from '#services/auth/oauth_service'
 
 /**
  * User model for OAuth-authenticated users with cached profiles and encrypted tokens
@@ -59,15 +60,15 @@ export default class User extends BaseModel {
 
   /** Create authenticated KibaMail API client using stored OAuth token */
   public async authClient() {
-    const kibaauth = await app.container.make('auth.kibaauth')
-
     const accessToken = await this.getOauthAccessToken()
 
     if (!accessToken) {
       throw new Error('No access token found.')
     }
 
-    return kibaauth.accessToken(accessToken)
+    const auth = await app.container.make(OauthService)
+
+    return auth.accessToken(accessToken)
   }
 
   /** Retrieve and decrypt OAuth access token from Redis */
@@ -101,9 +102,9 @@ export default class User extends BaseModel {
       return null
     }
 
-    const kibaauth = await app.container.make('auth.kibaauth')
+    const auth = await app.container.make(OauthService)
 
-    const [profile, profileError] = await kibaauth.accessToken(accessToken).user().profile()
+    const [profile, profileError] = await auth.accessToken(accessToken).user().profile()
 
     if (profileError) {
       console.error('Failed to refresh user profile:', profileError)

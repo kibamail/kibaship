@@ -172,11 +172,11 @@ export function NewApplicationCommand({ open, onOpenChange }: NewApplicationComm
       <div className="flex items-center gap-0.5">
         <span>{selectedProvider?.name}</span>
         <div className="h-3.5 mx-0.5 w-px bg-(--border-primary) transform rotate-20"></div>
-        <span>{repository.repository}</span>
+        <span className='max-w-[180px] truncate'>{repository.repository}</span>
 
-        <GitHubIcon className="size-3 ml-2 opacity-45" />
+        <GitHubIcon className="size-3 ml-1 opacity-45" />
 
-        <span className="text-sm kb-content-tertiary ml-2">
+        <span className="text-xs kb-content-tertiary ml-1">
           {repository.lastUpdatedAt ? dayjs(repository.lastUpdatedAt).fromNow() : 'Never'}
         </span>
       </div>
