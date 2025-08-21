@@ -2,6 +2,7 @@
 
 @import '@kibamail/owly/styles/text.css' layer(base);
 @import '@kibamail/owly/styles/alert.css' layer(base);
+@import '@kibamail/owly/styles/tabs.css' layer(base);
 @import '@kibamail/owly/styles/button.css' layer(base);
 @import '@kibamail/owly/styles/badge.css' layer(base);
 @import '@kibamail/owly/styles/heading.css' layer(base);
@@ -18,14 +19,12 @@
 
 @import 'tailwindcss' layer(base);
 
+@import './owly.css' layer(base);
+
 @plugin "tailwindcss-animate";
 
 @theme inline {
-  --font-sans:
-    Inter, ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
-    'Segoe UI Symbol', 'Noto Color Emoji';
-  --font-mono: 'Fira Mono', 'Dank Mono', 'Inconsolata', monospace;
-  --default-mono-font-family: var(--font-mono);
+  --font-sans: var(--default-font-family);
 }
 
 @layer base {
@@ -36,12 +35,6 @@
     font-style: normal;
     font-display: swap;
   }
-}
-
-:root {
-  --default-font-family:
-    Inter, ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
-    'Segoe UI Symbol', 'Noto Color Emoji';
 }
 
 body {
@@ -65,7 +58,6 @@ button,
 input,
 textarea,
 select {
-  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
   @apply font-sans;
 }
 

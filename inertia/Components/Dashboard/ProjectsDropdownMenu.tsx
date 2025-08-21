@@ -16,7 +16,7 @@ export function ProjectsDropdownMenu({ rootId, onCreateProjectClick }: ProjectsD
   const { props, url } = usePage<PageProps>()
 
   const activeProjectIndex = props.projects?.findIndex((project) => url.includes(project.id))
-  const activeProject = props.projects?.[activeProjectIndex] || props.projects?.[0]
+  const activeProject = props.projects?.[activeProjectIndex]
 
   const handleCreateProjectClick = () => {
     if (onCreateProjectClick) {
@@ -56,7 +56,7 @@ export function ProjectsDropdownMenu({ rootId, onCreateProjectClick }: ProjectsD
             <DropdownMenu.RadioItem key={project.id} value={project.id.toString()} asChild>
               <Link
                 data-testid={`${rootId}-switch-project-id-${project.id}`}
-                href={`/w/${props?.workspace?.slug}/${project?.id}`}
+                href={`/w/${props?.workspace?.slug}/p/${project?.id}`}
                 className="p-2 flex items-center hover:bg-(--background-secondary) rounded-lg cursor-pointer"
               >
                 <ProjectAvatar name={project.name} size="sm" />

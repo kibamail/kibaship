@@ -8,6 +8,9 @@ export default class extends BaseSchema {
       table.uuid('id').primary()
 
       table.string('name').notNullable()
+      table.enum('type', ['mysql', 'postgres', 'git', 'docker_image', 'template']).notNullable()
+
+      table.json('configurations').notNullable()
 
       table
         .uuid('project_id')

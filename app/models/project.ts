@@ -1,9 +1,10 @@
 import { DateTime } from 'luxon'
-import { afterCreate, BaseModel, beforeCreate, belongsTo, column } from '@adonisjs/lucid/orm'
+import { afterCreate, BaseModel, beforeCreate, belongsTo, column, hasMany } from '@adonisjs/lucid/orm'
 import { randomUUID } from 'node:crypto'
 import Environment from './environment.js'
 import Cluster from './cluster.js'
-import type { BelongsTo } from '@adonisjs/lucid/types/relations'
+import type { BelongsTo, HasMany } from '@adonisjs/lucid/types/relations'
+import Application from './application.js'
 
 /**
  * Project model for organizing applications and resources
@@ -34,6 +35,9 @@ export default class Project extends BaseModel {
 
   @belongsTo(() => Cluster)
   declare cluster: BelongsTo<typeof Cluster>
+
+  @hasMany(() => Application)
+  declare applications: HasMany<typeof Application>
 
   @beforeCreate()
   public static async pickCluster(project: Project) {

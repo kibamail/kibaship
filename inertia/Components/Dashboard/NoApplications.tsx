@@ -6,13 +6,7 @@ import { PlusIcon } from '../Icons/plus.svg'
 import { NewApplicationCommand } from '../Applications/NewApplicationCommand'
 import { useState } from 'react'
 
-interface NoApplicationsInWorkspaceProps {
-  onCreateApplicationClick?: () => void
-}
-
-export function NoApplicationsInWorkspace({
-  onCreateApplicationClick,
-}: NoApplicationsInWorkspaceProps) {
+export function NoApplicationsInWorkspace() {
   const [newApplicationCommandOpen, setNewApplicationCommandOpen] = useState(false)
   return (
     <div className="w-full h-full kb-background-hover flex flex-col items-center py-24 mt-12 border kb-border-tertiary rounded-lg px-6">

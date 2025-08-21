@@ -17,12 +17,11 @@ import { JSX } from 'react/jsx-runtime'
 import classNames from 'classnames'
 import { OpenNewWindowIcon } from '../Icons/open-new-window.svg'
 import { Button } from '@kibamail/owly'
-import { useMutation, useQuery } from '@tanstack/react-query'
-import { useForm, usePage } from '@inertiajs/react'
-import { PageProps, SourceCodeProvider, SourceCodeRepository } from '~/types'
+import { useQuery } from '@tanstack/react-query'
+import { useForm } from '@inertiajs/react'
+import { SourceCodeProvider, SourceCodeRepository } from '~/types'
 import { axios } from '~/app/axios'
 import Spinner from '../Icons/Spinner'
-import { AxiosError } from 'axios'
 
 interface NewApplicationCommandProps {
   open?: boolean
@@ -55,7 +54,6 @@ export function NewApplicationCommand({ open, onOpenChange }: NewApplicationComm
   const [pages, setPages] = useState<CommandType[]>([])
   const [search, setSearch] = useState('')
   const [selectedProvider, setSelectedProvider] = useState<SourceCodeProvider | null>(null)
-  const [selectedRepository, setSelectedRepository] = useState<SourceCodeRepository | null>(null)
 
   const form = useForm({
     type: 'git',
@@ -83,24 +81,6 @@ export function NewApplicationCommand({ open, onOpenChange }: NewApplicationComm
       return response.data
     },
     enabled: page === CommandType.REPOSITORY && Boolean(selectedProvider),
-  })
-
-  const createApplicationMutation = useMutation<
-    unknown,
-    AxiosError,
-    {
-      sourceCodeRepositoryId: string
-    }
-  >({
-    async mutationFn({ sourceCodeRepositoryId }) {
-      const response = await axios.post('/w/applications', {
-        type: 'git',
-        gitConfiguration: {
-          sourceCodeRepositoryId,
-        },
-      })
-      return response.data
-    },
   })
 
   const commands: Command[] = [
@@ -172,7 +152,7 @@ export function NewApplicationCommand({ open, onOpenChange }: NewApplicationComm
       <div className="flex items-center gap-0.5">
         <span>{selectedProvider?.name}</span>
         <div className="h-3.5 mx-0.5 w-px bg-(--border-primary) transform rotate-20"></div>
-        <span className='max-w-[180px] truncate'>{repository.repository}</span>
+        <span className="max-w-[180px] truncate">{repository.repository}</span>
 
         <GitHubIcon className="size-3 ml-1 opacity-45" />
 
@@ -190,11 +170,14 @@ export function NewApplicationCommand({ open, onOpenChange }: NewApplicationComm
       />
     ),
     onClick() {
-      setSelectedRepository(repository)
       form.setData('gitConfiguration.sourceCodeRepositoryId', repository.id)
 
       setTimeout(() => {
-        form.post('/w/applications')
+        form.post('/w/applications', {
+          onSuccess() {
+            onOpenChange?.(false)
+          },
+        })
       }, 0)
     },
   }))
@@ -221,7 +204,7 @@ export function NewApplicationCommand({ open, onOpenChange }: NewApplicationComm
       <Command.Dialog
         open={open}
         onOpenChange={onOpenChange}
-        className="absolute top-0 w-full h-screen bg-[rgba(17,17,17,0.2)]"
+        className="absolute top-0 w-full h-screen bg-[rgba(17,17,17,0.2)] z-20"
         onKeyDown={(event) => {
           if (event.key === 'Escape' || (event.key === 'Backspace' && !search)) {
             event.preventDefault()
@@ -297,7 +280,6 @@ export function NewApplicationCommand({ open, onOpenChange }: NewApplicationComm
                       <Container
                         href={command?.href}
                         onClick={command?.onClick}
-                        target="_blank"
                         rel="noopener noreferrer"
                         className="flex items-center w-full justify-between"
                       >

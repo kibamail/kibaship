@@ -116,11 +116,12 @@ export function WorkspacesDropdownMenu({
 }
 
 interface TeamAvatarProps {
-  size: 'sm' | 'md'
+  size?: 'sm' | 'md'
   name?: string
+  className?: string
 }
 
-function TeamAvatar({ size, name }: TeamAvatarProps) {
+export function TeamAvatar({ size = 'md', name, className }: TeamAvatarProps) {
   return (
     <span
       className={cn(
@@ -129,7 +130,8 @@ function TeamAvatar({ size, name }: TeamAvatarProps) {
           'w-5 h-5': size === 'sm',
           'w-6 h-6': size === 'md',
         },
-        getTeamAvatarBackgroundColor(name?.[0] ?? '')
+        getTeamAvatarBackgroundColor(name?.[0] ?? ''),
+        className,
       )}
     >
       {name?.[0]}

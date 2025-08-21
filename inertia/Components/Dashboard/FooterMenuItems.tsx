@@ -6,7 +6,7 @@ export function FooterMenuItems() {
     <>
       <div className="flex items-center">
         <button type="button" className="underline kb-content-tertiary kb-reset">
-          <Text className="kb-content-tertiary underline">Give feedback</Text>
+          <Text className="kb-content-tertiary underline cursor-pointer">Give feedback</Text>
         </button>
 
         <svg
@@ -23,12 +23,12 @@ export function FooterMenuItems() {
           <circle cx={1} cy={1} r={1} fill="#716D6A" />
         </svg>
 
-        <a href="/docs">
+        <a href="/docs" className='cursor-pointer'>
           <Text className="kb-content-tertiary underline">Docs</Text>
         </a>
       </div>
 
-      <a href="/w/settings">
+      <a href="/w/settings" className='cursor-pointer'>
         <SettingsIcon className="w-6 h-6 kb-content-tertiary" />
       </a>
     </>

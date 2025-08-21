@@ -7,7 +7,7 @@ import { CreateWorkspaceFlow } from './CreateWorkspaceFlow'
 import { ProjectsDropdownMenu } from './ProjectsDropdownMenu'
 import { SearchBoxTrigger } from './SearchBoxTrigger'
 import { WorkspacesDropdownMenu } from './WorkspaceDropdownMenu'
-import { usePage } from '@inertiajs/react'
+import { Link, usePage } from '@inertiajs/react'
 import { PageProps } from '~/types'
 
 export function Topbar() {
@@ -28,9 +28,14 @@ export function Topbar() {
     <>
       <nav className="w-full lg:h-12 box-border p-2 flex items-center relative">
         <div className="flex items-center gap-2">
-          <button type="button" aria-label="Expand sidebar" className="kb-reset">
+          <Link
+            href={`/w/${props?.workspace?.slug}`}
+            type="button"
+            aria-label="Expand sidebar"
+            className="kb-reset"
+          >
             <KibaIcon className="w-8 h-8" />
-          </button>
+          </Link>
 
           <SlashesIcon width={24} height={24} viewBox="0 0 24 24" />
 

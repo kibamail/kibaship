@@ -1,4 +1,5 @@
 import { BaseController } from '#controllers/Base/base_controller'
+import Application from '#models/application'
 import Project from '#models/project'
 import SourceCodeRepository from '#models/source_code_repository'
 import { createApplicationValidator } from '#validators/applications/create_application'
@@ -20,9 +21,19 @@ export default class ApplicationController extends BaseController {
     const project = data?.projectId
       ? await Project.findOrFail(data?.projectId)
       : await Project.create({
-          name: sourceCodeRepository?.repository,
-          workspaceId: workspace.id,
-        })
+        name: sourceCodeRepository?.repository,
+        workspaceId: workspace.id,
+      })
+
+    await Application.create({
+      name: sourceCodeRepository.repository,
+      projectId: project.id,
+      type: data.type,
+      configurations: {
+        gitConfiguration: data.gitConfiguration,
+        dockerImageConfiguration: data.dockerImageConfiguration
+      }
+    })
 
     return ctx.response.redirect(`/w/${workspace.slug}/p/${project.id}/?environment=production`)
   }

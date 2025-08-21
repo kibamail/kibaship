@@ -17,6 +17,12 @@ export interface Workspace {
   projects?: Project[]
 }
 
+export interface Cluster {
+  id: string
+  location: string
+  subdomainIdentifier: string
+}
+
 export interface Project {
   id: string
   name: string
@@ -24,7 +30,9 @@ export interface Project {
   workspace_id: string
   created_at: string
   updated_at: string
+  cluster: Cluster
   environments?: Environment[]
+  applications: Application[]
 }
 
 export interface Environment {
@@ -163,13 +171,19 @@ export interface SourceCodeProvider {
   type: 'user' | 'organization'
 }
 
-export interface Project {
+
+export interface Application {
   id: string
   name: string
+  type: 'mysql' | 'postgres' | 'git' | 'docker_image'
+  project_id: string
+  created_at: string
+  updated_at: string
 }
 
 export type PageProps<T extends Record<string, unknown> = Record<string, unknown>> = T & {
   profile: UserProfile
+  project: Project
   projects: Project[]
   workspace: UserProfile['workspaces'][number]
 }
