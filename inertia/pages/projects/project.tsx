@@ -80,8 +80,6 @@ export default function ProjectPage() {
     <AuthenticatedLayout>
       <Head title="Project" />
 
-      <VaulDrawer />
-
       <ProjectPageContext.Provider
         value={{
           selectedApplication,
