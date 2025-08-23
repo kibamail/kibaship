@@ -181,6 +181,10 @@ export interface Application {
   updated_at: string
 }
 
+export interface Deployment {
+  id: string
+}
+
 export type PageProps<T extends Record<string, unknown> = Record<string, unknown>> = T & {
   profile: UserProfile
   project: Project

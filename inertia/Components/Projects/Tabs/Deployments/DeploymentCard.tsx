@@ -4,20 +4,30 @@ import classNames from 'classnames'
 import { useState } from 'react'
 import { ArrowUpCircleSolidIcon } from '~/Components/Icons/arrow-up-circle-solid.svg'
 import { CheckIcon } from '~/Components/Icons/check.svg'
+import { CircleIcon } from '~/Components/Icons/circle.svg'
+import { ClockIcon } from '~/Components/Icons/clock.svg'
 import { GitBranchIcon } from '~/Components/Icons/git-branch.svg'
 import { GitCommitIcon } from '~/Components/Icons/git-commit.svg'
 import { MoreHorizIcon } from '~/Components/Icons/more-horiz.svg'
 import { NavArrowDownIcon } from '~/Components/Icons/nav-arrow-down.svg'
 import Spinner from '~/Components/Icons/Spinner'
 
-export function DeploymentCard() {
+interface DeploymentCardProps {
+  onSelected?: () => void
+}
+
+export function DeploymentCard({ onSelected }: DeploymentCardProps) {
   const [stateStatusExpanded, setStateStatusExpanded] = useState(false)
 
   return (
     <div className="w-full border border-owly-border-info rounded-md p-1 flex flex-col gap-1">
-      <div className="w-full p-3 rounded-t-sm bg-owly-background-info/5 grid items-center grid-cols-2 lg:grid-cols-[repeat(4,1fr)_64px] gap-4 lg:gap-6">
+      <div
+        role="button"
+        onClick={onSelected}
+        className="w-full cursor-pointer p-3 rounded-t-sm bg-owly-background-info/5 grid items-center grid-cols-2 lg:grid-cols-[repeat(4,1fr)_64px] gap-4 lg:gap-6"
+      >
         <div className="flex flex-col gap-0.5">
-          <Text className="text-owly-content-secondary !font-semibold">85c345p3d</Text>
+          <Text className="text-owly-content-secondary !font-semibold text-left">85c345p3d</Text>
 
           <div className="flex items-center gap-2">
             <Text className="!text-sm text-owly-content-tertiary lowercase">Production</Text>
@@ -30,13 +40,13 @@ export function DeploymentCard() {
 
         <div className="flex flex-col gap-0.5">
           <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-owly-background-notice"></div>
+            <div className="size-2.5 rounded-full bg-owly-background-notice"></div>
 
             <Text>Building</Text>
           </div>
 
           <div className="flex gap-2">
-            <Spinner className="w-4 h-4 mr-1 mt-1" />
+            <ClockIcon className="w-4 h-4 mt-0.5 text-owly-content-tertiary" />
 
             <Text className="text-sm text-owly-content-tertiary">1m 33s</Text>
           </div>
@@ -94,7 +104,7 @@ export function DeploymentCard() {
         className={classNames(
           'w-full flex flex-col overflow-hidden transition-all duration-300 ease-in-out',
           {
-            'max-h-0 opacity-0': !stateStatusExpanded,
+            'max-h-0 opacity-0 -mt-1': !stateStatusExpanded,
             'max-h-[200px] opacity-100 p-1.5': stateStatusExpanded,
           }
         )}
@@ -113,14 +123,14 @@ export function DeploymentCard() {
           </Text>
 
           <div className="pr-4">
-            <Text>1m 33s</Text>
+            <Text className="text-owly-content-tertiary">1m 33s</Text>
           </div>
         </div>
 
         <div className="flex h-10 items-center justify-between">
           <Text className="text-owly-content-secondary gap-2 flex items-center">
-            <Spinner className="size-4" />
-            Uploading artifacts
+            <CircleIcon className="size-4 text-owly-content-tertiary" />
+            Upload artifacts
           </Text>
 
           <div className="pr-4">

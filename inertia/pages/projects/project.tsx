@@ -4,15 +4,14 @@ import { Head, usePage, router } from '@inertiajs/react'
 import AuthenticatedLayout from '~/Layouts/AuthenticatedLayout'
 import { ReactFlow, Background, Controls } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Button } from '@kibamail/owly'
 import { PlusIcon } from '~/Components/Icons/plus.svg'
 import { NewApplicationCommand } from '~/Components/Applications/NewApplicationCommand'
 import { GitRepositoryAppNode } from '~/Components/Projects/Nodes/GitRepositoryAppNode'
 import { ProjectSettings } from '~/Components/Projects/ProjectSettings'
-import { Application, PageProps, Project } from '~/types'
+import { Application, Deployment, PageProps, Project } from '~/types'
 import { ProjectPageContext } from './projects-context'
-import { VaulDrawer } from '~/Components/VaulSheet'
 
 const initialEdges = [{ id: 'n1-n2', source: 'n1', target: 'n2' }]
 
@@ -30,10 +29,11 @@ export default function ProjectPage() {
   const urlObject = new URL(url, 'https://dummy.com')
 
   function applicationClickUrl(applicationId: string) {
-    urlObject.searchParams.set('application', applicationId)
-    urlObject.searchParams.set('tab', 'deployments')
+    const currentUrl = typeof window === 'undefined' ? urlObject : new URL(window.location.href)
+    currentUrl.searchParams.set('application', applicationId)
+    currentUrl.searchParams.set('tab', 'deployments')
 
-    return `/w/${props.workspace.slug}/p/${props.project.id}?${urlObject.searchParams.toString()}`
+    return `/w/${props.workspace.slug}/p/${props.project.id}?${currentUrl.searchParams.toString()}`
   }
 
   const [nodes] = useState(() => {
@@ -67,13 +67,22 @@ export default function ProjectPage() {
   const [selectedApplication, setSelectedApplication] = useState<Application | null>(
     applicationsMap[selectedApplicationId] || null
   )
+  const [selectedDeployment, setSelectedDeployment] = useState<Deployment | null>(null)
 
   function onSelectedApplication() {
-    urlObject.searchParams.delete('application')
+    const currentUrl = new URL(window.location.href)
+    currentUrl.searchParams.delete('application')
 
     router.visit(
-      `/w/${props.workspace.slug}/p/${props.project.id}?${urlObject.searchParams.toString()}`
+      `/w/${props.workspace.slug}/p/${props.project.id}?${currentUrl.searchParams.toString()}`
     )
+  }
+
+  function onSelectedDeployment() {
+    const currentUrl = new URL(window.location.href)
+    currentUrl.searchParams.delete('deployment')
+
+    window.history.replaceState({}, '', currentUrl)
   }
 
   return (
@@ -85,6 +94,12 @@ export default function ProjectPage() {
           selectedApplication,
           setSelectedApplication,
           applicationsMap,
+          selectedDeployment,
+          setSelectedDeployment(deployment) {
+            setSelectedDeployment(deployment)
+
+            onSelectedDeployment()
+          },
         }}
       >
         <div className="w-full h-full relative">

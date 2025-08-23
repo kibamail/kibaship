@@ -5,6 +5,14 @@ import { OpenNewWindowIcon } from '~/Components/Icons/open-new-window.svg'
 import { DeploymentCard } from './DeploymentCard'
 
 export function Deployments() {
+  function onDeploymentSelected() {
+    const currentUrl = new URL(window.location.href)
+
+    currentUrl.searchParams.set('deployment', Math.ceil(Math.random() * 1000000).toString())
+
+    window.history.replaceState({}, '', currentUrl)
+  }
+
   return (
     <>
       <div className="w-full lg:justify-between flex flex-col lg:flex-row lg:items-center mt-4 gap-4 lg:gap-0">
@@ -23,9 +31,9 @@ export function Deployments() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 mt-6">
-        <DeploymentCard />
-        <DeploymentCard />
-        <DeploymentCard />
+        <DeploymentCard onSelected={onDeploymentSelected} />
+        <DeploymentCard onSelected={onDeploymentSelected} />
+        <DeploymentCard onSelected={onDeploymentSelected} />
       </div>
     </>
   )
