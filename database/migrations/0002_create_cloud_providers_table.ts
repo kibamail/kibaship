@@ -1,16 +1,16 @@
 import { BaseSchema } from '@adonisjs/lucid/schema'
 
 export default class extends BaseSchema {
-  protected tableName = 'clusters'
+  protected tableName = 'cloud_providers'
 
   async up() {
     this.schema.createTable(this.tableName, (table) => {
       table.uuid('id').primary()
 
-      table.string('location').notNullable()
-      table.string('subdomain_identifier').notNullable()
-      table.string('kind').defaultTo('all_purpose')
-      table.string('control_plane_endpoint').notNullable()
+      table.string('name').notNullable()
+      table.enum('type', ['aws', 'hetzner', 'leaseweb', 'google_cloud', 'digital_ocean', 'linode', 'vultr', 'ovh']).notNullable()
+      table.uuid('workspace_id').notNullable()
+      table.text('credentials').notNullable()
 
       table.timestamp('created_at')
       table.timestamp('updated_at')

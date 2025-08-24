@@ -79,7 +79,7 @@ services:
       - '--domain=fully-notable-fowl.ngrok-free.app'
       - 'host.docker.internal:3333'
     ports:
-      - '4040:4040'
+      - '4044:4040'
 volumes:
   mysql_data:
     driver: local

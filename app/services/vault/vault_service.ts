@@ -2,8 +2,7 @@ import { VaultConfig } from '#config/vault'
 import app from '@adonisjs/core/services/app'
 import createClient from 'node-vault'
 
-export class VaultService {
-  protected workspaceId?: string
+class VaultService {
   protected config: VaultConfig
   protected accessTokens = {
     reads: {
@@ -24,22 +23,23 @@ export class VaultService {
     this.client = createClient({
       apiVersion: 'v1',
       endpoint: this.config.connection.address,
-      token: this.config.connection.token,
     })
   }
 
-  workspace(id: string) {
-    this.workspaceId = id
-
-    return this
-  }
-
-  public async read(_name: string) {
+  public async read(name: string) {
     await this.requestReadAccessToken()
+
+    return this.client.read(`/secrets/data/workspaces/${name}`, {
+      token: this.accessTokens.reads.content,
+    })
   }
 
-  public async write(_name: string, _data: Record<string, string>) {
+  public async write(name: string, data: Record<string, string>) {
     await this.requestWriteAccessToken()
+
+    return this.client.write(`/secrets/data/workspaces/${name}`, data, {
+      token: this.accessTokens.writes.content,
+    })
   }
 
   private async requestReadAccessToken() {
@@ -47,11 +47,13 @@ export class VaultService {
       return
     }
 
-    await this.client.approleLogin({
+    const auth = await this.client.approleLogin({
       role_id: this.config.readRole.roleId,
-      secret_id: this.config.writeRole.secretId,
+      secret_id: this.config.readRole.secretId,
     })
 
+    this.accessTokens.reads['content'] = auth.auth.client_token
+    this.accessTokens.reads['expiresAt'] = new Date(Date.now() + auth.auth.lease_duration * 1000)
   }
 
   private async requestWriteAccessToken() {
@@ -59,10 +61,15 @@ export class VaultService {
       return
     }
 
-    await this.client.approleLogin({
+    const auth = await this.client.approleLogin({
       role_id: this.config.writeRole.roleId,
       secret_id: this.config.writeRole.secretId,
     })
 
+    this.accessTokens.writes['content'] = auth.auth.client_token
+    this.accessTokens.writes['expiresAt'] = new Date(Date.now() + auth.auth.lease_duration * 1000)
+
   }
 }
+
+export const vault = new VaultService()

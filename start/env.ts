@@ -61,7 +61,6 @@ export default await Env.create(new URL('../', import.meta.url), {
   |----------------------------------------------------------
   */
   VAULT_ADDR: Env.schema.string({ format: 'url', tld: false }),
-  VAULT_TOKEN: Env.schema.string(),
   VAULT_READ_ROLE_ID: Env.schema.string(),
   VAULT_READ_SECRET_ID: Env.schema.string(),
   VAULT_WRITE_ROLE_ID: Env.schema.string(),
@@ -86,4 +85,13 @@ export default await Env.create(new URL('../', import.meta.url), {
   SOURCE_GITHUB_APP_WEBHOOKS_SECRET: Env.schema.string(),
   SOURCE_GITHUB_APP_SECRET: Env.schema.string(),
   SOURCE_GITHUB_APP_PRIVATE_KEY: Env.schema.string(),
+
+  /*
+  |----------------------------------------------------------
+  | Variables for @rlanz/bull-queue
+  |----------------------------------------------------------
+  */
+  QUEUE_REDIS_HOST: Env.schema.string({ format: 'host' }),
+  QUEUE_REDIS_PORT: Env.schema.number(),
+  QUEUE_REDIS_PASSWORD: Env.schema.string.optional()
 })

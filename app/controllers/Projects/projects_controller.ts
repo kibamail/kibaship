@@ -5,7 +5,6 @@ import type { HttpContext } from '@adonisjs/core/http'
 
 export default class ProjectsController extends BaseController {
   public async show(ctx: HttpContext) {
-    console.log('@@@@@@', ctx.request.qs())
     const applicationId = ctx.request.qs()?.application
     const [project] = await Project.query().preload('cluster').preload('applications').where('id', ctx.params.project).limit(1)
 

@@ -15,6 +15,8 @@ import WorkspacesController from '#controllers/Workspaces/workspaces_controller'
 import ApplicationController from '#controllers/applications/application_controller'
 import SourceProvidersController from '#controllers/Connections/source_providers_controller'
 import ProjectsController from '#controllers/Projects/projects_controller'
+import ClustersController from '#controllers/clusters_controller'
+import CloudProvidersController from '#controllers/cloud_providers_controller'
 
 router.on('/').renderInertia('home')
 
@@ -24,6 +26,9 @@ router
     router.get('/:workspace', [DashboardController, 'show']),
     router.post('/workspaces', [WorkspacesController, 'store']),
     router.get('/:workspace/p/:project', [ProjectsController, 'show']),
+    router.get('/:workspace/clusters', [ClustersController, 'index']),
+    router.post('/:workspace/clusters', [ClustersController, 'store']),
+    router.post('/:workspace/clusters/providers', [CloudProvidersController, 'store']),
   ])
   .prefix('/w')
   .use(middleware.auth())

@@ -49,7 +49,7 @@ export function CreateCloudProviderDialog({
   const { data, setData, post, processing, errors, reset } = useForm({
     name: '',
     type: '' as CloudProviderType | '',
-    credentials: [] as string[],
+    credentials: {} as Record<string, string>,
   })
 
   const selectedProvider = cloudProviders.find((provider) => provider.type === selectedProviderType)
@@ -61,7 +61,10 @@ export function CreateCloudProviderDialog({
 
       const provider = cloudProviders.find((provider) => provider.type === preselectedProviderType)
       if (provider) {
-        const emptyCredentials = new Array(provider.credentialFields.length).fill('')
+        const emptyCredentials: Record<string, string> = {}
+        provider.credentialFields.forEach((field) => {
+          emptyCredentials[field.name] = ''
+        })
         setData('credentials', emptyCredentials)
       }
     } else if (!isOpen) {
@@ -77,14 +80,17 @@ export function CreateCloudProviderDialog({
 
     const provider = cloudProviders.find((provider) => provider.type === providerType)
     if (provider) {
-      const emptyCredentials = new Array(provider.credentialFields.length).fill('')
+      const emptyCredentials: Record<string, string> = {}
+      provider.credentialFields.forEach((field) => {
+        emptyCredentials[field.name] = ''
+      })
       setData('credentials', emptyCredentials)
     }
   }
 
-  const handleCredentialChange = (index: number, value: string) => {
-    const newCredentials = [...data.credentials]
-    newCredentials[index] = value
+  const handleCredentialChange = (fieldName: string, value: string) => {
+    const newCredentials = { ...data.credentials }
+    newCredentials[fieldName] = value
     setData('credentials', newCredentials)
   }
 
@@ -195,16 +201,16 @@ export function CreateCloudProviderDialog({
                       </Text>
                     </div>
                   </div>
-                  {selectedProvider.credentialFields.map((field, index) => (
+                  {selectedProvider.credentialFields.map((field) => (
                     <div key={field.name} className="mb-4">
                       {field.type === 'textarea' ? (
                         <div className="space-y-2">
                           <TextField.Label>{field.label}</TextField.Label>
                           <textarea
                             placeholder={field.placeholder}
-                            name={`credentials.${index}`}
-                            value={data.credentials[index] || ''}
-                            onChange={(e) => handleCredentialChange(index, e.target.value)}
+                            name={`credentials.${field.name}`}
+                            value={data.credentials[field.name] || ''}
+                            onChange={(e) => handleCredentialChange(field.name, e.target.value)}
                             autoComplete="off"
                             data-form-type="other"
                             data-lpignore="true"
@@ -213,18 +219,18 @@ export function CreateCloudProviderDialog({
                             rows={6}
                             className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-vertical"
                           />
-                          {errors[`credentials.${index}` as keyof typeof errors] && (
+                          {errors[`credentials.${field.name}` as keyof typeof errors] && (
                             <TextField.Error>
-                              {errors[`credentials.${index}` as keyof typeof errors]}
+                              {errors[`credentials.${field.name}` as keyof typeof errors]}
                             </TextField.Error>
                           )}
                         </div>
                       ) : (
                         <TextField.Root
                           placeholder={field.placeholder}
-                          name={`credentials.${index}`}
-                          value={data.credentials[index] || ''}
-                          onChange={(e) => handleCredentialChange(index, e.target.value)}
+                          name={`credentials.${field.name}`}
+                          value={data.credentials[field.name] || ''}
+                          onChange={(e) => handleCredentialChange(field.name, e.target.value)}
                           type={field.type === 'password' ? 'password' : 'text'}
                           required={field.required}
                           autoComplete="new-password"
@@ -232,9 +238,9 @@ export function CreateCloudProviderDialog({
                           data-lpignore="true"
                         >
                           <TextField.Label>{field.label}</TextField.Label>
-                          {errors[`credentials.${index}` as keyof typeof errors] && (
+                          {errors[`credentials.${field.name}` as keyof typeof errors] && (
                             <TextField.Error>
-                              {errors[`credentials.${index}` as keyof typeof errors]}
+                              {errors[`credentials.${field.name}` as keyof typeof errors]}
                             </TextField.Error>
                           )}
                         </TextField.Root>

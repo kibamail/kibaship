@@ -190,4 +190,5 @@ export type PageProps<T extends Record<string, unknown> = Record<string, unknown
   project: Project
   projects: Project[]
   workspace: UserProfile['workspaces'][number]
+  cloudProviderRegions: Record<CloudProviderType, CloudProviderRegionsByContinent>
 }

@@ -8,7 +8,6 @@ const vaultConfig = {
   */
   connection: {
     address: env.get('VAULT_ADDR'),
-    token: env.get('VAULT_TOKEN'),
   },
 
   /*
@@ -37,7 +36,6 @@ export default vaultConfig
 export interface VaultConfig {
   connection: {
     address: string
-    token: string
   }
   readRole: {
     roleId: string

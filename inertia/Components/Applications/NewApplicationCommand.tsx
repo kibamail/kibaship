@@ -18,10 +18,12 @@ import classNames from 'classnames'
 import { OpenNewWindowIcon } from '../Icons/open-new-window.svg'
 import { Button } from '@kibamail/owly'
 import { useQuery } from '@tanstack/react-query'
-import { useForm } from '@inertiajs/react'
-import { SourceCodeProvider, SourceCodeRepository } from '~/types'
+import { Link, useForm, usePage } from '@inertiajs/react'
+import { PageProps, SourceCodeProvider, SourceCodeRepository } from '~/types'
 import { axios } from '~/app/axios'
 import Spinner from '../Icons/Spinner'
+import { PlusIcon } from '../Icons/plus.svg'
+import { K8sIcon } from '../Icons/k8s.svg'
 
 interface NewApplicationCommandProps {
   open?: boolean
@@ -33,6 +35,8 @@ enum CommandType {
   DOCKER = 'docker_image',
   POSTGRES = 'postgres',
   GIT = 'git',
+  CREATE_NEW_APPLICATION = 'create_new_application',
+  CREATE_NEW = 'create_new',
   CONNECT_GITHUB = 'connect_github',
   CONNECT_GITLAB = 'connect_gitlab',
   CONNECT_BITBUCKET = 'connect_bitbucket',
@@ -54,6 +58,8 @@ export function NewApplicationCommand({ open, onOpenChange }: NewApplicationComm
   const [pages, setPages] = useState<CommandType[]>([])
   const [search, setSearch] = useState('')
   const [selectedProvider, setSelectedProvider] = useState<SourceCodeProvider | null>(null)
+
+  const { props } = usePage<PageProps>()
 
   const form = useForm({
     type: 'git',
@@ -83,7 +89,7 @@ export function NewApplicationCommand({ open, onOpenChange }: NewApplicationComm
     enabled: page === CommandType.REPOSITORY && Boolean(selectedProvider),
   })
 
-  const commands: Command[] = [
+  const newApplicationCommands: Command[] = [
     {
       id: CommandType.GIT,
       label: 'Deploy git repository',
@@ -103,6 +109,20 @@ export function NewApplicationCommand({ open, onOpenChange }: NewApplicationComm
       id: CommandType.DOCKER,
       label: 'Deploy docker image',
       icon: <DockerIcon className="size-5" />,
+    },
+  ]
+
+  const createNewCommands: Command[] = [
+    {
+      id: CommandType.CREATE_NEW_APPLICATION,
+      label: 'Create new application',
+      icon: <PlusIcon className="size-5" />,
+    },
+    {
+      id: CommandType.CREATE_NEW,
+      label: 'Provision a new cluster',
+      icon: <K8sIcon className="size-5" />,
+      href: `/w/${props?.workspace?.slug}/clusters`,
     },
   ]
 
@@ -240,9 +260,40 @@ export function NewApplicationCommand({ open, onOpenChange }: NewApplicationComm
             <Command.Empty className="w-full py-6 kb-content-tertiary text-sm text-center max-w-sm mx-auto">
               We probably don't deploy this way yet. Ping us with feedback if you think we should.
             </Command.Empty>
-
             {!page &&
-              commands.map((command) => (
+              createNewCommands.map((command) => {
+                const Container = command?.href ? Link : 'button'
+                return (
+                  <Command.Item
+                    key={command.id}
+                    value={command.id}
+                    onSelect={(value) => setPages((current) => [...current, value as CommandType])}
+                    className={itemClassNames}
+                    onClick={command?.onClick}
+                  >
+                    <Container
+                      href={command?.href as string}
+                      onClick={command?.onClick}
+                      rel="noopener noreferrer"
+                      className="flex items-center w-full justify-between"
+                    >
+                      <div className="flex items-center gap-3">
+                        {command.icon}
+                        <span className="kb-content-secondary font-sans text-sm">
+                          {command.label}
+                        </span>
+                      </div>
+
+                      {commandsWithSubItems.includes(command.id) ? (
+                        <NavArrowRightIcon className="size-5 kb-content-tertiary" />
+                      ) : null}
+                    </Container>
+                  </Command.Item>
+                )
+              })}
+
+            {page === CommandType.CREATE_NEW_APPLICATION &&
+              newApplicationCommands.map((command) => (
                 <Command.Item
                   key={command.id}
                   value={command.id}
