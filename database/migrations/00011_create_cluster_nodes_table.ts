@@ -7,8 +7,10 @@ export default class extends BaseSchema {
     this.schema.createTable(this.tableName, (table) => {
       table.uuid('id').primary()
 
+      table.string('slug').notNullable().unique()
       table.enum('type', ['master', 'worker']).notNullable()
 
+      table.string('provider_id').nullable()
       table.string('ipv4_address').nullable()
       table.string('ipv6_address').nullable()
       table.string('private_ipv4_address').nullable()

@@ -14,7 +14,7 @@ export default class Oauth2Controller {
   constructor(
     protected auth: OauthService,
     protected userAuth: UserAuthService
-  ) {}
+  ) { }
 
   /** Redirect user to KibaMail authorization server for OAuth login */
   public async redirect(ctx: HttpContext) {

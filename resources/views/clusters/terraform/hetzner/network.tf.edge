@@ -1,0 +1,98 @@
+terraform {
+  required_providers {
+    hcloud = {
+      source  = "hetznercloud/hcloud"
+      version = "~> 1.52"
+    }
+  }
+}
+
+variable "hcloud_token" {
+  description = "Hetzner Cloud API Token"
+  type        = string
+  sensitive   = true
+}
+
+variable "cluster_name" {
+  description = "Name of the cluster"
+  type        = string
+}
+
+variable "network_zone" {
+  description = "Network zone for the private network"
+  type        = string
+}
+
+variable "delete_protection" {
+  description = "Enable delete protection for the network"
+  type        = bool
+  default     = false
+}
+
+provider "hcloud" {
+  token = var.hcloud_token
+}
+
+resource "hcloud_network" "cluster_network" {
+  name              = "${var.cluster_name}-network"
+  ip_range          = "10.0.0.0/16"
+  delete_protection = false
+
+  labels = {
+    cluster    = var.cluster_name
+    managed_by = "kibaship"
+    created_at = timestamp()
+  }
+}
+
+resource "hcloud_network_subnet" "cluster_subnet" {
+  type         = "cloud"
+  network_id   = hcloud_network.cluster_network.id
+  network_zone = var.network_zone
+  ip_range     = "10.0.1.0/24"
+}
+
+output "network_id" {
+  description = "ID of the created private network"
+  value       = hcloud_network.cluster_network.id
+}
+
+output "network_name" {
+  description = "Name of the created private network"
+  value       = hcloud_network.cluster_network.name
+}
+
+output "network_ip_range" {
+  description = "IP range of the private network"
+  value       = hcloud_network.cluster_network.ip_range
+}
+
+output "subnet_id" {
+  description = "ID of the created subnet"
+  value       = hcloud_network_subnet.cluster_subnet.id
+}
+
+output "subnet_ip_range" {
+  description = "IP range of the subnet"
+  value       = hcloud_network_subnet.cluster_subnet.ip_range
+}
+
+output "subnet_network_zone" {
+  description = "Network zone of the subnet"
+  value       = hcloud_network_subnet.cluster_subnet.network_zone
+}
+
+output "network_labels" {
+  description = "Labels applied to the network"
+  value       = hcloud_network.cluster_network.labels
+}
+
+output "subnet_gateway" {
+  description = "Gateway IP of the subnet"
+  value       = hcloud_network_subnet.cluster_subnet.gateway
+}
+
+output "network_delete_protection" {
+  description = "Delete protection status of the network"
+  value       = hcloud_network.cluster_network.delete_protection
+}

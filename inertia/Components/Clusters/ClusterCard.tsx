@@ -1,17 +1,26 @@
 import { Text } from '@kibamail/owly/text'
 import { TeamAvatar } from '../Dashboard/WorkspaceDropdownMenu'
-import { PageProps, Project } from '~/types'
-import { Link, usePage } from '@inertiajs/react'
+import { Cluster } from '~/types'
+import Spinner from '../Icons/Spinner'
+import classNames from 'classnames'
 
 interface ProjectCardProps {
-  project: Project
+  cluster: Cluster
+  onClusterSelected?: (cluster: Cluster) => void
 }
 
-export function ProjectCard({ project }: ProjectCardProps) {
-  const { props } = usePage<PageProps>()
+export function ClusterCard({ cluster, onClusterSelected }: ProjectCardProps) {
+  const statusClassNames = (() => {
+    if (cluster.status === 'provisioning') {
+      return 'text-owly-content-notice'
+    }
+
+    return ''
+  })()
+
   return (
-    <Link
-      href={`/w/${props.workspace.slug}/p/${project.id}`}
+    <button
+      onClick={() => onClusterSelected?.(cluster)}
       className="w-full bg-white rounded-[11px] min-h-[150px] border border-owly-border-tertiary relative group cursor-pointer"
     >
       <div className="absolute w-[calc(100%+10px)] h-[calc(100%+10px)] rounded-[14px] transform translate-x-[-5px] translate-y-[-5px] bg-transparent transition-all ease-in-out border border-transparent group-hover:border-owly-border-tertiary"></div>
@@ -19,10 +28,20 @@ export function ProjectCard({ project }: ProjectCardProps) {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <TeamAvatar
-              name="kibaauth"
+              name={cluster?.subdomainIdentifier}
               className="!mr-0 !rounded-sm w-10 h-10 !text-lg font-semibold"
             />
-            <Text className="text-owly-content-secondary font-semibold">{project?.name}</Text>
+            <Text className="text-owly-content-secondary font-semibold">
+              {cluster?.subdomainIdentifier}
+            </Text>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Spinner className="w-4 h-4 text-owly-content-tertiary" />
+
+            <Text className={classNames('capitalize !text-sm !font-medium', statusClassNames)}>
+              {cluster.status}
+            </Text>
           </div>
         </div>
 
@@ -54,12 +73,14 @@ export function ProjectCard({ project }: ProjectCardProps) {
               ></path>
             </svg>
 
-            <Text className="text-owly-content-tertiary">{project?.cluster?.location}</Text>
+            <Text className="text-owly-content-tertiary">{cluster?.location}</Text>
           </div>
 
-          <Text className="text-owly-content-tertiary text-sm">31 apps</Text>
+          <Text className="text-owly-content-tertiary text-sm">
+            3 control planes, 2 worker nodes
+          </Text>
         </div>
       </div>
-    </Link>
+    </button>
   )
 }

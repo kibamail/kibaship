@@ -17,6 +17,9 @@ import SourceProvidersController from '#controllers/Connections/source_providers
 import ProjectsController from '#controllers/Projects/projects_controller'
 import ClustersController from '#controllers/clusters_controller'
 import CloudProvidersController from '#controllers/cloud_providers_controller'
+import Cluster from '#models/cluster'
+import queue from '@rlanz/bull-queue/services/main'
+import ProvisionClusterJob from '#jobs/clusters/provision_cluster_job'
 
 router.on('/').renderInertia('home')
 
@@ -26,8 +29,8 @@ router
     router.get('/:workspace', [DashboardController, 'show']),
     router.post('/workspaces', [WorkspacesController, 'store']),
     router.get('/:workspace/p/:project', [ProjectsController, 'show']),
-    router.get('/:workspace/clusters', [ClustersController, 'index']),
-    router.post('/:workspace/clusters', [ClustersController, 'store']),
+    router.get('/:workspace/clusters', [ClustersController, 'index']).as('clusters.index'),
+    router.post('/:workspace/clusters', [ClustersController, 'store']).as('clusters.store'),
     router.post('/:workspace/clusters/providers', [CloudProvidersController, 'store']),
   ])
   .prefix('/w')
@@ -42,6 +45,16 @@ router
   ])
   .prefix('/connections')
   .use(middleware.auth())
+
+router.get('/provision', async ({ response }) => {
+  const cluster = await Cluster.firstOrFail()
+
+  await queue.dispatch(ProvisionClusterJob, {
+    clusterId: cluster.id
+  })
+
+  return response.json({ cluster })
+})
 
 router
   .group(() => [router.post('/', [ApplicationController, 'store'])])

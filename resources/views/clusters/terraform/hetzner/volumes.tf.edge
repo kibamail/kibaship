@@ -1,0 +1,116 @@
+terraform {
+  required_providers {
+    hcloud = {
+      source  = "hetznercloud/hcloud"
+      version = "~> 1.52"
+    }
+  }
+}
+
+variable "hcloud_token" {
+  description = "Hetzner Cloud API Token"
+  type        = string
+  sensitive   = true
+}
+
+variable "cluster_name" {
+  description = "Name of the cluster"
+  type        = string
+}
+
+variable "control_planes_volume_size" {
+  description = "Volume size for control plane nodes in GB"
+  type        = number
+}
+
+variable "workers_volume_size" {
+  description = "Volume size for worker nodes in GB"
+  type        = number
+}
+
+provider "hcloud" {
+  token = var.hcloud_token
+}
+@each((node, index) in control_planes)
+  resource "hcloud_volume" "control_plane_volume_{{ node['slug'] }}" {
+  name      = "{{ cluster_name }}-control-{{ node['slug'] }}-volume"
+  size      = var.control_planes_volume_size
+  server_id = {{ node['provider_id'] }}
+  automount = true
+  format    = "ext4"
+
+  labels = {
+    cluster    = var.cluster_name
+    type       = "control-plane-storage"
+    node_id    = "{{ node.id }}"
+    managed_by = "kibaship"
+    created_at = timestamp()
+  }
+}
+
+resource "hcloud_volume_attachment" "control_plane_attachment_{{ node['slug'] }}" {
+  volume_id = hcloud_volume.control_plane_volume_{{ node['slug'] }}.id
+  server_id = {{ node['provider_id'] }}
+  automount = true
+}
+@end
+
+@each((node, index) in workers)
+  resource "hcloud_volume" "worker_volume_{{ node['slug'] }}" {
+  name      = "{{ cluster_name }}-worker-{{ node['slug'] }}-volume"
+  size      = var.workers_volume_size
+  server_id = {{ node['provider_id'] }}
+  automount = true
+  format    = "ext4"
+
+  labels = {
+    cluster    = var.cluster_name
+    type       = "worker-storage"
+    node_id    = "{{ node.id }}"
+    managed_by = "kibaship"
+    created_at = timestamp()
+  }
+}
+
+resource "hcloud_volume_attachment" "worker_attachment_{{ node['slug'] }}" {
+  volume_id = hcloud_volume.worker_volume_{{ node['slug'] }}.id
+  server_id = {{ node['provider_id'] }}
+  automount = true
+}
+@end
+
+output "control_plane_volume_ids" {
+  description = "Map of control plane node IDs to volume IDs"
+  value = {
+@each((node, index) in control_planes)
+  "{{ node.id }}" = hcloud_volume.control_plane_volume_{{ node['slug'] }}.id{{ index === control_planes.length - 1 ? '' : ',' }}
+@end
+}
+}
+
+output "worker_volume_ids" {
+  description = "Map of worker node IDs to volume IDs"
+  value = {
+@each((node, index) in workers)
+  "{{ node.id }}" = hcloud_volume.worker_volume_{{ node['slug'] }}.id{{ index === workers.length - 1 ? '' : ',' }}
+@end
+}
+}
+
+output "control_plane_volume_attachments" {
+  description = "Map of control plane node IDs to volume attachment IDs"
+  value = {
+@each((node, index) in control_planes)
+  "{{ node.id }}" = hcloud_volume_attachment.control_plane_attachment_{{ node['slug'] }}.id{{ index === control_planes.length - 1 ? '' : ',' }}
+@end
+}
+}
+
+output "worker_volume_attachments" {
+  description = "Map of worker node IDs to volume attachment IDs"
+  value = {
+@each((node, index) in workers)
+  "{{ node.id }}" = hcloud_volume_attachment.worker_attachment_{{ node['slug'] }}.id{{ index === workers.length - 1 ? '' : ',' }}
+@end
+}
+}

@@ -35,7 +35,9 @@ export const controlPlaneNodesRule = vine.createRule(validateControlPlaneNodes)
 
 export const createClusterValidator = vine.compile(
   vine.object({
-    name: vine.string().trim().minLength(1).maxLength(255),
+    subdomain_identifier: vine.string().regex(
+      /^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$/
+    ).trim().minLength(1).maxLength(255),
     cloud_provider_id: vine
       .string()
       .uuid()
@@ -49,5 +51,13 @@ export const createClusterValidator = vine.compile(
       .min(3)
       .max(100),
     server_type: vine.string().trim().minLength(1),
+    control_planes_volume_size: vine
+      .number()
+      .min(10)
+      .max(500),
+    workers_volume_size: vine
+      .number()
+      .min(10)
+      .max(500),
   })
 )

@@ -131,7 +131,7 @@ export function TeamAvatar({ size = 'md', name, className }: TeamAvatarProps) {
           'w-6 h-6': size === 'md',
         },
         getTeamAvatarBackgroundColor(name?.[0] ?? ''),
-        className,
+        className
       )}
     >
       {name?.[0]}

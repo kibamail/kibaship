@@ -36,7 +36,7 @@ const providerIcons: Record<CloudProviderType, React.ComponentType<{ className?:
 }
 
 export function CreateClusterDialog({ isOpen, onOpenChange }: CreateClusterModalProps) {
-  const { connectedProviders, serverTypes } = usePage<
+  const { connectedProviders, serverTypes, workspace } = usePage<
     PageProps & {
       connectedProviders: CloudProvider[]
       serverTypes: Record<CloudProviderType, Record<string, CloudProviderServerType>>
@@ -44,12 +44,14 @@ export function CreateClusterDialog({ isOpen, onOpenChange }: CreateClusterModal
   >().props
 
   const { data, setData, post, processing, errors, reset } = useForm({
-    name: '',
+    subdomain_identifier: '',
     cloud_provider_id: connectedProviders.length === 1 ? connectedProviders[0].id : '',
     region: '',
     control_plane_nodes_count: 3,
     worker_nodes_count: 3,
     server_type: '',
+    control_planes_volume_size: 20,
+    workers_volume_size: 20,
   })
 
   const selectedProvider = connectedProviders.find((p) => p.id === data.cloud_provider_id)
@@ -79,12 +81,16 @@ export function CreateClusterDialog({ isOpen, onOpenChange }: CreateClusterModal
 
   function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    post('/', {
+    post(`/w/${workspace.slug}/clusters`, {
       onSuccess: () => {
         reset()
         onOpenChange(false)
       },
     })
+  }
+
+  function formatErrorMessage(message: string) {
+    return message?.replace('_', ' ')
   }
 
   return (
@@ -110,13 +116,19 @@ export function CreateClusterDialog({ isOpen, onOpenChange }: CreateClusterModal
           <div className="px-5 pb-5 space-y-4">
             <TextField.Root
               name="name"
-              value={data.name}
-              onChange={(e) => setData('name', e.target.value)}
-              placeholder="Enter cluster name"
+              value={data.subdomain_identifier}
+              onChange={(e) => setData('subdomain_identifier', e.target.value)}
+              placeholder="eu.kibaship.com"
               required
             >
-              <TextField.Label>Cluster Name</TextField.Label>
-              {errors.name && <TextField.Error>{errors.name}</TextField.Error>}
+              <TextField.Label>Cluster domain</TextField.Label>
+              {errors.subdomain_identifier && (
+                <TextField.Error>{formatErrorMessage(errors.subdomain_identifier)}</TextField.Error>
+              )}
+              <TextField.Hint>
+                All the applications you provision in this cluster will have a subdomain under this
+                domain.
+              </TextField.Hint>
             </TextField.Root>
 
             <Select.Root
@@ -146,7 +158,9 @@ export function CreateClusterDialog({ isOpen, onOpenChange }: CreateClusterModal
                   )
                 })}
               </Select.Content>
-              {errors.cloud_provider_id && <Select.Error>{errors.cloud_provider_id}</Select.Error>}
+              {errors.cloud_provider_id && (
+                <Select.Error>{formatErrorMessage(errors.cloud_provider_id)}</Select.Error>
+              )}
             </Select.Root>
 
             {selectedProvider && (
@@ -158,7 +172,9 @@ export function CreateClusterDialog({ isOpen, onOpenChange }: CreateClusterModal
                   onRegionChange={onRegionChange}
                   placeholder="Select a region"
                 />
-                {errors.region && <InputError baseId="region-input">{errors.region}</InputError>}
+                {errors.region && (
+                  <InputError baseId="region-input">{formatErrorMessage(errors.region)}</InputError>
+                )}
                 <input type="hidden" id="region-input" name="region" value={data.region} />
               </div>
             )}
@@ -178,7 +194,9 @@ export function CreateClusterDialog({ isOpen, onOpenChange }: CreateClusterModal
                   Recommended: 1, 3, 5, or 7 nodes for high availability
                 </NumberField.Hint>
                 {errors.control_plane_nodes_count && (
-                  <NumberField.Error>{errors.control_plane_nodes_count}</NumberField.Error>
+                  <NumberField.Error>
+                    {formatErrorMessage(errors.control_plane_nodes_count)}
+                  </NumberField.Error>
                 )}
               </NumberField.Field>
             </NumberField.Root>
@@ -196,7 +214,53 @@ export function CreateClusterDialog({ isOpen, onOpenChange }: CreateClusterModal
                 <NumberField.IncrementButton />
                 <NumberField.Hint>Minimum 3 worker nodes required</NumberField.Hint>
                 {errors.worker_nodes_count && (
-                  <NumberField.Error>{errors.worker_nodes_count}</NumberField.Error>
+                  <NumberField.Error>
+                    {formatErrorMessage(errors.worker_nodes_count)}
+                  </NumberField.Error>
+                )}
+              </NumberField.Field>
+            </NumberField.Root>
+
+            <NumberField.Root
+              name="control_planes_volume_size"
+              value={data.control_planes_volume_size}
+              min={10}
+              max={500}
+              increments={10}
+              onChange={(value: number) => setData('control_planes_volume_size', value)}
+            >
+              <NumberField.Label>Control Plane Volume Size (GB)</NumberField.Label>
+              <NumberField.Field placeholder="Enter volume size in GB">
+                <NumberField.DecrementButton />
+                <NumberField.IncrementButton />
+                <NumberField.Hint>
+                  Storage size for each control plane node (10-500 GB)
+                </NumberField.Hint>
+                {errors.control_planes_volume_size && (
+                  <NumberField.Error>
+                    {formatErrorMessage(errors.control_planes_volume_size)}
+                  </NumberField.Error>
+                )}
+              </NumberField.Field>
+            </NumberField.Root>
+
+            <NumberField.Root
+              name="workers_volume_size"
+              value={data.workers_volume_size}
+              min={10}
+              max={500}
+              increments={10}
+              onChange={(value: number) => setData('workers_volume_size', value)}
+            >
+              <NumberField.Label>Worker Volume Size (GB)</NumberField.Label>
+              <NumberField.Field placeholder="Enter volume size in GB">
+                <NumberField.DecrementButton />
+                <NumberField.IncrementButton />
+                <NumberField.Hint>Storage size for each worker node (10-500 GB)</NumberField.Hint>
+                {errors.workers_volume_size && (
+                  <NumberField.Error>
+                    {formatErrorMessage(errors.workers_volume_size)}
+                  </NumberField.Error>
                 )}
               </NumberField.Field>
             </NumberField.Root>
@@ -218,7 +282,9 @@ export function CreateClusterDialog({ isOpen, onOpenChange }: CreateClusterModal
                     </Select.Item>
                   ))}
                 </Select.Content>
-                {errors.server_type && <Select.Error>{errors.server_type}</Select.Error>}
+                {errors.server_type && (
+                  <Select.Error>{formatErrorMessage(errors.server_type)}</Select.Error>
+                )}
               </Select.Root>
             )}
           </div>

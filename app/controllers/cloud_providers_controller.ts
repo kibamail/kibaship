@@ -17,6 +17,8 @@ export default class CloudProvidersController extends BaseController {
             credentials: data.credentials
         })
 
-        return ctx.response.redirect().back()
+        return ctx.response.redirect().toRoute('clusters.index', {
+            workspace: workspace.slug
+        })
     }
 }

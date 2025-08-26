@@ -34,6 +34,7 @@ interface NumberFieldContextValue {
   min: number
   max: number
   disabled: boolean
+  increments: number
   name?: string
   onChange: (value: number) => void
   onInputChange: (e: React.ChangeEvent<HTMLInputElement>) => void
@@ -67,11 +68,15 @@ interface NumberFieldRootProps extends PropsWithChildren {
   max?: number
   name?: string
   disabled?: boolean
+  increments?: number
   onChange?: (value: number) => void
 }
 
 const NumberFieldRoot = React.forwardRef<HTMLDivElement, NumberFieldRootProps>(
-  ({ value, min = 0, max = 100, disabled = false, name, onChange, children }, ref) => {
+  (
+    { value, min = 0, max = 100, disabled = false, name, increments = 1, onChange, children },
+    ref
+  ) => {
     const [currentValue, setCurrentValue] = useState(value)
 
     function onValueChange(newValue: number) {
@@ -100,6 +105,7 @@ const NumberFieldRoot = React.forwardRef<HTMLDivElement, NumberFieldRootProps>(
       max,
       disabled,
       name,
+      increments,
       onChange: onValueChange,
       onInputChange: onInputChange,
     }
@@ -169,11 +175,11 @@ const NumberFieldDecrementButton = React.forwardRef<
   HTMLButtonElement,
   Omit<React.ComponentPropsWithoutRef<typeof Button>, 'onClick'>
 >((props, ref) => {
-  const { value, min, disabled, onChange } = useNumberFieldContext()
+  const { value, min, disabled, onChange, increments } = useNumberFieldContext()
 
   function onDecrement() {
     if (value > min) {
-      onChange(value - 1)
+      onChange(value - increments)
     }
   }
 
@@ -206,11 +212,11 @@ const NumberFieldIncrementButton = React.forwardRef<
   HTMLButtonElement,
   Omit<React.ComponentPropsWithoutRef<typeof Button>, 'onClick'>
 >((props, ref) => {
-  const { value, max, disabled, onChange } = useNumberFieldContext()
+  const { value, max, disabled, onChange, increments } = useNumberFieldContext()
 
   function onIncrement() {
     if (value < max) {
-      onChange(value + 1)
+      onChange(value + increments)
     }
   }
 
