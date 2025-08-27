@@ -1,58 +1,14 @@
 import { test } from '@japa/runner'
-import User from '#models/user'
-import CloudProvider from '#models/cloud_provider'
 import Cluster from '#models/cluster'
 import ClusterNode from '#models/cluster_node'
 import ClusterSshKey from '#models/cluster_ssh_key'
-import { randomBytes } from 'node:crypto'
-import redis from '@adonisjs/redis/services/main'
-
-async function createUserWithWorkspace() {
-  const user = await User.create({
-    email: `test_${randomBytes(4).toString('hex')}@example.com`,
-    oauthId: `oauth_${randomBytes(8).toString('hex')}`,
-  })
-
-  const workspaceId = `workspace_${randomBytes(8).toString('hex')}`
-  const workspaceSlug = `test-workspace-${randomBytes(4).toString('hex')}`
-  const mockProfile = {
-    id: user.oauthId,
-    email: user.email,
-    workspaces: [
-      {
-        id: workspaceId,
-        slug: workspaceSlug,
-        name: 'Test Workspace',
-      },
-    ],
-  }
-
-  await redis.set(`users:${user.id}`, JSON.stringify(mockProfile))
-
-  return { user, workspaceId, workspaceSlug }
-}
+import { createUserWithWorkspace, createTestCloudProvider, generateTestClusterData } from '#tests/helpers/test_helpers'
 
 test.group('Clusters create', () => {
   test('successfully creates a cluster with all required components', async ({ client, assert, route }) => {
     const { user, workspaceId, workspaceSlug } = await createUserWithWorkspace()
-
-    const cloudProvider = await CloudProvider.create({
-      name: 'Test Hetzner Provider',
-      type: 'hetzner',
-      workspaceId: workspaceId,
-      credentials: { token: 'test-token' },
-    })
-
-    const clusterData = {
-      subdomain_identifier: 'test-cluster.kibaship.com',
-      cloud_provider_id: cloudProvider.id,
-      region: 'eu-central',
-      control_plane_nodes_count: 3,
-      worker_nodes_count: 3,
-      server_type: 'cx11',
-      control_planes_volume_size: 50,
-      workers_volume_size: 100,
-    }
+    const cloudProvider = await createTestCloudProvider(workspaceId)
+    const clusterData = generateTestClusterData(cloudProvider.id)
 
     const response = await client
       .post(route('clusters.store', { workspace: workspaceSlug }))

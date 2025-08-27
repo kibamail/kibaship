@@ -1,8 +1,8 @@
 import edge from 'edge.js'
 import app from '@adonisjs/core/services/app'
-import { mkdir, writeFile, readdir, stat, rm } from 'node:fs/promises'
+import drive from '@adonisjs/drive/services/main'
+import env from '#start/env'
 import { join } from 'node:path'
-import { tmpdir } from 'node:os'
 import Cluster from '#models/cluster'
 import { ModelObject } from '@adonisjs/lucid/types/model'
 
@@ -15,10 +15,14 @@ export enum TerraformTemplate {
 }
 
 export interface TemplateContext {
+  cluster_id: string
   cluster_name: string
   network_zone: string
   location: string
   hcloud_token: string
+  s3_endpoint: string
+  s3_region: string
+  s3_bucket: string
   control_planes: Array<ModelObject & {
     id: string
     slug: string
@@ -37,6 +41,7 @@ export interface TemplateContext {
 export interface TerraformFile {
   name: string
   content: string
+  key: string
   path: string
 }
 
@@ -45,103 +50,106 @@ export interface TerraformFile {
  *
  * This service manages Terraform template generation for cluster infrastructure:
  * - Renders Edge templates by name for any cloud provider
- * - Initializes cluster directories and generates all templates
- * - Provides cleanup functionality for temporary files
+ * - Stores cluster Terraform files using AdonisJS Drive
+ * - Provides cleanup functionality for cluster files
  *
  * All methods follow the $trycatch pattern and return [result, error] tuples
  * for consistent error handling throughout the application.
  */
 export class TerraformService {
   private edge: typeof edge
-  private baseTempDir: string
-  private clusterDirectory: string
+  private disk: ReturnType<typeof drive.use>
+  private clusterId: string
+  private clusterBasePath: string
 
   constructor(clusterId: string) {
     this.edge = edge
-    this.baseTempDir = join(tmpdir(), 'kibaship-terraform')
-    this.clusterDirectory = join(this.baseTempDir, clusterId)
+    this.disk = drive.use('fs')
+    this.clusterId = clusterId
+    this.clusterBasePath = `terraform/clusters/${clusterId}`
   }
 
   /**
-   * Initializes the service by setting up Edge views and creating cluster directory
+   * Converts a Drive key to a file system path
+   */
+  private keyToPath(key: string): string {
+    return join(app.makePath('storage'), key)
+  }
+
+  /**
+   * Initializes the service by setting up Edge views
    */
   async init() {
-    await this.cleanup()
-
     const terraformViewsPath = app.makePath('resources/views/clusters/terraform')
-
     this.edge.mount(terraformViewsPath)
-
-    await mkdir(this.clusterDirectory, { recursive: true })
   }
 
   /**
-   * Writes a single Terraform file to a subdirectory with main.tf
+   * Writes a single Terraform file using Drive
    */
-  async writeTerraformFile(file: Omit<TerraformFile, 'path'>) {
+  async writeTerraformFile(file: Omit<TerraformFile, 'key' | 'path'>) {
     const templateName = file.name.replace('.tf', '')
-    const templateDir = join(this.clusterDirectory, templateName)
+    const fileKey = `${this.clusterBasePath}/${templateName}/main.tf`
 
-    await mkdir(templateDir, { recursive: true })
+    await this.disk.put(fileKey, file.content)
 
-    const filePath = join(templateDir, 'main.tf')
-    await writeFile(filePath, file.content, 'utf8')
-
-    return filePath
+    return fileKey
   }
 
   /**
-   * Writes multiple Terraform files to subdirectories with main.tf
+   * Writes multiple Terraform files using Drive
    */
-  async writeTerraformFiles(files: Omit<TerraformFile, 'path'>[]) {
-    const filePaths: TerraformFile[] = []
+  async writeTerraformFiles(files: Omit<TerraformFile, 'key' | 'path'>[]) {
+    const terraformFiles: TerraformFile[] = []
 
     for (const file of files) {
-      const filePath = await this.writeTerraformFile(file)
+      const fileKey = await this.writeTerraformFile(file)
       const templateName = file.name.replace('.tf', '')
 
-      filePaths.push({
+      terraformFiles.push({
         name: templateName,
         content: file.content,
-        path: filePath
+        key: fileKey,
+        path: this.keyToPath(fileKey)
       })
     }
 
-    return filePaths
+    return terraformFiles
   }
 
   /**
-   * Checks if a directory exists and is accessible
+   * Checks if a file exists in Drive
    */
-  async directoryExists(dirPath: string): Promise<boolean> {
+  async fileExists(key: string): Promise<boolean> {
     try {
-      const stats = await stat(dirPath)
-      return stats.isDirectory()
+      await this.disk.get(key)
+      return true
     } catch {
       return false
     }
   }
 
   /**
-   * Lists all files in a directory
+   * Gets a Terraform file content from Drive
    */
-  async listFiles(dirPath: string): Promise<string[]> {
-    return readdir(dirPath)
+  async getTerraformFile(templateName: string): Promise<string | null> {
+    const fileKey = `${this.clusterBasePath}/${templateName}/main.tf`
+    return this.disk.get(fileKey)
   }
 
   /**
-   * Removes the cluster directory and all its contents
+   * Removes all cluster Terraform files from Drive
    */
   async cleanup() {
-    const exists = await this.directoryExists(this.clusterDirectory)
-
-    if (exists) {
-      await rm(this.clusterDirectory, { recursive: true, force: true })
+    try {
+      await this.disk.deleteAll(this.clusterBasePath)
+    } catch {
+      // Ignore errors if path doesn't exist
     }
   }
 
   /**
-   * Generates a single Terraform template for a cluster and writes it to a file
+   * Generates a single Terraform template for a cluster and stores it using Drive
    * @param cluster - The cluster to generate template for
    * @param templateName - The specific template name to generate
    */
@@ -152,16 +160,18 @@ export class TerraformService {
     const cloudProviderType = cluster.cloudProvider.type
 
     const content = await this.edge.render(`${cloudProviderType}/${templateName}`, context)
-    const terraformFile: Omit<TerraformFile, 'path'> = {
+    const terraformFile: Omit<TerraformFile, 'key' | 'path'> = {
       name: templateName,
       content
     }
 
-    const filePath = await this.writeTerraformFile(terraformFile)
+    const fileKey = await this.writeTerraformFile(terraformFile)
+
     return {
       name: templateName.replace('.tf', ''),
       content,
-      path: filePath
+      key: fileKey,
+      path: this.keyToPath(fileKey)
     }
   }
 
@@ -202,10 +212,14 @@ export class TerraformService {
     }) || []
 
     return {
+      cluster_id: cluster.id,
       cluster_name: cluster.subdomainIdentifier,
       network_zone: this.getNetworkZoneFromLocation(cluster.location),
       location: cluster.location,
       hcloud_token: hcloudToken,
+      s3_endpoint: env.get('S3_ENDPOINT'),
+      s3_region: env.get('S3_REGION'),
+      s3_bucket: env.get('S3_BUCKET'),
       control_planes: controlPlanes,
       workers: workers,
       public_key: publicKey,

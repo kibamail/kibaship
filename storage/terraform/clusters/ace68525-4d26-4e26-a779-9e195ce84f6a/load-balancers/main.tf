@@ -1,0 +1,199 @@
+terraform {
+  required_providers {
+    hcloud = {
+      source  = "hetznercloud/hcloud"
+      version = "~> 1.52"
+    }
+  }
+
+  backend "s3" {
+    bucket = "terraform-state-staging"
+    key    = "clusters/ace68525-4d26-4e26-a779-9e195ce84f6a/load-balancers/terraform.tfstate"
+    region = "auto"
+
+    endpoints = {
+      s3 = "https://e61cebd91eb54d4ebeec9c5d525ae041.r2.cloudflarestorage.com"
+    }
+
+    skip_credentials_validation = true
+    skip_metadata_api_check     = true
+    skip_region_validation      = true
+    skip_requesting_account_id  = true
+    use_path_style           = true
+  }
+}
+
+variable "hcloud_token" {
+  description = "Hetzner Cloud API Token"
+  type        = string
+  sensitive   = true
+}
+
+
+
+variable "cluster_name" {
+  description = "Name of the cluster"
+  type        = string
+}
+
+variable "network_zone" {
+  description = "Network zone for the load balancers"
+  type        = string
+}
+
+variable "location" {
+  description = "Location for the load balancers"
+  type        = string
+  default     = "nbg1"
+}
+
+variable "network_id" {
+  description = "ID of the private network"
+  type        = string
+}
+
+provider "hcloud" {
+  token = var.hcloud_token
+}
+
+resource "hcloud_load_balancer" "ingress" {
+  name               = "ingress.${var.cluster_name}"
+  load_balancer_type = "lb11"
+  network_zone       = var.network_zone
+  location           = var.location
+
+  labels = {
+    cluster    = var.cluster_name
+    type       = "ingress"
+    managed_by = "kibaship"
+    created_at = timestamp()
+  }
+}
+
+resource "hcloud_load_balancer_network" "ingress_network" {
+  load_balancer_id = hcloud_load_balancer.ingress.id
+  network_id       = var.network_id
+  ip               = "10.0.1.10"
+}
+
+resource "hcloud_load_balancer_service" "ingress_http" {
+  load_balancer_id = hcloud_load_balancer.ingress.id
+  protocol         = "http"
+  listen_port      = 80
+  destination_port = 80
+
+  health_check {
+    protocol = "http"
+    port     = 80
+    interval = 15
+    timeout  = 10
+    retries  = 3
+    http {
+      path         = "/healthz"
+      status_codes = ["200"]
+    }
+  }
+
+  http {
+    sticky_sessions = true
+    redirect_http   = true
+    cookie_name     = "HCLBSTICKY"
+    cookie_lifetime = 300
+  }
+}
+
+resource "hcloud_load_balancer_service" "ingress_https" {
+  load_balancer_id = hcloud_load_balancer.ingress.id
+  protocol         = "https"
+  listen_port      = 443
+  destination_port = 443
+
+  health_check {
+    protocol = "tcp"
+    port     = 443
+    interval = 15
+    timeout  = 10
+    retries  = 3
+  }
+
+  http {
+    sticky_sessions = true
+    cookie_name     = "HCLBSTICKY"
+    cookie_lifetime = 300
+  }
+}
+
+resource "hcloud_load_balancer" "kube" {
+  name               = "kube.${var.cluster_name}"
+  load_balancer_type = "lb11"
+  network_zone       = var.network_zone
+  location           = var.location
+
+  labels = {
+    cluster    = var.cluster_name
+    type       = "kube-api"
+    managed_by = "kibaship"
+    created_at = timestamp()
+  }
+}
+
+resource "hcloud_load_balancer_network" "kube_network" {
+  load_balancer_id = hcloud_load_balancer.kube.id
+  network_id       = var.network_id
+  ip               = "10.0.1.11"
+}
+
+resource "hcloud_load_balancer_service" "kube_api" {
+  load_balancer_id = hcloud_load_balancer.kube.id
+  protocol         = "tcp"
+  listen_port      = 6443
+  destination_port = 6443
+
+  health_check {
+    protocol = "tcp"
+    port     = 6443
+    interval = 15
+    timeout  = 10
+    retries  = 3
+  }
+}
+
+output "ingress_load_balancer_id" {
+  description = "ID of the ingress load balancer"
+  value       = hcloud_load_balancer.ingress.id
+}
+
+output "ingress_load_balancer_name" {
+  description = "Name of the ingress load balancer"
+  value       = hcloud_load_balancer.ingress.name
+}
+
+output "ingress_load_balancer_public_ip" {
+  description = "Public IP of the ingress load balancer"
+  value       = hcloud_load_balancer.ingress.ipv4
+}
+
+output "ingress_load_balancer_private_ip" {
+  description = "Private IP of the ingress load balancer"
+  value       = hcloud_load_balancer_network.ingress_network.ip
+}
+
+output "kube_load_balancer_id" {
+  description = "ID of the Kubernetes API load balancer"
+  value       = hcloud_load_balancer.kube.id
+}
+
+output "kube_load_balancer_name" {
+  description = "Name of the Kubernetes API load balancer"
+  value       = hcloud_load_balancer.kube.name
+}
+
+output "kube_load_balancer_public_ip" {
+  description = "Public IP of the Kubernetes API load balancer"
+  value       = hcloud_load_balancer.kube.ipv4
+}
+
+output "kube_load_balancer_private_ip" {
+  description = "Private IP of the Kubernetes API load balancer"
+  value       = hcloud_load_balancer_network.kube_network.ip
+}

@@ -30,7 +30,8 @@
     "#database/*": "./database/*.js",
     "#tests/*": "./tests/*.js",
     "#start/*": "./start/*.js",
-    "#config/*": "./config/*.js"
+    "#config/*": "./config/*.js",
+    "#utils/*": "./app/utils/*.js"
   },
   "devDependencies": {
     "@adonisjs/assembler": "^7.8.2",
@@ -59,6 +60,7 @@
     "@adonisjs/auth": "^9.4.2",
     "@adonisjs/core": "^6.18.0",
     "@adonisjs/cors": "^2.2.1",
+    "@adonisjs/drive": "^3.4.1",
     "@adonisjs/inertia": "^3.1.1",
     "@adonisjs/lucid": "^21.6.1",
     "@adonisjs/redis": "^9.2.0",
@@ -66,6 +68,8 @@
     "@adonisjs/shield": "^8.2.0",
     "@adonisjs/static": "^1.1.1",
     "@adonisjs/vite": "^4.0.0",
+    "@aws-sdk/client-s3": "^3.876.0",
+    "@aws-sdk/s3-request-presigner": "^3.876.0",
     "@headlessui/react": "^2.2.7",
     "@inertiajs/react": "^2.0.17",
     "@kibamail/auth-sdk": "^0.0.3",
@@ -84,6 +88,7 @@
     "cmdk": "^1.1.1",
     "dayjs": "^1.11.13",
     "edge.js": "^6.2.1",
+    "execa": "^9.6.0",
     "luxon": "^3.7.1",
     "mysql2": "^3.14.3",
     "nanoid": "^5.1.5",

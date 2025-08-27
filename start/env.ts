@@ -93,5 +93,27 @@ export default await Env.create(new URL('../', import.meta.url), {
   */
   QUEUE_REDIS_HOST: Env.schema.string({ format: 'host' }),
   QUEUE_REDIS_PORT: Env.schema.number(),
-  QUEUE_REDIS_PASSWORD: Env.schema.string.optional()
+  QUEUE_REDIS_PASSWORD: Env.schema.string.optional(),
+
+  /*
+  |----------------------------------------------------------
+  | Variables for configuring the drive package
+  |----------------------------------------------------------
+  */
+  DRIVE_DISK: Env.schema.enum(['fs'] as const),
+  AWS_ACCESS_KEY_ID: Env.schema.string(),
+  AWS_SECRET_ACCESS_KEY: Env.schema.string(),
+  AWS_REGION: Env.schema.string(),
+  AWS_BUCKET: Env.schema.string(),
+
+  /*
+  |----------------------------------------------------------
+  | Variables for configuring the remote terraform state drive
+  |----------------------------------------------------------
+  */
+  S3_ACCESS_KEY: Env.schema.string(),
+  S3_ACCESS_SECRET: Env.schema.string(),
+  S3_ENDPOINT: Env.schema.string({ format: 'url' }),
+  S3_REGION: Env.schema.string(),
+  S3_BUCKET: Env.schema.string(),
 })
