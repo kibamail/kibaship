@@ -16,22 +16,12 @@ export default class ProvisionClusterJob extends Job {
   }
 
   async handle(payload: ProvisionClusterJobPayload) {
-    const cluster = await Cluster.query()
-      .where('id', payload.clusterId)
-      .preload('cloudProvider')
-      .preload('nodes')
-      .preload('sshKeys')
-      .preload('nodes')
-      .firstOrFail()
+    const cluster = await Cluster.completeFirstOrFail(payload.clusterId)
 
     const terraformService = new TerraformService(cluster.id)
 
-    // Generate all templates individually
     await terraformService.generate(cluster, TerraformTemplate.NETWORK)
-    await terraformService.generate(cluster, TerraformTemplate.SSH_KEYS)
-    await terraformService.generate(cluster, TerraformTemplate.LOAD_BALANCERS)
-    await terraformService.generate(cluster, TerraformTemplate.SERVERS)
-    await terraformService.generate(cluster, TerraformTemplate.VOLUMES)
+
   }
 
   async rescue(_payload: ProvisionClusterJobPayload) {

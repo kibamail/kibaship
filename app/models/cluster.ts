@@ -10,6 +10,16 @@ import CloudProvider from './cloud_provider.js'
 import type { HasMany, BelongsTo } from '@adonisjs/lucid/types/relations'
 import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
 
+export enum ProvisioningStepName {
+  NETWORKING = 'networking',
+  SSH_KEYS = 'sshKeys',
+  LOAD_BALANCERS = 'loadBalancers',
+  SERVERS = 'servers',
+  VOLUMES = 'volumes',
+  K8S = 'k8s',
+  OPERATOR = 'operator'
+}
+
 export type ProvisioningStepStatus = 'pending' | 'in_progress' | 'completed' | 'failed'
 
 export interface ProvisioningStep {
@@ -21,7 +31,7 @@ export interface ProvisioningStep {
 }
 
 export interface ClusterProvisioningProgress {
-  currentStep: string
+  currentStep: ProvisioningStepName
   overallStatus: 'pending' | 'in_progress' | 'completed' | 'failed'
   startedAt?: string
   completedAt?: string
@@ -130,6 +140,20 @@ export default class Cluster extends BaseModel {
     cluster.controlPlanesVolumeSize = data.control_planes_volume_size
     cluster.workersVolumeSize = data.workers_volume_size
     cluster.useTransaction(trx)
+    cluster.progress = {
+      currentStep: ProvisioningStepName.NETWORKING,
+      overallStatus: 'pending',
+      startedAt: new Date().toISOString(),
+      steps: {
+        sshKeys: { status: 'pending' },
+        networking: { status: 'pending' },
+        loadBalancers: { status: 'pending' },
+        servers: { status: 'pending' },
+        volumes: { status: 'pending' },
+        kubernetesCluster: { status: 'pending' },
+        kibashipOperator: { status: 'pending' },
+      }
+    }
     await cluster.save()
 
     await cluster.createSshKeys(trx)
@@ -183,25 +207,6 @@ export default class Cluster extends BaseModel {
     await Promise.all(nodes.map(node => node.save()))
   }
 
-  public async initializeProgress() {
-    this.progress = {
-      currentStep: 'sshKeys',
-      overallStatus: 'pending',
-      startedAt: new Date().toISOString(),
-      steps: {
-        sshKeys: { status: 'pending' },
-        networking: { status: 'pending' },
-        loadBalancers: { status: 'pending' },
-        servers: { status: 'pending' },
-        volumes: { status: 'pending' },
-        kubernetesCluster: { status: 'pending' },
-        kibashipOperator: { status: 'pending' },
-      }
-    }
-
-    await this.save()
-  }
-
   public isProvisioningComplete(): boolean {
     if (!this.progress) return false
 
@@ -216,5 +221,15 @@ export default class Cluster extends BaseModel {
     const completedSteps = allSteps.filter(step => step.status === 'completed').length
 
     return Math.round((completedSteps / allSteps.length) * 100)
+  }
+
+  public static completeFirstOrFail(clusterId: string) {
+    return Cluster.query()
+      .where('id', clusterId)
+      .preload('cloudProvider')
+      .preload('nodes')
+      .preload('sshKeys')
+      .preload('nodes')
+      .firstOrFail()
   }
 }
