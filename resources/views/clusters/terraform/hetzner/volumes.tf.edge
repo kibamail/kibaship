@@ -28,6 +28,16 @@ variable "workers_volume_size" {
   type        = number
 }
 
+variable "control_plane_server_ids" {
+  description = "Map of control plane node IDs to server IDs"
+  type        = map(string)
+}
+
+variable "worker_server_ids" {
+  description = "Map of worker node IDs to server IDs"
+  type        = map(string)
+}
+
 provider "hcloud" {
   token = var.hcloud_token
 }
@@ -35,7 +45,7 @@ provider "hcloud" {
   resource "hcloud_volume" "control_plane_volume_{{ node['slug'] }}" {
   name      = "{{ cluster_name }}-control-{{ node['slug'] }}-volume"
   size      = var.control_planes_volume_size
-  server_id = {{ node['provider_id'] }}
+  server_id = var.control_plane_server_ids["{{ node.id }}"]
   automount = true
   format    = "ext4"
 
@@ -50,7 +60,7 @@ provider "hcloud" {
 
 resource "hcloud_volume_attachment" "control_plane_attachment_{{ node['slug'] }}" {
   volume_id = hcloud_volume.control_plane_volume_{{ node['slug'] }}.id
-  server_id = {{ node['provider_id'] }}
+  server_id = var.control_plane_server_ids["{{ node.id }}"]
   automount = true
 }
 @end
@@ -59,7 +69,7 @@ resource "hcloud_volume_attachment" "control_plane_attachment_{{ node['slug'] }}
   resource "hcloud_volume" "worker_volume_{{ node['slug'] }}" {
   name      = "{{ cluster_name }}-worker-{{ node['slug'] }}-volume"
   size      = var.workers_volume_size
-  server_id = {{ node['provider_id'] }}
+  server_id = var.worker_server_ids["{{ node.id }}"]
   automount = true
   format    = "ext4"
 
@@ -74,7 +84,7 @@ resource "hcloud_volume_attachment" "control_plane_attachment_{{ node['slug'] }}
 
 resource "hcloud_volume_attachment" "worker_attachment_{{ node['slug'] }}" {
   volume_id = hcloud_volume.worker_volume_{{ node['slug'] }}.id
-  server_id = {{ node['provider_id'] }}
+  server_id = var.worker_server_ids["{{ node.id }}"]
   automount = true
 }
 @end

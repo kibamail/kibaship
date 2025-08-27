@@ -152,7 +152,7 @@ output "ingress_load_balancer_name" {
 
 output "ingress_load_balancer_public_ip" {
   description = "Public IP of the ingress load balancer"
-  value       = hcloud_load_balancer.ingress.public_net[0].ipv4
+  value       = hcloud_load_balancer.ingress.ipv4
 }
 
 output "ingress_load_balancer_private_ip" {
@@ -172,7 +172,7 @@ output "kube_load_balancer_name" {
 
 output "kube_load_balancer_public_ip" {
   description = "Public IP of the Kubernetes API load balancer"
-  value       = hcloud_load_balancer.kube.public_net[0].ipv4
+  value       = hcloud_load_balancer.kube.ipv4
 }
 
 output "kube_load_balancer_private_ip" {

@@ -4,12 +4,34 @@ import { mkdir, writeFile, readdir, stat, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import Cluster from '#models/cluster'
+import { ModelObject } from '@adonisjs/lucid/types/model'
+
+export enum TerraformTemplate {
+  NETWORK = 'network.tf',
+  SSH_KEYS = 'ssh-keys.tf',
+  LOAD_BALANCERS = 'load-balancers.tf',
+  SERVERS = 'servers.tf',
+  VOLUMES = 'volumes.tf'
+}
 
 export interface TemplateContext {
   cluster_name: string
   network_zone: string
-  hcloud_token?: string
-  [key: string]: any
+  location: string
+  hcloud_token: string
+  control_planes: Array<ModelObject & {
+    id: string
+    slug: string
+    type: string
+  }>
+  workers: Array<ModelObject & {
+    id: string
+    slug: string
+    type: string
+  }>
+  public_key: string
+  control_planes_volume_size: number
+  workers_volume_size: number
 }
 
 export interface TerraformFile {
@@ -33,7 +55,6 @@ export class TerraformService {
   private edge: typeof edge
   private baseTempDir: string
   private clusterDirectory: string
-  private templateNames = ['network.tf', 'ssh-keys.tf', 'load-balancers.tf', 'servers.tf', 'volumes.tf']
 
   constructor(clusterId: string) {
     this.edge = edge
@@ -120,41 +141,74 @@ export class TerraformService {
   }
 
   /**
-   * Generates all Terraform templates for a cluster and writes them to files
+   * Generates a single Terraform template for a cluster and writes it to a file
+   * @param cluster - The cluster to generate template for
+   * @param templateName - The specific template name to generate
    */
-  async generate(cluster: Cluster) {
+  async generate(cluster: Cluster, templateName: TerraformTemplate): Promise<TerraformFile> {
     await this.init()
 
     const context = this.buildTemplateContext(cluster)
-    console.log('@context', context)
     const cloudProviderType = cluster.cloudProvider.type
 
-    const templates = await Promise.all(
-      this.templateNames.map(templateName =>
-        this.edge.render(`${cloudProviderType}/${templateName}`, context)
-      )
-    )
+    const content = await this.edge.render(`${cloudProviderType}/${templateName}`, context)
+    const terraformFile: Omit<TerraformFile, 'path'> = {
+      name: templateName,
+      content
+    }
 
-    const terraformFiles: Omit<TerraformFile, 'path'>[] = this.templateNames.map((name, index) => ({
-      name,
-      content: templates[index]
-    }))
-
-    return this.writeTerraformFiles(terraformFiles)
+    const filePath = await this.writeTerraformFile(terraformFile)
+    return {
+      name: templateName.replace('.tf', ''),
+      content,
+      path: filePath
+    }
   }
+
+
 
   /**
    * Builds comprehensive template context for all infrastructure templates
    */
   private buildTemplateContext(cluster: Cluster): TemplateContext {
+    const hcloudToken = cluster.cloudProvider?.credentials?.token
+    if (!hcloudToken) {
+      throw new Error('Cloud provider token is required')
+    }
+
+    const publicKey = cluster.sshKeys?.[0]?.publicKey
+    if (!publicKey) {
+      throw new Error('SSH public key is required')
+    }
+
+    const controlPlanes = cluster.nodes?.filter(node => node.type === 'master')?.map(node => {
+      const nodeData = node.toJSON()
+      return {
+        id: nodeData.id,
+        slug: nodeData.slug,
+        type: nodeData.type,
+        ...nodeData
+      }
+    }) || []
+
+    const workers = cluster.nodes?.filter(node => node.type === 'worker')?.map(node => {
+      const nodeData = node.toJSON()
+      return {
+        id: nodeData.id,
+        slug: nodeData.slug,
+        type: nodeData.type,
+        ...nodeData
+      }
+    }) || []
+
     return {
       cluster_name: cluster.subdomainIdentifier,
       network_zone: this.getNetworkZoneFromLocation(cluster.location),
       location: cluster.location,
-      hcloud_token: cluster.cloudProvider?.credentials?.token,
-      control_planes: cluster.nodes?.filter(node => node.type === 'master')?.map(node => node.toJSON()) || [],
-      workers: cluster.nodes?.filter(node => node.type === 'worker')?.map(node => node.toJSON()) || [],
-      public_key: cluster.sshKeys?.[0]?.publicKey || '',
+      hcloud_token: hcloudToken,
+      control_planes: controlPlanes,
+      workers: workers,
+      public_key: publicKey,
       control_planes_volume_size: cluster.controlPlanesVolumeSize,
       workers_volume_size: cluster.workersVolumeSize
     }

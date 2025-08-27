@@ -23,12 +23,6 @@ variable "network_zone" {
   type        = string
 }
 
-variable "delete_protection" {
-  description = "Enable delete protection for the network"
-  type        = bool
-  default     = false
-}
-
 provider "hcloud" {
   token = var.hcloud_token
 }
@@ -36,12 +30,10 @@ provider "hcloud" {
 resource "hcloud_network" "cluster_network" {
   name              = "${var.cluster_name}-network"
   ip_range          = "10.0.0.0/16"
-  delete_protection = false
 
   labels = {
     cluster    = var.cluster_name
     managed_by = "kibaship"
-    created_at = timestamp()
   }
 }
 
@@ -85,14 +77,4 @@ output "subnet_network_zone" {
 output "network_labels" {
   description = "Labels applied to the network"
   value       = hcloud_network.cluster_network.labels
-}
-
-output "subnet_gateway" {
-  description = "Gateway IP of the subnet"
-  value       = hcloud_network_subnet.cluster_subnet.gateway
-}
-
-output "network_delete_protection" {
-  description = "Delete protection status of the network"
-  value       = hcloud_network.cluster_network.delete_protection
 }
