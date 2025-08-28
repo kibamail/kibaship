@@ -81,9 +81,6 @@ export default class Cluster extends BaseModel {
   declare publicDomain: string | null
 
   @column()
-  declare progress: ClusterProvisioningProgress | null
-
-  @column()
   declare controlPlanesVolumeSize: number
 
   @column()
@@ -140,20 +137,7 @@ export default class Cluster extends BaseModel {
     cluster.controlPlanesVolumeSize = data.control_planes_volume_size
     cluster.workersVolumeSize = data.workers_volume_size
     cluster.useTransaction(trx)
-    cluster.progress = {
-      currentStep: ProvisioningStepName.NETWORKING,
-      overallStatus: 'pending',
-      startedAt: new Date().toISOString(),
-      steps: {
-        sshKeys: { status: 'pending' },
-        networking: { status: 'pending' },
-        loadBalancers: { status: 'pending' },
-        servers: { status: 'pending' },
-        volumes: { status: 'pending' },
-        kubernetesCluster: { status: 'pending' },
-        kibashipOperator: { status: 'pending' },
-      }
-    }
+
     await cluster.save()
 
     await cluster.createSshKeys(trx)
@@ -205,22 +189,6 @@ export default class Cluster extends BaseModel {
     }
 
     await Promise.all(nodes.map(node => node.save()))
-  }
-
-  public isProvisioningComplete(): boolean {
-    if (!this.progress) return false
-
-    const allSteps = Object.values(this.progress.steps)
-    return allSteps.every(step => step.status === 'completed')
-  }
-
-  public getProgressPercentage(): number {
-    if (!this.progress) return 0
-
-    const allSteps = Object.values(this.progress.steps)
-    const completedSteps = allSteps.filter(step => step.status === 'completed').length
-
-    return Math.round((completedSteps / allSteps.length) * 100)
   }
 
   public static completeFirstOrFail(clusterId: string) {

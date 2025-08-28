@@ -59,13 +59,12 @@ export interface TerraformFile {
 export class TerraformService {
   private edge: typeof edge
   private disk: ReturnType<typeof drive.use>
-  private clusterId: string
   private clusterBasePath: string
 
   constructor(clusterId: string) {
     this.edge = edge
     this.disk = drive.use('fs')
-    this.clusterId = clusterId
+
     this.clusterBasePath = `terraform/clusters/${clusterId}`
   }
 

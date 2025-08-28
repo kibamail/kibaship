@@ -1,6 +1,7 @@
 import Cluster from '#models/cluster'
 import { Job } from '@rlanz/bull-queue'
 import { TerraformService, TerraformTemplate } from '#services/terraform/terraform_service'
+import { TerraformExecutor } from '#services/terraform/terraform_executor'
 
 interface ProvisionClusterJobPayload {
   clusterId: string
@@ -19,12 +20,20 @@ export default class ProvisionClusterJob extends Job {
     const cluster = await Cluster.completeFirstOrFail(payload.clusterId)
 
     const terraformService = new TerraformService(cluster.id)
-
     await terraformService.generate(cluster, TerraformTemplate.NETWORK)
 
+    const executor = new TerraformExecutor(cluster.id, 'network')
+      .vars({
+        ...cluster.cloudProvider?.getTerraformCredentials(),
+        cluster_name: cluster.subdomainIdentifier,
+        network_zone: cluster.cloudProvider?.getNetworkZone(cluster.location) || 'eu-central'
+      })
+
+    await executor.init()
+    await executor.apply({ autoApprove: true })
   }
 
   async rescue(_payload: ProvisionClusterJobPayload) {
-    console.log('Cluster provisioning job failed after all retries')
+    console.log('Cluster provisioning job failed after all retries', _payload)
   }
 }

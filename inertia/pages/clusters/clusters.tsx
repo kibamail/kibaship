@@ -9,7 +9,7 @@ import { Button } from '@kibamail/owly'
 import { PlusIcon } from '~/Components/Icons/plus.svg'
 import { useState } from 'react'
 import { CreateClusterDialog } from './CreateClusterDialog'
-import { ClusterProvisioningSheet } from '~/Components/Clusters/ClusterProvisioningSheet'
+import { ClusterProvisioningDialog } from '~/Components/Clusters/ClusterProvisioningDialog'
 
 export default function Clusters() {
   const { props } = usePage<
@@ -57,7 +57,7 @@ export default function Clusters() {
 
             <CreateClusterDialog isOpen={isCreateModalOpen} onOpenChange={setIsCreateModalOpen} />
 
-            <ClusterProvisioningSheet
+            <ClusterProvisioningDialog
               cluster={selectedCluster}
               isOpen={!!selectedCluster}
               onOpenChange={() => setSelectedCluster(null)}

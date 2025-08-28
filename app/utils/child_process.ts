@@ -62,7 +62,7 @@ export class ChildProcess {
     this._options = {
       ...this._options,
       env: {
-        ...process.env,
+        PATH: process.env.PATH,
         ...environment
       }
     }
@@ -120,123 +120,34 @@ export class ChildProcess {
   /**
    * Execute the child process
    */
-  async execute(): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-    if (!this._command) {
-      throw new Error('Command must be specified before execution')
-    }
-
-    return new Promise((resolve, reject) => {
-      let stdout = ''
-      let stderr = ''
-
-      const childProcess = execa(this._command, this._args, {
-        ...this._options,
-        stdio: 'pipe' // Always use pipe to capture output
-      })
-
-      // Handle stdout
-      if (childProcess.stdout) {
-        childProcess.stdout.on('data', (data: Buffer) => {
-          const output = data.toString()
-          stdout += output
-          if (this._onStdout) {
-            this._onStdout(output)
-          }
-        })
-      }
-
-      // Handle stderr
-      if (childProcess.stderr) {
-        childProcess.stderr.on('data', (data: Buffer) => {
-          const output = data.toString()
-          stderr += output
-          if (this._onStderr) {
-            this._onStderr(output)
-          }
-        })
-      }
-
-      // Handle process close
-      childProcess.on('close', (code: number | null) => {
-        if (this._onClose) {
-          this._onClose(code)
-        }
-
-        if (code === 0) {
-          resolve({
-            stdout,
-            stderr,
-            exitCode: code || 0
-          })
-        } else {
-          reject(new Error(`Process exited with code ${code}. stderr: ${stderr}`))
-        }
-      })
-
-      // Handle process errors
-      childProcess.on('error', (error: Error) => {
-        if (this._onError) {
-          this._onError(error)
-        }
-        reject(error)
-      })
+  async execute() {
+    const childProcess = execa(this._command, this._args, {
+      ...this._options,
+      stdio: 'pipe'
     })
-  }
 
-  /**
-   * Execute the process and return the execa child process for advanced usage
-   */
-  spawn() {
-    if (!this._command) {
-      throw new Error('Command must be specified before spawning')
-    }
+    const self = this
 
-    const childProcess = execa(this._command, this._args, this._options)
+    childProcess.stdout?.on('data', (data: Buffer) => {
+      const output = data.toString()
 
-    // Attach event listeners if provided
-    if (this._onStdout && childProcess.stdout) {
-      childProcess.stdout.on('data', (data: Buffer) => {
-        this._onStdout!(data.toString())
-      })
-    }
+      self._onStdout?.(output)
+    })
 
-    if (this._onStderr && childProcess.stderr) {
-      childProcess.stderr.on('data', (data: Buffer) => {
-        this._onStderr!(data.toString())
-      })
-    }
+    childProcess.stderr?.on('data', (data: Buffer) => {
+      const output = data.toString()
 
-    if (this._onClose) {
-      childProcess.on('close', this._onClose)
-    }
+      self._onStderr?.(output)
+    })
 
-    if (this._onError) {
-      childProcess.on('error', this._onError)
-    }
+    childProcess.on('close', (code) => {
+      return self._onClose?.(code)
+    })
+
+    childProcess.on('error', (error) => {
+      self._onError?.(error)
+    })
 
     return childProcess
-  }
-
-  /**
-   * Static method for quick execution without fluent interface
-   */
-  static async run(
-    command: string,
-    args: string[] = [],
-    options: ExecaOptions = {}
-  ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-    const childProcess = new ChildProcess()
-      .command(command)
-      .args(args)
-
-    if (options.env) {
-      childProcess.env(options.env as Record<string, string>)
-    }
-
-    if (options.cwd) {
-      childProcess.cwd(options.cwd as string)
-    }
-
-    return childProcess.execute()
   }
 }

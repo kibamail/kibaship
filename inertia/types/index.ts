@@ -93,6 +93,18 @@ export type CloudProviderRegionsByContinent = Record<string, CloudProviderRegion
 
 export type ClusterStatus = 'provisioning' | 'healthy' | 'unhealthy'
 
+export enum ProvisioningStepName {
+  NETWORKING = 'networking',
+  SSH_KEYS = 'sshKeys',
+  LOAD_BALANCERS = 'loadBalancers',
+  SERVERS = 'servers',
+  VOLUMES = 'volumes',
+  K8S = 'k8s',
+  OPERATOR = 'operator'
+}
+
+export type ProvisioningStepStatus = 'pending' | 'in_progress' | 'completed' | 'failed'
+
 export type ClusterNodeType = 'master' | 'worker'
 export type ClusterNodeStatus = 'provisioning' | 'healthy' | 'unhealthy'
 export type ClusterNodeStorageStatus = 'provisioning' | 'healthy' | 'unhealthy'
