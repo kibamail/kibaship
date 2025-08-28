@@ -1,5 +1,5 @@
 import { DateTime } from 'luxon'
-import { BaseModel, beforeCreate, column, hasMany, belongsTo } from '@adonisjs/lucid/orm'
+import { BaseModel, beforeCreate, column, hasMany, belongsTo, hasOne } from '@adonisjs/lucid/orm'
 import { randomUUID } from 'node:crypto'
 import { SshKeyService } from '#services/ssh/ssh_key_service'
 import Project from './project.js'
@@ -7,7 +7,7 @@ import ClusterNode from './cluster_node.js'
 import ClusterSshKey from './cluster_ssh_key.js'
 import ClusterLoadBalancer from './cluster_load_balancer.js'
 import CloudProvider from './cloud_provider.js'
-import type { HasMany, BelongsTo } from '@adonisjs/lucid/types/relations'
+import type { HasMany, BelongsTo, HasOne } from '@adonisjs/lucid/types/relations'
 import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
 
 export enum ProvisioningStepName {
@@ -31,8 +31,8 @@ export interface ProvisioningStep {
 }
 
 export interface ClusterProvisioningProgress {
-  currentStep: ProvisioningStepName
-  overallStatus: 'pending' | 'in_progress' | 'completed' | 'failed'
+  step: ProvisioningStepName
+  status: 'pending' | 'in_progress' | 'completed' | 'failed'
   startedAt?: string
   completedAt?: string
   steps: {
@@ -69,13 +69,25 @@ export default class Cluster extends BaseModel {
   declare workspaceId: string | null
 
   @column()
+  declare error: string
+
+  @column()
   declare cloudProviderId: string | null
 
   @column()
   declare status: ClusterStatus
 
   @column()
-  declare privateNetworkCidr: string | null
+  declare providerNetworkId: string | null
+
+  @column()
+  declare providerSubnetId: string | null
+
+  @column()
+  declare networkIpRange: string | null
+
+  @column()
+  declare subnetIpRange: string | null
 
   @column()
   declare publicDomain: string | null
@@ -85,6 +97,81 @@ export default class Cluster extends BaseModel {
 
   @column()
   declare workersVolumeSize: number
+
+  @column.dateTime()
+  declare networkingStartedAt: DateTime | null
+
+  @column.dateTime()
+  declare networkingCompletedAt: DateTime | null
+
+  @column()
+  declare networkingError: string | null
+
+  @column.dateTime()
+  declare sshKeysStartedAt: DateTime | null
+
+  @column.dateTime()
+  declare sshKeysCompletedAt: DateTime | null
+
+  @column()
+  declare sshKeysError: string | null
+
+  @column.dateTime()
+  declare loadBalancersStartedAt: DateTime | null
+
+  @column.dateTime()
+  declare loadBalancersCompletedAt: DateTime | null
+
+  @column()
+  declare loadBalancersError: string | null
+
+  @column.dateTime()
+  declare serversStartedAt: DateTime | null
+
+  @column.dateTime()
+  declare serversCompletedAt: DateTime | null
+
+  @column()
+  declare serversError: string | null
+
+  @column.dateTime()
+  declare volumesStartedAt: DateTime | null
+
+  @column.dateTime()
+  declare volumesCompletedAt: DateTime | null
+
+  @column()
+  declare volumesError: string | null
+
+  @column.dateTime()
+  declare kubernetesClusterStartedAt: DateTime | null
+
+  @column.dateTime()
+  declare kubernetesClusterCompletedAt: DateTime | null
+
+  @column()
+  declare kubernetesClusterError: string | null
+
+  @column.dateTime()
+  declare kibashipOperatorStartedAt: DateTime | null
+
+  @column.dateTime()
+  declare kibashipOperatorCompletedAt: DateTime | null
+
+  @column()
+  declare kibashipOperatorError: string | null
+
+  @column()
+  declare currentProvisioningStep: string | null
+
+  @column()
+  declare overallProvisioningStatus: string | null
+
+  @column.dateTime()
+  declare provisioningStartedAt: DateTime | null
+
+  @column.dateTime()
+  declare provisioningCompletedAt: DateTime | null
 
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime
@@ -98,8 +185,8 @@ export default class Cluster extends BaseModel {
   @hasMany(() => ClusterNode)
   declare nodes: HasMany<typeof ClusterNode>
 
-  @hasMany(() => ClusterSshKey)
-  declare sshKeys: HasMany<typeof ClusterSshKey>
+  @hasOne(() => ClusterSshKey)
+  declare sshKey: HasOne<typeof ClusterSshKey>
 
   @hasMany(() => ClusterLoadBalancer)
   declare loadBalancers: HasMany<typeof ClusterLoadBalancer>
@@ -140,13 +227,13 @@ export default class Cluster extends BaseModel {
 
     await cluster.save()
 
-    await cluster.createSshKeys(trx)
+    await cluster.createSshKey(trx)
     await cluster.createNodes(data.control_plane_nodes_count, data.worker_nodes_count, trx)
 
     return cluster
   }
 
-  public async createSshKeys(trx: TransactionClientContract): Promise<ClusterSshKey> {
+  public async createSshKey(trx: TransactionClientContract): Promise<ClusterSshKey> {
     const sshKeyPair = await SshKeyService.generateEd25519KeyPair()
 
     if (!sshKeyPair.publicKey || !sshKeyPair.privateKey) {
@@ -191,13 +278,13 @@ export default class Cluster extends BaseModel {
     await Promise.all(nodes.map(node => node.save()))
   }
 
-  public static completeFirstOrFail(clusterId: string) {
+  public static complete(clusterId: string) {
     return Cluster.query()
       .where('id', clusterId)
       .preload('cloudProvider')
       .preload('nodes')
-      .preload('sshKeys')
+      .preload('sshKey')
       .preload('nodes')
-      .firstOrFail()
+      .first()
   }
 }

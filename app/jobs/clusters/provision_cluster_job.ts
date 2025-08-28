@@ -1,7 +1,8 @@
-import Cluster from '#models/cluster'
 import { Job } from '@rlanz/bull-queue'
-import { TerraformService, TerraformTemplate } from '#services/terraform/terraform_service'
-import { TerraformExecutor } from '#services/terraform/terraform_executor'
+import queue from '@rlanz/bull-queue/services/main'
+import ProvisionNetworkJob from './provision_network_job.js'
+import Cluster from '#models/cluster'
+import { DateTime } from 'luxon'
 
 interface ProvisionClusterJobPayload {
   clusterId: string
@@ -17,23 +18,19 @@ export default class ProvisionClusterJob extends Job {
   }
 
   async handle(payload: ProvisionClusterJobPayload) {
-    const cluster = await Cluster.completeFirstOrFail(payload.clusterId)
+    const cluster = await Cluster.complete(payload.clusterId)
 
-    const terraformService = new TerraformService(cluster.id)
-    await terraformService.generate(cluster, TerraformTemplate.NETWORK)
+    if (!cluster) {
+      return
+    }
 
-    const executor = new TerraformExecutor(cluster.id, 'network')
-      .vars({
-        ...cluster.cloudProvider?.getTerraformCredentials(),
-        cluster_name: cluster.subdomainIdentifier,
-        network_zone: cluster.cloudProvider?.getNetworkZone(cluster.location) || 'eu-central'
-      })
+    cluster.provisioningStartedAt = DateTime.now()
 
-    await executor.init()
-    await executor.apply({ autoApprove: true })
+    await cluster.save()
+
+    await queue.dispatch(ProvisionNetworkJob, payload)
   }
 
   async rescue(_payload: ProvisionClusterJobPayload) {
-    console.log('Cluster provisioning job failed after all retries', _payload)
   }
 }

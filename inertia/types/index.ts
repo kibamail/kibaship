@@ -123,7 +123,7 @@ export interface Cluster {
   created_at: string
   updated_at: string
   nodes?: ClusterNode[]
-  ssh_keys?: ClusterSshKey[]
+  ssh_key?: ClusterSshKey
   load_balancers?: ClusterLoadBalancer[]
   cloud_provider?: CloudProvider
 }

@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import logger from '@adonisjs/core/services/logger'
 
 export type TerraformCommand = 'init' | 'apply' | 'plan' | 'destroy'
-export type TerraformStage = 'network' | 'servers' | 'volumes' | 'kubernetes'
+export type TerraformStage = 'network' | 'ssh-keys' | 'load-balancers' | 'servers' | 'volumes' | 'kubernetes'
 
 export interface TerraformExecutionOptions {
   autoApprove?: boolean
@@ -128,9 +128,7 @@ export class TerraformExecutor {
       args.push(...options.additionalArgs)
     }
 
-    await this.executeCommand('apply', args)
-
-    return this.getTerraformOutput()
+    return this.executeCommand('apply', args)
   }
 
   /**
@@ -228,24 +226,23 @@ export class TerraformExecutor {
   /**
    * Get terraform output and trigger callback
    */
-  private async getTerraformOutput() {
+  public async output() {
     return new ChildProcess()
       .command('terraform')
       .args(['output', '-json'])
       .cwd(this.terraformDir)
       .env(this.getTerraformEnvironment())
-      .onStdout(async (data) => {
-        await this.logToStream('output_stdout', data)
+      .onStdout(async () => {
+        logger.info('output_stdout fetched successfully')
       })
       .onStderr(async (data) => {
-        await this.logToStream('output_stderr', data)
+        logger.info('output_stderr: failed fetching output', data)
       })
       .onClose(async (code) => {
-        const message = `Terraform output exited with code: ${code}`
-        await this.logToStream('output_close', message)
+        logger.info('output_close: ', `Terraform output exited with code: ${code}`)
       })
       .onError(async (error) => {
-        await this.logToStream('output_error', error.message)
+        logger.error('output_error: ', error.message)
       })
       .execute()
   }

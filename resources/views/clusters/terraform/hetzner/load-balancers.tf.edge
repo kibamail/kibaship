@@ -10,16 +10,7 @@ terraform {
     bucket = "{{ s3_bucket }}"
     key    = "clusters/{{ cluster_id }}/load-balancers/terraform.tfstate"
     region = "{{ s3_region }}"
-
-    endpoints = {
-      s3 = "{{ s3_endpoint }}"
-    }
-
-    skip_credentials_validation = true
-    skip_metadata_api_check     = true
-    skip_region_validation      = true
-    skip_requesting_account_id  = true
-    use_path_style           = true
+    encrypt = true
   }
 }
 
@@ -33,11 +24,6 @@ variable "hcloud_token" {
 
 variable "cluster_name" {
   description = "Name of the cluster"
-  type        = string
-}
-
-variable "network_zone" {
-  description = "Network zone for the load balancers"
   type        = string
 }
 
@@ -59,14 +45,12 @@ provider "hcloud" {
 resource "hcloud_load_balancer" "ingress" {
   name               = "ingress.${var.cluster_name}"
   load_balancer_type = "lb11"
-  network_zone       = var.network_zone
   location           = var.location
 
   labels = {
     cluster    = var.cluster_name
     type       = "ingress"
     managed_by = "kibaship"
-    created_at = timestamp()
   }
 }
 
@@ -126,14 +110,12 @@ resource "hcloud_load_balancer_service" "ingress_https" {
 resource "hcloud_load_balancer" "kube" {
   name               = "kube.${var.cluster_name}"
   load_balancer_type = "lb11"
-  network_zone       = var.network_zone
   location           = var.location
 
   labels = {
     cluster    = var.cluster_name
     type       = "kube-api"
     managed_by = "kibaship"
-    created_at = timestamp()
   }
 }
 

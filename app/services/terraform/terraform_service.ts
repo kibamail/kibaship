@@ -20,7 +20,6 @@ export interface TemplateContext {
   network_zone: string
   location: string
   hcloud_token: string
-  s3_endpoint: string
   s3_region: string
   s3_bucket: string
   control_planes: Array<ModelObject & {
@@ -185,10 +184,7 @@ export class TerraformService {
       throw new Error('Cloud provider token is required')
     }
 
-    const publicKey = cluster.sshKeys?.[0]?.publicKey
-    if (!publicKey) {
-      throw new Error('SSH public key is required')
-    }
+    const publicKey = cluster.sshKey?.publicKey
 
     const controlPlanes = cluster.nodes?.filter(node => node.type === 'master')?.map(node => {
       const nodeData = node.toJSON()
@@ -216,7 +212,6 @@ export class TerraformService {
       network_zone: this.getNetworkZoneFromLocation(cluster.location),
       location: cluster.location,
       hcloud_token: hcloudToken,
-      s3_endpoint: env.get('S3_ENDPOINT'),
       s3_region: env.get('S3_REGION'),
       s3_bucket: env.get('S3_BUCKET'),
       control_planes: controlPlanes,

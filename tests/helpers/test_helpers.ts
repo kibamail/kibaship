@@ -91,7 +91,7 @@ export async function createTestCluster(workspaceId: string, cloudProviderId: st
 
     await cluster.load('cloudProvider')
     await cluster.load('nodes')
-    await cluster.load('sshKeys')
+    await cluster.load('sshKey')
 
     if (cluster.nodes && cluster.nodes.length > 0) {
       for (const node of cluster.nodes) {
@@ -101,7 +101,7 @@ export async function createTestCluster(workspaceId: string, cloudProviderId: st
       }
     }
 
-    if (!cluster.sshKeys || cluster.sshKeys.length === 0) {
+    if (!cluster.sshKey) {
       throw new Error('Cluster is missing SSH keys')
     }
 
