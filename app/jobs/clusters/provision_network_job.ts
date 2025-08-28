@@ -42,6 +42,7 @@ export default class ProvisionNetworkJob extends Job {
     }
 
     cluster.networkingStartedAt = DateTime.now()
+    cluster.networkingCompletedAt = null
     await cluster.save()
 
     const terraform = new TerraformService(payload.clusterId)

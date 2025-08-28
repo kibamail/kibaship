@@ -1,4 +1,6 @@
 import { RedisStream } from '#utils/redis_stream'
+import { RedisStreamConfig } from '#services/redis/redis_stream_config'
+import { ClusterLogsService, ClusterLogEntry } from '#services/redis/cluster_logs_service'
 import { ChildProcess } from '#utils/child_process'
 import app from '@adonisjs/core/services/app'
 import env from '#start/env'
@@ -42,11 +44,12 @@ export type TerraformOutputCallback = (outputs: Record<string, any>) => void
  * ```
  */
 export class TerraformExecutor {
-  private streamName = 'terraform:clusters'
+  private streamName: string
   private terraformDir: string
   private _vars: Record<string, string | number | boolean> = {}
 
   constructor(protected clusterId: string, protected stage: TerraformStage) {
+    this.streamName = RedisStreamConfig.getClusterStream(clusterId)
     this.terraformDir = join(app.makePath('storage'), `terraform/clusters/${clusterId}/${stage}`)
   }
 
@@ -178,13 +181,7 @@ export class TerraformExecutor {
   /**
    * Read historical logs from the stream
    */
-  async readLogs(fromId: string = '0', count?: number): Promise<Array<{
-    id: string
-    type: string
-    message: string
-    timestamp: string
-    cluster_id: string
-  }>> {
+  async readLogs(fromId: string = '0', count?: number): Promise<ClusterLogEntry[]> {
     try {
       const messages = await new RedisStream()
         .stream(this.streamName)
@@ -192,15 +189,7 @@ export class TerraformExecutor {
         .count(count || 100)
         .read()
 
-      return messages.flatMap(msg =>
-        msg.entries.map(entry => ({
-          id: entry.id,
-          type: entry.fields.type || 'unknown',
-          message: entry.fields.message || '',
-          timestamp: entry.fields.timestamp || '',
-          cluster_id: entry.fields.cluster_id || this.clusterId
-        }))
-      )
+      return ClusterLogsService.parseStreamMessages(messages, this.clusterId)
     } catch (error) {
       logger.error('Failed to read logs from stream:', error)
       return []

@@ -96,6 +96,53 @@ resource "hcloud_volume_attachment" "worker_attachment_{{ node['slug'] }}" {
 }
 @end
 
+# Individual Volume Outputs for Control Planes
+@each(node in control_planes)
+  output "control_plane_{{ node.slug }}_volume_id" {
+  description = "Volume ID for control plane node {{ node.id }}"
+  value       = hcloud_volume.control_plane_volume_{{ node['slug'] }}.id
+}
+
+output "control_plane_{{ node.slug }}_volume_name" {
+  description = "Volume name for control plane node {{ node.id }}"
+  value       = hcloud_volume.control_plane_volume_{{ node['slug'] }}.name
+}
+
+output "control_plane_{{ node.slug }}_volume_size" {
+  description = "Volume size for control plane node {{ node.id }}"
+  value       = hcloud_volume.control_plane_volume_{{ node['slug'] }}.size
+}
+
+output "control_plane_{{ node.slug }}_attachment_id" {
+  description = "Volume attachment ID for control plane node {{ node.id }}"
+  value       = hcloud_volume_attachment.control_plane_attachment_{{ node['slug'] }}.id
+}
+@end
+
+# Individual Volume Outputs for Workers
+@each(node in workers)
+  output "worker_{{ node.slug }}_volume_id" {
+  description = "Volume ID for worker node {{ node.id }}"
+  value       = hcloud_volume.worker_volume_{{ node['slug'] }}.id
+}
+
+output "worker_{{ node.slug }}_volume_name" {
+  description = "Volume name for worker node {{ node.id }}"
+  value       = hcloud_volume.worker_volume_{{ node['slug'] }}.name
+}
+
+output "worker_{{ node.slug }}_volume_size" {
+  description = "Volume size for worker node {{ node.id }}"
+  value       = hcloud_volume.worker_volume_{{ node['slug'] }}.size
+}
+
+output "worker_{{ node.slug }}_attachment_id" {
+  description = "Volume attachment ID for worker node {{ node.id }}"
+  value       = hcloud_volume_attachment.worker_attachment_{{ node['slug'] }}.id
+}
+@end
+
+# Summary Outputs
 output "control_plane_volume_ids" {
   description = "Map of control plane node IDs to volume IDs"
   value = {
@@ -110,24 +157,6 @@ output "worker_volume_ids" {
   value = {
 @each((node, index) in workers)
   "{{ node.id }}" = hcloud_volume.worker_volume_{{ node['slug'] }}.id{{ index === workers.length - 1 ? '' : ',' }}
-@end
-}
-}
-
-output "control_plane_volume_attachments" {
-  description = "Map of control plane node IDs to volume attachment IDs"
-  value = {
-@each((node, index) in control_planes)
-  "{{ node.id }}" = hcloud_volume_attachment.control_plane_attachment_{{ node['slug'] }}.id{{ index === control_planes.length - 1 ? '' : ',' }}
-@end
-}
-}
-
-output "worker_volume_attachments" {
-  description = "Map of worker node IDs to volume attachment IDs"
-  value = {
-@each((node, index) in workers)
-  "{{ node.id }}" = hcloud_volume_attachment.worker_attachment_{{ node['slug'] }}.id{{ index === workers.length - 1 ? '' : ',' }}
 @end
 }
 }

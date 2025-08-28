@@ -20,11 +20,13 @@
 @import 'tailwindcss' layer(base);
 
 @import './owly.css' layer(base);
+@import './ansi.css' layer(base);
 
 @plugin "tailwindcss-animate";
 
 @theme inline {
   --font-sans: var(--default-font-family);
+  --font-mono: "Dank Mono", "Space Mono", 'ui-monospace', Menlo, Consolas, 'Liberation Mono', monospace;
 }
 
 @layer base {

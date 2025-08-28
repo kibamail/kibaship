@@ -1,7 +1,8 @@
 import { DateTime } from 'luxon'
-import { BaseModel, beforeCreate, column, hasMany, belongsTo, hasOne } from '@adonisjs/lucid/orm'
+import { BaseModel, beforeCreate, column, hasMany, belongsTo, hasOne, afterUpdate } from '@adonisjs/lucid/orm'
 import { randomUUID } from 'node:crypto'
 import { SshKeyService } from '#services/ssh/ssh_key_service'
+import { TerraformStage } from '#services/terraform/terraform_executor'
 import Project from './project.js'
 import ClusterNode from './cluster_node.js'
 import ClusterSshKey from './cluster_ssh_key.js'
@@ -9,6 +10,8 @@ import ClusterLoadBalancer from './cluster_load_balancer.js'
 import CloudProvider from './cloud_provider.js'
 import type { HasMany, BelongsTo, HasOne } from '@adonisjs/lucid/types/relations'
 import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
+import redis from '@adonisjs/redis/services/main'
+import logger from '@adonisjs/core/services/logger'
 
 export enum ProvisioningStepName {
   NETWORKING = 'networking',
@@ -75,6 +78,9 @@ export default class Cluster extends BaseModel {
   declare cloudProviderId: string | null
 
   @column()
+  declare serverType: string | null
+
+  @column()
   declare status: ClusterStatus
 
   @column()
@@ -108,6 +114,9 @@ export default class Cluster extends BaseModel {
   declare networkingError: string | null
 
   @column.dateTime()
+  declare networkingErrorAt: DateTime | null
+
+  @column.dateTime()
   declare sshKeysStartedAt: DateTime | null
 
   @column.dateTime()
@@ -115,6 +124,9 @@ export default class Cluster extends BaseModel {
 
   @column()
   declare sshKeysError: string | null
+
+  @column.dateTime()
+  declare sshKeysErrorAt: DateTime | null
 
   @column.dateTime()
   declare loadBalancersStartedAt: DateTime | null
@@ -126,6 +138,9 @@ export default class Cluster extends BaseModel {
   declare loadBalancersError: string | null
 
   @column.dateTime()
+  declare loadBalancersErrorAt: DateTime | null
+
+  @column.dateTime()
   declare serversStartedAt: DateTime | null
 
   @column.dateTime()
@@ -133,6 +148,9 @@ export default class Cluster extends BaseModel {
 
   @column()
   declare serversError: string | null
+
+  @column.dateTime()
+  declare serversErrorAt: DateTime | null
 
   @column.dateTime()
   declare volumesStartedAt: DateTime | null
@@ -144,6 +162,9 @@ export default class Cluster extends BaseModel {
   declare volumesError: string | null
 
   @column.dateTime()
+  declare volumesErrorAt: DateTime | null
+
+  @column.dateTime()
   declare kubernetesClusterStartedAt: DateTime | null
 
   @column.dateTime()
@@ -153,6 +174,9 @@ export default class Cluster extends BaseModel {
   declare kubernetesClusterError: string | null
 
   @column.dateTime()
+  declare kubernetesClusterErrorAt: DateTime | null
+
+  @column.dateTime()
   declare kibashipOperatorStartedAt: DateTime | null
 
   @column.dateTime()
@@ -160,6 +184,9 @@ export default class Cluster extends BaseModel {
 
   @column()
   declare kibashipOperatorError: string | null
+
+  @column.dateTime()
+  declare kibashipOperatorErrorAt: DateTime | null
 
   @column()
   declare currentProvisioningStep: string | null
@@ -199,6 +226,15 @@ export default class Cluster extends BaseModel {
     cluster.id = randomUUID()
   }
 
+  @afterUpdate()
+  public static async publishUpdate(cluster: Cluster) {
+    const pub = await redis.publish('cluster:updated', JSON.stringify({
+      id: cluster.id
+    }))
+
+    logger.info(`Published cluster update for ${cluster.id}: ${pub}`)
+  }
+
   public static async createWithInfrastructure(
     data: {
       subdomain_identifier: string
@@ -228,7 +264,7 @@ export default class Cluster extends BaseModel {
     await cluster.save()
 
     await cluster.createSshKey(trx)
-    await cluster.createNodes(data.control_plane_nodes_count, data.worker_nodes_count, trx)
+    await cluster.createNodes(data.control_plane_nodes_count, data.worker_nodes_count, data.server_type, trx)
 
     return cluster
   }
@@ -253,6 +289,7 @@ export default class Cluster extends BaseModel {
   public async createNodes(
     controlPlaneCount: number,
     workerCount: number,
+    serverType: string,
     trx: TransactionClientContract
   ): Promise<void> {
     const nodes: ClusterNode[] = []
@@ -262,6 +299,7 @@ export default class Cluster extends BaseModel {
       controlPlaneNode.clusterId = this.id
       controlPlaneNode.type = 'master'
       controlPlaneNode.status = 'provisioning'
+      controlPlaneNode.serverType = serverType
       controlPlaneNode.useTransaction(trx)
       nodes.push(controlPlaneNode)
     }
@@ -271,6 +309,7 @@ export default class Cluster extends BaseModel {
       workerNode.clusterId = this.id
       workerNode.type = 'worker'
       workerNode.status = 'provisioning'
+      workerNode.serverType = serverType
       workerNode.useTransaction(trx)
       nodes.push(workerNode)
     }
@@ -282,9 +321,66 @@ export default class Cluster extends BaseModel {
     return Cluster.query()
       .where('id', clusterId)
       .preload('cloudProvider')
+      .preload('loadBalancers')
       .preload('nodes')
       .preload('sshKey')
-      .preload('nodes')
+      .preload('nodes', nodesQuery => nodesQuery.preload('storages'))
       .first()
+  }
+
+  public getStepStatus(stage: TerraformStage): ProvisioningStepStatus {
+    switch (stage) {
+      case 'network':
+        if (this.networkingCompletedAt) return 'completed'
+        if (this.networkingErrorAt) return 'failed'
+        if (this.networkingStartedAt) return 'in_progress'
+        return 'pending'
+
+      case 'ssh-keys':
+        if (this.sshKeysCompletedAt) return 'completed'
+        if (this.sshKeysErrorAt) return 'failed'
+        if (this.sshKeysStartedAt) return 'in_progress'
+        return 'pending'
+
+      case 'load-balancers':
+        if (this.loadBalancersCompletedAt) return 'completed'
+        if (this.loadBalancersErrorAt) return 'failed'
+        if (this.loadBalancersStartedAt) return 'in_progress'
+        return 'pending'
+
+      case 'servers':
+        if (this.serversCompletedAt) return 'completed'
+        if (this.serversErrorAt) return 'failed'
+        if (this.serversStartedAt) return 'in_progress'
+        return 'pending'
+
+      case 'volumes':
+        if (this.volumesCompletedAt) return 'completed'
+        if (this.volumesErrorAt) return 'failed'
+        if (this.volumesStartedAt) return 'in_progress'
+        return 'pending'
+
+      case 'kubernetes':
+        if (this.kubernetesClusterCompletedAt) return 'completed'
+        if (this.kubernetesClusterErrorAt) return 'failed'
+        if (this.kubernetesClusterStartedAt) return 'in_progress'
+        return 'pending'
+
+      default:
+        return 'pending'
+    }
+  }
+
+  public getFirstFailedStage(): TerraformStage | null {
+    const stages: TerraformStage[] = ['network', 'ssh-keys', 'load-balancers', 'servers', 'volumes', 'kubernetes']
+
+    for (const stage of stages) {
+      const status = this.getStepStatus(stage)
+      if (status === 'failed') {
+        return stage
+      }
+    }
+
+    return null
   }
 }

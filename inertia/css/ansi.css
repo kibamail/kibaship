@@ -1,0 +1,4 @@
+
+.font-mono code, .font-mono span {
+    font-family: var(--font-mono) !important;
+}

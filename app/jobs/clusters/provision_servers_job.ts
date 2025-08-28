@@ -1,0 +1,115 @@
+import { Job } from '@rlanz/bull-queue'
+import Cluster from '#models/cluster'
+import { TerraformExecutor } from '#services/terraform/terraform_executor'
+import { TerraformService, TerraformTemplate } from '#services/terraform/terraform_service'
+import { DateTime } from 'luxon'
+import queue from '@rlanz/bull-queue/services/main'
+import ProvisionVolumesJob from './provision_volumes_job.js'
+
+interface ProvisionServersJobPayload {
+  clusterId: string
+}
+
+interface TerraformOutputValue {
+  sensitive: boolean
+  type: string
+  value: string | number | object
+}
+
+interface HetznerServersOutput {
+  [key: string]: TerraformOutputValue
+}
+
+export default class ProvisionServersJob extends Job {
+  // This is the path to the file that is used to create the job
+  static get $$filepath() {
+    return import.meta.url
+  }
+
+  /**
+   * Base Entry point
+   */
+  async handle(payload: ProvisionServersJobPayload) {
+    const cluster = await Cluster.complete(payload.clusterId)
+
+    if (!cluster) {
+      return
+    }
+
+    cluster.serversStartedAt = DateTime.now()
+    cluster.serversCompletedAt = null
+    await cluster.save()
+
+    try {
+      const terraform = new TerraformService(payload.clusterId)
+      await terraform.generate(cluster, TerraformTemplate.SERVERS)
+
+      const ingressLoadBalancer = cluster.loadBalancers.find(lb => lb.type === 'ingress')
+      const kubeLoadBalancer = cluster.loadBalancers.find(lb => lb.type === 'cluster')
+
+      const executor = new TerraformExecutor(cluster.id, 'servers')
+        .vars({
+          ...cluster.cloudProvider?.getTerraformCredentials(),
+          cluster_name: cluster.subdomainIdentifier,
+          server_type: cluster.serverType as string,
+          network_id: cluster.providerNetworkId || '',
+          ssh_key_id: cluster.sshKey?.providerId || '',
+          ingress_load_balancer_id: ingressLoadBalancer?.providerId || '',
+          kube_load_balancer_id: kubeLoadBalancer?.providerId || ''
+        })
+
+      await executor.init()
+      await executor.apply({ autoApprove: true })
+
+      const { stdout } = await executor.output()
+
+      const output = JSON.parse(stdout as string) as HetznerServersOutput
+
+      if (cluster.cloudProvider?.type === 'hetzner') {
+        await this.updateClusterNodes(cluster.id, output)
+      }
+
+      cluster.serversCompletedAt = DateTime.now()
+
+      await cluster.save()
+
+      await queue.dispatch(ProvisionVolumesJob, payload)
+    } catch (error) {
+      cluster.serversErrorAt = DateTime.now()
+
+      await cluster.save()
+      throw error
+    }
+  }
+
+  /**
+   * This is an optional method that gets called when the retries has exceeded and is marked failed.
+   */
+  async rescue(_payload: ProvisionServersJobPayload) { }
+
+  private async updateClusterNodes(
+    clusterId: string,
+    output: HetznerServersOutput
+  ): Promise<void> {
+    const cluster = await Cluster.query()
+      .where('id', clusterId)
+      .preload('nodes')
+      .firstOrFail()
+
+    for (const node of cluster.nodes) {
+      const serverIdKey = `${node.type === 'master' ? 'control_plane' : 'worker'}_${node.slug}_server_id`
+      const publicIpKey = `${node.type === 'master' ? 'control_plane' : 'worker'}_${node.slug}_public_ip`
+      const privateIpKey = `${node.type === 'master' ? 'control_plane' : 'worker'}_${node.slug}_private_ip`
+
+      const serverId = output[serverIdKey]?.value as string
+      const publicIp = output[publicIpKey]?.value as string
+      const privateIp = output[privateIpKey]?.value as string
+
+      node.ipv4Address = publicIp
+      node.privateIpv4Address = privateIp
+      node.status = 'healthy'
+      node.providerId = serverId
+      await node.save()
+    }
+  }
+}

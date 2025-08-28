@@ -16,10 +16,14 @@ export default class ClusterLoadBalancer extends BaseModel {
   @column()
   declare type: ClusterLoadBalancerType
 
-  @column()
+  @column({
+    columnName: 'public_ipv4_address'
+  })
   declare publicIpv4Address: string | null
 
-  @column()
+  @column({
+    columnName: 'private_ipv4_address'
+  })
   declare privateIpv4Address: string | null
 
   @column()

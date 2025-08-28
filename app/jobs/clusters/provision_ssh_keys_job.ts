@@ -40,6 +40,7 @@ export default class ProvisionSshKeysJob extends Job {
     }
 
     cluster.sshKeysStartedAt = DateTime.now()
+    cluster.sshKeysCompletedAt = null
     await cluster.save()
 
     try {
@@ -67,11 +68,13 @@ export default class ProvisionSshKeysJob extends Job {
 
       cluster.sshKeysCompletedAt = DateTime.now()
 
+      await cluster.sshKey.save()
+
       await cluster.save()
 
       await queue.dispatch(ProvisionLoadBalancersJob, payload)
     } catch (error) {
-      cluster.sshKeysError = `${cluster.sshKeysError || ''}\n ${error?.message}`
+      cluster.sshKeysErrorAt = DateTime.now()
 
       await cluster.save()
       throw error

@@ -72,7 +72,6 @@ provider "hcloud" {
     type        = "control-plane"
     node_id     = "{{ node.id }}"
     managed_by  = "kibaship"
-    created_at  = timestamp()
   }
 }
 
@@ -101,7 +100,6 @@ resource "hcloud_load_balancer_target" "control_plane_kube_{{ node.slug }}" {
     type        = "worker"
     node_id     = "{{ node.id }}"
     managed_by  = "kibaship"
-    created_at  = timestamp()
   }
 }
 

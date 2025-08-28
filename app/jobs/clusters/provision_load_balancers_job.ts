@@ -4,6 +4,8 @@ import ClusterLoadBalancer from '#models/cluster_load_balancer'
 import { TerraformExecutor } from '#services/terraform/terraform_executor'
 import { TerraformService, TerraformTemplate } from '#services/terraform/terraform_service'
 import { DateTime } from 'luxon'
+import queue from '@rlanz/bull-queue/services/main'
+import ProvisionServersJob from './provision_servers_job.js'
 
 interface ProvisionLoadBalancersJobPayload {
   clusterId: string
@@ -39,6 +41,7 @@ export default class ProvisionLoadBalancersJob extends Job {
     }
 
     cluster.loadBalancersStartedAt = DateTime.now()
+    cluster.loadBalancersCompletedAt = null
     await cluster.save()
 
     try {
@@ -61,35 +64,62 @@ export default class ProvisionLoadBalancersJob extends Job {
       const output = JSON.parse(stdout as string) as HetznerLoadBalancersOutput
 
       if (cluster.cloudProvider?.type === 'hetzner') {
-        const ingressLoadBalancer = new ClusterLoadBalancer()
-        ingressLoadBalancer.clusterId = cluster.id
-        ingressLoadBalancer.type = 'ingress'
-        ingressLoadBalancer.providerId = output.ingress_load_balancer_id.value as string
-        ingressLoadBalancer.publicIpv4Address = output.ingress_load_balancer_public_ip.value as string
-        ingressLoadBalancer.privateIpv4Address = output.ingress_load_balancer_private_ip.value as string
-        await ingressLoadBalancer.save()
+        await this.createOrUpdateLoadBalancer(
+          cluster.id,
+          'ingress',
+          output.ingress_load_balancer_id.value as string,
+          output.ingress_load_balancer_public_ip.value as string,
+          output.ingress_load_balancer_private_ip.value as string
+        )
 
-        const kubeLoadBalancer = new ClusterLoadBalancer()
-        kubeLoadBalancer.clusterId = cluster.id
-        kubeLoadBalancer.type = 'cluster'
-        kubeLoadBalancer.providerId = output.kube_load_balancer_id.value as string
-        kubeLoadBalancer.publicIpv4Address = output.kube_load_balancer_public_ip.value as string
-        kubeLoadBalancer.privateIpv4Address = output.kube_load_balancer_private_ip.value as string
-        await kubeLoadBalancer.save()
+        await this.createOrUpdateLoadBalancer(
+          cluster.id,
+          'cluster',
+          output.kube_load_balancer_id.value as string,
+          output.kube_load_balancer_public_ip.value as string,
+          output.kube_load_balancer_private_ip.value as string
+        )
       }
 
       cluster.loadBalancersCompletedAt = DateTime.now()
 
       await cluster.save()
 
-    } catch (error) {
-      cluster.loadBalancersError = `${cluster.loadBalancersError || ''}\n ${error?.message}`
+      await queue.dispatch(ProvisionServersJob, payload)
 
-      await cluster.save()
+    } catch (error) {
+      this.logger.error(error)
+
       throw error
     }
   }
 
   async rescue(_payload: ProvisionLoadBalancersJobPayload) {
+  }
+
+  private async createOrUpdateLoadBalancer(
+    clusterId: string,
+    type: 'ingress' | 'cluster',
+    providerId: string,
+    publicIpv4Address: string,
+    privateIpv4Address: string
+  ): Promise<ClusterLoadBalancer> {
+    let loadBalancer = await ClusterLoadBalancer.query()
+      .where('cluster_id', clusterId)
+      .where('type', type)
+      .first()
+
+    if (!loadBalancer) {
+      loadBalancer = new ClusterLoadBalancer()
+    }
+
+    loadBalancer.clusterId = clusterId
+    loadBalancer.type = type
+    loadBalancer.providerId = providerId
+    loadBalancer.publicIpv4Address = publicIpv4Address
+    loadBalancer.privateIpv4Address = privateIpv4Address
+    await loadBalancer.save()
+
+    return loadBalancer
   }
 }

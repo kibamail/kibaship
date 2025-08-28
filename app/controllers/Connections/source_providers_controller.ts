@@ -41,8 +41,6 @@ export default class SourceProvidersController extends BaseController {
 
     const installation = await this.githubService.installation(query.installation_id).installation()
 
-    console.dir({ installation }, { depth: null })
-
     const sourceCodeProvider = await SourceCodeProvider.firstOrCreate(
       {
         providerId: installation.id.toString(),

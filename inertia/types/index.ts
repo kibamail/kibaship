@@ -1,3 +1,4 @@
+import { TerraformStage } from '#services/terraform/terraform_executor'
 import { UserProfile } from '@kibamail/auth-sdk'
 
 export interface User {
@@ -17,11 +18,7 @@ export interface Workspace {
   projects?: Project[]
 }
 
-export interface Cluster {
-  id: string
-  location: string
-  subdomainIdentifier: string
-}
+export type ClusterKind = 'all_purpose' | 'volume_storage' | 'pipelines'
 
 export interface Project {
   id: string
@@ -112,21 +109,69 @@ export type ClusterLoadBalancerType = 'cluster' | 'ingress' | 'tcp' | 'udp'
 
 export interface Cluster {
   id: string
-  name: string
-  slug: string
+  location: string
+  controlPlaneEndpoint: string
+  subdomainIdentifier: string
+  kind: ClusterKind
+  workspaceId: string | null
+  error: string
+  cloudProviderId: string | null
   status: ClusterStatus
-  workspace_id: string
-  cloud_provider_id: string
-  region: string
-  shared_storage_worker_nodes: boolean
-  vault_ssh_key_path: string | null
-  created_at: string
-  updated_at: string
+  providerNetworkId: string | null
+  providerSubnetId: string | null
+  networkIpRange: string | null
+  subnetIpRange: string | null
+  publicDomain: string | null
+  controlPlanesVolumeSize: number
+  workersVolumeSize: number
+  networkingStartedAt: string | null
+  networkingCompletedAt: string | null
+  networkingError: string | null
+  networkingErrorAt: string | null
+  sshKeysStartedAt: string | null
+  sshKeysCompletedAt: string | null
+  sshKeysError: string | null
+  sshKeysErrorAt: string | null
+  loadBalancersStartedAt: string | null
+  loadBalancersCompletedAt: string | null
+  loadBalancersError: string | null
+  loadBalancersErrorAt: string | null
+  serversStartedAt: string | null
+  serversCompletedAt: string | null
+  serversError: string | null
+  serversErrorAt: string | null
+  volumesStartedAt: string | null
+  volumesCompletedAt: string | null
+  volumesError: string | null
+  volumesErrorAt: string | null
+  kubernetesClusterStartedAt: string | null
+  kubernetesClusterCompletedAt: string | null
+  kubernetesClusterError: string | null
+  kubernetesClusterErrorAt: string | null
+  kibashipOperatorStartedAt: string | null
+  kibashipOperatorCompletedAt: string | null
+  kibashipOperatorError: string | null
+  kibashipOperatorErrorAt: string | null
+  currentProvisioningStep: string | null
+  overallProvisioningStatus: string | null
+  provisioningStartedAt: string | null
+  provisioningCompletedAt: string | null
+  createdAt: string
+  updatedAt: string
+  projects?: Project[]
   nodes?: ClusterNode[]
-  ssh_key?: ClusterSshKey
-  load_balancers?: ClusterLoadBalancer[]
-  cloud_provider?: CloudProvider
+  sshKey?: ClusterSshKey
+  loadBalancers?: ClusterLoadBalancer[]
+  cloudProvider?: CloudProvider
 }
+
+export interface ProvisioningStepInfo {
+  stage: TerraformStage
+  title: string
+  description: string
+  icon: React.ReactNode
+}
+
 
 export interface ClusterNode {
   id: string

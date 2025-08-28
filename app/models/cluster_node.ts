@@ -16,13 +16,25 @@ export default class ClusterNode extends BaseModel {
   @column()
   declare type: ClusterNodeType
 
-  @column()
+  @column({
+    columnName: 'ipv4_address'
+  })
   declare ipv4Address: string | null
 
-  @column()
+  @column({
+    columnName: 'ipv6_address'
+  })
   declare ipv6Address: string | null
 
   @column()
+  declare providerId: string | null
+
+  @column()
+  declare serverType: string | null
+
+  @column({
+    columnName: 'private_ipv4_address'
+  })
   declare privateIpv4Address: string | null
 
   @column()

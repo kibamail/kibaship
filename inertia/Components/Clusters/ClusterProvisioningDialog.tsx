@@ -1,20 +1,28 @@
 'use client'
 
 import * as Dialog from '@kibamail/owly/dialog'
-import { Text } from '@kibamail/owly/text'
 import { Button } from '@kibamail/owly/button'
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden'
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../Accordion'
-import { Cluster, ProvisioningStepStatus } from '~/types'
-import { CheckIcon } from '../Icons/check.svg'
-import { ClockIcon } from '../Icons/clock.svg'
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
+import { Accordion } from '../Accordion'
+import { Cluster, PageProps, ProvisioningStepInfo } from '~/types'
 import { Spinner } from '../Icons/Spinner'
-import { XMarkIcon } from '../Icons/xmark.svg'
 import { CloudCheckIcon } from '../Icons/cloud-check.svg'
 import { SettingsIcon } from '../Icons/settings.svg'
 import { StackIcon } from '../Icons/stack.svg'
 import { K8sIcon } from '../Icons/k8s.svg'
-import { KibaIcon } from '../Icons/kiba.svg'
+import { NavArrowDownIcon } from '../Icons/nav-arrow-down.svg'
+
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { axios } from '~/app/axios'
+import { usePage } from '@inertiajs/react'
+import { type ClusterLogEntry } from '#services/redis/cluster_logs_service'
+import React, { useEffect, useState } from 'react'
+import { TerraformStage } from '#services/terraform/terraform_executor'
+import { getStepStatus } from './ClusterProvisioningStep'
+import { useSocketIo } from '~/hooks/useSocketIo'
+
+const ClusterProvisioningStep = React.lazy(() => import('./ClusterProvisioningStep'))
 
 interface ClusterProvisioningDialogProps {
   cluster: Cluster | null
@@ -22,84 +30,179 @@ interface ClusterProvisioningDialogProps {
   onOpenChange: (open: boolean) => void
 }
 
-interface ProvisioningStepInfo {
-  key: string
-  title: string
-  description: string
-  icon: React.ReactNode
-}
-
 const provisioningSteps: ProvisioningStepInfo[] = [
   {
-    key: 'networking',
+    stage: 'network',
     title: 'Network infrastructure',
     description: 'Setting up virtual networks, subnets, and security groups',
     icon: <CloudCheckIcon className="!size-4.5" />,
   },
   {
-    key: 'sshKeys',
+    stage: 'ssh-keys',
     title: 'SSH keys',
     description: 'Generating and configuring SSH keys for secure access to cluster nodes',
     icon: <SettingsIcon className="!size-5" />,
   },
-
   {
-    key: 'loadBalancers',
+    stage: 'load-balancers',
     title: 'Load balancers',
     description: 'Configuring load balancers for high availability and traffic distribution',
     icon: <StackIcon className="!size-5" />,
   },
   {
-    key: 'servers',
+    stage: 'servers',
     title: 'Server provisioning',
     description: 'Creating and configuring virtual machines for control plane and worker nodes',
     icon: <StackIcon className="!size-5" />,
   },
   {
-    key: 'volumes',
+    stage: 'volumes',
     title: 'Storage volumes',
     description: 'Attaching and configuring persistent storage volumes',
     icon: <StackIcon className="!size-5" />,
   },
   {
-    key: 'kubernetesCluster',
+    stage: 'kubernetes',
     title: 'Kubernetes cluster',
     description: 'Installing and configuring Kubernetes on the provisioned infrastructure',
     icon: <K8sIcon className="!size-5" />,
   },
-  {
-    key: 'kibashipOperator',
-    title: 'Kibaship operator',
-    description: 'Installing Kibaship operator for cluster management and monitoring',
-    icon: <KibaIcon className="!size-5" />,
-  },
 ]
 
-function getStatusIcon(status: ProvisioningStepStatus, className: string = 'h-5 w-5') {
-  switch (status) {
-    case 'completed':
-      return <CheckIcon className={`${className} text-owly-content-positive !size-4`} />
-    case 'in_progress':
-      return <Spinner className={`${className} text-owly-content-info !size-4`} />
-    case 'failed':
-      return <XMarkIcon className={`${className} text-owly-content-negative !size-4`} />
-    case 'pending':
-    default:
-      return <ClockIcon className={`${className} text-owly-content-tertiary !size-4`} />
+function getLatestStage(cluster: Cluster | null | undefined): TerraformStage {
+  if (!cluster) {
+    return 'network'
   }
+
+  const stagesWithStatus = provisioningSteps.map((step) => ({
+    stage: step.stage,
+    status: getStepStatus(cluster, step.stage),
+  }))
+
+  const latestStage = stagesWithStatus.find((stage) => stage.status === 'in_progress')?.stage
+  const latestFailedStage = stagesWithStatus.find((stage) => stage.status === 'failed')?.stage
+
+  return latestStage || latestFailedStage || 'network'
 }
 
 export function ClusterProvisioningDialog({
-  cluster,
+  cluster: initialCluster,
   isOpen,
   onOpenChange,
 }: ClusterProvisioningDialogProps) {
+  const { props } = usePage<PageProps>()
+  const queryClient = useQueryClient()
+  const [expandedStage, setExpandedStage] = useState<TerraformStage>(getLatestStage(initialCluster))
+
+  const socket = useSocketIo()
+
+  const clusterQuery = useQuery<Cluster>({
+    queryKey: ['clusters', initialCluster?.id],
+    async queryFn() {
+      const response = await axios.get(`/w/${props.workspace.slug}/clusters/${initialCluster?.id}`)
+
+      const latestStage = getLatestStage(response.data)
+
+      setExpandedStage(latestStage)
+
+      return response.data
+    },
+    enabled: Boolean(initialCluster) && isOpen,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
+  })
+
+  const cluster = clusterQuery?.data
+
+  const logsQuery = useQuery<ClusterLogEntry[]>({
+    queryKey: ['clusters', cluster?.id, 'logs'],
+    async queryFn() {
+      const response = await axios.get(`/w/${props.workspace.slug}/clusters/${cluster?.id}/logs`)
+
+      return response.data?.logs
+    },
+    enabled: Boolean(cluster) && isOpen,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
+  })
+
+  useEffect(() => {
+    if (!cluster) {
+      return
+    }
+
+    const listener = socket.on(`cluster:${cluster.id}:updated`, (data) => {
+      console.log('@@@@@@@@@@@@---->CLUSTER_UPDATE_RECEIVED', data?.id)
+      clusterQuery.refetch()
+    })
+
+    return () => {
+      // console.log('=== executed disconnect')
+      // listener.disconnect()
+    }
+  }, [cluster])
+
+  const existingLogsFetched = logsQuery?.isSuccess
+  const clusterId = cluster?.id
+
+  useEffect(() => {
+    if (existingLogsFetched && clusterId) {
+      socket.emit('cluster:logs', {
+        clusterId: cluster?.id,
+      })
+
+      const listener = socket.on(`cluster:${clusterId}:logs`, (data) => {
+        console.log('@@@@@@@@@@@@---->LOG_RECEIVED', data)
+
+        queryClient.setQueryData(
+          ['clusters', clusterId, 'logs'],
+          (oldData: ClusterLogEntry[] | undefined) => {
+            return [...(oldData || []), data]
+          }
+        )
+      })
+
+      return () => {
+        // console.log('=== executed logs disconnect')
+        // socket.emit('cluster:logs:unsubscribe')
+        // listener.disconnect()
+      }
+    }
+  }, [existingLogsFetched, clusterId])
+
+  const restartMutation = useMutation({
+    async mutationFn({ type }: { type: 'start' | 'failed' }) {
+      const response = await axios.post(
+        `/w/${props.workspace.slug}/clusters/${cluster?.id}/restart`,
+        {
+          type,
+        }
+      )
+      return response.data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['clusters', cluster?.id, 'logs'] })
+    },
+  })
+
+  useEffect(() => {
+    setExpandedStage(getLatestStage(cluster))
+  }, [initialCluster])
+
+  const stageStatuses = provisioningSteps.map((step) => getStepStatus(initialCluster, step.stage))
+
+  const atLeastOneFailed = stageStatuses.some((status) => status === 'failed')
+
   return (
     <Dialog.Root open={isOpen} onOpenChange={onOpenChange}>
       <Dialog.Content className="max-w-4xl">
         <Dialog.Header>
           <Dialog.Title>
-            {cluster ? `Provisioning ${cluster?.name || cluster?.id}` : 'Cluster provisioning'}
+            {cluster
+              ? `Provisioning cluster ${cluster?.subdomainIdentifier}`
+              : 'Cluster provisioning'}
           </Dialog.Title>
           <VisuallyHidden>
             <Dialog.Description>
@@ -108,42 +211,75 @@ export function ClusterProvisioningDialog({
           </VisuallyHidden>
         </Dialog.Header>
 
-        <div className="px-5 pb-5 pt-5">
-          <Accordion type="single" className="w-full">
-            <div className="flex flex-col gap-2">
-              {provisioningSteps.map((stepInfo) => {
-                return (
-                  <AccordionItem key={stepInfo.key} value={stepInfo.key}>
-                    <AccordionTrigger>
-                      <div className="flex items-center gap-1.5">
-                        <div className="flex items-center gap-1">
-                          {stepInfo.icon}
-                          <span className="font-medium"></span>
-                          <Text className="text-owly-content-secondary">{stepInfo.title}</Text>
-                        </div>
-                        <div className="ml-auto mr-4">{getStatusIcon('pending')}</div>
-                      </div>
-                    </AccordionTrigger>
-                    <AccordionContent>
-                      <div className="px-6 py-2 w-full">
-                        <Text className="!text-sm text-owly-content-tertiary">
-                          {stepInfo.description}
-                        </Text>
-                      </div>
-
-                      <div className="w-full bg-owly-background-brand h-[300px] overflow-y-auto rounded-b-md"></div>
-                    </AccordionContent>
-                  </AccordionItem>
-                )
-              })}
+        <div className="p-5">
+          {logsQuery?.isLoading ? (
+            <div className="flex justify-center py-16">
+              <Spinner className="size-6" />
             </div>
-          </Accordion>
+          ) : cluster ? (
+            <Accordion
+              type="single"
+              className="w-full"
+              value={expandedStage}
+              onValueChange={(value) => setExpandedStage(value as TerraformStage)}
+            >
+              <div className="flex flex-col gap-2">
+                {provisioningSteps.map((info) => (
+                  <ClusterProvisioningStep
+                    info={info}
+                    cluster={cluster}
+                    key={info.stage}
+                    logs={logsQuery.data || []}
+                    active={expandedStage === info.stage}
+                  />
+                ))}
+              </div>
+            </Accordion>
+          ) : null}
         </div>
 
-        <Dialog.Footer className="flex justify-end">
+        <Dialog.Footer className="flex justify-between items-center">
           <Dialog.Close asChild>
             <Button variant="secondary">Close</Button>
           </Dialog.Close>
+
+          <DropdownMenu.Root modal={false}>
+            <DropdownMenu.Trigger asChild>
+              <Button
+                disabled={!atLeastOneFailed || restartMutation.isPending}
+                className="flex items-center gap-2"
+              >
+                {restartMutation.isPending ? 'Restarting...' : 'Rerun provisioning'}
+                <NavArrowDownIcon className="w-4 h-4" />
+              </Button>
+            </DropdownMenu.Trigger>
+
+            <DropdownMenu.Content
+              align="end"
+              sideOffset={8}
+              className="border kb-border-tertiary rounded-xl p-1 shadow-[0px_16px_24px_-8px_var(--black-10)] kb-background-primary w-48 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 z-50"
+            >
+              <DropdownMenu.Item
+                className="p-2 flex items-center hover:bg-(--background-secondary) rounded-lg cursor-pointer"
+                onSelect={() => {
+                  restartMutation.mutate({ type: 'start' })
+                }}
+                disabled={restartMutation.isPending}
+              >
+                <span className="text-sm">Rerun from start</span>
+              </DropdownMenu.Item>
+
+              <DropdownMenu.Item
+                className="p-2 flex items-center hover:bg-(--background-secondary) rounded-lg cursor-pointer"
+                onSelect={() => {
+                  restartMutation.mutate({ type: 'failed' })
+                }}
+                disabled={restartMutation.isPending}
+              >
+                <span className="text-sm">Rerun from failed</span>
+              </DropdownMenu.Item>
+            </DropdownMenu.Content>
+          </DropdownMenu.Root>
         </Dialog.Footer>
       </Dialog.Content>
     </Dialog.Root>

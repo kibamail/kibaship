@@ -1,5 +1,6 @@
 import { Server } from 'socket.io'
 import server from '@adonisjs/core/services/server'
+import env from '#start/env'
 
 class Ws {
     public io: Server | undefined
@@ -16,8 +17,8 @@ class Ws {
         this.booted = true
         this.io = new Server(server.getNodeServer(), {
             cors: {
-                origin: '*'
-            }
+                origin: env.get('APP_URL'),
+            },
         })
     }
 }

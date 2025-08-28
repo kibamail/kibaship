@@ -62,48 +62,33 @@ resource "hcloud_load_balancer_network" "ingress_network" {
 
 resource "hcloud_load_balancer_service" "ingress_http" {
   load_balancer_id = hcloud_load_balancer.ingress.id
-  protocol         = "http"
+  protocol         = "tcp"
   listen_port      = 80
-  destination_port = 80
+  destination_port = 30080
+  proxyprotocol    = true
 
   health_check {
-    protocol = "http"
-    port     = 80
+    protocol = "tcp"
+    port     = 30080
     interval = 15
     timeout  = 10
     retries  = 3
-    http {
-      path         = "/healthz"
-      status_codes = ["200"]
-    }
-  }
-
-  http {
-    sticky_sessions = true
-    redirect_http   = true
-    cookie_name     = "HCLBSTICKY"
-    cookie_lifetime = 300
   }
 }
 
 resource "hcloud_load_balancer_service" "ingress_https" {
   load_balancer_id = hcloud_load_balancer.ingress.id
-  protocol         = "https"
+  protocol         = "tcp"
   listen_port      = 443
-  destination_port = 443
+  destination_port = 30443
+  proxyprotocol    = true
 
   health_check {
     protocol = "tcp"
-    port     = 443
+    port     = 30443
     interval = 15
     timeout  = 10
     retries  = 3
-  }
-
-  http {
-    sticky_sessions = true
-    cookie_name     = "HCLBSTICKY"
-    cookie_lifetime = 300
   }
 }
 
@@ -130,6 +115,7 @@ resource "hcloud_load_balancer_service" "kube_api" {
   protocol         = "tcp"
   listen_port      = 6443
   destination_port = 6443
+  proxyprotocol    = true
 
   health_check {
     protocol = "tcp"
