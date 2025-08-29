@@ -1,0 +1,12 @@
+---
+- name: Converge
+  hosts: all
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: Include defaults from role
+      include_vars: ../../defaults/main.yml
+    
+    - name: Include k8s_binaries_download role tasks
+      include_tasks: ../../tasks/main.yml

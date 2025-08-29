@@ -1,0 +1,12 @@
+---
+# Kernel modules configuration for Kubernetes networking
+k8s_networking_sysctl_file: "/etc/sysctl.d/99-kubernetes-networking.conf"
+
+# Bridge netfilter sysctls required for Kubernetes
+k8s_networking_bridge_sysctls:
+  - name: "net.bridge.bridge-nf-call-iptables"
+    value: "1"
+  - name: "net.bridge.bridge-nf-call-arptables" 
+    value: "1"
+  - name: "net.bridge.bridge-nf-call-ip6tables"
+    value: "1"

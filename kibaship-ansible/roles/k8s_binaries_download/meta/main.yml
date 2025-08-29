@@ -1,0 +1,26 @@
+---
+galaxy_info:
+  author: Claude-SRE
+  namespace: kibaship
+  role_name: k8s_binaries_download
+  description: Download and install Kubernetes binaries (kubeadm v1.33.4, kubelet v1.33.4, kubectl v1.33.4, crictl v1.33.0) on Ubuntu 24.04
+  company: Kibaship
+  license: MIT
+  min_ansible_version: '2.18'
+
+  platforms:
+    - name: Ubuntu
+      versions:
+        - '24.04'
+
+  galaxy_tags:
+    - kubernetes
+    - kubeadm
+    - kubelet
+    - kubectl
+    - crictl
+    - k8s
+    - ubuntu
+    - binaries
+
+dependencies: []

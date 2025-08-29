@@ -1,0 +1,83 @@
+---
+- name: Verify k8s_node_networking role (container-safe)
+  hosts: all
+  become: false
+  gather_facts: false
+  
+  tasks:
+    - name: Check if br_netfilter module persistence file exists
+      ansible.builtin.stat:
+        path: /etc/modules-load.d/kubespray-br_netfilter.conf
+      register: br_netfilter_conf
+
+    - name: Verify br_netfilter configuration file exists
+      ansible.builtin.assert:
+        that:
+          - br_netfilter_conf.stat.exists
+          - br_netfilter_conf.stat.isreg
+        fail_msg: "br_netfilter persistence file does not exist"
+
+    - name: Read br_netfilter configuration content
+      ansible.builtin.slurp:
+        path: /etc/modules-load.d/kubespray-br_netfilter.conf
+      register: br_netfilter_content
+
+    - name: Verify br_netfilter configuration content
+      ansible.builtin.assert:
+        that:
+          - "'br_netfilter' in (br_netfilter_content.content | b64decode)"
+        fail_msg: "br_netfilter not found in persistence configuration"
+
+    - name: Check if sysctl configuration file exists
+      ansible.builtin.stat:
+        path: /etc/sysctl.d/99-kubernetes-networking.conf
+      register: sysctl_file
+
+    - name: Verify sysctl configuration file exists
+      ansible.builtin.assert:
+        that:
+          - sysctl_file.stat.exists
+          - sysctl_file.stat.isreg
+        fail_msg: "Kubernetes networking sysctl config file does not exist"
+
+    - name: Read sysctl configuration content
+      ansible.builtin.slurp:
+        path: /etc/sysctl.d/99-kubernetes-networking.conf
+      register: sysctl_content
+
+    - name: Decode sysctl configuration
+      ansible.builtin.set_fact:
+        sysctl_config: "{{ sysctl_content.content | b64decode }}"
+
+    - name: Verify bridge netfilter iptables is configured
+      ansible.builtin.assert:
+        that:
+          - "'net.bridge.bridge-nf-call-iptables = 1' in sysctl_config"
+        fail_msg: "Bridge netfilter iptables not configured"
+
+    - name: Verify bridge netfilter arptables is configured
+      ansible.builtin.assert:
+        that:
+          - "'net.bridge.bridge-nf-call-arptables = 1' in sysctl_config"
+        fail_msg: "Bridge netfilter arptables not configured"
+
+    - name: Verify bridge netfilter ip6tables is configured
+      ansible.builtin.assert:
+        that:
+          - "'net.bridge.bridge-nf-call-ip6tables = 1' in sysctl_config"
+        fail_msg: "Bridge netfilter ip6tables not configured"
+
+    - name: Final verification summary
+      ansible.builtin.debug:
+        msg: |
+          ========================================
+          K8S NODE NETWORKING VERIFICATION COMPLETE
+          ========================================
+          ✓ br_netfilter module: configured for persistence
+          ✓ Bridge netfilter iptables: configured
+          ✓ Bridge netfilter arptables: configured  
+          ✓ Bridge netfilter ip6tables: configured
+          ✓ Configuration optimized for Cilium kube-proxy replacement
+          
+          In production: modules and sysctls will be applied on real systems.
+          In containers: configurations are prepared but may not be active.

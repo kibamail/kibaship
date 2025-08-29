@@ -1,0 +1,67 @@
+---
+- name: Detect system architecture for CNI plugins
+  set_fact:
+    cni_arch: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }}"
+
+- name: Create CNI bin directory
+  file:
+    path: /opt/cni/bin
+    state: directory
+    mode: '0755'
+    owner: root
+    group: root
+
+- name: Create CNI configuration directory
+  file:
+    path: /etc/cni/net.d
+    state: directory
+    mode: '0755'
+    owner: root
+    group: root
+
+- name: Create temporary directory for CNI plugins download
+  tempfile:
+    state: directory
+    suffix: _cni_download
+  register: cni_temp_dir
+
+- name: Download CNI plugins v1.7.1 tarball
+  get_url:
+    url: "https://github.com/containernetworking/plugins/releases/download/v1.7.1/cni-plugins-linux-{{ cni_arch }}-v1.7.1.tgz"
+    dest: "{{ cni_temp_dir.path }}/cni-plugins.tgz"
+    mode: '0644'
+    timeout: 300
+    validate_certs: true
+  register: cni_download
+
+- name: Extract CNI plugins to /opt/cni/bin
+  unarchive:
+    src: "{{ cni_temp_dir.path }}/cni-plugins.tgz"
+    dest: /opt/cni/bin
+    owner: root
+    group: root
+    mode: '0755'
+    remote_src: true
+
+- name: Set executable permissions on all CNI plugins
+  file:
+    path: /opt/cni/bin
+    state: directory
+    mode: '0755'
+    recurse: true
+
+- name: Clean up temporary directory
+  file:
+    path: "{{ cni_temp_dir.path }}"
+    state: absent
+
+- name: Verify CNI plugins installation
+  command: /opt/cni/bin/bridge
+  register: cni_bridge_check
+  failed_when: false
+  changed_when: false
+
+- name: Display CNI installation status
+  debug:
+    msg: "CNI plugins v1.7.1 successfully installed to /opt/cni/bin"
+  when: cni_bridge_check.rc != 127

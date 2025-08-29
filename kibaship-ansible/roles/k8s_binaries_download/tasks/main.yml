@@ -1,0 +1,212 @@
+---
+- name: Detect system architecture for Kubernetes binaries
+  set_fact:
+    k8s_arch: "{{ k8s_arch_map[ansible_architecture] | default('amd64') }}"
+
+# =======================================================================
+# KUBERNETES BINARIES DOWNLOAD & INSTALLATION
+# =======================================================================
+
+- name: Create temporary directory for Kubernetes binaries download
+  tempfile:
+    state: directory
+    suffix: _k8s_binaries_download
+  register: k8s_temp_dir
+
+- name: Download kubeadm {{ k8s_version }} binary
+  get_url:
+    url: "{{ k8s_download_base_url }}/{{ k8s_version }}/bin/linux/{{ k8s_arch }}/kubeadm"
+    dest: "{{ k8s_temp_dir.path }}/kubeadm"
+    mode: '0755'
+    timeout: 300
+    validate_certs: true
+  register: kubeadm_download
+
+- name: Download kubelet {{ k8s_version }} binary
+  get_url:
+    url: "{{ k8s_download_base_url }}/{{ k8s_version }}/bin/linux/{{ k8s_arch }}/kubelet"
+    dest: "{{ k8s_temp_dir.path }}/kubelet"
+    mode: '0755'
+    timeout: 300
+    validate_certs: true
+  register: kubelet_download
+
+- name: Download kubectl {{ k8s_version }} binary
+  get_url:
+    url: "{{ k8s_download_base_url }}/{{ k8s_version }}/bin/linux/{{ k8s_arch }}/kubectl"
+    dest: "{{ k8s_temp_dir.path }}/kubectl"
+    mode: '0755'
+    timeout: 300
+    validate_certs: true
+  register: kubectl_download
+
+- name: Install kubeadm binary to {{ k8s_bin_dir }}
+  copy:
+    src: "{{ k8s_temp_dir.path }}/kubeadm"
+    dest: "{{ k8s_bin_dir }}/kubeadm"
+    owner: root
+    group: root
+    mode: '0755'
+    remote_src: true
+
+- name: Install kubelet binary to {{ k8s_bin_dir }}
+  copy:
+    src: "{{ k8s_temp_dir.path }}/kubelet"
+    dest: "{{ k8s_bin_dir }}/kubelet"
+    owner: root
+    group: root
+    mode: '0755'
+    remote_src: true
+
+- name: Install kubectl binary to {{ k8s_bin_dir }}
+  copy:
+    src: "{{ k8s_temp_dir.path }}/kubectl"
+    dest: "{{ k8s_bin_dir }}/kubectl"
+    owner: root
+    group: root
+    mode: '0755'
+    remote_src: true
+
+# =======================================================================
+# CRICTL BINARY INSTALLATION (Updated to v1.33.0)
+# =======================================================================
+
+- name: Create temporary directory for crictl download
+  tempfile:
+    state: directory
+    suffix: _crictl_download
+  register: crictl_temp_dir
+
+- name: Download crictl {{ critools_version }} tarball
+  get_url:
+    url: "{{ critools_download_base_url }}/{{ critools_version }}/crictl-{{ critools_version }}-linux-{{ k8s_arch }}.tar.gz"
+    dest: "{{ crictl_temp_dir.path }}/crictl.tar.gz"
+    mode: '0644'
+    timeout: 300
+    validate_certs: true
+  register: crictl_download
+
+- name: Extract crictl binary
+  unarchive:
+    src: "{{ crictl_temp_dir.path }}/crictl.tar.gz"
+    dest: "{{ crictl_temp_dir.path }}"
+    remote_src: true
+
+- name: Install crictl binary to {{ k8s_bin_dir }}
+  copy:
+    src: "{{ crictl_temp_dir.path }}/crictl"
+    dest: "{{ k8s_bin_dir }}/crictl"
+    owner: root
+    group: root
+    mode: '0755'
+    remote_src: true
+
+# =======================================================================
+# KUBELET SYSTEMD SERVICE CONFIGURATION
+# =======================================================================
+
+- name: Create kubelet configuration directory
+  file:
+    path: "{{ kubelet_config_dir }}"
+    state: directory
+    mode: '0755'
+    owner: root
+    group: root
+
+- name: Install kubelet systemd service file
+  copy:
+    content: |
+      [Unit]
+      Description=kubelet: The Kubernetes Node Agent
+      Documentation=https://kubernetes.io/docs/home/
+      Wants=network-online.target
+      After=network-online.target
+
+      [Service]
+      ExecStart={{ k8s_bin_dir }}/kubelet
+      Restart=always
+      StartLimitInterval=0
+      RestartSec=10
+
+      [Install]
+      WantedBy=multi-user.target
+    dest: "{{ systemd_dir }}/kubelet.service"
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Create kubelet systemd drop-in directory
+  file:
+    path: "{{ systemd_dir }}/kubelet.service.d"
+    state: directory
+    mode: '0755'
+    owner: root
+    group: root
+
+- name: Install kubeadm drop-in configuration
+  copy:
+    content: |
+      # Note: This drop-in only works with kubeadm and kubelet v1.11+
+      [Service]
+      Environment="KUBELET_KUBECONFIG_ARGS=--bootstrap-kubeconfig=/etc/kubernetes/bootstrap-kubelet.conf --kubeconfig=/etc/kubernetes/kubelet.conf"
+      Environment="KUBELET_CONFIG_ARGS=--config=/var/lib/kubelet/config.yaml"
+      # This is a file that "kubeadm init" and "kubeadm join" generates at runtime, populating the KUBELET_KUBEADM_ARGS variable dynamically
+      EnvironmentFile=-/var/lib/kubelet/kubeadm-flags.env
+      # This is a file that the user can use for overrides of the kubelet args as a last resort. Preferably, the user should use
+      # the .NodeRegistration.KubeletExtraArgs object in the configuration files instead. KUBELET_EXTRA_ARGS should be sourced from this file.
+      EnvironmentFile=-/etc/default/kubelet
+      ExecStart=
+      ExecStart={{ k8s_bin_dir }}/kubelet $KUBELET_KUBECONFIG_ARGS $KUBELET_CONFIG_ARGS $KUBELET_KUBEADM_ARGS $KUBELET_EXTRA_ARGS
+    dest: "{{ systemd_dir }}/kubelet.service.d/10-kubeadm.conf"
+    owner: root
+    group: root
+    mode: '0644'
+
+# =======================================================================
+# CLEANUP TEMPORARY DIRECTORIES
+# =======================================================================
+
+- name: Clean up Kubernetes binaries temporary directory
+  file:
+    path: "{{ k8s_temp_dir.path }}"
+    state: absent
+
+- name: Clean up crictl temporary directory
+  file:
+    path: "{{ crictl_temp_dir.path }}"
+    state: absent
+
+# =======================================================================
+# VERIFICATION AND STATUS
+# =======================================================================
+
+- name: Verify kubeadm installation
+  command: "{{ k8s_bin_dir }}/kubeadm version --output=short"
+  register: kubeadm_version_check
+  changed_when: false
+
+- name: Verify kubelet installation
+  command: "{{ k8s_bin_dir }}/kubelet --version"
+  register: kubelet_version_check
+  changed_when: false
+
+- name: Verify kubectl installation
+  command: "{{ k8s_bin_dir }}/kubectl version --client --output=yaml"
+  register: kubectl_version_check
+  changed_when: false
+
+- name: Verify crictl installation
+  command: "{{ k8s_bin_dir }}/crictl --version"
+  register: crictl_version_check
+  changed_when: false
+
+- name: Display Kubernetes binaries installation status
+  debug:
+    msg: |
+      Kubernetes Binaries Installation Complete:
+      ✓ kubeadm {{ k8s_version }}: {{ 'SUCCESS' if k8s_version in kubeadm_version_check.stdout else 'FAILED' }}
+      ✓ kubelet {{ k8s_version }}: {{ 'SUCCESS' if k8s_version in kubelet_version_check.stdout else 'FAILED' }}
+      ✓ kubectl {{ k8s_version }}: {{ 'SUCCESS' if k8s_version in kubectl_version_check.stdout else 'FAILED' }}
+      ✓ crictl {{ critools_version }}: {{ 'SUCCESS' if critools_version in crictl_version_check.stdout else 'FAILED' }}
+      ✓ kubelet systemd service: Configured (not started until cluster initialization)
+      ✓ Architecture: {{ k8s_arch }} ({{ ansible_architecture }})

@@ -1,0 +1,19 @@
+---
+# Kubernetes version configuration
+k8s_version: "v1.34.0"
+critools_version: "v1.33.0"
+
+# Architecture detection for binary downloads
+k8s_arch_map:
+  x86_64: "amd64"
+  aarch64: "arm64"
+  armv7l: "arm"
+
+# Binary download URLs
+k8s_download_base_url: "https://dl.k8s.io/release"
+critools_download_base_url: "https://github.com/kubernetes-sigs/cri-tools/releases/download"
+
+# Installation paths
+k8s_bin_dir: "/usr/local/bin"
+systemd_dir: "/etc/systemd/system"
+kubelet_config_dir: "/var/lib/kubelet"

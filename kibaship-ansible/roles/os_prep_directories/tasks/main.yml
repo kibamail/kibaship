@@ -1,0 +1,48 @@
+---
+# os_prep_directories: Create essential Kubernetes system directories
+# Following Kubespray's directory structure patterns for cluster preparation
+
+- name: Create CNI bin directory
+  file:
+    path: /opt/cni/bin
+    state: directory
+    mode: '0755'
+    owner: root
+    group: root
+  register: cni_bin_created
+
+- name: Create Kubernetes config directory
+  file:
+    path: /etc/kubernetes
+    state: directory
+    mode: '0755'
+    owner: root
+    group: root
+  register: k8s_config_created
+
+- name: Create Kubernetes manifests directory
+  file:
+    path: /etc/kubernetes/manifests
+    state: directory
+    mode: '0755'
+    owner: root
+    group: root
+  register: k8s_manifests_created
+
+- name: Create kubelet data directory
+  file:
+    path: /var/lib/kubelet
+    state: directory
+    mode: '0755'
+    owner: root
+    group: root
+  register: kubelet_data_created
+
+- name: Log directory creation results
+  debug:
+    msg: |
+      Directory creation completed:
+      - CNI bin: {{ 'created' if cni_bin_created.changed else 'already exists' }}
+      - K8s config: {{ 'created' if k8s_config_created.changed else 'already exists' }}
+      - K8s manifests: {{ 'created' if k8s_manifests_created.changed else 'already exists' }}
+      - Kubelet data: {{ 'created' if kubelet_data_created.changed else 'already exists' }}

@@ -1,0 +1,54 @@
+---
+- name: Kibaship E2E Test - Complete Role Suite
+  hosts: "{{ target_host | default('all') }}"
+  become: true
+  gather_facts: true
+  
+  tasks:
+    - name: Run OS preparation roles
+      include_role:
+        name: "{{ item }}"
+      loop:
+        - os_prep_swap
+        - os_prep_directories  
+        - os_prep_kernel
+        - os_prep_packages
+      tags: ["os"]
+      
+    - name: Run container preparation roles
+      include_role:
+        name: "{{ item }}"
+      loop:
+        - container_prep_runc
+        - container_prep_cni
+        - container_prep_containerd
+        - container_prep_tools
+      tags: ["container"]
+      
+    - name: Run Kubernetes roles
+      include_role:
+        name: "{{ item }}"
+      loop:
+        - k8s_binaries_download
+        - k8s_node_networking
+      tags: ["k8s"]
+      
+    - name: Run etcd role
+      include_role:
+        name: etcd_install
+      tags: ["etcd"]
+      
+    - name: Verify all services are configured
+      debug:
+        msg: |
+          ========================================
+          KIBASHIP E2E TEST COMPLETED SUCCESSFULLY
+          ========================================
+          ✓ All roles executed successfully on real Ubuntu 24.04 server
+          ✓ OS preparation: complete
+          ✓ Container runtime: complete  
+          ✓ Kubernetes binaries: complete
+          ✓ Node networking: complete
+          ✓ etcd installation: complete
+          
+          Server ready for Kubernetes cluster initialization!

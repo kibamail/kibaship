@@ -1,0 +1,299 @@
+---
+- name: Verify etcd installation and functionality
+  hosts: all
+  become: true
+  gather_facts: true
+
+  tasks:
+    # ====================================================================
+    # ETCD BINARY VERIFICATION
+    # ====================================================================
+    - name: Check etcd binary exists
+      stat:
+        path: /usr/local/bin/etcd
+      register: etcd_binary
+
+    - name: Verify etcd binary is installed
+      assert:
+        that:
+          - etcd_binary.stat.exists
+          - etcd_binary.stat.executable
+          - etcd_binary.stat.mode == '0755'
+          - etcd_binary.stat.pw_name == 'root'
+        fail_msg: "etcd binary not properly installed at /usr/local/bin/etcd"
+
+    - name: Test etcd version command
+      command: /usr/local/bin/etcd --version
+      register: etcd_version_output
+      changed_when: false
+
+    - name: Verify etcd version is 3.6.4
+      assert:
+        that:
+          - "'3.6.4' in etcd_version_output.stdout"
+        fail_msg: "etcd version check failed or wrong version installed"
+
+    # ====================================================================
+    # ETCDCTL BINARY VERIFICATION
+    # ====================================================================
+    - name: Check etcdctl binary exists
+      stat:
+        path: /usr/local/bin/etcdctl
+      register: etcdctl_binary
+
+    - name: Verify etcdctl binary is installed
+      assert:
+        that:
+          - etcdctl_binary.stat.exists
+          - etcdctl_binary.stat.executable
+          - etcdctl_binary.stat.mode == '0755'
+          - etcdctl_binary.stat.pw_name == 'root'
+        fail_msg: "etcdctl binary not properly installed at /usr/local/bin/etcdctl"
+
+    - name: Test etcdctl version command
+      command: /usr/local/bin/etcdctl version
+      register: etcdctl_version_output
+      changed_when: false
+
+    - name: Verify etcdctl version is 3.6.4
+      assert:
+        that:
+          - "'3.6.4' in etcdctl_version_output.stdout"
+        fail_msg: "etcdctl version check failed or wrong version installed"
+
+    # ====================================================================
+    # ETCD USER AND GROUP VERIFICATION
+    # ====================================================================
+    - name: Check etcd user exists
+      getent:
+        database: passwd
+        key: etcd
+        fail_key: false
+      register: etcd_user_check
+
+    - name: Verify etcd user is created
+      assert:
+        that:
+          - etcd_user_check.ansible_facts.getent_passwd.etcd is defined
+        fail_msg: "etcd user not created properly"
+
+    - name: Check etcd group exists
+      getent:
+        database: group
+        key: etcd
+        fail_key: false
+      register: etcd_group_check
+
+    - name: Verify etcd group is created
+      assert:
+        that:
+          - etcd_group_check.ansible_facts.getent_group.etcd is defined
+        fail_msg: "etcd group not created properly"
+
+    # ====================================================================
+    # ETCD DIRECTORIES VERIFICATION
+    # ====================================================================
+    - name: Check etcd data directory exists
+      stat:
+        path: /var/lib/etcd
+      register: etcd_data_dir
+
+    - name: Verify etcd data directory
+      assert:
+        that:
+          - etcd_data_dir.stat.exists
+          - etcd_data_dir.stat.isdir
+          - etcd_data_dir.stat.mode == '0700'
+          - etcd_data_dir.stat.pw_name == 'etcd'
+          - etcd_data_dir.stat.gr_name == 'etcd'
+        fail_msg: "etcd data directory not properly created"
+
+    - name: Check etcd configuration directory exists
+      stat:
+        path: /etc/etcd
+      register: etcd_config_dir
+
+    - name: Verify etcd configuration directory
+      assert:
+        that:
+          - etcd_config_dir.stat.exists
+          - etcd_config_dir.stat.isdir
+          - etcd_config_dir.stat.mode == '0755'
+          - etcd_config_dir.stat.pw_name == 'root'
+          - etcd_config_dir.stat.gr_name == 'root'
+        fail_msg: "etcd configuration directory not properly created"
+
+    # ====================================================================
+    # ETCD CERTIFICATE VERIFICATION
+    # ====================================================================
+    - name: Check etcd CA certificate exists
+      stat:
+        path: /etc/etcd/ca.pem
+      register: etcd_ca_cert
+
+    - name: Verify etcd CA certificate
+      assert:
+        that:
+          - etcd_ca_cert.stat.exists
+          - etcd_ca_cert.stat.isreg
+          - etcd_ca_cert.stat.mode == '0644'
+        fail_msg: "etcd CA certificate not properly created"
+
+    - name: Check etcd server certificate exists
+      stat:
+        path: /etc/etcd/server.pem
+      register: etcd_server_cert
+
+    - name: Verify etcd server certificate
+      assert:
+        that:
+          - etcd_server_cert.stat.exists
+          - etcd_server_cert.stat.isreg
+          - etcd_server_cert.stat.mode == '0644'
+        fail_msg: "etcd server certificate not properly created"
+
+    - name: Check etcd server key exists
+      stat:
+        path: /etc/etcd/server-key.pem
+      register: etcd_server_key
+
+    - name: Verify etcd server private key
+      assert:
+        that:
+          - etcd_server_key.stat.exists
+          - etcd_server_key.stat.isreg
+          - etcd_server_key.stat.mode == '0600'
+          - etcd_server_key.stat.pw_name == 'etcd'
+        fail_msg: "etcd server private key not properly created"
+
+    - name: Check etcd client certificate exists
+      stat:
+        path: /etc/etcd/client.pem
+      register: etcd_client_cert
+
+    - name: Verify etcd client certificate
+      assert:
+        that:
+          - etcd_client_cert.stat.exists
+          - etcd_client_cert.stat.isreg
+          - etcd_client_cert.stat.mode == '0644'
+        fail_msg: "etcd client certificate not properly created"
+
+    - name: Check etcd client key exists
+      stat:
+        path: /etc/etcd/client-key.pem
+      register: etcd_client_key
+
+    - name: Verify etcd client private key
+      assert:
+        that:
+          - etcd_client_key.stat.exists
+          - etcd_client_key.stat.isreg
+          - etcd_client_key.stat.mode == '0600'
+          - etcd_client_key.stat.pw_name == 'root'
+        fail_msg: "etcd client private key not properly created"
+
+    # ====================================================================
+    # ETCD SYSTEMD SERVICE VERIFICATION
+    # ====================================================================
+    - name: Check etcd systemd service file exists
+      stat:
+        path: /etc/systemd/system/etcd.service
+      register: etcd_service_file
+
+    - name: Verify etcd service file exists
+      assert:
+        that:
+          - etcd_service_file.stat.exists
+          - etcd_service_file.stat.isreg
+          - etcd_service_file.stat.mode == '0644'
+        fail_msg: "etcd systemd service file not properly created"
+
+    - name: Check if systemd can load etcd service
+      command: systemctl status etcd --no-pager
+      register: etcd_service_status
+      changed_when: false
+      failed_when: false
+
+    - name: Verify etcd service is recognized by systemd
+      assert:
+        that:
+          - "'could not be found' not in etcd_service_status.stderr"
+          - "etcd_service_status.rc != 4"  # Service not found error code
+        fail_msg: "etcd systemd service not properly recognized"
+
+    # ====================================================================
+    # ETCD CONFIGURATION FILE VERIFICATION
+    # ====================================================================
+    - name: Check etcd configuration file exists
+      stat:
+        path: /etc/etcd/etcd.conf.yml
+      register: etcd_config_file
+
+    - name: Verify etcd configuration file exists
+      assert:
+        that:
+          - etcd_config_file.stat.exists
+          - etcd_config_file.stat.isreg
+          - etcd_config_file.stat.mode == '0644'
+          - etcd_config_file.stat.pw_name == 'root'
+        fail_msg: "etcd configuration file not properly created"
+
+    - name: Read etcd configuration file
+      slurp:
+        path: /etc/etcd/etcd.conf.yml
+      register: etcd_config_content
+
+    - name: Verify etcd configuration contains required settings
+      assert:
+        that:
+          - "'data-dir: /var/lib/etcd' in etcd_config_content.content | b64decode"
+          - "'listen-client-urls' in etcd_config_content.content | b64decode"
+          - "'cert-file: /etc/etcd/server.pem' in etcd_config_content.content | b64decode"
+          - "'key-file: /etc/etcd/server-key.pem' in etcd_config_content.content | b64decode"
+        fail_msg: "etcd configuration missing required settings"
+
+    # ====================================================================
+    # ARCHITECTURE COMPATIBILITY VERIFICATION
+    # ====================================================================
+    - name: Check system architecture compatibility for etcd binaries
+      shell: |
+        # Test if binaries are executable (architecture compatibility check)
+        /usr/local/bin/etcd --version &&
+        /usr/local/bin/etcdctl version
+      register: etcd_arch_compatibility_check
+      changed_when: false
+      failed_when: false
+
+    - name: Verify etcd binaries are built for correct architecture
+      assert:
+        that:
+          - etcd_arch_compatibility_check.rc == 0
+        fail_msg: "etcd binaries may not be built for the correct architecture"
+
+    # ====================================================================
+    # FINAL VERIFICATION SUMMARY
+    # ====================================================================
+    - name: Final etcd verification summary
+      debug:
+        msg: |
+          ========================================
+          ETCD INSTALLATION VERIFICATION COMPLETE
+          ========================================
+          ✓ etcd: v3.6.4 installed at /usr/local/bin/etcd
+          ✓ etcdctl: v3.6.4 installed at /usr/local/bin/etcdctl
+          ✓ etcd user: Created with proper permissions
+          ✓ etcd group: Created with proper permissions
+          ✓ data directory: /var/lib/etcd (mode 0700, owner etcd:etcd)
+          ✓ config directory: /etc/etcd (mode 0755, owner root:root)
+          ✓ CA certificate: /etc/etcd/ca.pem (created and accessible)
+          ✓ server certificate: /etc/etcd/server.pem (created and accessible)
+          ✓ server key: /etc/etcd/server-key.pem (mode 0600, owner etcd)
+          ✓ client certificate: /etc/etcd/client.pem (created and accessible)
+          ✓ client key: /etc/etcd/client-key.pem (mode 0600, owner root)
+          ✓ systemd service: /etc/systemd/system/etcd.service (configured)
+          ✓ configuration: /etc/etcd/etcd.conf.yml (TLS and cluster ready)
+          ✓ architecture: Compatible with {{ ansible_architecture }}
+          ✓ service status: etcd service recognized (not started until cluster init)
+          
+          etcd distributed key-value store ready for Kubernetes cluster!

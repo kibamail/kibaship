@@ -1,0 +1,9 @@
+---
+- name: Converge
+  hosts: all
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: Include container_prep_tools role directly
+      include_tasks: ../../tasks/main.yml

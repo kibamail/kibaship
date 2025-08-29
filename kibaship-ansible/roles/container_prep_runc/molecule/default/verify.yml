@@ -1,0 +1,91 @@
+---
+- name: Verify runc installation and functionality
+  hosts: all
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: Check runc binary exists at correct location
+      stat:
+        path: /usr/local/bin/runc
+      register: runc_binary
+
+    - name: Verify runc binary is installed
+      assert:
+        that:
+          - runc_binary.stat.exists
+          - runc_binary.stat.executable
+          - runc_binary.stat.mode == '0755'
+          - runc_binary.stat.pw_name == 'root'
+        fail_msg: "runc binary not properly installed at /usr/local/bin/runc"
+
+    - name: Test runc version command
+      command: /usr/local/bin/runc --version
+      register: runc_version_output
+      changed_when: false
+
+    - name: Verify runc version is 1.3.0
+      assert:
+        that:
+          - "'runc version 1.3.0' in runc_version_output.stdout"
+          - "'commit:' in runc_version_output.stdout"
+          - "'spec: 1.2.1' in runc_version_output.stdout"
+        fail_msg: "runc version check failed or wrong version installed"
+
+    - name: Test runc OCI spec generation
+      command: /usr/local/bin/runc spec
+      args:
+        chdir: /tmp
+        creates: /tmp/config.json
+      register: runc_spec_test
+      changed_when: false
+
+    - name: Verify OCI spec was generated
+      stat:
+        path: /tmp/config.json
+      register: oci_spec_file
+
+    - name: Validate OCI spec content
+      assert:
+        that:
+          - oci_spec_file.stat.exists
+          - oci_spec_file.stat.size > 100
+        fail_msg: "runc spec generation failed"
+
+    - name: Check for conflicting system packages
+      shell: dpkg -l | grep -i runc || echo "No system runc packages found"
+      register: system_packages
+      changed_when: false
+
+    - name: Test runc features command
+      command: /usr/local/bin/runc features
+      register: runc_features
+      changed_when: false
+
+    - name: Verify runc features include required capabilities
+      assert:
+        that:
+          - "'seccomp' in runc_features.stdout"
+          - "'apparmor' in runc_features.stdout or 'selinux' in runc_features.stdout"
+        fail_msg: "runc missing required security features"
+
+    - name: Clean up test files
+      file:
+        path: /tmp/config.json
+        state: absent
+      changed_when: false
+
+    - name: Final verification summary
+      debug:
+        msg: |
+          ========================================
+          RUNC INSTALLATION VERIFICATION COMPLETE  
+          ========================================
+          ✓ Binary location: /usr/local/bin/runc (mode: {{ runc_binary.stat.mode }})
+          ✓ Version: runc 1.3.0 with OCI spec 1.2.1
+          ✓ OCI spec generation: Functional
+          ✓ Security features: {{ 'seccomp' if 'seccomp' in runc_features.stdout else 'N/A' }}
+          ✓ System packages: {{ 'Clean' if 'No system runc packages found' in system_packages.stdout else 'Conflicts detected' }}
+          ✓ Executable permissions: Correct (755, root:root)
+          
+          runc 1.3.0 ready for containerd integration!

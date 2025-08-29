@@ -1,0 +1,22 @@
+---
+dependency:
+  name: galaxy
+
+driver:
+  name: docker
+
+platforms:
+  - name: ubuntu-24-04
+    image: geerlingguy/docker-ubuntu2404-ansible  # Ubuntu 24.04 specific image
+    pre_build_image: true
+    command: sleep infinity
+
+provisioner:
+  name: ansible
+  config_options:
+    defaults:
+      callbacks_enabled: profile_tasks
+      stdout_callback: yaml
+
+verifier:
+  name: ansible
