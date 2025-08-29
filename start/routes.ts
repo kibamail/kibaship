@@ -21,6 +21,7 @@ import ClusterLogsController from '#controllers/cluster_logs_controller'
 import Cluster from '#models/cluster'
 import queue from '@rlanz/bull-queue/services/main'
 import ProvisionClusterJob from '#jobs/clusters/provision_cluster_job'
+import DigitalOceanController from '#controllers/cloud_providers/digital_ocean_controller'
 
 router.on('/').renderInertia('home')
 
@@ -46,6 +47,8 @@ router
     router.get('/source-code-providers/:sourceCodeProviderId', [SourceProvidersController, 'show']),
     router.get('/:provider/redirect', [SourceProvidersController, 'redirect']),
     router.get('/:provider/callback', [SourceProvidersController, 'callback']),
+    router.get('/cloud-providers/digital-ocean/redirect', [DigitalOceanController, 'redirect']),
+    router.get('/cloud-providers/digital-ocean/callback', [DigitalOceanController, 'callback'])
   ])
   .prefix('/connections')
   .use(middleware.auth())

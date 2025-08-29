@@ -61,7 +61,3 @@
   failed_when: false
   changed_when: false
 
-- name: Display CNI installation status
-  debug:
-    msg: "CNI plugins v1.7.1 successfully installed to /opt/cni/bin"
-  when: cni_bridge_check.rc != 127

@@ -129,7 +129,3 @@
   register: containerd_version_check
   changed_when: false
 
-- name: Display containerd installation status
-  debug:
-    msg: "containerd v2.1.4 successfully installed and running"
-  when: "'containerd containerd.io 2.1.4' in containerd_version_check.stdout"

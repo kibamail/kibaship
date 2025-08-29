@@ -200,13 +200,3 @@
   register: crictl_version_check
   changed_when: false
 
-- name: Display Kubernetes binaries installation status
-  debug:
-    msg: |
-      Kubernetes Binaries Installation Complete:
-      ✓ kubeadm {{ k8s_version }}: {{ 'SUCCESS' if k8s_version in kubeadm_version_check.stdout else 'FAILED' }}
-      ✓ kubelet {{ k8s_version }}: {{ 'SUCCESS' if k8s_version in kubelet_version_check.stdout else 'FAILED' }}
-      ✓ kubectl {{ k8s_version }}: {{ 'SUCCESS' if k8s_version in kubectl_version_check.stdout else 'FAILED' }}
-      ✓ crictl {{ critools_version }}: {{ 'SUCCESS' if critools_version in crictl_version_check.stdout else 'FAILED' }}
-      ✓ kubelet systemd service: Configured (not started until cluster initialization)
-      ✓ Architecture: {{ k8s_arch }} ({{ ansible_architecture }})

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Kibaship E2E Testing Script with DigitalOcean
-# Provisions infrastructure, runs Ansible playbooks, and cleans up
+# Provisions multi-node infrastructure, runs Ansible playbooks, and cleans up
 
 set -e
 
@@ -35,7 +35,7 @@ error() {
 
 usage() {
     cat << EOF
-Kibaship E2E Testing Script
+Kibaship E2E Testing Script - Multi-Node HA Cluster
 
 Usage: $0 [COMMAND] [OPTIONS]
 
@@ -45,7 +45,7 @@ Commands:
     test        Run tests on existing infrastructure  
     destroy     Destroy infrastructure
     status      Show infrastructure status
-    ssh         SSH into the test server
+    ssh         SSH into a cluster node
     
 Options:
     --skip-tests    Skip running Ansible playbooks (provision only)
@@ -53,11 +53,11 @@ Options:
     --help          Show this help message
 
 Examples:
-    $0 up                    # Full E2E test cycle
-    $0 provision             # Just create the server
-    $0 test                  # Run tests on existing server
+    $0 up                    # Full E2E test cycle (3 CP + 3 workers + 2 LBs)
+    $0 provision             # Just create the cluster infrastructure
+    $0 test                  # Run tests on existing cluster
     $0 destroy               # Clean up everything
-    $0 ssh                   # SSH into test server
+    $0 ssh                   # SSH into first control plane node
 
 EOF
 }
@@ -70,6 +70,7 @@ check_prerequisites() {
     
     command -v terraform >/dev/null 2>&1 || missing_tools+=("terraform")
     command -v ssh >/dev/null 2>&1 || missing_tools+=("ssh")
+    command -v jq >/dev/null 2>&1 || missing_tools+=("jq")
     
     # Check for Ansible in virtual environment
     if [ -f "$PROJECT_ROOT/venv/bin/ansible" ]; then
@@ -104,7 +105,7 @@ check_prerequisites() {
 }
 
 provision_infrastructure() {
-    log "Provisioning DigitalOcean infrastructure..."
+    log "Provisioning DigitalOcean multi-node cluster infrastructure..."
     cd "$TERRAFORM_DIR"
     
     # Initialize Terraform
@@ -112,7 +113,7 @@ provision_infrastructure() {
     terraform init
     
     # Plan the deployment
-    log "Planning infrastructure..."
+    log "Planning infrastructure (3 control planes + 3 workers + 2 load balancers)..."
     terraform plan
     
     # Apply the configuration
@@ -120,25 +121,36 @@ provision_infrastructure() {
     if terraform apply -auto-approve; then
         success "Infrastructure provisioned successfully"
         
-        # Get droplet IP
-        DROPLET_IP=$(terraform output -raw droplet_ip)
-        log "Droplet IP: $DROPLET_IP"
+        # Get cluster info
+        log "Cluster Infrastructure Summary:"
+        echo "Control Planes: $(terraform output -json control_plane_ips | jq -r '.[]' | wc -l)"
+        echo "Workers: $(terraform output -json worker_ips | jq -r '.[]' | wc -l)"
+        echo "Kube API LB: $(terraform output -raw kube_api_lb_ip)"
+        echo "Ingress LB: $(terraform output -raw ingress_lb_ip)"
         
-        # Wait for SSH to be ready
-        log "Waiting for SSH to be ready..."
-        for i in {1..30}; do
-            if ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no -i "$SSH_KEY_PATH" root@"$DROPLET_IP" echo "SSH Ready" >/dev/null 2>&1; then
-                success "SSH connection established"
-                break
+        # Wait for all nodes to be SSH ready
+        log "Waiting for all nodes to be SSH ready..."
+        local all_ips=(
+            $(terraform output -json control_plane_ips | jq -r '.[]')
+            $(terraform output -json worker_ips | jq -r '.[]')
+        )
+        
+        for ip in "${all_ips[@]}"; do
+            log "Waiting for SSH on $ip..."
+            for i in {1..30}; do
+                if ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no -i "$SSH_KEY_PATH" root@"$ip" echo "SSH Ready" >/dev/null 2>&1; then
+                    success "SSH connection established to $ip"
+                    break
+                fi
+                echo -n "."
+                sleep 10
+            done
+            
+            if [ $i -eq 30 ]; then
+                error "SSH connection timeout for $ip"
+                exit 1
             fi
-            echo -n "."
-            sleep 10
         done
-        
-        if [ $i -eq 30 ]; then
-            error "SSH connection timeout"
-            exit 1
-        fi
         
     else
         error "Failed to provision infrastructure"
@@ -146,79 +158,106 @@ provision_infrastructure() {
     fi
 }
 
+generate_inventory() {
+    log "Generating dynamic inventory for multi-node cluster..."
+    cd "$TERRAFORM_DIR"
+    
+    # Get cluster info from Terraform
+    local cluster_info=$(terraform output -json cluster_info)
+    local cp_ips=($(terraform output -json control_plane_ips | jq -r '.[]'))
+    local cp_private_ips=($(terraform output -json control_plane_private_ips | jq -r '.[]'))
+    local cp_names=($(terraform output -json control_plane_names | jq -r '.[]'))
+    local worker_ips=($(terraform output -json worker_ips | jq -r '.[]'))
+    local worker_private_ips=($(terraform output -json worker_private_ips | jq -r '.[]'))
+    local worker_names=($(terraform output -json worker_names | jq -r '.[]'))
+    local kube_api_lb_ip=$(terraform output -raw kube_api_lb_ip)
+    local ingress_lb_ip=$(terraform output -raw ingress_lb_ip)
+    
+    # Generate inventory from template
+    cp "$PROJECT_ROOT/inventory/e2e/hosts.yml" "$PROJECT_ROOT/inventory/e2e/hosts-active.yml"
+    
+    # Replace placeholders for control planes
+    for i in {0..2}; do
+        local cp_num=$((i + 1))
+        sed -i "s/CP${cp_num}_PUBLIC_IP_PLACEHOLDER/${cp_ips[$i]}/g" "$PROJECT_ROOT/inventory/e2e/hosts-active.yml"
+        sed -i "s/CP${cp_num}_PRIVATE_IP_PLACEHOLDER/${cp_private_ips[$i]}/g" "$PROJECT_ROOT/inventory/e2e/hosts-active.yml"
+    done
+    
+    # Replace placeholders for workers
+    for i in {0..2}; do
+        local w_num=$((i + 1))
+        sed -i "s/W${w_num}_PUBLIC_IP_PLACEHOLDER/${worker_ips[$i]}/g" "$PROJECT_ROOT/inventory/e2e/hosts-active.yml"
+        sed -i "s/W${w_num}_PRIVATE_IP_PLACEHOLDER/${worker_private_ips[$i]}/g" "$PROJECT_ROOT/inventory/e2e/hosts-active.yml"
+    done
+    
+    # Replace load balancer placeholders
+    sed -i "s/KUBE_API_LB_IP_PLACEHOLDER/$kube_api_lb_ip/g" "$PROJECT_ROOT/inventory/e2e/hosts-active.yml"
+    sed -i "s/INGRESS_LB_IP_PLACEHOLDER/$ingress_lb_ip/g" "$PROJECT_ROOT/inventory/e2e/hosts-active.yml"
+    
+    # Replace timestamp in hostnames
+    local timestamp=$(echo "${cp_names[0]}" | grep -o '[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}-[0-9]\{4\}')
+    sed -i "s/TIMESTAMP/$timestamp/g" "$PROJECT_ROOT/inventory/e2e/hosts-active.yml"
+    
+    success "Dynamic inventory generated successfully"
+    log "Control Plane Load Balancer: $kube_api_lb_ip:6443"
+    log "Ingress Load Balancer: $ingress_lb_ip"
+}
+
 run_ansible_tests() {
-    log "Running Ansible E2E tests..."
+    log "Running Kibaship HA cluster deployment E2E test..."
     cd "$PROJECT_ROOT"
     
-    # Get droplet IP from terraform
-    DROPLET_IP=$(cd "$TERRAFORM_DIR" && terraform output -raw droplet_ip)
-    
-    if [ -z "$DROPLET_IP" ]; then
-        error "Could not get droplet IP from Terraform"
-        exit 1
-    fi
-    
-    # Generate dynamic inventory
-    cat > "$SCRIPT_DIR/inventory.yml" << EOF
----
-all:
-  hosts:
-    kibaship-e2e:
-      ansible_host: $DROPLET_IP
-      ansible_user: root
-      ansible_ssh_private_key_file: $SSH_KEY_PATH
-      ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
-  children:
-    k8s_cluster:
-      hosts:
-        kibaship-e2e:
-    kube_control_plane:
-      hosts:
-        kibaship-e2e:
-    kube_node:
-      hosts:
-        kibaship-e2e:
-    etcd:
-      hosts:
-        kibaship-e2e:
-EOF
-    
-    log "Generated inventory for $DROPLET_IP"
+    # Generate inventory
+    generate_inventory
     
     # Activate Python virtual environment
     source "$PROJECT_ROOT/venv/bin/activate"
     
-    # Test connectivity
-    log "Testing Ansible connectivity..."
-    if ansible -i "$SCRIPT_DIR/inventory.yml" all -m ping; then
-        success "Ansible connectivity confirmed"
+    # Test connectivity to all nodes
+    log "Testing Ansible connectivity to all cluster nodes..."
+    if ansible -i "$PROJECT_ROOT/inventory/e2e/hosts-active.yml" all -m ping; then
+        success "Ansible connectivity confirmed to all nodes"
     else
         error "Ansible connectivity failed"
         exit 1
     fi
     
-    # Run all our roles in sequence with explicit roles path
-    log "Running complete E2E test suite..."
+    # Run production cluster deployment
+    log "Deploying Kibaship Kubernetes HA cluster..."
+    log "Cluster configuration: 3 control planes + 3 workers + HA load balancers"
     cd "$PROJECT_ROOT"
-    ANSIBLE_ROLES_PATH="./roles" ansible-playbook -i "$SCRIPT_DIR/inventory.yml" -e "target_host=kibaship-e2e" "$SCRIPT_DIR/e2e-playbook.yml"
+    ANSIBLE_ROLES_PATH="./roles" ansible-playbook -i "$PROJECT_ROOT/inventory/e2e/hosts-active.yml" cluster.yml
     
     if [ $? -eq 0 ]; then
-        success "All Ansible roles executed successfully!"
+        success "Kibaship Kubernetes HA cluster deployed successfully!"
+        log "Production-ready cluster is now available"
+        
+        # Show cluster access information
+        cd "$TERRAFORM_DIR"
+        local kube_api_lb_ip=$(terraform output -raw kube_api_lb_ip)
+        local ingress_lb_ip=$(terraform output -raw ingress_lb_ip)
+        
+        echo ""
+        log "=== CLUSTER ACCESS INFORMATION ==="
+        echo "Kubernetes API: https://$kube_api_lb_ip:6443"
+        echo "Ingress Endpoint: http://$ingress_lb_ip"
+        echo "SSH to first control plane: ssh -i $SSH_KEY_PATH root@$(terraform output -json control_plane_ips | jq -r '.[0]')"
+        echo ""
     else
-        error "Ansible playbook execution failed"
+        error "HA cluster deployment failed"
         exit 1
     fi
 }
 
 destroy_infrastructure() {
-    log "Destroying infrastructure..."
+    log "Destroying multi-node infrastructure..."
     cd "$TERRAFORM_DIR"
     
     if terraform destroy -auto-approve; then
         success "Infrastructure destroyed successfully"
         
         # Clean up generated files
-        rm -f "$SCRIPT_DIR/inventory.yml"
+        rm -f "$PROJECT_ROOT/inventory/e2e/hosts-active.yml"
     else
         error "Failed to destroy infrastructure"
         exit 1
@@ -226,11 +265,17 @@ destroy_infrastructure() {
 }
 
 show_status() {
-    log "Infrastructure Status:"
+    log "Multi-Node Cluster Status:"
     cd "$TERRAFORM_DIR"
     
     if terraform show >/dev/null 2>&1; then
         terraform show
+        echo ""
+        log "Quick Status Summary:"
+        echo "Control Plane IPs: $(terraform output -json control_plane_ips 2>/dev/null | jq -r '.[]' | tr '\n' ' ' || echo 'N/A')"
+        echo "Worker IPs: $(terraform output -json worker_ips 2>/dev/null | jq -r '.[]' | tr '\n' ' ' || echo 'N/A')"
+        echo "Kube API LB: $(terraform output -raw kube_api_lb_ip 2>/dev/null || echo 'N/A')"
+        echo "Ingress LB: $(terraform output -raw ingress_lb_ip 2>/dev/null || echo 'N/A')"
     else
         warning "No infrastructure found or Terraform not initialized"
     fi
@@ -238,15 +283,16 @@ show_status() {
 
 ssh_to_server() {
     cd "$TERRAFORM_DIR"
-    DROPLET_IP=$(terraform output -raw droplet_ip 2>/dev/null)
+    local cp_ips=($(terraform output -json control_plane_ips 2>/dev/null | jq -r '.[]'))
     
-    if [ -z "$DROPLET_IP" ]; then
-        error "No infrastructure found or droplet IP unavailable"
+    if [ ${#cp_ips[@]} -eq 0 ]; then
+        error "No infrastructure found or control plane IPs unavailable"
         exit 1
     fi
     
-    log "Connecting to $DROPLET_IP..."
-    ssh -i "$SSH_KEY_PATH" -o StrictHostKeyChecking=no root@"$DROPLET_IP"
+    local first_cp_ip="${cp_ips[0]}"
+    log "Connecting to first control plane: $first_cp_ip..."
+    ssh -i "$SSH_KEY_PATH" -o StrictHostKeyChecking=no root@"$first_cp_ip"
 }
 
 # Parse command line arguments

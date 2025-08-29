@@ -45,7 +45,3 @@
   register: runc_version_check
   changed_when: false
 
-- name: Display runc installation status
-  debug:
-    msg: "runc 1.3.0 successfully installed at /usr/local/bin/runc"
-  when: "'runc version 1.3.0' in runc_version_check.stdout"

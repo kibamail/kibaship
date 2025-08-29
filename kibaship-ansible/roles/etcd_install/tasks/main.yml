@@ -317,7 +317,6 @@
       peer-auto-tls: false
       
       # Enable debug-level logging for etcd
-      debug: false
       
       # Specify 'stdout' or 'stderr' to skip journald logging even when running under systemd
       log-outputs: [stderr]
@@ -376,15 +375,3 @@
   register: etcdctl_version_check
   changed_when: false
 
-- name: Display etcd installation status
-  debug:
-    msg: |
-      etcd Installation Complete:
-      ✓ etcd {{ etcd_version }}: {{ 'SUCCESS' if etcd_version in etcd_version_check.stdout else 'FAILED' }}
-      ✓ etcdctl {{ etcd_version }}: {{ 'SUCCESS' if etcd_version in etcdctl_version_check.stdout else 'FAILED' }}
-      ✓ etcd user: Created (etcd:etcd)
-      ✓ data directory: {{ etcd_data_dir }} (mode 0700, owner etcd:etcd)
-      ✓ config directory: {{ etcd_config_dir }} (mode 0755, owner root:root)
-      ✓ TLS certificates: Generated and configured
-      ✓ systemd service: Configured (not started until cluster initialization)
-      ✓ Architecture: {{ etcd_arch }} ({{ ansible_architecture }})

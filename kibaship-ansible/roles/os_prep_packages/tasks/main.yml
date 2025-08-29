@@ -3,12 +3,7 @@
 # Optimized for Ubuntu 24.04 - no OS detection needed
 # Following Kubespray's bootstrap_os patterns
 
-- name: Check if we're in testing environment
-  stat:
-    path: /.dockerenv
-  register: docker_env
-
-- name: Update apt package cache (production only)
+- name: Update apt package cache
   apt:
     update_cache: true
     cache_valid_time: 3600  # 1 hour cache validity
@@ -16,10 +11,8 @@
   retries: 3
   delay: 10
   until: apt_update is succeeded
-  when: not docker_env.stat.exists
-  tags: production
 
-- name: Install essential system packages (production only)
+- name: Install essential system packages
   apt:
     name: "{{ essential_packages }}"
     state: present
@@ -28,7 +21,6 @@
   retries: 3
   delay: 5
   until: package_install is succeeded
-  when: not docker_env.stat.exists
   vars:
     essential_packages:
       - apt-transport-https  # HTTPS repository support
@@ -43,18 +35,6 @@
       - unzip                # Archive extraction utility
       - wget                 # Alternative HTTP client
       - openssl              # Cryptographic toolkit
-  tags: production
-
-- name: Verify essential packages are present (testing mode)
-  command: dpkg -s {{ item }}
-  register: package_check
-  changed_when: false
-  failed_when: false
-  when: docker_env.stat.exists
-  loop:
-    - python3
-    - ca-certificates
-  tags: testing
 
 - name: Ensure GPG keyring directory exists
   file:
@@ -64,19 +44,3 @@
     owner: root
     group: root
 
-- name: Log package installation results
-  debug:
-    msg: |
-      Package management completed:
-      {% if docker_env.stat.exists %}
-      - Environment: Container (testing mode - package verification only)
-      - Package detection: Completed for essential packages
-      - Production behavior: Would update apt cache and install missing packages
-      {% else %}
-      - Environment: Production system  
-      - Apt cache: {{ 'updated' if apt_update.changed else 'already current' }}
-      - Essential packages: {{ 'installed' if package_install.changed else 'already present' }}
-      {% endif %}
-      - GPG keyring directory: Created (/etc/apt/keyrings)
-      - System ready for: Kubernetes cluster preparation
-      - Target OS: Ubuntu 24.04 LTS

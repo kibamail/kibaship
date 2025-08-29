@@ -60,6 +60,7 @@ export default defineConfig({
     () => import('@adonisjs/redis/redis_provider'),
     () => import('@rlanz/bull-queue/queue_provider'),
     () => import('@adonisjs/drive/drive_provider'),
+    () => import('@adonisjs/ally/ally_provider')
   ],
 
   /*

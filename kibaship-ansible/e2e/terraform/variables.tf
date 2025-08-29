@@ -14,13 +14,19 @@ variable "ssh_key_path" {
 
 # Droplet Configuration
 variable "droplet_image" {
-  description = "Ubuntu image for the droplet"
+  description = "Ubuntu image for the droplets"
   type        = string
   default     = "ubuntu-24-04-x64"
 }
 
-variable "droplet_size" {
-  description = "Size of the droplet"
+variable "control_plane_size" {
+  description = "Size of the control plane droplets"
+  type        = string
+  default     = "s-2vcpu-4gb"
+}
+
+variable "worker_size" {
+  description = "Size of the worker droplets"
   type        = string
   default     = "s-2vcpu-4gb"
 }

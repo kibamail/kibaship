@@ -38,12 +38,3 @@
   failed_when: false  # Container restrictions expected
   register: sysctl_applied
 
-- name: Log kernel parameter configuration
-  debug:
-    msg: |
-      Kernel parameter configuration completed:
-      - IPv4 forwarding: configured
-      - Bridge netfilter iptables: configured  
-      - Bridge netfilter ip6tables: configured
-      - Configuration file: /etc/sysctl.d/99-kubernetes.conf
-      - Note: Some parameters may require privileged containers or real systems to be applied

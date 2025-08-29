@@ -1,9 +1,0 @@
----
-- name: Converge
-  hosts: all
-  become: false  # Run as root in container directly
-  gather_facts: false
-
-  tasks:
-    - name: Include os_prep_directories role directly
-      include_tasks: ../../tasks/main.yml

@@ -48,12 +48,3 @@
     mode: "0644"
     backup: true
   register: sysctl_configured
-
-- name: Log networking configuration status
-  ansible.builtin.debug:
-    msg: |
-      Kubernetes node networking configuration completed:
-      - br_netfilter module: configured for persistence
-      - Bridge netfilter sysctls: configured in {{ k8s_networking_sysctl_file }}
-      - Configuration optimized for Cilium kube-proxy replacement
-      - Note: Some operations may require privileged containers or real systems to be applied

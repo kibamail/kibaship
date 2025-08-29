@@ -21,16 +21,6 @@
   when: fstab_file.stat.exists
   register: fstab_swap_removal
 
-- name: Log fstab swap removal result
-  debug:
-    msg: "{{ 'Removed swap entries from /etc/fstab' if fstab_swap_removal.changed else 'No swap entries found in /etc/fstab (already clean)' }}"
-  when: fstab_file.stat.exists
-
-- name: Log fstab not found
-  debug:
-    msg: "/etc/fstab does not exist - no swap entries to remove"
-  when: not fstab_file.stat.exists
-
 - name: Check if systemctl is available
   command: which systemctl
   register: systemctl_available
@@ -44,16 +34,6 @@
   register: swap_target_mask
   when: systemctl_available.rc == 0
 
-- name: Log swap.target mask result
-  debug:
-    msg: "{{ 'Masked swap.target successfully' if swap_target_mask.changed else 'swap.target already masked (idempotent)' }}"
-  when: systemctl_available.rc == 0
-
-- name: Log systemctl not available
-  debug:
-    msg: "systemctl not available - skipping swap.target masking"
-  when: systemctl_available.rc != 0
-
 - name: Check if swap devices are active
   shell: cat /proc/swaps | wc -l
   register: swap_count
@@ -66,6 +46,3 @@
   changed_when: false
   when: swap_count.stdout|int > 1
 
-- name: Log immediate swap disable result
-  debug:
-    msg: "{{ 'Disabled active swap devices' if swap_count.stdout|int > 1 else 'No active swap devices to disable (already disabled)' }}"

@@ -39,6 +39,9 @@ export default class CloudProvider extends BaseModel {
     application_key: string
     application_secret: string
     consumer_key: string
+
+    access_token: string
+    refresh_token: string
   }>
 
   @column.dateTime({ autoCreate: true })

@@ -113,4 +113,23 @@ export default await Env.create(new URL('../', import.meta.url), {
   S3_ENDPOINT: Env.schema.string({ format: 'url' }),
   S3_REGION: Env.schema.string(),
   S3_BUCKET: Env.schema.string(),
+
+  /*
+  |----------------------------------------------------------
+  | Variables for configuring ally package
+  |----------------------------------------------------------
+  */
+  // GITHUB_CLIENT_ID: Env.schema.string(),
+  // GITHUB_CLIENT_SECRET: Env.schema.string(),
+  // GOOGLE_CLIENT_ID: Env.schema.string(),
+  // GOOGLE_CLIENT_SECRET: Env.schema.string(),
+
+  /*
+|----------------------------------------------------------
+| Variables for digital ocean app oauth
+|----------------------------------------------------------
+*/
+  DIGITAL_OCEAN_APP_CLIENT_ID: Env.schema.string(),
+  DIGITAL_OCEAN_APP_CLIENT_SECRET: Env.schema.string(),
+  DIGITAL_OCEAN_APP_CALLBACK_URL: Env.schema.string({ format: 'url', tld: false })
 })

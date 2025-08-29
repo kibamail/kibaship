@@ -1,0 +1,46 @@
+---
+# k8s_cluster_init role default variables
+# Kubernetes v1.33.x cluster initialization with kubeadm
+
+# Kubernetes version configuration
+kube_version: v1.33.0
+kubeadm_config_api_version: v1beta3
+
+# Cluster configuration
+cluster_name: "{{ cluster_name | default('kubernetes') }}"
+kube_service_addresses: 10.96.0.0/12
+kube_pods_subnet: 10.244.0.0/16
+dns_domain: cluster.local
+
+# API server configuration
+kube_apiserver_port: 6443
+kube_apiserver_bind_address: 0.0.0.0
+
+# Certificate configuration
+kube_cert_dir: /etc/kubernetes/pki
+kube_config_dir: /etc/kubernetes
+
+# kubeadm initialization settings
+kubeadm_init_timeout: 600s
+kubeadm_ignore_preflight_errors: []
+kubeadm_init_phases_skip: []
+
+# Feature gates
+kube_feature_gates: []
+
+# Control plane endpoint (dynamically determined)
+kube_control_plane_endpoint: >-
+  {%- if groups['kube_control_plane'] | length > 1 -%}
+  {{ hostvars[groups['kube_control_plane'][0]]['main_access_ip'] }}:{{ kube_apiserver_port }}
+  {%- else -%}
+  {{ hostvars[groups['kube_control_plane'][0]]['main_ip'] }}:{{ kube_apiserver_port }}
+  {%- endif -%}
+
+# Certificate SANs for API server
+supplementary_addresses_in_ssl_keys: []
+
+# Upload certificates for HA setup
+upload_certs: "{{ groups['kube_control_plane'] | length > 1 }}"
+
+# Networking
+kube_proxy_mode: ipvs
