@@ -1,0 +1,29 @@
+---
+# k8s_worker_join role default variables
+
+# Kubeadm join settings
+kubeadm_join_timeout: 300s
+kubeadm_token_ttl: 24h0m0s
+discovery_timeout: 5m0s
+
+# Preflight error handling
+kubeadm_ignore_preflight_errors:
+  - DirAvailable--etc-kubernetes-manifests
+  - Port-6443
+  - Port-10250
+  - FileAvailable--etc-kubernetes-kubelet.conf
+  - FileAvailable--etc-kubernetes-pki-ca.crt
+
+# Join phases to skip (if any)
+kubeadm_join_phases_skip: []
+
+# Kubeadm patches directory
+kubeadm_patches_dir: "{{ kube_config_dir }}/patches"
+kubeadm_patches: []
+
+# DNS settings for worker nodes
+kube_dns_cluster_ip: "10.96.0.10"
+dns_domain: "cluster.local"
+
+# CRI socket path
+cri_socket: "unix:///var/run/containerd/containerd.sock"

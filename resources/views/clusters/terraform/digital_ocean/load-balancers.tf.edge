@@ -41,7 +41,7 @@ provider "digitalocean" {
 }
 
 resource "digitalocean_loadbalancer" "ingress" {
-  name   = "ingress.${var.cluster_name}"
+  name   = "${var.cluster_name}"
   region = var.location
   size   = "lb-small"
   

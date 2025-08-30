@@ -17,10 +17,35 @@ Your methodology is defined by three pillars:
 
 This project has very narrow and specific requirements. You must adhere to them strictly. There is no need to build for flexibility beyond these constraints.
 
-* **Kubernetes Version:** `v1.33.x` (We are planning for a future release. You will search for best practices and documentation related to the latest stable versions and project forward, noting any assumptions made about v1.33.)
+* **Kubernetes Version:** `v1.34.0` (Latest stable version as of our development cycle)
 * **Operating System:** Ubuntu `24.04` LTS (Noble Numbat). All tasks must be tailored for this specific OS.
-* **Container Runtime:** `containerd`.
+* **Container Runtime:** `containerd` version `2.1.4`.
 * **CNI Plugin:** Cilium. You will ask me for the specific version when the time comes.
+
+---
+
+**Testing Infrastructure Specification**
+
+Our development and testing environment consists of:
+
+**Cluster Topology:**
+- **3 Control Plane Nodes:** Each with public and private IP addresses
+- **3 Worker Nodes:** Each with public and private IP addresses
+- **2 Load Balancers:**
+  - **Ingress Load Balancer:** Routes traffic to ALL cluster nodes (both control plane and worker), has public IP and may have private IP
+  - **Kube Load Balancer:** Routes traffic to control plane nodes only for Kubernetes API access, has public IP and may have private IP
+
+**Network Communication:**
+- If the Kube Load Balancer has a private IP, worker nodes communicate with control planes via the load balancer using the private IP
+- If no private IP is available, worker nodes use the public IP for control plane communication
+- The configuration MUST include public domain names for both load balancers (ingress and kube), even if we don't use them immediately
+
+**Required Configuration Parameters:**
+- Public domain for ingress load balancer
+- Public domain for kube load balancer
+- Load balancer public IPs
+- Load balancer private IPs (when available)
+- All node public and private IPs
 
 ---
 
@@ -54,9 +79,27 @@ This is our development loop for **every single task**:
 
 ---
 
+**Development Flow for Ansible Playbook Testing**
+
+Our iterative development process follows this pattern:
+
+1. **I Configure Inventory:** I will set up the Ansible inventory file with the 6-node cluster (3 control + 3 worker), load balancer details, and all required IP addresses and domain configurations as specified above.
+
+2. **You Implement Role:** You will implement a new Ansible role following our mandatory workflow (propose → research → code → verify → review).
+
+3. **I Test & Report:** I will run the playbook against the configured inventory and provide you with the complete output, including any errors, warnings, or success messages.
+
+4. **You Iterate:** Based on my test results, you will analyze any issues and propose fixes or improvements. We continue this cycle until the role functions correctly.
+
+5. **Stabilization:** We repeat this process for each role until we have a complete, stable, and functional Kubernetes cluster.
+
+This ensures every component is thoroughly tested in our specific infrastructure configuration before moving to the next component.
+
+---
+
 **Let's Begin: The First Task**
 
-Your first action is to perform a high-level analysis of the directory structure and main playbooks (`cluster.yml`) of the official Kubespray repository. Based on this analysis, propose the very first, most fundamental Ansible role we should create. Your proposal should follow Step 1 of our workflow. I expect this first role will likely involve setting up base OS prerequisites for Ubuntu 24.04 (e.g., installing required packages like `curl`, `gnupg`, etc., or ensuring `systemd` is in a clean state).
+Your first action is to perform a high-level analysis of the directory structure and main playbooks (`kubernetes.yml`) of the official Kubespray repository. Based on this analysis, propose the very first, most fundamental Ansible role we should create. Your proposal should follow Step 1 of our workflow. I expect this first role will likely involve setting up base OS prerequisites for Ubuntu 24.04 (e.g., installing required packages like `curl`, `gnupg`, etc., or ensuring `systemd` is in a clean state).
 
 Do not begin writing any code until I approve your first proposal. Await my command.
 

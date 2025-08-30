@@ -14,6 +14,7 @@ import ProvisionLoadBalancersJob from '#jobs/clusters/provision_load_balancers_j
 import ProvisionServersJob from '#jobs/clusters/provision_servers_job'
 import ProvisionVolumesJob from '#jobs/clusters/provision_volumes_job'
 import DestroyClusterJob from '#jobs/clusters/destroy_cluster_job'
+import ProvisionKubernetesJob from '#jobs/clusters/provision_kubernetes_job'
 import { DateTime } from 'luxon'
 
 export default class ClustersController extends BaseController {
@@ -133,7 +134,7 @@ export default class ClustersController extends BaseController {
             case 'volumes':
                 return ProvisionVolumesJob
             case 'kubernetes':
-                throw new Error('ProvisionKubernetesJob not implemented yet')
+                return ProvisionKubernetesJob
             default:
                 throw new Error(`Unknown stage: ${stage}`)
         }

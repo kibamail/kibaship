@@ -108,6 +108,18 @@ export default class Cluster extends BaseModel {
   declare deletedAt: DateTime | null
 
   @column.dateTime()
+  declare dnsStartedAt: DateTime | null
+
+  @column.dateTime()
+  declare dnsCompletedAt: DateTime | null
+
+  @column.dateTime()
+  declare dnsLastCheckedAt: DateTime | null
+
+  @column.dateTime()
+  declare dnsErrorAt: DateTime | null
+
+  @column.dateTime()
   declare networkingStartedAt: DateTime | null
 
   @column.dateTime()

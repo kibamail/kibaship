@@ -1,0 +1,17 @@
+---
+# k8s_control_plane_join role variables
+# Role-specific variables that should not be overridden
+
+# Internal role state variables
+__k8s_control_plane_join_role_name: "k8s_control_plane_join"
+__k8s_control_plane_join_version: "1.0.0"
+
+# Validation patterns
+__valid_kubeadm_config_versions:
+  - "v1beta3"
+  - "v1beta4"
+
+# Internal paths
+__kubeadm_config_path: "{{ kube_config_dir }}/kubeadm-controlplane.yaml"
+__kubelet_conf_path: "{{ kube_config_dir }}/kubelet.conf"
+__admin_conf_path: "{{ kube_config_dir }}/admin.conf"

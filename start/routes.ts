@@ -22,6 +22,7 @@ import Cluster from '#models/cluster'
 import queue from '@rlanz/bull-queue/services/main'
 import ProvisionClusterJob from '#jobs/clusters/provision_cluster_job'
 import DigitalOceanController from '#controllers/cloud_providers/digital_ocean_controller'
+import ClusterDnsVerifyController from '#controllers/clusters/cluster_dns_verify_controller'
 
 router.on('/').renderInertia('home')
 
@@ -38,6 +39,7 @@ router
     router.post('/:workspace/clusters/:clusterId/restart', [ClustersController, 'restart']).as('clusters.restart'),
     router.delete('/:workspace/clusters/:clusterId', [ClustersController, 'destroy']),
     router.post('/:workspace/clusters/providers', [CloudProvidersController, 'store']),
+    router.post('/:workspace/clusters/:clusterId/dns/verify', [ClusterDnsVerifyController, 'index'])
   ])
   .prefix('/w')
   .use(middleware.auth())
@@ -54,10 +56,8 @@ router
   .prefix('/connections')
   .use(middleware.auth())
 
-router.get('/provision', async ({ response }) => {
-  let clusterFirst = await Cluster.firstOrFail()
-
-  const cluster = await Cluster.complete(clusterFirst?.id)
+router.get('/provision/:clusterId', async ({ response, params }) => {
+  const cluster = await Cluster.complete(params.clusterId)
 
   await queue.dispatch(ProvisionClusterJob, {
     clusterId: cluster?.id as string

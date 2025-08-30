@@ -68,6 +68,7 @@ export default class ProvisionVolumesJob extends Job {
       await this.createOrUpdateVolumes(cluster.id, output)
 
       cluster.volumesCompletedAt = DateTime.now()
+      cluster.dnsStartedAt = DateTime.now()
 
       await cluster.save()
 

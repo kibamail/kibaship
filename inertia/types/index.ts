@@ -128,6 +128,9 @@ export interface Cluster {
   networkingStartedAt: string | null
   networkingCompletedAt: string | null
   networkingError: string | null
+  dnsStartedAt: string | null
+  dnsCompletedAt: string | null
+  dnsErrorAt: string | null
   networkingErrorAt: string | null
   sshKeysStartedAt: string | null
   sshKeysCompletedAt: string | null
@@ -212,13 +215,14 @@ export interface ClusterSshKey {
 
 export interface ClusterLoadBalancer {
   id: string
-  cluster_id: string
+  clusterId: string
   type: ClusterLoadBalancerType
-  public_ipv4_address: string | null
-  private_ipv4_address: string | null
-  provider_id: string | null
-  created_at: string
-  updated_at: string
+  publicIpv4Address: string | null
+  privateIpv4Address: string | null
+  providerId: string | null
+  dnsVerifiedAt: string | null
+  createdAt: string
+  updatedAt: string
   cluster?: Cluster
 }
 

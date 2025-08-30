@@ -1,0 +1,5 @@
+---
+# validate_inventory role variables
+
+__validate_inventory_role_name: "validate_inventory"
+__validate_inventory_version: "1.0.0"

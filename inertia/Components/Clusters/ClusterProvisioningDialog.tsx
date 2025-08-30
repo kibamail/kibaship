@@ -21,6 +21,9 @@ import React, { useEffect, useState } from 'react'
 import { TerraformStage } from '#services/terraform/terraform_executor'
 import { getStepStatus } from './ClusterProvisioningStep'
 import { useSocketIo } from '~/hooks/useSocketIo'
+import { ServerIcon } from '../Icons/server.svg'
+import { NetworkIcon } from '../Icons/network.svg'
+import { DNSIcon } from '../Icons/dns.svg'
 
 const ClusterProvisioningStep = React.lazy(() => import('./ClusterProvisioningStep'))
 
@@ -47,19 +50,25 @@ const provisioningSteps: ProvisioningStepInfo[] = [
     stage: 'load-balancers',
     title: 'Load balancers',
     description: 'Configuring load balancers for high availability and traffic distribution',
-    icon: <StackIcon className="!size-5" />,
+    icon: <NetworkIcon className="!size-5" />,
   },
   {
     stage: 'servers',
     title: 'Server provisioning',
     description: 'Creating and configuring control plane and worker servers',
-    icon: <StackIcon className="!size-5" />,
+    icon: <ServerIcon className="!size-4" />,
   },
   {
     stage: 'volumes',
     title: 'Storage volumes',
     description: 'Attaching and configuring persistent storage volumes',
-    icon: <StackIcon className="!size-5" />,
+    icon: <StackIcon className="!size-5.5" />,
+  },
+  {
+    stage: 'dns',
+    title: 'DNS configuration',
+    description: 'Setup DNS for the cluster ingress.',
+    icon: <DNSIcon className="!size-5" />,
   },
   {
     stage: 'kubernetes',
@@ -197,7 +206,7 @@ export function ClusterProvisioningDialog({
 
   return (
     <Dialog.Root open={isOpen} onOpenChange={onOpenChange}>
-      <Dialog.Content className="max-w-4xl">
+      <Dialog.Content className="!max-w-2xl">
         <Dialog.Header>
           <Dialog.Title>
             {cluster

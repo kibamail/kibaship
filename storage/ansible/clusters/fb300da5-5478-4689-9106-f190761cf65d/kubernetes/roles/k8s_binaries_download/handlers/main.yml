@@ -1,0 +1,10 @@
+---
+- name: Reload systemd daemon
+  systemd:
+    daemon_reload: true
+
+- name: Restart kubelet
+  systemd:
+    name: kubelet
+    state: restarted
+  when: kubelet_service_enabled | default(false)

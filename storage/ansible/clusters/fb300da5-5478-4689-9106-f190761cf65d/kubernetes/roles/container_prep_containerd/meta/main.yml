@@ -1,0 +1,24 @@
+---
+galaxy_info:
+  author: Claude-SRE
+  namespace: kibaship
+  role_name: container_prep_containerd
+  description: Install containerd v2.1.4 container runtime with CRI support for Kubernetes cluster on Ubuntu 24.04
+  company: Kibaship
+  license: MIT
+  min_ansible_version: '2.18'
+
+  platforms:
+    - name: Ubuntu
+      versions:
+        - '24.04'
+
+  galaxy_tags:
+    - containers
+    - kubernetes
+    - containerd
+    - cri
+    - ubuntu
+    - runtime
+
+dependencies: []

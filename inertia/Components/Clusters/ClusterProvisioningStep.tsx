@@ -12,6 +12,7 @@ import { type TerraformStage } from '#services/terraform/terraform_executor'
 import { CheckCircleSolidIcon } from '../Icons/check-circle-solid.svg'
 import { XMarkCircleSolidIcon } from '../Icons/xmark-circle-solid.svg'
 import { ClockSolidIcon } from '../Icons/clock-solid.svg'
+import ClusterDnsStep from './ClusterDnsStep'
 
 export interface ClusterProvisioningStepProps {
   logs: ClusterLogEntry[]
@@ -79,6 +80,12 @@ export function getStepStatus(
       if (cluster.kubernetesClusterStartedAt) return 'in_progress'
       return 'pending'
 
+    case 'dns':
+      if (cluster.dnsCompletedAt) return 'completed'
+      if (cluster.dnsErrorAt) return 'failed'
+      if (cluster.dnsStartedAt) return 'in_progress'
+      return 'pending'
+
     default:
       return 'pending'
   }
@@ -123,22 +130,26 @@ export default function ClusterProvisioningStep({
           <Text className="!text-sm text-owly-content-tertiary">{info.description}</Text>
         </div>
 
-        <div
-          ref={ref}
-          className="w-full h-[300px] overflow-y-auto rounded-b-md px-4 bg-[hsl(0,0%,98%)]"
-        >
-          {logs.map((log) => (
-            <div key={log?.id} className="w-full flex items-start gap-4 py-1">
-              <Text className="!text-xs !font-mono shrink-0">
-                {dayjs(log?.timestamp).format('MMM DD HH:mm:ss')}
-              </Text>
+        {info.stage === 'dns' ? (
+          <ClusterDnsStep cluster={cluster} />
+        ) : (
+          <div
+            ref={ref}
+            className="w-full h-[300px] overflow-y-auto rounded-b-md px-4 bg-[hsl(0,0%,98%)]"
+          >
+            {logs.map((log) => (
+              <div key={log?.id} className="w-full flex items-start gap-4 py-1">
+                <Text className="!text-xs !font-mono shrink-0">
+                  {dayjs(log?.timestamp).format('MMM DD HH:mm:ss')}
+                </Text>
 
-              <Text className="font-mono !text-xs">
-                <Ansi>{log?.message}</Ansi>
-              </Text>
-            </div>
-          ))}
-        </div>
+                <Text className="font-mono !text-xs">
+                  <Ansi>{log?.message}</Ansi>
+                </Text>
+              </div>
+            ))}
+          </div>
+        )}
       </AccordionContent>
     </AccordionItem>
   )
