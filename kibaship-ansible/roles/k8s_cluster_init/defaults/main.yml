@@ -1,32 +1,33 @@
 ---
 # k8s_cluster_init role default variables
-# Kubernetes v1.33.x cluster initialization with kubeadm
+# Uses centralized configuration from group_vars/all/
 
-# Kubernetes version configuration
-kube_version: v1.33.0
-kubeadm_config_api_version: v1beta3
+# Kubernetes version configuration - inherits from centralized config
+kube_version: "{{ kubernetes_version }}"
+kubeadm_config_api_version: "{{ kubeadm_config_api_version }}"
 
-# Cluster configuration
-cluster_name: "{{ cluster_name | default('kubernetes') }}"
-kube_service_addresses: 10.96.0.0/12
-kube_pods_subnet: 10.244.0.0/16
-dns_domain: cluster.local
+# Cluster configuration - inherits from centralized config
+cluster_name: "{{ cluster_name }}"
+kube_service_addresses: "{{ kube_service_addresses }}"
+kube_pods_subnet: "{{ kube_pods_subnet }}"
+dns_domain: "{{ dns_domain }}"
 
-# API server configuration
-kube_apiserver_port: 6443
-kube_apiserver_bind_address: 0.0.0.0
+# API server configuration - inherits from centralized config
+kube_apiserver_port: "{{ kube_apiserver_port }}"
+kube_apiserver_bind_address: "{{ kube_apiserver_bind_address }}"
 
-# Certificate configuration
-kube_cert_dir: /etc/kubernetes/pki
-kube_config_dir: /etc/kubernetes
+# Directory configuration - uses centralized paths
+kube_cert_dir: "{{ kube_cert_dir }}"
+kube_config_dir: "{{ kube_config_dir }}"
+bin_dir: "{{ bin_dir }}"
 
 # kubeadm initialization settings
 kubeadm_init_timeout: 600s
 kubeadm_ignore_preflight_errors: []
 kubeadm_init_phases_skip: []
 
-# Feature gates
-kube_feature_gates: []
+# Feature gates - uses centralized configuration
+kube_feature_gates: "{{ kube_feature_gates }}"
 
 # Control plane endpoint (dynamically determined)
 kube_control_plane_endpoint: >-
@@ -42,5 +43,14 @@ supplementary_addresses_in_ssl_keys: []
 # Upload certificates for HA setup
 upload_certs: "{{ groups['kube_control_plane'] | length > 1 }}"
 
-# Networking
-kube_proxy_mode: ipvs
+# Networking - uses centralized configuration
+kube_proxy_mode: "{{ kube_proxy_mode }}"
+
+# Container runtime - uses centralized configuration
+cri_socket: "{{ cri_socket }}"
+
+# Image repository - uses centralized configuration
+kube_image_repo: "{{ kube_image_repo }}"
+
+# TLS configuration - uses centralized configuration
+tls_min_version: "{{ tls_min_version }}"

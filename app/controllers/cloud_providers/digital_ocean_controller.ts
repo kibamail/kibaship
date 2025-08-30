@@ -26,6 +26,14 @@ export default class DigitalOceanController extends BaseController {
             'block_storage:read',
             'block_storage:create',
             'block_storage:delete',
+            'tag:create',
+            'tag:delete',
+            'tag:read',
+            'vpc:read',
+            'vpc:create',
+            'vpc:update',
+            'vpc:delete',
+            'block_storage_action:create',
         ].join(',')
 
         const url = new URL(this.authorizeUrl)

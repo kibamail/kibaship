@@ -84,6 +84,7 @@ export interface CloudProviderRegion {
   name: string
   slug: string
   flag: string
+  availableServerTypes: Record<string, boolean>
 }
 
 export type CloudProviderRegionsByContinent = Record<string, CloudProviderRegion[]>

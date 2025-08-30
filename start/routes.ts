@@ -36,6 +36,7 @@ router
     router.get('/:workspace/clusters/:clusterId', [ClustersController, 'show']).as('clusters.show'),
     router.get('/:workspace/clusters/:clusterId/logs', [ClusterLogsController, 'show']).as('clusters.logs'),
     router.post('/:workspace/clusters/:clusterId/restart', [ClustersController, 'restart']).as('clusters.restart'),
+    router.delete('/:workspace/clusters/:clusterId', [ClustersController, 'destroy']),
     router.post('/:workspace/clusters/providers', [CloudProvidersController, 'store']),
   ])
   .prefix('/w')

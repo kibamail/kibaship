@@ -17,15 +17,16 @@ interface TerraformOutputValue {
   value: string | number | object
 }
 
-interface HetznerLoadBalancersOutput {
+interface LoadBalancersOutput {
   ingress_load_balancer_id: TerraformOutputValue
   ingress_load_balancer_name: TerraformOutputValue
   ingress_load_balancer_public_ip: TerraformOutputValue
-  ingress_load_balancer_private_ip: TerraformOutputValue
   kube_load_balancer_id: TerraformOutputValue
   kube_load_balancer_name: TerraformOutputValue
   kube_load_balancer_public_ip: TerraformOutputValue
-  kube_load_balancer_private_ip: TerraformOutputValue
+  // Hetzner-specific outputs (optional)
+  ingress_load_balancer_private_ip?: TerraformOutputValue
+  kube_load_balancer_private_ip?: TerraformOutputValue
 }
 
 export default class ProvisionLoadBalancersJob extends Job {
@@ -41,6 +42,7 @@ export default class ProvisionLoadBalancersJob extends Job {
     }
 
     cluster.loadBalancersStartedAt = DateTime.now()
+    cluster.loadBalancersErrorAt = null
     cluster.loadBalancersCompletedAt = null
     await cluster.save()
 
@@ -60,26 +62,23 @@ export default class ProvisionLoadBalancersJob extends Job {
       await executor.apply({ autoApprove: true })
 
       const { stdout } = await executor.output()
+      const output = JSON.parse(stdout as string) as LoadBalancersOutput
 
-      const output = JSON.parse(stdout as string) as HetznerLoadBalancersOutput
+      await this.createOrUpdateLoadBalancer(
+        cluster.id,
+        'ingress',
+        output.ingress_load_balancer_id.value as string,
+        output.ingress_load_balancer_public_ip.value as string,
+        (output.ingress_load_balancer_private_ip?.value as string) || (output.ingress_load_balancer_public_ip.value as string)
+      )
 
-      if (cluster.cloudProvider?.type === 'hetzner') {
-        await this.createOrUpdateLoadBalancer(
-          cluster.id,
-          'ingress',
-          output.ingress_load_balancer_id.value as string,
-          output.ingress_load_balancer_public_ip.value as string,
-          output.ingress_load_balancer_private_ip.value as string
-        )
-
-        await this.createOrUpdateLoadBalancer(
-          cluster.id,
-          'cluster',
-          output.kube_load_balancer_id.value as string,
-          output.kube_load_balancer_public_ip.value as string,
-          output.kube_load_balancer_private_ip.value as string
-        )
-      }
+      await this.createOrUpdateLoadBalancer(
+        cluster.id,
+        'cluster',
+        output.kube_load_balancer_id.value as string,
+        output.kube_load_balancer_public_ip.value as string,
+        (output.kube_load_balancer_private_ip?.value as string) || (output.kube_load_balancer_public_ip.value as string)
+      )
 
       cluster.loadBalancersCompletedAt = DateTime.now()
 

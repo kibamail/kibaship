@@ -70,7 +70,7 @@ export default class CloudProvider extends BaseModel {
         }
       case 'digital_ocean':
         return {
-          do_token: this.credentials.token || ''
+          do_token: this.credentials.access_token || ''
         }
       case 'linode':
         return {

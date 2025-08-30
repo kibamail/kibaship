@@ -52,7 +52,7 @@ const provisioningSteps: ProvisioningStepInfo[] = [
   {
     stage: 'servers',
     title: 'Server provisioning',
-    description: 'Creating and configuring virtual machines for control plane and worker nodes',
+    description: 'Creating and configuring control plane and worker servers',
     icon: <StackIcon className="!size-5" />,
   },
   {

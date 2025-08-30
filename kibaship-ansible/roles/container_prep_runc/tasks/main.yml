@@ -13,23 +13,21 @@
     suffix: _runc_download
   register: runc_temp_dir
 
-- name: Detect system architecture
-  set_fact:
-    runc_arch: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }}"
+# Architecture is now centralized in group_vars/all/versions.yml as host_architecture
 
-- name: Download runc 1.3.0 binary
+- name: Download runc {{ runc_version }} binary
   get_url:
-    url: "https://github.com/opencontainers/runc/releases/download/v1.3.0/runc.{{ runc_arch }}"
+    url: "{{ runc_release_url }}/v{{ runc_version }}/runc.{{ host_architecture }}"
     dest: "{{ runc_temp_dir.path }}/runc"
     mode: '0755'
-    timeout: 300
+    timeout: "{{ download_timeout }}"
     validate_certs: true
   register: runc_download
 
-- name: Install runc binary to /usr/local/bin
+- name: Install runc binary to {{ bin_dir }}
   copy:
     src: "{{ runc_temp_dir.path }}/runc"
-    dest: /usr/local/bin/runc
+    dest: "{{ bin_dir }}/runc"
     owner: root
     group: root
     mode: '0755'
@@ -41,7 +39,7 @@
     state: absent
 
 - name: Verify runc installation
-  command: /usr/local/bin/runc --version
+  command: "{{ bin_dir }}/runc --version"
   register: runc_version_check
   changed_when: false
 

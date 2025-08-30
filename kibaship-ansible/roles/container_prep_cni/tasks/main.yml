@@ -1,7 +1,5 @@
 ---
-- name: Detect system architecture for CNI plugins
-  set_fact:
-    cni_arch: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }}"
+# Architecture is now centralized in group_vars/all/versions.yml as host_architecture
 
 - name: Create CNI bin directory
   file:
@@ -25,12 +23,12 @@
     suffix: _cni_download
   register: cni_temp_dir
 
-- name: Download CNI plugins v1.7.1 tarball
+- name: Download CNI plugins {{ cni_plugins_version }} tarball
   get_url:
-    url: "https://github.com/containernetworking/plugins/releases/download/v1.7.1/cni-plugins-linux-{{ cni_arch }}-v1.7.1.tgz"
+    url: "{{ cni_release_url }}/v{{ cni_plugins_version }}/cni-plugins-linux-{{ host_architecture }}-v{{ cni_plugins_version }}.tgz"
     dest: "{{ cni_temp_dir.path }}/cni-plugins.tgz"
     mode: '0644'
-    timeout: 300
+    timeout: "{{ download_timeout }}"
     validate_certs: true
   register: cni_download
 

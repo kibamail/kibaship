@@ -1,11 +1,9 @@
 ---
-- name: Detect system architecture for containerd
-  set_fact:
-    containerd_arch: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }}"
+# Architecture is now centralized in group_vars/all/versions.yml as host_architecture
 
 - name: Create containerd configuration directory
   file:
-    path: /etc/containerd
+    path: "{{ containerd_config_dir }}"
     state: directory
     mode: '0755'
     owner: root
@@ -17,33 +15,33 @@
     suffix: _containerd_download
   register: containerd_temp_dir
 
-- name: Download containerd v2.1.4 tarball
+- name: Download containerd {{ containerd_version }} tarball
   get_url:
-    url: "https://github.com/containerd/containerd/releases/download/v2.1.4/containerd-2.1.4-linux-{{ containerd_arch }}.tar.gz"
+    url: "{{ containerd_release_url }}/v{{ containerd_version }}/containerd-{{ containerd_version }}-linux-{{ host_architecture }}.tar.gz"
     dest: "{{ containerd_temp_dir.path }}/containerd.tar.gz"
     mode: '0644'
-    timeout: 300
+    timeout: "{{ download_timeout }}"
     validate_certs: true
   register: containerd_download
 
-- name: Extract containerd binaries to /usr/local/bin
+- name: Extract containerd binaries to {{ bin_dir }}
   unarchive:
     src: "{{ containerd_temp_dir.path }}/containerd.tar.gz"
-    dest: /usr/local
+    dest: "{{ bin_dir | dirname }}"
     owner: root
     group: root
     mode: '0755'
     remote_src: true
 
 - name: Generate containerd configuration with version 3 format
-  shell: /usr/local/bin/containerd config default
+  shell: "{{ bin_dir }}/containerd config default"
   register: containerd_default_config
   changed_when: false
 
 - name: Create containerd configuration file with Kubernetes optimizations
   copy:
     content: |
-      # Containerd v2.1.4 configuration for Kubernetes
+      # Containerd {{ containerd_version }} configuration for Kubernetes
       version = 3
       root = "/var/lib/containerd"
       state = "/run/containerd"
@@ -82,14 +80,14 @@
             conf_dir = "/etc/cni/net.d"
 
         [plugins."io.containerd.cri.v1.images"]
-          sandbox_image = "registry.k8s.io/pause:3.9"
+          sandbox_image = "{{ kube_image_repo }}/pause:{{ pause_version }}"
 
         [plugins."io.containerd.snapshotter.v1.overlayfs"]
           root_path = "/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs"
 
         [plugins."io.containerd.differ.v1.walking"]
           root_path = "/var/lib/containerd/io.containerd.differ.v1.walking"
-    dest: /etc/containerd/config.toml
+    dest: "{{ containerd_config_dir }}/config.toml"
     mode: '0644'
     owner: root
     group: root
@@ -97,7 +95,7 @@
 - name: Download containerd systemd service unit
   get_url:
     url: "https://raw.githubusercontent.com/containerd/containerd/main/containerd.service"
-    dest: /etc/systemd/system/containerd.service
+    dest: "{{ systemd_dir }}/containerd.service"
     mode: '0644'
     owner: root
     group: root

@@ -1,26 +1,26 @@
 ---
-# etcd version configuration
-etcd_version: "3.6.4"
+# etcd Installation Configuration
+# Uses centralized version and path configuration from group_vars/all/
 
-# Architecture detection for binary downloads
-etcd_arch_map:
-  x86_64: "amd64"
-  aarch64: "arm64"
-  armv7l: "arm"
+# Version - inherits from centralized config
+etcd_version_local: "{{ etcd_version }}"
 
-# Binary download URLs
-etcd_download_base_url: "https://github.com/etcd-io/etcd/releases/download"
+# Architecture - uses centralized architecture detection
+etcd_arch: "{{ host_architecture }}"
 
-# Installation paths
-etcd_bin_dir: "/usr/local/bin"
-etcd_data_dir: "/var/lib/etcd"
+# Binary download URLs - uses centralized base URLs
+etcd_download_base_url: "{{ etcd_release_url }}"
+
+# Installation paths - uses centralized paths
+etcd_bin_dir: "{{ bin_dir }}"
+etcd_data_dir: "{{ etcd_data_dir }}"  # Already defined in main.yml
 etcd_config_dir: "/etc/etcd"
-systemd_dir: "/etc/systemd/system"
+systemd_dir: "{{ systemd_dir }}"
 
 # etcd cluster configuration
-etcd_cluster_name: "default"
+etcd_cluster_name: "{{ cluster_name }}-etcd"
 etcd_initial_cluster_state: "new"
-etcd_initial_cluster_token: "etcd-cluster-0"
+etcd_initial_cluster_token: "{{ cluster_name }}-etcd-token"
 
 # Network configuration
 etcd_client_port: 2379
@@ -40,7 +40,17 @@ etcd_peer_key_file: "{{ etcd_config_dir }}/server-key.pem"
 etcd_peer_trusted_ca_file: "{{ etcd_config_dir }}/ca.pem"
 etcd_peer_client_cert_auth: true
 
-# Certificate configuration
-etcd_ca_key_size: 2048
-etcd_cert_key_size: 2048
+# Certificate configuration - uses centralized certificate settings
+etcd_ca_key_size: "{{ certificates_key_size }}"
+etcd_cert_key_size: "{{ certificates_key_size }}"
 etcd_cert_days: 3650
+
+# Download configuration - uses centralized settings
+download_retries: "{{ download_retries }}"
+download_delay: "{{ download_delay }}"
+download_timeout: "{{ download_timeout }}"
+
+# Performance tuning
+etcd_heartbeat_interval: "{{ etcd_heartbeat_interval }}"
+etcd_election_timeout: "{{ etcd_election_timeout }}"
+etcd_snapshot_count: "{{ etcd_snapshot_count | default(10000) }}"

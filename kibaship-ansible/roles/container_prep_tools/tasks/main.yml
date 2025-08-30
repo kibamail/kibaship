@@ -1,10 +1,8 @@
 ---
-- name: Detect system architecture for container tools
-  set_fact:
-    tools_arch: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }}"
+# Architecture is now centralized in group_vars/all/versions.yml as host_architecture
 
 # =======================================================================
-# CRICTL INSTALLATION (CRI CLI Tool) - v1.34.0
+# CRICTL INSTALLATION (CRI CLI Tool) - {{ crictl_version }}
 # =======================================================================
 
 - name: Create temporary directory for crictl download
@@ -13,12 +11,12 @@
     suffix: _crictl_download
   register: crictl_temp_dir
 
-- name: Download crictl v1.34.0 tarball
+- name: Download crictl {{ crictl_version }} tarball
   get_url:
-    url: "https://github.com/kubernetes-sigs/cri-tools/releases/download/v1.34.0/crictl-v1.34.0-linux-{{ tools_arch }}.tar.gz"
+    url: "{{ github_url }}/kubernetes-sigs/cri-tools/releases/download/{{ crictl_version }}/crictl-{{ crictl_version }}-linux-{{ host_architecture }}.tar.gz"
     dest: "{{ crictl_temp_dir.path }}/crictl.tar.gz"
     mode: '0644'
-    timeout: 300
+    timeout: "{{ download_timeout }}"
     validate_certs: true
   register: crictl_download
 
@@ -31,7 +29,7 @@
 - name: Install crictl binary to /usr/local/bin
   copy:
     src: "{{ crictl_temp_dir.path }}/crictl"
-    dest: /usr/local/bin/crictl
+    dest: "{{ bin_dir }}/crictl"
     owner: root
     group: root
     mode: '0755'
@@ -40,8 +38,8 @@
 - name: Create crictl configuration file
   copy:
     content: |
-      runtime-endpoint: unix:///run/containerd/containerd.sock
-      image-endpoint: unix:///run/containerd/containerd.sock
+      runtime-endpoint: {{ cri_socket }}
+      image-endpoint: {{ cri_socket }}
       timeout: 30
     dest: /etc/crictl.yaml
     owner: root

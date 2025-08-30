@@ -18,6 +18,7 @@ import * as Select from '@kibamail/owly/select-field'
 import { Text } from '@kibamail/owly/text'
 import * as TextField from '@kibamail/owly/text-field'
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden'
+import { useEffect, useMemo } from 'react'
 
 interface CreateClusterModalProps {
   isOpen: boolean
@@ -36,7 +37,7 @@ const providerIcons: Record<CloudProviderType, React.ComponentType<{ className?:
 }
 
 export function CreateClusterDialog({ isOpen, onOpenChange }: CreateClusterModalProps) {
-  const { connectedProviders, serverTypes, workspace } = usePage<
+  const { connectedProviders, serverTypes, workspace, cloudProviderRegions } = usePage<
     PageProps & {
       connectedProviders: CloudProvider[]
       serverTypes: Record<CloudProviderType, Record<string, CloudProviderServerType>>
@@ -93,9 +94,34 @@ export function CreateClusterDialog({ isOpen, onOpenChange }: CreateClusterModal
     return message?.replace('_', ' ')
   }
 
+  const providerType = selectedProvider?.type
+  const region = data?.region
+
+  useEffect(() => {
+    setData('server_type', '')
+  }, [region])
+
+  const availableServers = useMemo(() => {
+    if (!providerType) {
+      return {}
+    }
+
+    if (!region) {
+      return {}
+    }
+
+    const cloudProvidersByContinent = cloudProviderRegions[providerType] || {}
+
+    const regions = Object.values(cloudProvidersByContinent).flat()
+
+    const selectedRegion = regions.find((_region) => _region.slug === region)
+
+    return selectedRegion?.availableServerTypes || {}
+  }, [providerType, region])
+
   return (
     <Dialog.Root open={isOpen} onOpenChange={onOpenChange}>
-      <Dialog.Content>
+      <Dialog.Content className="!max-w-[590px]">
         <Dialog.Header>
           <Dialog.Title>Create New Cluster</Dialog.Title>
           <VisuallyHidden>
@@ -145,7 +171,7 @@ export function CreateClusterDialog({ isOpen, onOpenChange }: CreateClusterModal
                     : 'Select a cloud provider'
                 }
               />
-              <Select.Content className="z-100">
+              <Select.Content className="z-100 !max-h-[300px] overflow-y-auto">
                 {connectedProviders.map((provider) => {
                   const IconComponent = providerIcons[provider.type]
                   return (
@@ -270,18 +296,27 @@ export function CreateClusterDialog({ isOpen, onOpenChange }: CreateClusterModal
                 name="server_type"
                 value={data.server_type}
                 onValueChange={onServerTypeChange}
+                disabled={!data.region}
               >
                 <Select.Label>Node type</Select.Label>
                 <Select.Trigger placeholder="Select node type" />
-                <Select.Content className="z-100">
+                <Select.Content className="z-100 !max-h-[300px] overflow-y-auto">
                   {availableServerTypes.map((serverType) => (
-                    <Select.Item key={serverType.slug} value={serverType.slug}>
+                    <Select.Item
+                      disabled={!availableServers[serverType.slug]}
+                      key={serverType.slug}
+                      value={serverType.slug}
+                    >
                       <div className="flex flex-col">
                         <span className="font-medium">{serverType.name}</span>
                       </div>
                     </Select.Item>
                   ))}
                 </Select.Content>
+                <Select.Hint>
+                  The available server types depend on the region you select above. Please select a
+                  region first.
+                </Select.Hint>
                 {errors.server_type && (
                   <Select.Error>{formatErrorMessage(errors.server_type)}</Select.Error>
                 )}

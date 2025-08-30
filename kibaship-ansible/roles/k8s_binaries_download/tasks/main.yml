@@ -1,7 +1,5 @@
 ---
-- name: Detect system architecture for Kubernetes binaries
-  set_fact:
-    k8s_arch: "{{ k8s_arch_map[ansible_architecture] | default('amd64') }}"
+# Architecture is now centralized in group_vars/all/versions.yml as host_architecture
 
 # =======================================================================
 # KUBERNETES BINARIES DOWNLOAD & INSTALLATION
@@ -18,7 +16,7 @@
     url: "{{ k8s_download_base_url }}/{{ k8s_version }}/bin/linux/{{ k8s_arch }}/kubeadm"
     dest: "{{ k8s_temp_dir.path }}/kubeadm"
     mode: '0755'
-    timeout: 300
+    timeout: "{{ download_timeout }}"
     validate_certs: true
   register: kubeadm_download
 
@@ -27,7 +25,7 @@
     url: "{{ k8s_download_base_url }}/{{ k8s_version }}/bin/linux/{{ k8s_arch }}/kubelet"
     dest: "{{ k8s_temp_dir.path }}/kubelet"
     mode: '0755'
-    timeout: 300
+    timeout: "{{ download_timeout }}"
     validate_certs: true
   register: kubelet_download
 
@@ -36,7 +34,7 @@
     url: "{{ k8s_download_base_url }}/{{ k8s_version }}/bin/linux/{{ k8s_arch }}/kubectl"
     dest: "{{ k8s_temp_dir.path }}/kubectl"
     mode: '0755'
-    timeout: 300
+    timeout: "{{ download_timeout }}"
     validate_certs: true
   register: kubectl_download
 
@@ -82,7 +80,7 @@
     url: "{{ critools_download_base_url }}/{{ critools_version }}/crictl-{{ critools_version }}-linux-{{ k8s_arch }}.tar.gz"
     dest: "{{ crictl_temp_dir.path }}/crictl.tar.gz"
     mode: '0644'
-    timeout: 300
+    timeout: "{{ download_timeout }}"
     validate_certs: true
   register: crictl_download
 

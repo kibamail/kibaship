@@ -99,7 +99,7 @@ etcd:
 {% endfor %}
 dns:
   type: CoreDNS
-imageRepository: registry.k8s.io
+imageRepository: {{ kube_image_repo }}
 
 ---
 apiVersion: kubelet.config.k8s.io/v1beta1

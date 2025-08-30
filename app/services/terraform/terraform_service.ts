@@ -19,7 +19,6 @@ export interface TemplateContext {
   cluster_name: string
   network_zone: string
   location: string
-  hcloud_token: string
   s3_region: string
   s3_bucket: string
   control_planes: Array<ModelObject & {
@@ -179,39 +178,17 @@ export class TerraformService {
    * Builds comprehensive template context for all infrastructure templates
    */
   private buildTemplateContext(cluster: Cluster): TemplateContext {
-    const hcloudToken = cluster.cloudProvider?.credentials?.token
-    if (!hcloudToken) {
-      throw new Error('Cloud provider token is required')
-    }
-
     const publicKey = cluster.sshKey?.publicKey
 
-    const controlPlanes = cluster.nodes?.filter(node => node.type === 'master')?.map(node => {
-      const nodeData = node.toJSON()
-      return {
-        id: nodeData.id,
-        slug: nodeData.slug,
-        type: nodeData.type,
-        ...nodeData
-      }
-    }) || []
+    const controlPlanes = (cluster.nodes?.filter(node => node.type === 'master')?.map(node => node.toJSON()) || []) as TemplateContext['control_planes']
 
-    const workers = cluster.nodes?.filter(node => node.type === 'worker')?.map(node => {
-      const nodeData = node.toJSON()
-      return {
-        id: nodeData.id,
-        slug: nodeData.slug,
-        type: nodeData.type,
-        ...nodeData
-      }
-    }) || []
+    const workers = (cluster.nodes?.filter(node => node.type === 'worker')?.map(node => node.toJSON()) || []) as TemplateContext['workers']
 
     return {
       cluster_id: cluster.id,
       cluster_name: cluster.subdomainIdentifier,
       network_zone: this.getNetworkZoneFromLocation(cluster.location),
       location: cluster.location,
-      hcloud_token: hcloudToken,
       s3_region: env.get('S3_REGION'),
       s3_bucket: env.get('S3_BUCKET'),
       control_planes: controlPlanes,

@@ -1,0 +1,135 @@
+terraform {
+  required_providers {
+    digitalocean = {
+      source  = "digitalocean/digitalocean"
+      version = "~> 2.0"
+    }
+  }
+
+  backend "s3" {
+    bucket = "{{ s3_bucket }}"
+    key    = "clusters/{{ cluster_id }}/load-balancers/terraform.tfstate"
+    region = "{{ s3_region }}"
+    encrypt = true
+  }
+}
+
+variable "do_token" {
+  description = "DigitalOcean API Token"
+  type        = string
+  sensitive   = true
+}
+
+variable "cluster_name" {
+  description = "Name of the cluster"
+  type        = string
+}
+
+variable "location" {
+  description = "Location for the load balancers"
+  type        = string
+  default     = "nyc3"
+}
+
+variable "network_id" {
+  description = "ID of the VPC"
+  type        = string
+}
+
+provider "digitalocean" {
+  token = var.do_token
+}
+
+resource "digitalocean_loadbalancer" "ingress" {
+  name   = "ingress.${var.cluster_name}"
+  region = var.location
+  size   = "lb-small"
+  
+  vpc_uuid = var.network_id
+
+  forwarding_rule {
+    entry_protocol  = "http"
+    entry_port      = 80
+    target_protocol = "http"
+    target_port     = 30080
+  }
+
+  forwarding_rule {
+    entry_protocol  = "https"
+    entry_port      = 443
+    target_protocol = "https"
+    target_port     = 30443
+    tls_passthrough = true
+  }
+
+  droplet_tag = "worker-{{ cluster_id }}"
+
+  healthcheck {
+    protocol               = "tcp"
+    port                   = 30080
+    check_interval_seconds = 15
+    response_timeout_seconds = 10
+    unhealthy_threshold    = 3
+    healthy_threshold      = 3
+  }
+
+  enable_proxy_protocol = true
+}
+
+resource "digitalocean_loadbalancer" "kube" {
+  name   = "kube.${var.cluster_name}"
+  region = var.location
+  size   = "lb-small"
+  
+  vpc_uuid = var.network_id
+
+  forwarding_rule {
+    entry_protocol  = "tcp"
+    entry_port      = 6443
+    target_protocol = "tcp"
+    target_port     = 6443
+  }
+
+  droplet_tag = "control-plane-{{ cluster_id }}"
+
+  healthcheck {
+    protocol               = "tcp"
+    port                   = 6443
+    check_interval_seconds = 15
+    response_timeout_seconds = 10
+    unhealthy_threshold    = 3
+    healthy_threshold      = 3
+  }
+
+  enable_proxy_protocol = true
+}
+
+output "ingress_load_balancer_id" {
+  description = "ID of the ingress load balancer"
+  value       = digitalocean_loadbalancer.ingress.id
+}
+
+output "ingress_load_balancer_name" {
+  description = "Name of the ingress load balancer"
+  value       = digitalocean_loadbalancer.ingress.name
+}
+
+output "ingress_load_balancer_public_ip" {
+  description = "Public IP of the ingress load balancer"
+  value       = digitalocean_loadbalancer.ingress.ip
+}
+
+output "kube_load_balancer_id" {
+  description = "ID of the Kubernetes API load balancer"
+  value       = digitalocean_loadbalancer.kube.id
+}
+
+output "kube_load_balancer_name" {
+  description = "Name of the Kubernetes API load balancer"
+  value       = digitalocean_loadbalancer.kube.name
+}
+
+output "kube_load_balancer_public_ip" {
+  description = "Public IP of the Kubernetes API load balancer"
+  value       = digitalocean_loadbalancer.kube.ip
+}

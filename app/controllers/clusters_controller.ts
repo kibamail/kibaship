@@ -11,6 +11,10 @@ import ProvisionClusterJob from '#jobs/clusters/provision_cluster_job'
 import ProvisionNetworkJob from '#jobs/clusters/provision_network_job'
 import ProvisionSshKeysJob from '#jobs/clusters/provision_ssh_keys_job'
 import ProvisionLoadBalancersJob from '#jobs/clusters/provision_load_balancers_job'
+import ProvisionServersJob from '#jobs/clusters/provision_servers_job'
+import ProvisionVolumesJob from '#jobs/clusters/provision_volumes_job'
+import DestroyClusterJob from '#jobs/clusters/destroy_cluster_job'
+import { DateTime } from 'luxon'
 
 export default class ClustersController extends BaseController {
     public async index(ctx: HttpContext) {
@@ -97,6 +101,25 @@ export default class ClustersController extends BaseController {
         })
     }
 
+    public async destroy(ctx: HttpContext) {
+        const workspace = await this.workspace(ctx)
+        const clusterId = ctx.params.clusterId
+
+        const cluster = await Cluster.query()
+            .where('id', clusterId)
+            .where('workspace_id', workspace.id)
+            .firstOrFail()
+
+        cluster.deletedAt = DateTime.now()
+        await cluster.save()
+
+        await queue.dispatch(DestroyClusterJob, { clusterId: cluster.id })
+
+        return ctx.response.redirect().toRoute('clusters.index', {
+            workspace: workspace.slug
+        })
+    }
+
     private getJobForStage(stage: string) {
         switch (stage) {
             case 'network':
@@ -106,9 +129,9 @@ export default class ClustersController extends BaseController {
             case 'load-balancers':
                 return ProvisionLoadBalancersJob
             case 'servers':
-                throw new Error('ProvisionServersJob not implemented yet')
+                return ProvisionServersJob
             case 'volumes':
-                throw new Error('ProvisionVolumesJob not implemented yet')
+                return ProvisionVolumesJob
             case 'kubernetes':
                 throw new Error('ProvisionKubernetesJob not implemented yet')
             default:

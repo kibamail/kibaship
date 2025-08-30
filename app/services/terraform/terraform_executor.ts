@@ -240,7 +240,11 @@ export class TerraformExecutor {
    * Execute a terraform command with stream logging
    */
   private async executeCommand(command: TerraformCommand, args: string[]) {
-    await this.logToStream('command_start', `Starting terraform ${command} with args: ${args.join(' ')}`)
+    const shouldLogToStream = command !== 'destroy'
+
+    if (shouldLogToStream) {
+      await this.logToStream('command_start', `Starting terraform ${command} with args: ${args.join(' ')}`)
+    }
 
     return new ChildProcess()
       .command('terraform')
@@ -248,25 +252,31 @@ export class TerraformExecutor {
       .cwd(this.terraformDir)
       .env(this.getTerraformEnvironment())
       .onStdout(async (data) => {
-        await this.logToStream(`${command}_stdout`, data)
+        if (shouldLogToStream) {
+          await this.logToStream(`${command}_stdout`, data)
+        }
 
         logger.info(`${command}_stdout: ${data.substring(0, 100)}...`)
       })
       .onStderr(async (data) => {
-        await this.logToStream(`${command}_stderr`, data)
+        if (shouldLogToStream) {
+          await this.logToStream(`${command}_stderr`, data)
+        }
 
         logger.error(`${command}_stderr: ${data.substring(0, 100)}...`)
       })
       .onClose(async (code) => {
         const message = `Terraform ${command} exited with code: ${code}`
 
-        await this.logToStream(`${command}_close`, message)
-
+        if (shouldLogToStream) {
+          await this.logToStream(`${command}_close`, message)
+        }
         logger.info(`${command}_close: ${message.substring(0, 100)}...`)
       })
       .onError(async (error) => {
-        await this.logToStream(`${command}_error`, error.message)
-
+        if (shouldLogToStream) {
+          await this.logToStream(`${command}_error`, error.message)
+        }
         logger.error(`${command}_error: ${error.message}...`)
       })
       .execute()

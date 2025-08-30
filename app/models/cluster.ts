@@ -78,7 +78,7 @@ export default class Cluster extends BaseModel {
   declare cloudProviderId: string | null
 
   @column()
-  declare serverType: string | null
+  declare serverType: string
 
   @column()
   declare status: ClusterStatus
@@ -103,6 +103,9 @@ export default class Cluster extends BaseModel {
 
   @column()
   declare workersVolumeSize: number
+
+  @column.dateTime()
+  declare deletedAt: DateTime | null
 
   @column.dateTime()
   declare networkingStartedAt: DateTime | null
@@ -257,6 +260,7 @@ export default class Cluster extends BaseModel {
     cluster.kind = 'all_purpose'
     cluster.subdomainIdentifier = data.subdomain_identifier
     cluster.controlPlaneEndpoint = ''
+    cluster.serverType = data.server_type
     cluster.controlPlanesVolumeSize = data.control_planes_volume_size
     cluster.workersVolumeSize = data.workers_volume_size
     cluster.useTransaction(trx)

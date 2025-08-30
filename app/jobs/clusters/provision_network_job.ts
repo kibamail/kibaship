@@ -17,14 +17,17 @@ interface TerraformOutputValue {
   value: string | number | object
 }
 
-interface HetznerNetworkOutput {
+interface NetworkOutput {
   network_id: TerraformOutputValue
   network_name: TerraformOutputValue
   network_ip_range: TerraformOutputValue
   network_labels: TerraformOutputValue
-  subnet_id: TerraformOutputValue
-  subnet_ip_range: TerraformOutputValue
-  subnet_network_zone: TerraformOutputValue
+  // Hetzner-specific outputs (optional)
+  subnet_id?: TerraformOutputValue
+  subnet_ip_range?: TerraformOutputValue
+  subnet_network_zone?: TerraformOutputValue
+  // DigitalOcean-specific outputs (optional)
+  network_region?: TerraformOutputValue
 }
 
 export default class ProvisionNetworkJob extends Job {
@@ -43,6 +46,7 @@ export default class ProvisionNetworkJob extends Job {
 
     cluster.networkingStartedAt = DateTime.now()
     cluster.networkingCompletedAt = null
+    cluster.networkingErrorAt = null
     await cluster.save()
 
     const terraform = new TerraformService(payload.clusterId)
@@ -54,22 +58,20 @@ export default class ProvisionNetworkJob extends Job {
         .vars({
           ...cluster.cloudProvider?.getTerraformCredentials(),
           cluster_name: cluster.subdomainIdentifier,
-          network_zone: cluster.cloudProvider?.getNetworkZone(cluster.location) || 'eu-central'
+          network_zone: cluster.cloudProvider?.getNetworkZone(cluster.location) || 'eu-central',
+          location: cluster.location
         })
 
       await executor.init()
       await executor.apply({ autoApprove: true })
 
       const { stdout } = await executor.output()
+      const output = JSON.parse(stdout as string) as NetworkOutput
 
-      const output = JSON.parse(stdout as string) as HetznerNetworkOutput
-
-      if (cluster.cloudProvider?.type === 'hetzner') {
-        cluster.networkIpRange = output.network_ip_range.value as string
-        cluster.subnetIpRange = output.subnet_ip_range.value as string
-        cluster.providerNetworkId = output.network_id.value as string
-        cluster.providerSubnetId = output.subnet_id.value as string
-      }
+      cluster.networkIpRange = output.network_ip_range.value as string
+      cluster.providerNetworkId = output.network_id.value as string
+      cluster.subnetIpRange = (output.subnet_ip_range?.value as string || output.network_ip_range.value as string) || null
+      cluster.providerSubnetId = (output.subnet_id?.value || output.network_id.value) as string || null
 
       cluster.networkingCompletedAt = DateTime.now()
 
@@ -77,8 +79,9 @@ export default class ProvisionNetworkJob extends Job {
 
       await queue.dispatch(ProvisionSshKeysJob, payload)
     } catch (error) {
+      console.error(error)
       cluster.status = 'unhealthy'
-      cluster.networkingError = `${cluster.networkingError || ''}\n ${error?.message}`
+      cluster.networkingErrorAt = DateTime.now()
 
       await cluster.save()
     }

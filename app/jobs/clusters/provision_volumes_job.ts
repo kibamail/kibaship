@@ -15,7 +15,7 @@ interface TerraformOutputValue {
   value: string | number | object
 }
 
-interface HetznerVolumesOutput {
+interface VolumesOutput {
   [key: string]: TerraformOutputValue
 }
 
@@ -37,6 +37,8 @@ export default class ProvisionVolumesJob extends Job {
 
     cluster.volumesStartedAt = DateTime.now()
     cluster.volumesCompletedAt = null
+    cluster.volumesErrorAt = null
+
     await cluster.save()
 
     try {
@@ -53,26 +55,23 @@ export default class ProvisionVolumesJob extends Job {
           control_planes_volume_size: cluster.controlPlanesVolumeSize,
           workers_volume_size: cluster.workersVolumeSize,
           control_plane_server_ids: JSON.stringify(controlPlaneServerIds),
-          worker_server_ids: JSON.stringify(workerServerIds)
+          worker_server_ids: JSON.stringify(workerServerIds),
+          location: cluster.location
         })
 
       await executor.init()
       await executor.apply({ autoApprove: true })
 
       const { stdout } = await executor.output()
+      const output = JSON.parse(stdout as string) as VolumesOutput
 
-      const output = JSON.parse(stdout as string) as HetznerVolumesOutput
-
-      if (cluster.cloudProvider?.type === 'hetzner') {
-        await this.createOrUpdateVolumes(cluster.id, output)
-      }
+      await this.createOrUpdateVolumes(cluster.id, output)
 
       cluster.volumesCompletedAt = DateTime.now()
 
       await cluster.save()
 
     } catch (error) {
-      cluster.volumesError = `${cluster.volumesError || ''}\n ${error?.message}`
       cluster.volumesErrorAt = DateTime.now()
 
       await cluster.save()
@@ -99,7 +98,7 @@ export default class ProvisionVolumesJob extends Job {
 
   private async createOrUpdateVolumes(
     clusterId: string,
-    output: HetznerVolumesOutput
+    output: VolumesOutput
   ): Promise<void> {
     const cluster = await Cluster.query()
       .where('id', clusterId)

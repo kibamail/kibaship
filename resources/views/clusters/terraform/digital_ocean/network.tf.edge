@@ -1,0 +1,70 @@
+terraform {
+  required_providers {
+    digitalocean = {
+      source  = "digitalocean/digitalocean"
+      version = "~> 2.0"
+    }
+  }
+
+  backend "s3" {
+    bucket = "{{ s3_bucket }}"
+    key    = "clusters/{{ cluster_id }}/network/terraform.tfstate"
+    region = "{{ s3_region }}"
+    encrypt = true
+  }
+}
+
+variable "do_token" {
+  description = "DigitalOcean API Token"
+  type        = string
+  sensitive   = true
+}
+
+variable "cluster_name" {
+  description = "Name of the cluster"
+  type        = string
+}
+
+variable "location" {
+  description = "Location for the VPC"
+  type        = string
+  default     = "nyc3"
+}
+
+provider "digitalocean" {
+  token = var.do_token
+}
+
+resource "digitalocean_vpc" "cluster_network" {
+  name     = "${var.cluster_name}-network"
+  region   = var.location
+  ip_range = "10.0.0.0/16"
+}
+
+output "network_id" {
+  description = "ID of the created VPC"
+  value       = digitalocean_vpc.cluster_network.id
+}
+
+output "network_name" {
+  description = "Name of the created VPC"
+  value       = digitalocean_vpc.cluster_network.name
+}
+
+output "network_ip_range" {
+  description = "IP range of the VPC"
+  value       = digitalocean_vpc.cluster_network.ip_range
+}
+
+output "network_region" {
+  description = "Region of the VPC"
+  value       = digitalocean_vpc.cluster_network.region
+}
+
+output "network_labels" {
+  description = "Labels applied to the VPC"
+  value = {
+    cluster    = var.cluster_name
+    managed_by = "kibaship"
+  }
+}
