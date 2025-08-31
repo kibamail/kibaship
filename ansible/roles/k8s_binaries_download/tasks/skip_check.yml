@@ -1,0 +1,59 @@
+---
+# Skip check for k8s_binaries_download role
+- name: Check if Kubernetes binaries are already installed
+  block:
+    - name: Check for Kubernetes binaries
+      stat:
+        path: "{{ item }}"
+      register: k8s_binaries
+      loop:
+        - /usr/local/bin/kubeadm
+        - /usr/local/bin/kubelet
+        - /usr/local/bin/kubectl
+
+    - name: Test kubeadm functionality
+      command: kubeadm version --output=short
+      register: kubeadm_version_check
+      changed_when: false
+      failed_when: false
+      when: k8s_binaries.results[0].stat.exists
+
+    - name: Check kubelet service configuration
+      stat:
+        path: /etc/systemd/system/kubelet.service
+      register: kubelet_service_file
+
+    - name: Check kubelet service drop-in
+      stat:
+        path: /etc/systemd/system/kubelet.service.d/10-kubeadm.conf
+      register: kubelet_dropin
+
+    - name: Set skip flag if Kubernetes binaries are properly installed
+      set_fact:
+        skip_this_role: true
+      when: 
+        - k8s_binaries.results | map(attribute='stat.exists') | list | unique == [true]
+        - kubeadm_version_check.rc == 0
+        - kubelet_service_file.stat.exists
+        - kubelet_dropin.stat.exists
+
+    - name: Display skip decision for k8s binaries download
+      debug:
+        msg: |
+          {% if skip_this_role | default(false) %}
+          ✅ SKIPPING k8s_binaries_download: Kubernetes binaries are already installed and configured
+          {% else %}
+          ⚡ EXECUTING k8s_binaries_download: Kubernetes binaries need to be installed/configured
+          {% endif %}
+          - All binaries exist: {{ (k8s_binaries.results | map(attribute='stat.exists') | list | unique == [true]) | default(false) }}
+          - kubeadm functional: {{ (kubeadm_version_check.rc == 0) | default(false) }}
+          - kubelet service configured: {{ (kubelet_service_file.stat.exists and kubelet_dropin.stat.exists) | default(false) }}
+
+  rescue:
+    - name: Force role execution due to check failure
+      set_fact:
+        skip_this_role: false
+      
+    - name: Log skip check failure
+      debug:
+        msg: "k8s_binaries_download skip check failed, will execute role fully"

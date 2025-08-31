@@ -7,8 +7,8 @@
   assert:
     that:
       - inventory_hostname == groups['kube_control_plane'][0]
-    fail_msg: "This role should only run on the first control plane node"
-    success_msg: "Running cluster initialization on first control plane node"
+    fail_msg: 'This role should only run on the first control plane node'
+    success_msg: 'Running cluster initialization on first control plane node'
 
 - name: Check if kubeadm has already initialized the cluster
   stat:
@@ -21,22 +21,22 @@
 - name: Generate certificate key for HA setup
   command: kubeadm certs certificate-key
   register: certificate_key_result
-  when: 
+  when:
     - groups['kube_control_plane'] | length > 1
     - not kubeadm_already_run.stat.exists
   changed_when: false
 
 - name: Set certificate key fact
   set_fact:
-    kubeadm_certificate_key: "{{ certificate_key_result.stdout }}"
-  when: 
-    - groups['kube_control_plane'] | length > 1 
+    kubeadm_certificate_key: '{{ certificate_key_result.stdout }}'
+  when:
+    - groups['kube_control_plane'] | length > 1
     - certificate_key_result is defined
     - certificate_key_result.stdout is defined
 
 - name: Create kubeadm config directory
   file:
-    path: "{{ kube_config_dir }}"
+    path: '{{ kube_config_dir }}'
     state: directory
     mode: '0755'
     owner: root
@@ -44,8 +44,8 @@
 
 - name: Generate kubeadm configuration
   template:
-    src: "kubeadm-config.{{ kubeadm_config_api_version }}.yaml.j2"
-    dest: "{{ kube_config_dir }}/kubeadm-config.yaml"
+    src: 'kubeadm-config.{{ kubeadm_config_api_version }}.yaml.j2'
+    dest: '{{ kube_config_dir }}/kubeadm-config.yaml'
     mode: '0640'
     owner: root
     group: root
@@ -54,7 +54,7 @@
 - name: Initialize Kubernetes cluster with kubeadm
   command: >-
     timeout {{ kubeadm_init_timeout }}
-    kubeadm init 
+    kubeadm init
     --config={{ kube_config_dir }}/kubeadm-config.yaml
     {% if kubeadm_ignore_preflight_errors | length > 0 %}
     --ignore-preflight-errors={{ kubeadm_ignore_preflight_errors | join(',') }}
@@ -66,10 +66,10 @@
     --upload-certs
     {% endif %}
   environment:
-    PATH: "{{ bin_dir }}:{{ ansible_env.PATH }}"
+    PATH: '{{ bin_dir }}:{{ ansible_env.PATH }}'
   when: not kubeadm_already_run.stat.exists
   register: kubeadm_init_result
-  failed_when: 
+  failed_when:
     - kubeadm_init_result.rc != 0
     - '"field is immutable" not in kubeadm_init_result.stderr'
 
@@ -104,7 +104,7 @@
 - name: Extract load balancer domain from control plane endpoint
   set_fact:
     lb_domain: "{{ kube_control_plane_endpoint.split(':')[0] }}"
-    lb_expected_ip: "{{ kube_load_balancer_public_ip }}"
+    lb_expected_ip: '{{ kube_load_balancer_public_ip }}'
   when: groups['kube_control_plane'] | length > 1 or groups['kube_node'] | default([]) | length > 0
 
 - name: Display DNS propagation check information
@@ -115,13 +115,13 @@
       ==========================================
       Load Balancer Domain: {{ lb_domain | default('N/A') }}
       Expected IP Address: {{ lb_expected_ip | default('N/A') }}
-      
+
       Before proceeding with token creation, we must ensure the load balancer
       domain resolves to the correct IP address. This prevents kubeadm token
       operations from failing due to DNS propagation delays.
-      
+
       This check will retry up to 30 times with 30-second intervals (15 minutes total).
-  when: 
+  when:
     - groups['kube_control_plane'] | length > 1 or groups['kube_node'] | default([]) | length > 0
     - lb_domain is defined
 
@@ -129,12 +129,12 @@
   shell: |
     # Perform DNS lookup and extract IPv4 addresses
     resolved_ips=$(nslookup {{ lb_domain }} | grep -A 10 "Non-authoritative answer:" | grep "Address:" | awk '{print $2}' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
-    
+
     if [ -z "$resolved_ips" ]; then
       echo "DNS_LOOKUP_FAILED: No IPv4 address resolved for {{ lb_domain }}"
       exit 1
     fi
-    
+
     if [ "$resolved_ips" = "{{ lb_expected_ip }}" ]; then
       echo "DNS_MATCH_SUCCESS: {{ lb_domain }} resolves to {{ lb_expected_ip }}"
       exit 0
@@ -148,7 +148,7 @@
   delay: 30
   changed_when: false
   failed_when: false
-  when: 
+  when:
     - groups['kube_control_plane'] | length > 1 or groups['kube_node'] | default([]) | length > 0
     - lb_domain is defined
     - lb_expected_ip is defined
@@ -164,38 +164,38 @@
       Domain: {{ lb_domain }}
       Resolved IP: {{ lb_expected_ip }}
       Status: {{ dns_check_result.stdout_lines[-1] if dns_check_result.stdout_lines else 'Unknown' }}
-      
+
       Proceeding with cluster token operations...
       {% else %}
       ❌ FAILED: DNS propagation check failed after 30 attempts (15 minutes)
       Domain: {{ lb_domain }}
       Expected IP: {{ lb_expected_ip }}
       Last Status: {{ dns_check_result.stdout_lines[-1] if dns_check_result.stdout_lines else 'No output' }}
-      
+
       This likely indicates:
       1. DNS records not yet propagated globally
       2. Load balancer not properly configured
       3. Domain configuration issues
-      
+
       Manual verification: nslookup {{ lb_domain }}
       {% endif %}
-  when: 
+  when:
     - groups['kube_control_plane'] | length > 1 or groups['kube_node'] | default([]) | length > 0
     - dns_check_result is defined
 
 - name: Fail if DNS propagation check failed
   fail:
     msg: |
-      DNS propagation check failed after maximum retries. Cannot proceed with 
+      DNS propagation check failed after maximum retries. Cannot proceed with
       cluster token operations until {{ lb_domain }} resolves to {{ lb_expected_ip }}.
-      
+
       Please verify:
       1. Load balancer is properly provisioned and healthy
       2. DNS records are configured correctly
       3. DNS propagation has completed
-      
+
       You can manually verify with: nslookup {{ lb_domain }}
-  when: 
+  when:
     - groups['kube_control_plane'] | length > 1 or groups['kube_node'] | default([]) | length > 0
     - dns_check_result is defined
     - dns_check_result.rc != 0
@@ -242,10 +242,10 @@
       {% if upload_certs %}
       ✓ HA Configuration: Enabled ({{ groups['kube_control_plane'] | length }} control plane nodes planned)
       {% endif %}
-      
+
       Cluster Nodes:
       {{ cluster_nodes.stdout }}
-      
+
       Next Steps:
       - Additional control plane nodes will join using certificate key
       - Worker nodes will join using token authentication

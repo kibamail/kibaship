@@ -2,6 +2,16 @@
 # Configure essential kernel networking modules for Kubernetes nodes with Cilium kube-proxy replacement
 # Based on Kubespray's kubernetes/node role, optimized for Cilium proxy replacement
 
+- name: Skip check for redundant steps
+  include_tasks: skip_check.yml
+  when: skip_redundant_steps | default(false)
+
+- name: Skip role execution if already completed
+  meta: end_play
+  when: 
+    - skip_redundant_steps | default(false)
+    - skip_this_role | default(false)
+
 - name: Verify if br_netfilter module exists (container-safe)
   ansible.builtin.command: "modinfo br_netfilter"
   environment:

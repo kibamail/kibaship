@@ -3,6 +3,16 @@
 # Based on Kubespray's kubernetes/kubeadm role, adapted for Kibaship architecture
 # Runs only on worker nodes (kube_node group, not kube_control_plane)
 
+- name: Skip check for redundant steps
+  include_tasks: skip_check.yml
+  when: skip_redundant_steps | default(false)
+
+- name: Skip role execution if already completed
+  meta: end_play
+  when: 
+    - skip_redundant_steps | default(false)
+    - skip_this_role | default(false)
+
 - name: Check if this is a worker node
   assert:
     that:

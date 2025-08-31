@@ -1,0 +1,60 @@
+---
+# Skip check for os_prep_kernel role
+- name: Check if kernel modules and parameters are configured
+  block:
+    - name: Check required kernel modules
+      shell: lsmod | grep -E '^(br_netfilter|overlay|ip_vs)' | wc -l
+      register: loaded_modules_count
+      changed_when: false
+      failed_when: false
+
+    - name: Check bridge netfilter sysctl
+      shell: sysctl -n net.bridge.bridge-nf-call-iptables 2>/dev/null || echo "0"
+      register: bridge_nf_iptables
+      changed_when: false
+      failed_when: false
+
+    - name: Check IP forwarding sysctl
+      shell: sysctl -n net.ipv4.ip_forward 2>/dev/null || echo "0"
+      register: ip_forward
+      changed_when: false
+      failed_when: false
+
+    - name: Check sysctl configuration files
+      stat:
+        path: "{{ item }}"
+      register: sysctl_configs
+      loop:
+        - /etc/sysctl.d/99-kubernetes-cri.conf
+        - /etc/modules-load.d/kubespray-br_netfilter.conf
+
+    - name: Set skip flag if kernel is properly configured
+      set_fact:
+        skip_this_role: true
+      when: 
+        - loaded_modules_count.stdout | int >= 3
+        - bridge_nf_iptables.stdout | int == 1
+        - ip_forward.stdout | int == 1
+        - sysctl_configs.results | map(attribute='stat.exists') | list | unique == [true]
+
+    - name: Display skip decision for kernel preparation
+      debug:
+        msg: |
+          {% if skip_this_role | default(false) %}
+          ✅ SKIPPING os_prep_kernel: Kernel modules and parameters already configured
+          {% else %}
+          ⚡ EXECUTING os_prep_kernel: Kernel configuration needs setup
+          {% endif %}
+          - Loaded modules: {{ loaded_modules_count.stdout | default('unknown') }}/3
+          - Bridge netfilter: {{ bridge_nf_iptables.stdout | default('unknown') }}
+          - IP forwarding: {{ ip_forward.stdout | default('unknown') }}
+          - Config files: {{ sysctl_configs.results | map(attribute='stat.exists') | list }}
+
+  rescue:
+    - name: Force role execution due to check failure
+      set_fact:
+        skip_this_role: false
+      
+    - name: Log skip check failure
+      debug:
+        msg: "os_prep_kernel skip check failed, will execute role fully"

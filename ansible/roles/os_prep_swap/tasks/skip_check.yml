@@ -1,0 +1,42 @@
+---
+# Skip check for os_prep_swap role
+- name: Check if swap is already disabled
+  block:
+    - name: Check for active swap entries
+      shell: grep -v '^Filename' /proc/swaps | wc -l
+      register: active_swap_count
+      changed_when: false
+      failed_when: false
+
+    - name: Check if swap is disabled in fstab
+      shell: grep -E '^[^#]*swap' /etc/fstab | wc -l
+      register: fstab_swap_count
+      changed_when: false
+      failed_when: false
+
+    - name: Set skip flag if swap is already disabled
+      set_fact:
+        skip_this_role: true
+      when: 
+        - active_swap_count.stdout | int == 0
+        - fstab_swap_count.stdout | int == 0
+
+    - name: Display skip decision for swap preparation
+      debug:
+        msg: |
+          {% if skip_this_role | default(false) %}
+          ✅ SKIPPING os_prep_swap: Swap is already disabled
+          {% else %}
+          ⚡ EXECUTING os_prep_swap: Swap needs to be disabled
+          {% endif %}
+          - Active swap entries: {{ active_swap_count.stdout | default('unknown') }}
+          - Swap entries in fstab: {{ fstab_swap_count.stdout | default('unknown') }}
+
+  rescue:
+    - name: Force role execution due to check failure
+      set_fact:
+        skip_this_role: false
+      
+    - name: Log skip check failure
+      debug:
+        msg: "os_prep_swap skip check failed, will execute role fully"

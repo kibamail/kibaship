@@ -1,6 +1,16 @@
 ---
 # Architecture is now centralized in group_vars/all/versions.yml as host_architecture
 
+- name: Skip check for redundant steps
+  include_tasks: skip_check.yml
+  when: skip_redundant_steps | default(false)
+
+- name: Skip role execution if already completed
+  meta: end_play
+  when: 
+    - skip_redundant_steps | default(false)
+    - skip_this_role | default(false)
+
 - name: Create containerd configuration directory
   file:
     path: "{{ containerd_config_dir }}"

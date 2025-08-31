@@ -8,8 +8,8 @@
     that:
       - inventory_hostname in groups['kube_control_plane']
       - inventory_hostname != groups['kube_control_plane'][0]
-    fail_msg: "This role should only run on additional control plane nodes (not the first)"
-    success_msg: "Running control plane join on additional control plane node"
+    fail_msg: 'This role should only run on additional control plane nodes (not the first)'
+    success_msg: 'Running control plane join on additional control plane node'
 
 - name: Check if kubeadm has already joined this node
   stat:
@@ -31,20 +31,20 @@
 - name: Wait for first control plane API server to be ready
   wait_for:
     host: "{{ kubeadm_discovery_address.split(':')[0] }}"
-    port: "{{ kubeadm_discovery_address.split(':')[1] }}"
+    port: "{{ kubeadm_discovery_address.split(':')[1] if ':' in kubeadm_discovery_address else kube_apiserver_port }}"
     timeout: 300
   when: not kubelet_conf_exists.stat.exists
 
 - name: Get cluster join information from first control plane node
   set_fact:
     cluster_join_info: "{{ hostvars[groups['kube_control_plane'][0]]['cluster_join_info'] }}"
-  when: 
+  when:
     - not kubelet_conf_exists.stat.exists
     - hostvars[groups['kube_control_plane'][0]]['cluster_join_info'] is defined
 
 - name: Fail if join information is missing
   fail:
-    msg: "Cluster join information not available from first control plane node. Ensure k8s_cluster_init role has run successfully."
+    msg: 'Cluster join information not available from first control plane node. Ensure k8s_cluster_init role has run successfully.'
   when:
     - not kubelet_conf_exists.stat.exists
     - cluster_join_info is not defined
@@ -61,7 +61,7 @@
 
 - name: Parse fresh certificate key
   set_fact:
-    fresh_certificate_key: "{{ kubeadm_upload_cert.stdout_lines[-1] | trim }}"
+    fresh_certificate_key: '{{ kubeadm_upload_cert.stdout_lines[-1] | trim }}'
   when:
     - kubeadm_upload_cert is defined
     - kubeadm_upload_cert.stdout_lines is defined
@@ -73,15 +73,15 @@
       kubeadm reset -f --cert-dir {{ kube_cert_dir }}
     fi
   environment:
-    PATH: "{{ bin_dir }}:{{ ansible_env.PATH }}"
+    PATH: '{{ bin_dir }}:{{ ansible_env.PATH }}'
   when:
     - not kubelet_conf_exists.stat.exists
     - inventory_hostname != groups['kube_control_plane'][0]
 
 - name: Create kubeadm control plane join configuration
   template:
-    src: "kubeadm-controlplane.yaml.j2"
-    dest: "{{ kube_config_dir }}/kubeadm-controlplane.yaml"
+    src: 'kubeadm-controlplane.yaml.j2'
+    dest: '{{ kube_config_dir }}/kubeadm-controlplane.yaml'
     mode: '0640'
     owner: root
     group: root
@@ -100,7 +100,7 @@
     --skip-phases={{ kubeadm_join_phases_skip | join(',') }}
     {% endif %}
   environment:
-    PATH: "{{ bin_dir }}:{{ ansible_env.PATH }}"
+    PATH: '{{ bin_dir }}:{{ ansible_env.PATH }}'
   register: kubeadm_join_control_plane
   retries: 3
   delay: 10
@@ -152,10 +152,10 @@
       ✓ Cluster: {{ cluster_name }}
       ✓ Control Plane Endpoint: {{ kubeadm_discovery_address }}
       ✓ Local API Server: {{ hostvars[inventory_hostname]['ip'] }}:{{ kube_apiserver_port }}
-      
+
       Cluster Nodes (from this control plane):
       {{ cluster_nodes_from_joined_cp.stdout }}
-      
+
       High Availability Status:
       - Control Plane Nodes: {{ groups['kube_control_plane'] | length }}
       - Etcd Members: {{ groups['kube_control_plane'] | length }}

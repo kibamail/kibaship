@@ -1,0 +1,64 @@
+---
+# Skip check for k8s_worker_join role
+- name: Check if worker node is already joined
+  block:
+    - name: Check if kubelet.conf exists
+      stat:
+        path: /etc/kubernetes/kubelet.conf
+      register: kubelet_conf
+
+    - name: Check kubelet service status
+      systemd:
+        name: kubelet
+      register: kubelet_service
+      failed_when: false
+
+    - name: Test if node is in cluster via first control plane
+      command: kubectl --kubeconfig=/etc/kubernetes/admin.conf get node {{ inventory_hostname }}
+      register: node_in_cluster
+      changed_when: false
+      failed_when: false
+      delegate_to: "{{ groups['kube_control_plane'][0] }}"
+      when: kubelet_conf.stat.exists
+
+    - name: Check node status in cluster
+      command: kubectl --kubeconfig=/etc/kubernetes/admin.conf get node {{ inventory_hostname }} -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}'
+      register: node_ready_status
+      changed_when: false
+      failed_when: false
+      delegate_to: "{{ groups['kube_control_plane'][0] }}"
+      when: 
+        - kubelet_conf.stat.exists
+        - node_in_cluster.rc == 0
+
+    - name: Set skip flag if worker is already joined and ready
+      set_fact:
+        skip_this_role: true
+      when: 
+        - kubelet_conf.stat.exists
+        - kubelet_service.status is defined
+        - kubelet_service.status.ActiveState == "active"
+        - node_in_cluster.rc == 0
+        - node_ready_status.stdout == "True"
+
+    - name: Display skip decision for worker join
+      debug:
+        msg: |
+          {% if skip_this_role | default(false) %}
+          ✅ SKIPPING k8s_worker_join: Worker node is already joined and ready
+          {% else %}
+          ⚡ EXECUTING k8s_worker_join: Worker node needs to join the cluster
+          {% endif %}
+          - kubelet.conf exists: {{ kubelet_conf.stat.exists | default(false) }}
+          - kubelet service active: {{ (kubelet_service.status.ActiveState == 'active') | default(false) }}
+          - Node in cluster: {{ (node_in_cluster.rc == 0) | default(false) }}
+          - Node ready: {{ (node_ready_status.stdout == 'True') | default(false) }}
+
+  rescue:
+    - name: Force role execution due to check failure
+      set_fact:
+        skip_this_role: false
+      
+    - name: Log skip check failure
+      debug:
+        msg: "k8s_worker_join skip check failed, will execute role fully"

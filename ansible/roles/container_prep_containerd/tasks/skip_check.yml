@@ -1,0 +1,58 @@
+---
+# Skip check for container_prep_containerd role
+- name: Check if containerd is already installed and configured
+  block:
+    - name: Check containerd service status
+      systemd:
+        name: containerd
+      register: containerd_service
+      failed_when: false
+
+    - name: Check containerd binary and functionality
+      command: ctr version
+      register: containerd_version_check
+      changed_when: false
+      failed_when: false
+
+    - name: Check containerd configuration
+      stat:
+        path: /etc/containerd/config.toml
+      register: containerd_config
+
+    - name: Check if containerd is accepting connections
+      command: ctr containers list
+      register: containerd_connection_test
+      changed_when: false
+      failed_when: false
+
+    - name: Set skip flag if containerd is properly configured
+      set_fact:
+        skip_this_role: true
+      when: 
+        - containerd_service.status is defined
+        - containerd_service.status.ActiveState == "active"
+        - containerd_version_check.rc == 0
+        - containerd_config.stat.exists
+        - containerd_connection_test.rc == 0
+
+    - name: Display skip decision for containerd preparation
+      debug:
+        msg: |
+          {% if skip_this_role | default(false) %}
+          ✅ SKIPPING container_prep_containerd: containerd is already installed and running
+          {% else %}
+          ⚡ EXECUTING container_prep_containerd: containerd needs to be installed/configured
+          {% endif %}
+          - Service active: {{ (containerd_service.status.ActiveState == 'active') | default(false) }}
+          - Binary functional: {{ (containerd_version_check.rc == 0) | default(false) }}
+          - Config exists: {{ containerd_config.stat.exists | default(false) }}
+          - Daemon responding: {{ (containerd_connection_test.rc == 0) | default(false) }}
+
+  rescue:
+    - name: Force role execution due to check failure
+      set_fact:
+        skip_this_role: false
+      
+    - name: Log skip check failure
+      debug:
+        msg: "container_prep_containerd skip check failed, will execute role fully"

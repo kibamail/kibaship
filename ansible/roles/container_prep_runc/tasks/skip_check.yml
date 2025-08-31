@@ -1,0 +1,43 @@
+---
+# Skip check for container_prep_runc role
+- name: Check if runc is already installed and configured
+  block:
+    - name: Check if runc binary exists
+      stat:
+        path: /usr/local/bin/runc
+      register: runc_binary
+
+    - name: Check runc functionality
+      command: /usr/local/bin/runc --version
+      register: runc_version_check
+      changed_when: false
+      failed_when: false
+      when: runc_binary.stat.exists
+
+    - name: Set skip flag if runc is properly installed
+      set_fact:
+        skip_this_role: true
+      when: 
+        - runc_binary.stat.exists
+        - runc_version_check.rc == 0
+        - "'runc version' in runc_version_check.stdout"
+
+    - name: Display skip decision for runc preparation
+      debug:
+        msg: |
+          {% if skip_this_role | default(false) %}
+          ✅ SKIPPING container_prep_runc: runc is already installed and functional
+          {% else %}
+          ⚡ EXECUTING container_prep_runc: runc needs to be installed/configured
+          {% endif %}
+          - runc binary exists: {{ runc_binary.stat.exists | default(false) }}
+          - runc functional: {{ (runc_version_check.rc == 0) | default(false) }}
+
+  rescue:
+    - name: Force role execution due to check failure
+      set_fact:
+        skip_this_role: false
+      
+    - name: Log skip check failure
+      debug:
+        msg: "container_prep_runc skip check failed, will execute role fully"

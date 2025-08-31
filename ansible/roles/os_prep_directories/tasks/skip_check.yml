@@ -1,0 +1,42 @@
+---
+# Skip check for os_prep_directories role
+- name: Check if required directories already exist
+  block:
+    - name: Check for required Kubernetes directories
+      stat:
+        path: "{{ item }}"
+      register: k8s_directories
+      loop:
+        - /opt/cni/bin
+        - /etc/cni/net.d
+        - /etc/kubernetes
+        - /var/lib/kubelet
+        - /var/lib/etcd
+        - /etc/systemd/system/kubelet.service.d
+
+    - name: Set skip flag if all directories exist
+      set_fact:
+        skip_this_role: true
+      when: k8s_directories.results | map(attribute='stat.exists') | list | unique == [true]
+
+    - name: Display skip decision for directory preparation
+      debug:
+        msg: |
+          {% if skip_this_role | default(false) %}
+          ✅ SKIPPING os_prep_directories: All required directories already exist
+          {% else %}
+          ⚡ EXECUTING os_prep_directories: Some directories need to be created
+          {% endif %}
+          Directory status:
+          {% for result in k8s_directories.results %}
+          - {{ result.item }}: {{ 'exists' if result.stat.exists else 'missing' }}
+          {% endfor %}
+
+  rescue:
+    - name: Force role execution due to check failure
+      set_fact:
+        skip_this_role: false
+      
+    - name: Log skip check failure
+      debug:
+        msg: "os_prep_directories skip check failed, will execute role fully"

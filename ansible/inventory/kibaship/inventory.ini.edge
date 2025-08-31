@@ -37,3 +37,6 @@ cluster_name={{ cluster.name }}
 kube_service_addresses={{ cluster.network.serviceSubnet }}
 kube_pods_subnet={{ cluster.network.podSubnet }}
 dns_domain={{ cluster.network.dnsDomain }}
+
+# Optimization: Skip redundant steps on reruns to reduce provisioning time from ~20min to ~5-8min
+skip_redundant_steps={{ cluster.skipRedundantSteps || 'true' }}

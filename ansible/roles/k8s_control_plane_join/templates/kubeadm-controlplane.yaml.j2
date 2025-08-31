@@ -9,13 +9,13 @@ discovery:
 {% if apiserver_loadbalancer_domain_name is defined %}
     apiServerEndpoint: "{{ apiserver_loadbalancer_domain_name }}:{{ loadbalancer_apiserver_port | default(6443) }}"
 {% elif kube_control_plane_endpoint is defined %}
-    apiServerEndpoint: "{{ kube_control_plane_endpoint }}"
+    apiServerEndpoint: "{{ kube_control_plane_endpoint.split(':')[0] }}:{{ kube_control_plane_endpoint.split(':')[1] if ':' in kube_control_plane_endpoint else kube_apiserver_port }}"
 {% else %}
     apiServerEndpoint: "{{ hostvars[groups['kube_control_plane'][0]]['ip'] }}:{{ kube_apiserver_port }}"
 {% endif %}
     token: {{ cluster_join_info.token }}
     caCertHashes:
-      - sha256:{{ cluster_join_info.discovery_token_ca_cert_hash }}
+      - {{ cluster_join_info.discovery_token_ca_cert_hash }}
   tlsBootstrapToken: {{ cluster_join_info.token }}
 timeouts:
   discovery: {{ discovery_timeout | default('5m0s') }}
