@@ -66,6 +66,9 @@ apiServer:
     - {{ item }}
 {% endfor %}
 {% endif %}
+  extraArgs:
+    authorization-mode: Node,RBAC
+    enable-bootstrap-token-auth: "true"
 etcd:
   local:
     dataDir: /var/lib/etcd

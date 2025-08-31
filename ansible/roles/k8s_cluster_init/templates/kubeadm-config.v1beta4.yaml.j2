@@ -69,34 +69,6 @@ apiServer:
 etcd:
   local:
     dataDir: /var/lib/etcd
-    serverCertSANs:
-      - localhost
-      - 127.0.0.1
-      - {{ hostvars[inventory_hostname]['ip'] }}
-{% if hostvars[inventory_hostname]['access_ip'] is defined %}
-      - {{ hostvars[inventory_hostname]['access_ip'] }}
-{% endif %}
-{% for item in groups['kube_control_plane'] %}
-      - {{ hostvars[item]['ip'] }}
-{% if hostvars[item]['access_ip'] is defined %}
-      - {{ hostvars[item]['access_ip'] }}
-{% endif %}
-      - {{ hostvars[item]['ansible_hostname'] }}
-{% endfor %}
-    peerCertSANs:
-      - localhost
-      - 127.0.0.1
-      - {{ hostvars[inventory_hostname]['ip'] }}
-{% if hostvars[inventory_hostname]['access_ip'] is defined %}
-      - {{ hostvars[inventory_hostname]['access_ip'] }}
-{% endif %}
-{% for item in groups['kube_control_plane'] %}
-      - {{ hostvars[item]['ip'] }}
-{% if hostvars[item]['access_ip'] is defined %}
-      - {{ hostvars[item]['access_ip'] }}
-{% endif %}
-      - {{ hostvars[item]['ansible_hostname'] }}
-{% endfor %}
 ---
 apiVersion: kubelet.config.k8s.io/v1beta1
 kind: KubeletConfiguration
