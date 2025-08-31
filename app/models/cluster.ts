@@ -1,5 +1,13 @@
 import { DateTime } from 'luxon'
-import { BaseModel, beforeCreate, column, hasMany, belongsTo, hasOne, afterUpdate } from '@adonisjs/lucid/orm'
+import {
+  BaseModel,
+  beforeCreate,
+  column,
+  hasMany,
+  belongsTo,
+  hasOne,
+  afterUpdate,
+} from '@adonisjs/lucid/orm'
 import { randomUUID } from 'node:crypto'
 import { SshKeyService } from '#services/ssh/ssh_key_service'
 import { TerraformStage } from '#services/terraform/terraform_executor'
@@ -20,7 +28,7 @@ export enum ProvisioningStepName {
   SERVERS = 'servers',
   VOLUMES = 'volumes',
   K8S = 'k8s',
-  OPERATOR = 'operator'
+  OPERATOR = 'operator',
 }
 
 export type ProvisioningStepStatus = 'pending' | 'in_progress' | 'completed' | 'failed'
@@ -243,9 +251,12 @@ export default class Cluster extends BaseModel {
 
   @afterUpdate()
   public static async publishUpdate(cluster: Cluster) {
-    const pub = await redis.publish('cluster:updated', JSON.stringify({
-      id: cluster.id
-    }))
+    const pub = await redis.publish(
+      'cluster:updated',
+      JSON.stringify({
+        id: cluster.id,
+      })
+    )
 
     logger.info(`Published cluster update for ${cluster.id}: ${pub}`)
   }
@@ -280,9 +291,20 @@ export default class Cluster extends BaseModel {
     await cluster.save()
 
     await cluster.createSshKey(trx)
-    await cluster.createNodes(data.control_plane_nodes_count, data.worker_nodes_count, data.server_type, trx)
+    await cluster.createNodes(
+      data.control_plane_nodes_count,
+      data.worker_nodes_count,
+      data.server_type,
+      trx
+    )
 
     return cluster
+  }
+
+  public async resetProvisionProgress() {
+    this.status = 'provisioning'
+
+    await this.save()
   }
 
   public async createSshKey(trx: TransactionClientContract): Promise<ClusterSshKey> {
@@ -330,7 +352,7 @@ export default class Cluster extends BaseModel {
       nodes.push(workerNode)
     }
 
-    await Promise.all(nodes.map(node => node.save()))
+    await Promise.all(nodes.map((node) => node.save()))
   }
 
   public static complete(clusterId: string) {
@@ -340,7 +362,7 @@ export default class Cluster extends BaseModel {
       .preload('loadBalancers')
       .preload('nodes')
       .preload('sshKey')
-      .preload('nodes', nodesQuery => nodesQuery.preload('storages'))
+      .preload('nodes', (nodesQuery) => nodesQuery.preload('storages'))
       .first()
   }
 
@@ -388,7 +410,14 @@ export default class Cluster extends BaseModel {
   }
 
   public getFirstFailedStage(): TerraformStage | null {
-    const stages: TerraformStage[] = ['network', 'ssh-keys', 'load-balancers', 'servers', 'volumes', 'kubernetes']
+    const stages: TerraformStage[] = [
+      'network',
+      'ssh-keys',
+      'load-balancers',
+      'servers',
+      'volumes',
+      'kubernetes',
+    ]
 
     for (const stage of stages) {
       const status = this.getStepStatus(stage)

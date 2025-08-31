@@ -1,0 +1,27 @@
+---
+# validate_inventory role metadata
+
+galaxy_info:
+  author: Kibaship SRE Team
+  description: Validate inventory configuration before Kubernetes cluster deployment
+  company: Kibamail
+  license: MIT
+  min_ansible_version: 2.14
+  
+  platforms:
+    - name: Ubuntu
+      versions:
+        - focal    # 20.04 LTS
+        - jammy    # 22.04 LTS  
+        - noble    # 24.04 LTS
+
+  galaxy_tags:
+    - validation
+    - inventory
+    - kubernetes
+    - k8s
+    - load-balancer
+    - high-availability
+    - infrastructure
+
+dependencies: []

@@ -1,0 +1,28 @@
+---
+# k8s-verify role metadata
+
+galaxy_info:
+  author: Kibaship SRE Team
+  description: Comprehensive Kubernetes cluster health verification after deployment
+  company: Kibamail
+  license: MIT
+  min_ansible_version: 2.14
+  
+  platforms:
+    - name: Ubuntu
+      versions:
+        - focal    # 20.04 LTS
+        - jammy    # 22.04 LTS  
+        - noble    # 24.04 LTS
+
+  galaxy_tags:
+    - kubernetes
+    - k8s
+    - verification
+    - health-check
+    - monitoring
+    - cluster-validation
+    - etcd
+    - containerd
+
+dependencies: []

@@ -1,0 +1,54 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Ansible
+*.retry
+.vault_pass
+
+# E2E Testing - Terraform
+e2e/terraform/.terraform/
+e2e/terraform/.terraform.lock.hcl
+e2e/terraform/terraform.tfstate*
+e2e/terraform/terraform.tfvars
+e2e/terraform/.terraform.tfstate.lock.info
+
+# E2E Testing - Generated files
+e2e/inventory.yml
+e2e/*.log
+
+# SSH Keys (Security)
+e2e/.ssh/kibaship-e2e
+e2e/.ssh/kibaship-e2e.pub
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Molecule
+molecule/*/pytest_cache/
+.pytest_cache/
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp

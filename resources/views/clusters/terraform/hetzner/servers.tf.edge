@@ -64,7 +64,7 @@ provider "hcloud" {
 
   network {
     network_id = var.network_id
-    ip         = "10.0.1.{{ 20 + index }}"
+    ip         = "10.219.0.{{ 20 + index }}"
   }
 
   labels = {
@@ -92,7 +92,7 @@ resource "hcloud_load_balancer_target" "control_plane_kube_{{ node.slug }}" {
 
   network {
     network_id = var.network_id
-    ip         = "10.0.1.{{ 50 + index }}"
+    ip         = "10.219.0.{{ 20 + index }}"
   }
 
   labels = {

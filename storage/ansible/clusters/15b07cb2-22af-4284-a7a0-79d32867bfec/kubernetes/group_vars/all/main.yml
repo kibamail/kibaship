@@ -1,0 +1,175 @@
+---
+# Kibaship Kubernetes Cluster - Main Configuration
+# This is the single source of truth for all cluster configuration
+
+## Cluster Identity
+cluster_name: "kibaship-cluster"
+cluster_domain: "cluster.local"
+
+## Network Configuration
+# Pod Network CIDR
+kube_pods_subnet: "10.244.0.0/16"
+
+# Service Network CIDR  
+kube_service_addresses: "10.96.0.0/12"
+
+# Node Network Configuration
+kube_apiserver_bind_address: "0.0.0.0"
+kube_apiserver_port: 6443
+
+# DNS Configuration
+dns_domain: "{{ cluster_domain }}"
+upstream_dns_servers:
+  - 8.8.8.8
+  - 8.8.4.4
+
+## Directory Configuration
+kube_config_dir: /etc/kubernetes
+kube_cert_dir: "{{ kube_config_dir }}/ssl"
+kube_manifest_dir: "{{ kube_config_dir }}/manifests"
+kube_script_dir: "{{ bin_dir }}/kubernetes-scripts"
+kube_token_dir: "{{ kube_config_dir }}/tokens"
+kubelet_config_dir: /var/lib/kubelet
+
+## Container Runtime Configuration
+container_manager: containerd
+containerd_config_dir: /etc/containerd
+containerd_data_dir: /var/lib/containerd
+containerd_state_dir: /run/containerd
+containerd_systemd_dir: /etc/systemd/system/containerd.service.d
+
+## System Configuration
+# Users and Groups
+kube_owner: kube
+kube_cert_group: kube-cert
+
+# System Resources
+system_reserved: true
+system_memory_reserved: "512Mi"
+system_cpu_reserved: "500m"
+kube_memory_reserved: "256Mi" 
+kube_cpu_reserved: "100m"
+
+# Logging
+kube_log_level: 2
+
+## Network Plugin Configuration
+# CNI: Cilium (ONLY supported CNI - replaces kube-proxy)
+kube_network_plugin: cilium
+cilium_tunnel_mode: vxlan
+cilium_enable_hubble: true
+cilium_hubble_metrics_enabled: true
+
+# Kube-proxy configuration - DISABLED (Cilium replaces kube-proxy)
+kube_proxy_mode: none
+kube_proxy_strict_arp: false
+cilium_kube_proxy_replacement: true
+
+## Security Configuration
+# TLS Configuration
+tls_min_version: "VersionTLS12"
+kube_api_anonymous_auth: false
+
+# Certificate Configuration
+certificates_duration: 8760h  # 1 year
+certificates_key_size: 2048
+auto_renew_certificates: false
+
+# RBAC
+rbac_enabled: true
+
+# Pod Security
+pod_security_policy_enabled: false
+
+## High Availability Configuration
+# Load Balancer
+loadbalancer_apiserver_localhost: false
+loadbalancer_apiserver_type: nginx
+loadbalancer_apiserver_port: "{{ kube_apiserver_port }}"
+loadbalancer_apiserver_healthcheck_port: 8081
+
+# Etcd Configuration
+etcd_data_dir: /var/lib/etcd
+etcd_backup_retention: 7
+etcd_heartbeat_interval: 250
+etcd_election_timeout: 5000
+
+## Storage Configuration
+# Local storage
+local_volume_provisioner_enabled: false
+
+# Container image storage
+container_manager_storage_dir: "{{ containerd_data_dir }}"
+
+## Monitoring and Observability
+# Metrics
+enable_nodelocaldns: true
+nodelocaldns_ip: 169.254.25.10
+
+# Health checks
+kubelet_healthz_bind_address: "0.0.0.0"
+kubelet_healthz_port: 10248
+
+## Feature Configuration
+# Kubernetes features
+kubelet_csr_approver_enabled: false
+kubernetes_audit: false
+event_ttl_duration: "1h0m0s"
+
+# Encryption at rest
+kube_encrypt_secret_data: false
+
+# Swap configuration
+kubelet_fail_swap_on: true
+
+## Proxy Configuration (if needed)
+# http_proxy: ""
+# https_proxy: ""
+# no_proxy: "localhost,127.0.0.1,{{ kube_service_addresses }},{{ kube_pods_subnet }}"
+
+## Cloud Provider Configuration
+# cloud_provider: ""
+# external_cloud_provider: ""
+
+## Addon Configuration
+# DNS
+dns_mode: coredns
+enable_coredns_k8s_external: false
+resolvconf_mode: host_resolvconf
+
+# Ingress Controller
+ingress_nginx_enabled: false
+ingress_nginx_namespace: ingress-nginx
+
+# Metrics Server  
+metrics_server_enabled: true
+
+# Dashboard
+kubernetes_dashboard_enabled: false
+
+## Development and Testing
+# Netchecker for network validation
+deploy_netchecker: false
+
+# Download configuration
+retry_stagger: 5
+download_validate_certs: true
+download_run_once: false
+download_localhost: false
+
+## Backup and Recovery Configuration
+etcd_backup_enabled: false
+etcd_backup_schedule: "0 2 * * *"  # Daily at 2 AM
+etcd_snapshot_count: 10000
+
+## Advanced Configuration
+# Kubelet configuration (no pod limit - allows unlimited pods per node)
+kubelet_minimum_root_fs_size_mb: 15000
+kubelet_disable_local_storage_capacity_isolation: true
+
+# Container runtime
+containerd_oom_score: -999
+containerd_max_container_log_line_size: -1
+
+# Systemd
+systemd_dir: /etc/systemd/system

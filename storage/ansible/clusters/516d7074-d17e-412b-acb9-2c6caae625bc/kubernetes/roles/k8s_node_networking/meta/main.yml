@@ -1,0 +1,18 @@
+---
+galaxy_info:
+  author: kibaship-ansible
+  description: Configure essential kernel networking modules for Kubernetes nodes with Cilium kube-proxy replacement
+  company: Kibaship
+  license: MIT
+  min_ansible_version: "2.18"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble
+  galaxy_tags:
+    - kubernetes
+    - networking
+    - kernel
+    - cilium
+
+dependencies: []

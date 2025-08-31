@@ -1,10 +1,7 @@
-import { promisify } from 'node:util'
-import { resolve4 } from 'node:dns'
+import { Resolver } from 'node:dns'
 import logger from '@adonisjs/core/services/logger'
 import Cluster from '#models/cluster'
 import { randomUUID } from 'node:crypto'
-
-const resolveIpv4Address = promisify(resolve4)
 
 export interface DnsVerificationResult {
   ingress: boolean
@@ -12,17 +9,37 @@ export interface DnsVerificationResult {
 }
 
 export class ClusterDnsVerificationService {
-  public static async verify(cluster: Cluster): Promise<DnsVerificationResult> {
-    const ingressLoadBalancer = cluster.loadBalancers.find(lb => lb.type === 'ingress')
-    const clusterLoadBalancer = cluster.loadBalancers.find(lb => lb.type === 'cluster')
+  protected resolver = new Resolver()
+
+  constructor(protected cluster: Cluster) {
+    this.init()
+  }
+
+  protected init() {
+    let nameservers: string[] = ['8.8.8.8', '8.8.4.4']
+
+    // if (this.cluster.cloudProvider.type === 'hetzner') {
+    //   nameservers = ['185.12.64.1', '185.12.64.2']
+    // }
+
+    // if (this.cluster.cloudProvider.type === 'digital_ocean') {
+    //   nameservers = ['67.207.67.2', '67.207.67.3']
+    // }
+
+    this.resolver.setServers(nameservers)
+  }
+
+  public async verify(): Promise<DnsVerificationResult> {
+    const ingressLoadBalancer = this.cluster.loadBalancers.find((lb) => lb.type === 'ingress')
+    const clusterLoadBalancer = this.cluster.loadBalancers.find((lb) => lb.type === 'cluster')
 
     /**
-     * 
+     *
      * In order to check the definition of the wildcard domain
      * Check a random subdomain
      */
-    const ingressDomain = `${randomUUID()}.${cluster.subdomainIdentifier}`
-    const clusterDomain = `kube.${cluster.subdomainIdentifier}`
+    const ingressDomain = `${randomUUID()}.${this.cluster.subdomainIdentifier}`
+    const clusterDomain = `kube.${this.cluster.subdomainIdentifier}`
 
     const ingressVerified = await this.verifyDnsRecord(
       ingressDomain,
@@ -35,18 +52,18 @@ export class ClusterDnsVerificationService {
     )
 
     logger.info('DNS verification completed', {
-      clusterId: cluster.id,
+      clusterId: this.cluster.id,
       ingressVerified,
-      clusterVerified
+      clusterVerified,
     })
 
     return {
       ingress: ingressVerified,
-      cluster: clusterVerified
+      cluster: clusterVerified,
     }
   }
 
-  private static async verifyDnsRecord(
+  private async verifyDnsRecord(
     domain: string,
     expectedIp: string | null
   ): Promise<boolean> {
@@ -54,28 +71,31 @@ export class ClusterDnsVerificationService {
       return false
     }
 
-    try {
-      const resolvedIps = await resolveIpv4Address(domain)
+    const self = this
 
-      const verified = resolvedIps.includes(expectedIp)
+    return new Promise((resolve, reject) => {
+      self.resolver.resolve4(domain, (error, hostnames) => {
+        if (error) {
+          console.error(error)
+          logger.warn('DNS resolution failed', {
+            domain,
+            expectedIp,
+            error: error.message,
+          })
+          return reject(error)
+        }
 
-      logger.debug('DNS record verification', {
-        domain,
-        expectedIp,
-        resolvedIps,
-        verified
+        const verified = hostnames.includes(expectedIp)
+
+        logger.debug('DNS record verification', {
+          domain,
+          expectedIp,
+          resolvedIps: hostnames,
+          verified,
+        })
+
+        return resolve(verified)
       })
-
-      return verified
-    } catch (error) {
-      console.error(error)
-      logger.warn('DNS resolution failed', {
-        domain,
-        expectedIp,
-        error: error.message
-      })
-
-      return false
-    }
+    })
   }
 }

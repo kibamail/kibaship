@@ -1,0 +1,33 @@
+---
+# k8s_control_plane_join role defaults
+# Control plane join specific configurations
+
+# Discovery timeout for joining nodes
+discovery_timeout: "5m0s"
+
+# Preflight error ignores (cautiously minimal)
+kubeadm_ignore_preflight_errors:
+  - DirAvailable--etc-kubernetes-manifests
+
+# Join phases to skip (none by default for control plane)
+kubeadm_join_phases_skip: []
+
+# Timeout for kubeadm join operation 
+kubeadm_join_timeout: "300s"
+
+# Node hostname override (uses inventory_hostname by default)
+# kube_override_hostname: ""
+
+# Patches directory for kubeadm configuration patches
+# kubeadm_patches_dir: "/etc/kubernetes/patches"
+
+# Control plane join validation settings
+validate_control_plane_join: true
+
+# Retry settings for join operation
+kubeadm_join_retries: 3
+kubeadm_join_delay: 10
+
+# Certificate refresh settings
+refresh_certificates: true
+certificate_refresh_timeout: "60s"

@@ -1,0 +1,46 @@
+---
+# os_prep_packages: Install essential system packages for Kubernetes
+# Optimized for Ubuntu 24.04 - no OS detection needed
+# Following Kubespray's bootstrap_os patterns
+
+- name: Update apt package cache
+  apt:
+    update_cache: true
+    cache_valid_time: 3600  # 1 hour cache validity
+  register: apt_update
+  retries: 3
+  delay: 10
+  until: apt_update is succeeded
+
+- name: Install essential system packages
+  apt:
+    name: "{{ essential_packages }}"
+    state: present
+    update_cache: false  # Already updated above
+  register: package_install
+  retries: 3
+  delay: 5
+  until: package_install is succeeded
+  vars:
+    essential_packages:
+      - apt-transport-https  # HTTPS repository support
+      - ca-certificates      # SSL/TLS certificate authorities
+      - curl                 # HTTP client for downloads
+      - gnupg                # GPG for package verification
+      - dirmngr              # GPG network certificate management daemon
+      - software-properties-common  # Repository management utilities
+      - python3              # Required for Ansible operations
+      - python3-apt          # Python APT library for ansible apt module
+      - rsync                # File synchronization utility
+      - unzip                # Archive extraction utility
+      - wget                 # Alternative HTTP client
+      - openssl              # Cryptographic toolkit
+
+- name: Ensure GPG keyring directory exists
+  file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: '0755'
+    owner: root
+    group: root
+

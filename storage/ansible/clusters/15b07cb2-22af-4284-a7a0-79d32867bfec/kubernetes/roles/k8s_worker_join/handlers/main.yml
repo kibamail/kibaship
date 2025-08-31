@@ -1,0 +1,9 @@
+---
+# k8s_worker_join role handlers
+
+- name: Worker | restart kubelet
+  service:
+    name: kubelet
+    state: restarted
+    daemon_reload: true
+  when: kubelet_deployment_type != "host"

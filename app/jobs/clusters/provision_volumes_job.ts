@@ -45,19 +45,22 @@ export default class ProvisionVolumesJob extends Job {
       const terraform = new TerraformService(payload.clusterId)
       await terraform.generate(cluster, TerraformTemplate.VOLUMES)
 
-      const controlPlaneServerIds = this.buildServerIdsMap(cluster.nodes.filter(n => n.type === 'master'))
-      const workerServerIds = this.buildServerIdsMap(cluster.nodes.filter(n => n.type === 'worker'))
+      const controlPlaneServerIds = this.buildServerIdsMap(
+        cluster.nodes.filter((n) => n.type === 'master')
+      )
+      const workerServerIds = this.buildServerIdsMap(
+        cluster.nodes.filter((n) => n.type === 'worker')
+      )
 
-      const executor = new TerraformExecutor(cluster.id, 'volumes')
-        .vars({
-          ...cluster.cloudProvider?.getTerraformCredentials(),
-          cluster_name: cluster.subdomainIdentifier,
-          control_planes_volume_size: cluster.controlPlanesVolumeSize,
-          workers_volume_size: cluster.workersVolumeSize,
-          control_plane_server_ids: JSON.stringify(controlPlaneServerIds),
-          worker_server_ids: JSON.stringify(workerServerIds),
-          location: cluster.location
-        })
+      const executor = new TerraformExecutor(cluster.id, 'volumes').vars({
+        ...cluster.cloudProvider?.getTerraformCredentials(),
+        cluster_name: cluster.subdomainIdentifier,
+        control_planes_volume_size: cluster.controlPlanesVolumeSize,
+        workers_volume_size: cluster.workersVolumeSize,
+        control_plane_server_ids: JSON.stringify(controlPlaneServerIds),
+        worker_server_ids: JSON.stringify(workerServerIds),
+        location: cluster.location,
+      })
 
       await executor.init()
       await executor.apply({ autoApprove: true })
@@ -71,7 +74,6 @@ export default class ProvisionVolumesJob extends Job {
       cluster.dnsStartedAt = DateTime.now()
 
       await cluster.save()
-
     } catch (error) {
       cluster.volumesErrorAt = DateTime.now()
 
@@ -83,7 +85,7 @@ export default class ProvisionVolumesJob extends Job {
   /**
    * This is an optional method that gets called when the retries has exceeded and is marked failed.
    */
-  async rescue(_payload: ProvisionVolumesJobPayload) { }
+  async rescue(_payload: ProvisionVolumesJobPayload) {}
 
   private buildServerIdsMap(nodes: any[]): Record<string, string> {
     const serverIds: Record<string, string> = {}
@@ -97,10 +99,7 @@ export default class ProvisionVolumesJob extends Job {
     return serverIds
   }
 
-  private async createOrUpdateVolumes(
-    clusterId: string,
-    output: VolumesOutput
-  ): Promise<void> {
+  private async createOrUpdateVolumes(clusterId: string, output: VolumesOutput): Promise<void> {
     const cluster = await Cluster.query()
       .where('id', clusterId)
       .preload('nodes', (query) => {
@@ -127,9 +126,7 @@ export default class ProvisionVolumesJob extends Job {
     volumeId: string,
     attachmentId: string
   ): Promise<ClusterNodeStorage> {
-    let storage = await ClusterNodeStorage.query()
-      .where('cluster_node_id', nodeId)
-      .first()
+    let storage = await ClusterNodeStorage.query().where('cluster_node_id', nodeId).first()
 
     if (!storage) {
       storage = new ClusterNodeStorage()

@@ -1,0 +1,112 @@
+---
+# Verify etcd cluster is healthy (runs on control plane nodes only)
+
+- name: Check etcd service status
+  service_facts:
+
+- name: Verify etcd service is running
+  assert:
+    that:
+      - ansible_facts.services['etcd.service'] is defined
+      - ansible_facts.services['etcd.service'].state == 'running'
+      - ansible_facts.services['etcd.service'].status == 'enabled'
+    fail_msg: |
+      ❌ etcd service is not running properly
+      Status: {{ ansible_facts.services['etcd.service'].state | default('unknown') }}
+      Enabled: {{ ansible_facts.services['etcd.service'].status | default('unknown') }}
+    success_msg: "✓ etcd service is running and enabled"
+
+- name: Check etcd data directory
+  stat:
+    path: /var/lib/etcd
+  register: etcd_data_dir
+
+- name: Verify etcd data directory exists
+  assert:
+    that:
+      - etcd_data_dir.stat.exists
+      - etcd_data_dir.stat.isdir
+    fail_msg: "❌ etcd data directory not found at /var/lib/etcd"
+    success_msg: "✓ etcd data directory exists"
+
+- name: Test etcd cluster health
+  command: >
+    etcdctl endpoint health
+    --endpoints=https://127.0.0.1:2379
+    --cacert={{ kube_cert_dir }}/etcd/ca.crt
+    --cert={{ kube_cert_dir }}/etcd/server.crt
+    --key={{ kube_cert_dir }}/etcd/server.key
+  register: etcd_health
+  changed_when: false
+  environment:
+    ETCDCTL_API: "3"
+
+- name: Verify etcd endpoint health
+  assert:
+    that:
+      - etcd_health.rc == 0
+      - "'is healthy' in etcd_health.stdout"
+    fail_msg: |
+      ❌ etcd endpoint health check failed
+      Output: {{ etcd_health.stdout }}
+      Error: {{ etcd_health.stderr }}
+    success_msg: "✓ etcd endpoint is healthy"
+
+- name: Get etcd cluster member list
+  command: >
+    etcdctl member list
+    --endpoints=https://127.0.0.1:2379
+    --cacert={{ kube_cert_dir }}/etcd/ca.crt
+    --cert={{ kube_cert_dir }}/etcd/server.crt
+    --key={{ kube_cert_dir }}/etcd/server.key
+  register: etcd_members
+  changed_when: false
+  environment:
+    ETCDCTL_API: "3"
+
+- name: Parse etcd member count
+  set_fact:
+    etcd_member_count: "{{ etcd_members.stdout_lines | length }}"
+
+- name: Test etcd cluster connectivity
+  command: >
+    etcdctl endpoint status
+    --endpoints=https://127.0.0.1:2379
+    --cacert={{ kube_cert_dir }}/etcd/ca.crt
+    --cert={{ kube_cert_dir }}/etcd/server.crt
+    --key={{ kube_cert_dir }}/etcd/server.key
+    --write-out=table
+  register: etcd_status
+  changed_when: false
+  environment:
+    ETCDCTL_API: "3"
+
+- name: Check etcd logs for errors
+  command: journalctl -u etcd --no-pager --lines=10 --since="5 minutes ago"
+  register: etcd_logs
+  changed_when: false
+
+- name: Analyze etcd logs for errors
+  set_fact:
+    etcd_errors: "{{ etcd_logs.stdout_lines | select('match', '.*ERROR.*|.*WARN.*') | list }}"
+
+- name: Display etcd verification results
+  debug:
+    msg: |
+      ✓ Etcd Cluster Verification Complete
+      - Service: etcd running and enabled
+      - Data directory: Present and accessible
+      - Endpoint health: Healthy and responding
+      - Cluster members: {{ etcd_member_count }} member(s)
+      - Cluster status: {{ 'Healthy' if etcd_health.rc == 0 else 'Unhealthy' }}
+      - Recent issues: {{ etcd_errors | length }} warning/error(s) in last 5 minutes
+      
+      Etcd Status:
+      {{ etcd_status.stdout }}
+      
+      {% if etcd_errors | length > 0 %}
+      Recent warnings/errors:
+      {% for error in etcd_errors[-3:] %}
+      - {{ error }}
+      {% endfor %}
+      {% endif %}

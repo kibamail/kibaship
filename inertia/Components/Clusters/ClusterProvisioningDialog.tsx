@@ -12,7 +12,7 @@ import { SettingsIcon } from '../Icons/settings.svg'
 import { StackIcon } from '../Icons/stack.svg'
 import { K8sIcon } from '../Icons/k8s.svg'
 import { NavArrowDownIcon } from '../Icons/nav-arrow-down.svg'
-
+import { useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { axios } from '~/app/axios'
 import { usePage } from '@inertiajs/react'
@@ -104,6 +104,10 @@ export function ClusterProvisioningDialog({
   const [expandedStage, setExpandedStage] = useState<TerraformStage>(getLatestStage(initialCluster))
 
   const socket = useSocketIo()
+  const socketRegisteredRef = useRef({
+    update: false,
+    logs: false,
+  })
 
   const clusterQuery = useQuery<Cluster>({
     queryKey: ['clusters', initialCluster?.id],
@@ -142,6 +146,15 @@ export function ClusterProvisioningDialog({
       return
     }
 
+    if (socketRegisteredRef.current.update) {
+      return
+    }
+
+    socketRegisteredRef.current = {
+      ...socketRegisteredRef.current,
+      update: true,
+    }
+
     const listener = socket.on(`cluster:${cluster.id}:updated`, (data) => {
       console.log('@@@@@@@@@@@@---->CLUSTER_UPDATE_RECEIVED', data?.id)
       clusterQuery.refetch()
@@ -161,6 +174,15 @@ export function ClusterProvisioningDialog({
       socket.emit('cluster:logs', {
         clusterId: cluster?.id,
       })
+
+      if (socketRegisteredRef.current.logs) {
+        return
+      }
+
+      socketRegisteredRef.current = {
+        ...socketRegisteredRef.current,
+        logs: true,
+      }
 
       const listener = socket.on(`cluster:${clusterId}:logs`, (data) => {
         console.log('@@@@@@@@@@@@---->LOG_RECEIVED', data)

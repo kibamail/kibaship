@@ -1,0 +1,116 @@
+---
+# Verify Kubernetes API server is healthy (runs on control plane nodes only)
+
+- name: Check API server health endpoint
+  uri:
+    url: "https://127.0.0.1:6443/healthz"
+    method: GET
+    status_code: 200
+    validate_certs: false
+  register: apiserver_health
+  retries: 5
+  delay: 10
+
+- name: Verify API server health check
+  assert:
+    that:
+      - apiserver_health.status == 200
+      - apiserver_health.content == "ok"
+    fail_msg: |
+      ❌ API server health check failed
+      Status: {{ apiserver_health.status | default('unknown') }}
+      Content: {{ apiserver_health.content | default('no content') }}
+    success_msg: "✓ API server health endpoint responding: {{ apiserver_health.content }}"
+
+- name: Check API server readiness endpoint
+  uri:
+    url: "https://127.0.0.1:6443/readyz"
+    method: GET
+    status_code: 200
+    validate_certs: false
+  register: apiserver_readiness
+  retries: 3
+  delay: 5
+
+- name: Verify API server readiness
+  assert:
+    that:
+      - apiserver_readiness.status == 200
+      - apiserver_readiness.content == "ok"
+    fail_msg: "❌ API server readiness check failed"
+    success_msg: "✓ API server readiness endpoint responding: {{ apiserver_readiness.content }}"
+
+- name: Test kubectl connectivity
+  command: kubectl cluster-info
+  register: cluster_info
+  changed_when: false
+  environment:
+    KUBECONFIG: "{{ kube_config_dir }}/admin.conf"
+
+- name: Verify kubectl can connect to cluster
+  assert:
+    that:
+      - cluster_info.rc == 0
+      - "'Kubernetes control plane' in cluster_info.stdout"
+    fail_msg: |
+      ❌ kubectl cannot connect to cluster
+      Output: {{ cluster_info.stdout }}
+      Error: {{ cluster_info.stderr }}
+    success_msg: "✓ kubectl successfully connected to cluster"
+
+- name: Get API server version
+  command: kubectl version --short
+  register: api_version
+  changed_when: false
+  environment:
+    KUBECONFIG: "{{ kube_config_dir }}/admin.conf"
+
+- name: Check kube-system namespace
+  command: kubectl get namespace kube-system -o name
+  register: kube_system_ns
+  changed_when: false
+  environment:
+    KUBECONFIG: "{{ kube_config_dir }}/admin.conf"
+
+- name: Verify kube-system namespace exists
+  assert:
+    that:
+      - kube_system_ns.rc == 0
+      - "'namespace/kube-system' in kube_system_ns.stdout"
+    fail_msg: "❌ kube-system namespace not found"
+    success_msg: "✓ kube-system namespace exists"
+
+- name: Check API server logs for errors
+  command: journalctl -u kube-apiserver --no-pager --lines=10 --since="5 minutes ago"
+  register: apiserver_logs
+  changed_when: false
+  failed_when: false  # API server might not be running as systemd service
+
+- name: Check API server pod logs (if running as static pod)
+  command: kubectl logs kube-apiserver-{{ inventory_hostname }} -n kube-system --tail=10
+  register: apiserver_pod_logs
+  changed_when: false
+  failed_when: false
+  environment:
+    KUBECONFIG: "{{ kube_config_dir }}/admin.conf"
+
+- name: Set API server log source
+  set_fact:
+    apiserver_log_output: "{{ apiserver_pod_logs.stdout if apiserver_pod_logs.rc == 0 else apiserver_logs.stdout }}"
+    apiserver_log_source: "{{ 'static pod' if apiserver_pod_logs.rc == 0 else 'systemd service' }}"
+
+- name: Display API server verification results
+  debug:
+    msg: |
+      ✓ API Server Verification Complete
+      - Health endpoint: Responding correctly (200 OK)
+      - Readiness endpoint: Ready and available
+      - kubectl connectivity: Successfully connected
+      - kube-system namespace: Present and accessible
+      - Log source: {{ apiserver_log_source }}
+      
+      Cluster Info:
+      {{ cluster_info.stdout }}
+      
+      Version Info:
+      {{ api_version.stdout if api_version.rc == 0 else 'Version check failed' }}

@@ -1,0 +1,109 @@
+---
+# Verify all cluster nodes are registered and ready (runs on control plane nodes only)
+
+- name: Get all cluster nodes
+  command: kubectl get nodes -o wide --no-headers
+  register: cluster_nodes
+  changed_when: false
+  environment:
+    KUBECONFIG: "{{ kube_config_dir }}/admin.conf"
+
+- name: Parse node information
+  set_fact:
+    node_info: "{{ cluster_nodes.stdout_lines | map('split') | list }}"
+
+- name: Count ready nodes
+  set_fact:
+    ready_nodes: "{{ node_info | selectattr('1', 'equalto', 'Ready') | list }}"
+    not_ready_nodes: "{{ node_info | rejectattr('1', 'equalto', 'Ready') | list }}"
+
+- name: Verify all nodes are ready
+  assert:
+    that:
+      - ready_nodes | length == groups['k8s_cluster'] | length
+      - not_ready_nodes | length == 0
+    fail_msg: |
+      ❌ Not all nodes are ready
+      Ready nodes: {{ ready_nodes | length }}/{{ groups['k8s_cluster'] | length }}
+      Not ready nodes: {{ not_ready_nodes | map(attribute='0') | list | join(', ') }}
+    success_msg: "✓ All {{ ready_nodes | length }} nodes are Ready"
+
+- name: Verify control plane nodes
+  set_fact:
+    control_plane_nodes: "{{ node_info | selectattr('2', 'match', '.*control-plane.*') | list }}"
+
+- name: Check control plane node count
+  assert:
+    that:
+      - control_plane_nodes | length == groups['kube_control_plane'] | length
+    fail_msg: |
+      ❌ Control plane node count mismatch
+      Expected: {{ groups['kube_control_plane'] | length }}
+      Found: {{ control_plane_nodes | length }}
+    success_msg: "✓ All {{ control_plane_nodes | length }} control plane nodes are present"
+
+- name: Verify worker nodes
+  set_fact:
+    worker_nodes: "{{ node_info | rejectattr('2', 'match', '.*control-plane.*') | list }}"
+
+- name: Check worker node count
+  assert:
+    that:
+      - worker_nodes | length == groups['kube_node'] | default([]) | length
+    fail_msg: |
+      ❌ Worker node count mismatch
+      Expected: {{ groups['kube_node'] | default([]) | length }}
+      Found: {{ worker_nodes | length }}
+    success_msg: "✓ All {{ worker_nodes | length }} worker nodes are present"
+
+- name: Get node resource usage
+  command: kubectl top nodes --no-headers
+  register: node_resources
+  changed_when: false
+  failed_when: false
+  environment:
+    KUBECONFIG: "{{ kube_config_dir }}/admin.conf"
+
+- name: Check system pods in kube-system namespace
+  command: kubectl get pods -n kube-system --no-headers
+  register: system_pods
+  changed_when: false
+  environment:
+    KUBECONFIG: "{{ kube_config_dir }}/admin.conf"
+
+- name: Parse system pod status
+  set_fact:
+    running_pods: "{{ system_pods.stdout_lines | select('match', '.*Running.*') | list }}"
+    failed_pods: "{{ system_pods.stdout_lines | reject('match', '.*Running.*') | reject('match', '.*Completed.*') | list }}"
+
+- name: Display cluster node verification results
+  debug:
+    msg: |
+      ✓ Cluster Node Status Verification Complete
+      
+      Node Summary:
+      - Total nodes: {{ node_info | length }}
+      - Ready nodes: {{ ready_nodes | length }}
+      - Control plane nodes: {{ control_plane_nodes | length }}
+      - Worker nodes: {{ worker_nodes | length }}
+      
+      All Nodes:
+      {% for node in node_info %}
+      - {{ node[0] }}: {{ node[1] }} ({{ node[2] }}) - {{ node[4] }}
+      {% endfor %}
+      
+      System Pods Status:
+      - Running: {{ running_pods | length }}
+      - Failed/Pending: {{ failed_pods | length }}
+      
+      {% if node_resources.rc == 0 %}
+      Node Resource Usage:
+      {{ node_resources.stdout }}
+      {% endif %}
+      
+      {% if failed_pods | length > 0 %}
+      Failed/Pending Pods:
+      {% for pod in failed_pods[:5] %}
+      - {{ pod }}
+      {% endfor %}
+      {% endif %}

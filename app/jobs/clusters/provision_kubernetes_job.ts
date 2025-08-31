@@ -20,13 +20,15 @@ export default class ProvisionKubernetesJob extends Job {
     const cluster = await Cluster.complete(payload.clusterId)
 
     if (!cluster) {
-      logger.error('Cluster not found for Kubernetes provisioning', { clusterId: payload.clusterId })
+      logger.error('Cluster not found for Kubernetes provisioning', {
+        clusterId: payload.clusterId,
+      })
       return
     }
 
     logger.info('Starting Kubernetes provisioning for cluster', {
       clusterId: cluster.id,
-      clusterName: cluster.subdomainIdentifier
+      clusterName: cluster.subdomainIdentifier,
     })
 
     cluster.kubernetesClusterStartedAt = DateTime.now()
@@ -48,11 +50,9 @@ export default class ProvisionKubernetesJob extends Job {
 
       logger.info('Kubernetes provisioning completed successfully', {
         clusterId: cluster.id,
-        streamName: ansibleExecutor.getStreamName()
+        streamName: ansibleExecutor.getStreamName(),
       })
-
     } catch (error) {
-      cluster.kubernetesClusterError = error.message || 'Unknown error during Kubernetes provisioning'
       cluster.kubernetesClusterErrorAt = DateTime.now()
       cluster.status = 'unhealthy'
       await cluster.save()
@@ -65,6 +65,8 @@ export default class ProvisionKubernetesJob extends Job {
    * This is an optional method that gets called when the retries has exceeded and is marked failed.
    */
   async rescue(payload: ProvisionKubernetesJobPayload) {
-    logger.error('ProvisionKubernetesJob failed after all retries', { clusterId: payload.clusterId })
+    logger.error('ProvisionKubernetesJob failed after all retries', {
+      clusterId: payload.clusterId,
+    })
   }
 }

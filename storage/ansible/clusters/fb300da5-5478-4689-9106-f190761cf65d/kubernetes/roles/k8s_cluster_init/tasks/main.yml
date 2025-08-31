@@ -1,0 +1,153 @@
+---
+# k8s_cluster_init: Initialize Kubernetes cluster with kubeadm
+# Based on Kubespray's kubernetes/control-plane role
+# Runs only on the first control plane node (kube_control_plane[0])
+
+- name: Check if this is the first control plane node
+  assert:
+    that:
+      - inventory_hostname == groups['kube_control_plane'][0]
+    fail_msg: "This role should only run on the first control plane node"
+    success_msg: "Running cluster initialization on first control plane node"
+
+- name: Check if kubeadm has already initialized the cluster
+  stat:
+    path: /etc/kubernetes/admin.conf
+    get_attributes: false
+    get_checksum: false
+    get_mime: false
+  register: kubeadm_already_run
+
+- name: Generate certificate key for HA setup
+  command: kubeadm certs certificate-key
+  register: certificate_key_result
+  when: 
+    - groups['kube_control_plane'] | length > 1
+    - not kubeadm_already_run.stat.exists
+  changed_when: false
+
+- name: Set certificate key fact
+  set_fact:
+    kubeadm_certificate_key: "{{ certificate_key_result.stdout }}"
+  when: 
+    - groups['kube_control_plane'] | length > 1 
+    - certificate_key_result is defined
+    - certificate_key_result.stdout is defined
+
+- name: Create kubeadm config directory
+  file:
+    path: "{{ kube_config_dir }}"
+    state: directory
+    mode: '0755'
+    owner: root
+    group: root
+
+- name: Generate kubeadm configuration
+  template:
+    src: "kubeadm-config.{{ kubeadm_config_api_version }}.yaml.j2"
+    dest: "{{ kube_config_dir }}/kubeadm-config.yaml"
+    mode: '0640'
+    owner: root
+    group: root
+    backup: true
+
+- name: Initialize Kubernetes cluster with kubeadm
+  command: >-
+    timeout {{ kubeadm_init_timeout }}
+    kubeadm init 
+    --config={{ kube_config_dir }}/kubeadm-config.yaml
+    {% if kubeadm_ignore_preflight_errors | length > 0 %}
+    --ignore-preflight-errors={{ kubeadm_ignore_preflight_errors | join(',') }}
+    {% endif %}
+    {% if kubeadm_init_phases_skip | length > 0 %}
+    --skip-phases={{ kubeadm_init_phases_skip | join(',') }}
+    {% endif %}
+    {% if upload_certs %}
+    --upload-certs
+    {% endif %}
+  environment:
+    PATH: "{{ bin_dir }}:{{ ansible_env.PATH }}"
+  when: not kubeadm_already_run.stat.exists
+  register: kubeadm_init_result
+  failed_when: 
+    - kubeadm_init_result.rc != 0
+    - '"field is immutable" not in kubeadm_init_result.stderr'
+
+- name: Create .kube directory for root user
+  file:
+    path: /root/.kube
+    state: directory
+    mode: '0700'
+    owner: root
+    group: root
+
+- name: Copy admin.conf to root's kube config
+  copy:
+    src: /etc/kubernetes/admin.conf
+    dest: /root/.kube/config
+    remote_src: true
+    owner: root
+    group: root
+    mode: '0600'
+
+- name: Wait for API server to be ready
+  uri:
+    url: "https://{{ hostvars[inventory_hostname]['main_ip'] }}:{{ kube_apiserver_port }}/healthz"
+    method: GET
+    validate_certs: false
+    status_code: 200
+  register: api_server_check
+  until: api_server_check.status == 200
+  retries: 30
+  delay: 10
+
+- name: Get cluster join token
+  command: kubeadm token create --print-join-command
+  register: kubeadm_join_command
+  changed_when: false
+  when: groups['kube_control_plane'] | length > 1 or groups['kube_node'] | default([]) | length > 0
+
+- name: Extract join token from command
+  set_fact:
+    kubeadm_token: "{{ kubeadm_join_command.stdout | regex_search('--token ([^ ]+)', '\\1') | first }}"
+    kubeadm_discovery_token_ca_cert_hash: "{{ kubeadm_join_command.stdout | regex_search('--discovery-token-ca-cert-hash ([^ ]+)', '\\1') | first }}"
+  when: kubeadm_join_command is defined and kubeadm_join_command.stdout is defined
+
+- name: Store cluster join information for other nodes
+  set_fact:
+    cluster_join_info:
+      token: "{{ kubeadm_token | default('') }}"
+      discovery_token_ca_cert_hash: "{{ kubeadm_discovery_token_ca_cert_hash | default('') }}"
+      certificate_key: "{{ kubeadm_certificate_key | default('') }}"
+      control_plane_endpoint: "{{ hostvars[inventory_hostname]['main_ip'] }}:{{ kube_apiserver_port }}"
+  when: kubeadm_join_command is defined
+
+- name: Verify cluster status
+  command: kubectl get nodes
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  register: cluster_nodes
+  changed_when: false
+
+- name: Display cluster initialization results
+  debug:
+    msg: |
+      ==============================================
+      KUBERNETES CLUSTER INITIALIZED SUCCESSFULLY
+      ==============================================
+      ✓ Cluster Name: {{ cluster_name }}
+      ✓ Kubernetes Version: {{ kube_version }}
+      ✓ Control Plane Endpoint: {{ hostvars[inventory_hostname]['main_ip'] }}:{{ kube_apiserver_port }}
+      ✓ Service Network: {{ kube_service_addresses }}
+      ✓ Pod Network: {{ kube_pods_subnet }}
+      {% if upload_certs %}
+      ✓ HA Configuration: Enabled ({{ groups['kube_control_plane'] | length }} control plane nodes planned)
+      {% endif %}
+      
+      Cluster Nodes:
+      {{ cluster_nodes.stdout }}
+      
+      Next Steps:
+      - Additional control plane nodes will join using certificate key
+      - Worker nodes will join using token authentication
+      - CNI plugin (Cilium) installation required for pod networking

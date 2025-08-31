@@ -1,0 +1,27 @@
+---
+# Kubeadm JoinConfiguration for worker nodes
+# Uses kubeadm.k8s.io/v1beta4 API for Kubernetes v1.34.0
+apiVersion: kubeadm.k8s.io/v1beta4
+kind: JoinConfiguration
+discovery:
+  bootstrapToken:
+    apiServerEndpoint: "{{ kube_control_plane_endpoint }}"
+    token: "{{ cluster_join_token }}"
+    caCertHashes:
+      - "sha256:{{ cluster_ca_cert_hash }}"
+  timeout: {{ discovery_timeout }}
+caCertPath: {{ kube_cert_dir }}/ca.crt
+nodeRegistration:
+  name: "{{ inventory_hostname }}"
+  criSocket: "{{ cri_socket }}"
+  kubeletExtraArgs:
+    - name: node-ip
+      value: "{{ hostvars[inventory_hostname]['main_ip'] }}"
+    - name: cluster-dns
+      value: "{{ kube_dns_cluster_ip }}"
+    - name: cluster-domain
+      value: "{{ dns_domain }}"
+{% if kubeadm_patches | length > 0 %}
+patches:
+  directory: {{ kubeadm_patches_dir }}
+{% endif %}

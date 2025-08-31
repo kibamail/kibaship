@@ -1,0 +1,4 @@
+---
+# k8s-verify role handlers
+
+# No handlers needed for verification role - it's read-only

@@ -101,7 +101,7 @@ resource "digitalocean_loadbalancer" "kube" {
     healthy_threshold      = 3
   }
 
-  enable_proxy_protocol = true
+  enable_proxy_protocol = false
 }
 
 output "ingress_load_balancer_id" {

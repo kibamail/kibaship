@@ -242,7 +242,6 @@ export class AnsibleExecutor {
     }
   }
 
-
   /**
    * Generate inventory.ini from the Edge template
    */
@@ -295,7 +294,7 @@ export class AnsibleExecutor {
             : undefined,
         },
         network: {
-          serviceSubnet: '10.96.0.0/12',
+          serviceSubnet: '10.219.0.0/16',
           podSubnet: '10.244.0.0/16',
           dnsDomain: 'cluster.local',
         },
@@ -379,17 +378,17 @@ export class AnsibleExecutor {
   }
 
   /**
-   * Execute ansible-playbook command
+   * Execute ansible-playbook command via bash script
    */
   private async executeAnsiblePlaybook(command: AnsibleCommand, args: string[]): Promise<void> {
-    const ansiblePlaybookPath = join(this.venvPath, 'bin', 'ansible-playbook')
+    const playbookScriptPath = join(this.ansibleDir, 'playbook.sh')
 
     await this.logToStream(
       'playbook_start',
-      `Starting ansible-playbook with args: ${args.join(' ')}`
+      `Starting ansible-playbook via bash script with args: ${args.join(' ')}`
     )
 
-    await this.executeCommand(command, ansiblePlaybookPath, args, this.cluster || undefined)
+    await this.executeCommand(command, playbookScriptPath, args, this.cluster || undefined)
   }
 
   /**
@@ -440,8 +439,13 @@ export class AnsibleExecutor {
       // Python path for virtual environment
       PATH: `${join(this.venvPath, 'bin')}:${process.env.PATH || ''}`,
 
-      // SSH private key from cluster
-      ...(cluster?.sshKey?.privateKey ? { KIBASHIP_SSH_PRIVATE_KEY: cluster.sshKey.privateKey } : {}),
+      // Ansible playbook binary path for bash script
+      ANSIBLE_PLAYBOOK_BIN: join(this.venvPath, 'bin', 'ansible-playbook'),
+
+      // SSH private key from cluster (for bash script)
+      ...(cluster?.sshKey?.privateKey
+        ? { KIBASHIP_SSH_PRIVATE_KEY: cluster.sshKey.privateKey }
+        : {}),
 
       // Inherit system environment
       ...process.env,

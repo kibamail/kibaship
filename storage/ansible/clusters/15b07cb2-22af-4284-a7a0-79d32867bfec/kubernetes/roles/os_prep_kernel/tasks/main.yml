@@ -1,0 +1,40 @@
+---
+# os_prep_kernel: Configure essential kernel parameters for Kubernetes
+# Following Kubespray's sysctl configuration patterns for networking
+
+- name: Ensure sysctl.d directory exists
+  file:
+    path: /etc/sysctl.d
+    state: directory
+    mode: '0755'
+    owner: root
+    group: root
+
+- name: Configure Kubernetes kernel parameters
+  copy:
+    dest: /etc/sysctl.d/99-kubernetes.conf
+    content: |
+      # Kubernetes networking parameters
+      # Enable IPv4 forwarding for pod-to-pod communication
+      net.ipv4.ip_forward = 1
+      
+      # Enable bridge netfilter for iptables rules on bridge traffic
+      net.bridge.bridge-nf-call-iptables = 1
+      net.bridge.bridge-nf-call-ip6tables = 1
+    mode: '0644'
+    owner: root
+    group: root
+  register: sysctl_config
+
+- name: Apply kernel parameters (container-safe)
+  ansible.posix.sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    state: present
+    reload: false  # Container-friendly: don't reload immediately
+    sysctl_file: /etc/sysctl.d/99-kubernetes.conf
+  loop:
+    - { key: "net.ipv4.ip_forward", value: "1" }
+  failed_when: false  # Container restrictions expected
+  register: sysctl_applied
+

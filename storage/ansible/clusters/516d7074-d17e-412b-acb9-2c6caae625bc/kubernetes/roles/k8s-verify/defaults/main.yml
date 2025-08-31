@@ -1,0 +1,16 @@
+---
+# k8s-verify role default variables
+
+# Kubernetes configuration paths
+kube_config_dir: "/etc/kubernetes"
+kube_cert_dir: "/etc/kubernetes/pki"
+
+# Timeout settings for verification checks
+health_check_timeout: 30
+health_check_retries: 3
+health_check_delay: 10
+
+# Log analysis settings
+log_analysis_minutes: "5 minutes ago"
+max_log_lines: 10
+max_errors_displayed: 5

@@ -36,7 +36,7 @@ provider "hcloud" {
 
 resource "hcloud_network" "cluster_network" {
   name              = "${var.cluster_name}-network"
-  ip_range          = "10.0.0.0/16"
+  ip_range          = "10.219.0.0/16"
 
   labels = {
     cluster    = var.cluster_name
@@ -48,7 +48,7 @@ resource "hcloud_network_subnet" "cluster_subnet" {
   type         = "cloud"
   network_id   = hcloud_network.cluster_network.id
   network_zone = var.network_zone
-  ip_range     = "10.0.1.0/24"
+  ip_range     = "10.219.0.0/16"
 }
 
 output "network_id" {

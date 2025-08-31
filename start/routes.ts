@@ -35,23 +35,30 @@ router
     router.get('/:workspace/clusters', [ClustersController, 'index']).as('clusters.index'),
     router.post('/:workspace/clusters', [ClustersController, 'store']).as('clusters.store'),
     router.get('/:workspace/clusters/:clusterId', [ClustersController, 'show']).as('clusters.show'),
-    router.get('/:workspace/clusters/:clusterId/logs', [ClusterLogsController, 'show']).as('clusters.logs'),
-    router.post('/:workspace/clusters/:clusterId/restart', [ClustersController, 'restart']).as('clusters.restart'),
+    router
+      .get('/:workspace/clusters/:clusterId/logs', [ClusterLogsController, 'show'])
+      .as('clusters.logs'),
+    router
+      .post('/:workspace/clusters/:clusterId/restart', [ClustersController, 'restart'])
+      .as('clusters.restart'),
     router.delete('/:workspace/clusters/:clusterId', [ClustersController, 'destroy']),
     router.post('/:workspace/clusters/providers', [CloudProvidersController, 'store']),
-    router.post('/:workspace/clusters/:clusterId/dns/verify', [ClusterDnsVerifyController, 'index'])
+    router.post('/:workspace/clusters/:clusterId/dns/verify', [
+      ClusterDnsVerifyController,
+      'index',
+    ]),
   ])
   .prefix('/w')
   .use(middleware.auth())
 
-router
+router  
   .group(() => [
     router.get('/source-code-providers', [SourceProvidersController, 'index']),
     router.get('/source-code-providers/:sourceCodeProviderId', [SourceProvidersController, 'show']),
     router.get('/:provider/redirect', [SourceProvidersController, 'redirect']),
     router.get('/:provider/callback', [SourceProvidersController, 'callback']),
     router.get('/cloud-providers/digital-ocean/redirect', [DigitalOceanController, 'redirect']),
-    router.get('/cloud-providers/digital-ocean/callback', [DigitalOceanController, 'callback'])
+    router.get('/cloud-providers/digital-ocean/callback', [DigitalOceanController, 'callback']),
   ])
   .prefix('/connections')
   .use(middleware.auth())
@@ -60,7 +67,7 @@ router.get('/provision/:clusterId', async ({ response, params }) => {
   const cluster = await Cluster.complete(params.clusterId)
 
   await queue.dispatch(ProvisionClusterJob, {
-    clusterId: cluster?.id as string
+    clusterId: cluster?.id as string,
   })
 
   return response.json({ cluster })

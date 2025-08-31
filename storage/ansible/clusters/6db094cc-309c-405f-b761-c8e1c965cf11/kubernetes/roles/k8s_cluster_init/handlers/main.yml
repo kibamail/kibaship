@@ -1,0 +1,9 @@
+---
+# k8s_cluster_init handlers
+
+- name: restart kubelet
+  systemd:
+    name: kubelet
+    state: restarted
+    daemon_reload: true
+  listen: "restart kubelet"
