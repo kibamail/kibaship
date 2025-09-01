@@ -2,16 +2,23 @@
 ## Directory where the binaries will be installed
 bin_dir: /usr/local/bin
 
+## The access_ip variable is used to define how other nodes should access
+## the node.  This is used in flannel to allow other flannel nodes to see
+## this node for example.  The access_ip is really useful AWS and Google
+## environments where the nodes are accessed remotely by the "public" ip,
+## but don't know about that address themselves.
+# access_ip: 1.1.1.1
+
 ## External LB example config
-apiserver_loadbalancer_domain_name: "{{ subdomain_identifier }}"
+## apiserver_loadbalancer_domain_name: "elb.some.domain"
 # loadbalancer_apiserver:
 #   address: 1.2.3.4
 #   port: 1234
 
 ## Internal loadbalancers for apiservers
-loadbalancer_apiserver_localhost: true
+# loadbalancer_apiserver_localhost: true
 # valid options are "nginx" or "haproxy"
-loadbalancer_apiserver_type: nginx
+# loadbalancer_apiserver_type: nginx  # valid values "nginx" or "haproxy"
 
 ## Local loadbalancer should use this port
 ## And must be set port 6443
@@ -116,16 +123,16 @@ kube_webhook_token_auth_url_skip_tls_verify: false
 
 ## NTP Settings
 # Start the ntpd or chrony service and enable it at system boot.
-ntp_enabled: true
+ntp_enabled: false
 ntp_manage_config: false
 ntp_servers:
-  - "0.pool.ntp.org iburst"
-  - "1.pool.ntp.org iburst"
-  - "2.pool.ntp.org iburst"
-  - "3.pool.ntp.org iburst"
+  - '0.pool.ntp.org iburst'
+  - '1.pool.ntp.org iburst'
+  - '2.pool.ntp.org iburst'
+  - '3.pool.ntp.org iburst'
 
 ## Used to control no_log attribute
-unsafe_show_logs: true
+unsafe_show_logs: false
 
 ## If enabled it will allow kubespray to attempt setup even if the distribution is not supported. For unsupported distributions this can lead to unexpected failures in some cases.
 allow_unsupported_distribution_setup: false

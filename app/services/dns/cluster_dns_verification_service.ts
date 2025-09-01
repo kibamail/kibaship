@@ -73,29 +73,36 @@ export class ClusterDnsVerificationService {
 
     const self = this
 
-    return new Promise((resolve, reject) => {
-      self.resolver.resolve4(domain, (error, hostnames) => {
-        if (error) {
-          console.error(error)
-          logger.warn('DNS resolution failed', {
+    try {
+      await new Promise((resolve, reject) => {
+        self.resolver.resolve4(domain, (error, hostnames) => {
+          if (error) {
+            console.error(error)
+            logger.warn('DNS resolution failed', {
+              domain,
+              expectedIp,
+              error: error.message,
+            })
+            return reject(error)
+          }
+
+          const verified = hostnames.includes(expectedIp)
+
+          logger.debug('DNS record verification', {
             domain,
             expectedIp,
-            error: error.message,
+            resolvedIps: hostnames,
+            verified,
           })
-          return reject(error)
-        }
 
-        const verified = hostnames.includes(expectedIp)
-
-        logger.debug('DNS record verification', {
-          domain,
-          expectedIp,
-          resolvedIps: hostnames,
-          verified,
+          return resolve(verified)
         })
-
-        return resolve(verified)
       })
-    })
+
+      return true
+    } catch (error) {
+      console.error(error)
+      return false
+    }
   }
 }

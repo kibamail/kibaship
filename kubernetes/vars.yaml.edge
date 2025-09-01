@@ -1,0 +1,7 @@
+apiserver_loadbalancer_domain_name: "{{ load_balancer_subdomain_identifier }}"
+
+loadbalancer_apiserver_localhost: true
+
+loadbalancer_apiserver_type: nginx
+
+supplementary_addresses_in_ssl_keys: [{{ load_balancer_public_ipv4_address }}, {{ load_balancer_private_ipv4_address }}, {{ load_balancer_subdomain_identifier }}]

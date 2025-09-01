@@ -5,12 +5,12 @@ import { ChildProcess } from '#utils/child_process'
 import app from '@adonisjs/core/services/app'
 import edge from 'edge.js'
 import { join } from 'node:path'
-import { mkdir, cp, writeFile, access, rm } from 'node:fs/promises'
+import { mkdir, cp, writeFile, access, rm, readFile } from 'node:fs/promises'
 import { constants } from 'node:fs'
 import logger from '@adonisjs/core/services/logger'
 import type Cluster from '#models/cluster'
 
-export type AnsibleCommand = 'venv-init' | 'dependencies' | 'playbook'
+export type AnsibleCommand = 'clone' | 'checkout' | 'copy' | 'copy-script' | 'venv-init' | 'dependencies' | 'playbook'
 export type AnsibleStage = 'kubernetes'
 
 export interface AnsibleExecutionOptions {
@@ -27,44 +27,19 @@ export interface AnsibleExecutionResult {
   error?: string
 }
 
-export interface AnsibleInventoryData {
-  name: string
-  sshUser: string
-  sshKeyPath: string
-  controlPlanes: Array<{
-    name: string
-    publicIP: string
-    privateIP: string
+export interface KubeSprayTemplateData {
+  subdomain_identifier: string
+  control_planes: Array<{
+    public_ipv4_address: string
+    private_ipv4_address: string
   }>
   workers: Array<{
-    name: string
-    publicIP: string
-    privateIP: string
+    public_ipv4_address: string
+    private_ipv4_address: string
   }>
-  loadBalancers: {
-    kube: {
-      domain: string
-      port: number
-      publicIP: string
-      privateIP?: string
-    }
-    ingress?: {
-      domain: string
-      publicIP: string
-      privateIP?: string
-    }
-  }
-  network: {
-    serviceSubnet: string
-    podSubnet: string
-    dnsDomain: string
-  }
-  cloudProvider?: {
-    name: string
-    region: string
-    projectId: string
-  }
-  provisionedAt: string
+  load_balancer_public_ipv4_address: string
+  load_balancer_private_ipv4_address: string
+  load_balancer_subdomain_identifier: string
 }
 
 /**
@@ -81,10 +56,9 @@ export interface AnsibleInventoryData {
  */
 export class AnsibleExecutor {
   private streamName: string
-  private ansibleDir: string
-  private sourceAnsibleDir: string
+  private clusterDir: string
+  private kubesprayDir: string
   private venvPath: string
-  private inventoryPath: string
   private cluster: Cluster | null = null
 
   constructor(
@@ -92,10 +66,9 @@ export class AnsibleExecutor {
     protected stage: AnsibleStage
   ) {
     this.streamName = RedisStreamConfig.getClusterStream(clusterId)
-    this.ansibleDir = join(app.makePath('storage'), `ansible/clusters/${clusterId}/${stage}`)
-    this.sourceAnsibleDir = join(app.makePath(), 'ansible')
-    this.venvPath = join(this.ansibleDir, 'venv')
-    this.inventoryPath = join(this.ansibleDir, 'inventory/kibaship/inventory.ini')
+    this.clusterDir = join(app.makePath('storage'), `ansible/clusters/${clusterId}`)
+    this.kubesprayDir = join(this.clusterDir, 'kubespray')
+    this.venvPath = join(this.clusterDir, 'venv')
   }
 
   /**
@@ -104,8 +77,13 @@ export class AnsibleExecutor {
   async init(cluster: Cluster): Promise<void> {
     this.cluster = cluster
     await this.initializeStream()
-    await this.copyAnsibleFiles()
-    await this.generateInventory(cluster)
+    await this.setupClusterDirectory()
+    await this.cloneKubespray()
+    await this.checkoutKubesprayVersion()
+    await this.copyKibashipInventory()
+    await this.copyHardeningConfig()
+    await this.copyPlaybookScript()
+    await this.compileEdgeTemplates(cluster)
     await this.initializePythonEnvironment()
     await this.installDependencies()
   }
@@ -114,17 +92,24 @@ export class AnsibleExecutor {
    * Execute the main Kubernetes provisioning playbook
    */
   async executePlaybook(): Promise<void> {
-    const playbook = 'kubernetes.yml'
+    const playbookScriptPath = join(this.clusterDir, 'playbook.sh')
     const inventory = 'inventory/kibaship/inventory.ini'
+    const playbook = 'kubespray/cluster.yml'
+    const hardeningConfig = 'hardening.yaml'
+    const varsConfig = 'vars.yaml'
 
     const args = [
       '-i',
       inventory,
       playbook,
-      '-v', // Always use verbose for provisioning visibility
+      '-e',
+      `@${hardeningConfig}`,
+      '-e',
+      `@${varsConfig}`,
+      '-v',
     ]
 
-    await this.executeAnsiblePlaybook('playbook', args)
+    await this.executePlaybookScript(playbookScriptPath, args)
   }
 
   /**
@@ -135,10 +120,10 @@ export class AnsibleExecutor {
   }
 
   /**
-   * Get the Ansible working directory
+   * Get the cluster working directory
    */
-  getAnsibleDirectory(): string {
-    return this.ansibleDir
+  getClusterDirectory(): string {
+    return this.clusterDir
   }
 
   /**
@@ -190,143 +175,180 @@ export class AnsibleExecutor {
   }
 
   /**
-   * Copy the entire ansible directory to cluster storage
+   * Setup cluster directory and remove existing if present
    */
-  private async copyAnsibleFiles(): Promise<void> {
-    await this.logToStream('copy_start', 'Copying Ansible files to cluster directory')
+  private async setupClusterDirectory(): Promise<void> {
+    await this.logToStream('setup_start', 'Setting up cluster directory')
 
     try {
-      // Check if ansible storage directory already exists for cluster and delete it
+      // Check if cluster directory already exists and delete it
       try {
-        await access(this.ansibleDir, constants.F_OK)
-        await this.logToStream('cleanup_start', 'Existing Ansible directory found, removing it')
-        await rm(this.ansibleDir, { recursive: true, force: true })
-        await this.logToStream('cleanup_success', 'Existing Ansible directory removed successfully')
+        await access(this.clusterDir, constants.F_OK)
+        await this.logToStream('cleanup_start', 'Existing cluster directory found, removing it')
+        await rm(this.clusterDir, { recursive: true, force: true })
+        await this.logToStream('cleanup_success', 'Existing cluster directory removed successfully')
       } catch {
-        // Directory doesn't exist, which is fine
-        await this.logToStream(
-          'cleanup_skip',
-          'No existing Ansible directory found, proceeding with copy'
-        )
+        await this.logToStream('cleanup_skip', 'No existing cluster directory found')
       }
 
-      // Create the cluster ansible directory
-      await mkdir(this.ansibleDir, { recursive: true })
-
-      // Copy entire ansible directory
-      await cp(this.sourceAnsibleDir, this.ansibleDir, {
-        recursive: true,
-        force: true,
-      })
-
-      await this.logToStream('copy_success', 'Ansible files copied successfully')
-
-      // After copying, check if venv directory exists inside copied directory and delete it
-      const copiedVenvPath = join(this.ansibleDir, 'venv')
-      try {
-        await access(copiedVenvPath, constants.F_OK)
-        await this.logToStream(
-          'venv_cleanup_start',
-          'Found venv directory in copied files, removing it'
-        )
-        await rm(copiedVenvPath, { recursive: true, force: true })
-        await this.logToStream('venv_cleanup_success', 'Venv directory removed from copied files')
-      } catch {
-        // venv directory doesn't exist in copied files, which is fine
-        await this.logToStream('venv_cleanup_skip', 'No venv directory found in copied files')
-      }
+      // Create the cluster directory
+      await mkdir(this.clusterDir, { recursive: true })
+      await this.logToStream('setup_success', 'Cluster directory created successfully')
     } catch (error) {
-      const errorMessage = `Failed to copy Ansible files: ${error instanceof Error ? error.message : 'Unknown error'}`
-      await this.logToStream('copy_error', errorMessage)
+      const errorMessage = `Failed to setup cluster directory: ${error instanceof Error ? error.message : 'Unknown error'}`
+      await this.logToStream('setup_error', errorMessage)
       throw new Error(errorMessage)
     }
   }
 
   /**
-   * Generate inventory.ini from the Edge template
+   * Clone kubespray repository
    */
-  private async generateInventory(cluster: Cluster): Promise<void> {
-    await this.logToStream(
-      'inventory_start',
-      'Generating Ansible inventory from cluster configuration'
-    )
+  private async cloneKubespray(): Promise<void> {
+    await this.logToStream('clone_start', 'Cloning kubespray repository')
+
+    const args = [
+      'clone',
+      'https://github.com/kubernetes-sigs/kubespray.git',
+      'kubespray'
+    ]
+
+    await this.executeCommand('clone', 'git', args)
+    await this.logToStream('clone_success', 'Kubespray repository cloned successfully')
+  }
+
+  /**
+   * Checkout kubespray to specific version
+   */
+  private async checkoutKubesprayVersion(): Promise<void> {
+    await this.logToStream('checkout_start', 'Checking out kubespray version v2.28.1')
+
+    const args = ['checkout', 'v2.28.1']
+
+    await this.executeCommand('checkout', 'git', args, undefined, this.kubesprayDir)
+    await this.logToStream('checkout_success', 'Kubespray checked out to v2.28.1 successfully')
+  }
+
+  /**
+   * Copy kibaship inventory structure
+   */
+  private async copyKibashipInventory(): Promise<void> {
+    await this.logToStream('copy_inventory_start', 'Copying kibaship inventory structure')
 
     try {
-      // Cluster is already loaded with all relationships
+      const sourceInventoryDir = join(app.makePath(), 'kubernetes/kibaship')
+      const targetInventoryDir = join(this.clusterDir, 'inventory/kibaship')
 
-      // Prepare inventory data
-      const inventoryData: AnsibleInventoryData = {
-        name: cluster.subdomainIdentifier,
-        sshUser: 'root', // Fixed user for Kibaship clusters
-        sshKeyPath: 'ENV_SSH_KEY', // SSH key will be passed via environment variable
-        controlPlanes: cluster.nodes
+      await mkdir(targetInventoryDir, { recursive: true })
+
+      await cp(sourceInventoryDir, targetInventoryDir, {
+        recursive: true,
+        force: true,
+      })
+
+      await this.logToStream('copy_inventory_success', 'Kibaship inventory structure copied successfully')
+    } catch (error) {
+      const errorMessage = `Failed to copy kibaship inventory: ${error instanceof Error ? error.message : 'Unknown error'}`
+      await this.logToStream('copy_inventory_error', errorMessage)
+      throw new Error(errorMessage)
+    }
+  }
+
+  /**
+   * Copy hardening configuration
+   */
+  private async copyHardeningConfig(): Promise<void> {
+    await this.logToStream('copy_hardening_start', 'Copying hardening configuration')
+
+    try {
+      const sourceHardeningPath = join(app.makePath(), 'kubernetes/hardening.yaml')
+      const targetHardeningPath = join(this.clusterDir, 'hardening.yaml')
+
+      await cp(sourceHardeningPath, targetHardeningPath)
+
+      await this.logToStream('copy_hardening_success', 'Hardening configuration copied successfully')
+    } catch (error) {
+      const errorMessage = `Failed to copy hardening config: ${error instanceof Error ? error.message : 'Unknown error'}`
+      await this.logToStream('copy_hardening_error', errorMessage)
+      throw new Error(errorMessage)
+    }
+  }
+
+  /**
+   * Copy playbook script
+   */
+  private async copyPlaybookScript(): Promise<void> {
+    await this.logToStream('copy_playbook_start', 'Copying playbook script')
+
+    try {
+      const sourcePlaybookPath = join(app.makePath(), 'kubernetes/playbook.sh')
+      const targetPlaybookPath = join(this.clusterDir, 'playbook.sh')
+
+      await cp(sourcePlaybookPath, targetPlaybookPath)
+
+      await this.logToStream('copy_playbook_success', 'Playbook script copied successfully')
+    } catch (error) {
+      const errorMessage = `Failed to copy playbook script: ${error instanceof Error ? error.message : 'Unknown error'}`
+      await this.logToStream('copy_playbook_error', errorMessage)
+      throw new Error(errorMessage)
+    }
+  }
+
+  /**
+   * Compile Edge templates with cluster data
+   */
+  private async compileEdgeTemplates(cluster: Cluster): Promise<void> {
+    await this.logToStream('compile_start', 'Compiling Edge templates with cluster data')
+
+    try {
+      const clusterLoadBalancer = cluster.loadBalancers.find((lb) => lb.type === 'cluster')
+
+      const templateData: KubeSprayTemplateData = {
+        subdomain_identifier: cluster.subdomainIdentifier,
+        control_planes: cluster.nodes
           .filter((node) => node.type === 'master')
-          .map((node, index) => ({
-            name: `k8s-cp-${index + 1}`,
-            publicIP: node.ipv4Address!,
-            privateIP: node.privateIpv4Address!,
+          .map((node) => ({
+            public_ipv4_address: node.ipv4Address as string,
+            private_ipv4_address: node.privateIpv4Address as string,
           })),
         workers: cluster.nodes
           .filter((node) => node.type === 'worker')
-          .map((node, index) => ({
-            name: `k8s-worker-${index + 1}`,
-            publicIP: node.ipv4Address!,
-            privateIP: node.privateIpv4Address!,
+          .map((node) => ({
+            public_ipv4_address: node.ipv4Address as string,
+            private_ipv4_address: node.privateIpv4Address as string,
           })),
-        loadBalancers: {
-          kube: {
-            domain: `kube.${cluster.subdomainIdentifier}`,
-            port: 6443,
-            publicIP: cluster.loadBalancers.find((lb) => lb.type === 'cluster')?.publicIpv4Address!,
-            privateIP:
-              cluster.loadBalancers.find((lb) => lb.type === 'cluster')?.privateIpv4Address ||
-              undefined,
-          },
-          ingress: cluster.loadBalancers.find((lb) => lb.type === 'ingress')
-            ? {
-                domain: cluster.subdomainIdentifier,
-                publicIP: cluster.loadBalancers.find((lb) => lb.type === 'ingress')
-                  ?.publicIpv4Address!,
-                privateIP:
-                  cluster.loadBalancers.find((lb) => lb.type === 'ingress')?.privateIpv4Address ||
-                  undefined,
-              }
-            : undefined,
-        },
-        network: {
-          serviceSubnet: '10.219.0.0/16',
-          podSubnet: '10.244.0.0/16',
-          dnsDomain: 'cluster.local',
-        },
-        cloudProvider: cluster.cloudProvider
-          ? {
-              name: cluster.cloudProvider.type,
-              region: cluster.location,
-              projectId: cluster.cloudProvider.id,
-            }
-          : undefined,
-        provisionedAt: new Date().toISOString(),
+        load_balancer_public_ipv4_address: clusterLoadBalancer?.publicIpv4Address as string,
+        load_balancer_private_ipv4_address: clusterLoadBalancer?.privateIpv4Address as string,
+        load_balancer_subdomain_identifier: `kube.${cluster.subdomainIdentifier}`,
       }
 
-      // Load and render the Edge template
-      const templatePath = join(this.ansibleDir, 'inventory/kibaship/inventory.ini.edge')
-      const inventoryContent = await edge.render(templatePath, {
-        cluster: inventoryData,
-        kibashipVersion: '1.0.0',
-      })
+      await this.compileTemplate('inventory/kibaship/inventory.ini.edge', 'inventory/kibaship/inventory.ini', templateData)
 
-      // Write the generated inventory
-      await writeFile(this.inventoryPath, inventoryContent, 'utf8')
+      const varsTemplatePath = join(app.makePath(), 'kubernetes/vars.yaml.edge')
+      const varsOutputPath = join(this.clusterDir, 'vars.yaml')
+      const varsTemplateContent = await readFile(varsTemplatePath, 'utf8')
+      const varsCompiledContent = await edge.renderRaw(varsTemplateContent, templateData)
+      await writeFile(varsOutputPath, varsCompiledContent, 'utf8')
 
-      await this.logToStream(
-        'inventory_success',
-        `Ansible inventory generated successfully: ${cluster.nodes.length} nodes, ${cluster.loadBalancers.length} load balancers`
-      )
+      await this.logToStream('compile_success', 'Edge templates compiled successfully')
     } catch (error) {
-      const errorMessage = `Failed to generate inventory: ${error instanceof Error ? error.message : 'Unknown error'}`
-      await this.logToStream('inventory_error', errorMessage)
+      const errorMessage = `Failed to compile templates: ${error instanceof Error ? error.message : 'Unknown error'}`
+      await this.logToStream('compile_error', errorMessage)
       throw new Error(errorMessage)
     }
+  }
+
+  /**
+   * Compile a single Edge template
+   */
+  private async compileTemplate(templatePath: string, outputPath: string, data: KubeSprayTemplateData): Promise<void> {
+    const fullTemplatePath = join(this.clusterDir, templatePath)
+    const fullOutputPath = join(this.clusterDir, outputPath)
+
+    const templateContent = await readFile(fullTemplatePath, 'utf8')
+    const compiledContent = await edge.renderRaw(templateContent, data)
+
+    await writeFile(fullOutputPath, compiledContent, 'utf8')
   }
 
   /**
@@ -358,7 +380,7 @@ export class AnsibleExecutor {
   private async installDependencies(): Promise<void> {
     await this.logToStream('deps_start', 'Installing Ansible dependencies')
 
-    const requirementsPath = join(this.ansibleDir, 'requirements.txt')
+    const requirementsPath = join(this.kubesprayDir, 'requirements.txt')
     const pipPath = join(this.venvPath, 'bin', 'pip')
 
     // Check if requirements.txt exists
@@ -372,7 +394,7 @@ export class AnsibleExecutor {
       return
     }
 
-    const args = ['install', '-r', 'requirements.txt']
+    const args = ['install', '-r', requirementsPath]
 
     await this.executeCommand('dependencies', pipPath, args)
   }
@@ -380,15 +402,13 @@ export class AnsibleExecutor {
   /**
    * Execute ansible-playbook command via bash script
    */
-  private async executeAnsiblePlaybook(command: AnsibleCommand, args: string[]): Promise<void> {
-    const playbookScriptPath = join(this.ansibleDir, 'playbook.sh')
-
+  private async executePlaybookScript(scriptPath: string, args: string[]): Promise<void> {
     await this.logToStream(
       'playbook_start',
       `Starting ansible-playbook via bash script with args: ${args.join(' ')}`
     )
 
-    await this.executeCommand(command, playbookScriptPath, args, this.cluster || undefined)
+    await this.executeCommand('playbook', scriptPath, args, this.cluster || undefined)
   }
 
   /**
@@ -398,16 +418,19 @@ export class AnsibleExecutor {
     command: AnsibleCommand,
     executable: string,
     args: string[],
-    cluster?: Cluster
+    cluster?: Cluster,
+    workingDir?: string
   ): Promise<void> {
+    const cwd = workingDir || this.clusterDir
+
     await new ChildProcess()
       .command(executable)
       .args(args)
-      .cwd(this.ansibleDir)
+      .cwd(cwd)
       .env(this.getAnsibleEnvironment(cluster))
       .onStdout(async (data) => {
         await this.logToStream(`${command}_stdout`, data)
-        logger.info(`${command}_stdout: ${data.substring(0, 100)}...`)
+        logger.info(`${command}_stdout: ${data.substring(0, 300)}...`)
       })
       .onStderr(async (data) => {
         await this.logToStream(`${command}_stderr`, data)
@@ -433,8 +456,8 @@ export class AnsibleExecutor {
       // Disable host key checking for automated provisioning
       ANSIBLE_HOST_KEY_CHECKING: 'false',
 
-      // Use our ansible.cfg
-      ANSIBLE_CONFIG: join(this.ansibleDir, 'ansible.cfg'),
+      // Use kubespray ansible.cfg
+      ANSIBLE_CONFIG: join(this.kubesprayDir, 'ansible.cfg'),
 
       // Python path for virtual environment
       PATH: `${join(this.venvPath, 'bin')}:${process.env.PATH || ''}`,
