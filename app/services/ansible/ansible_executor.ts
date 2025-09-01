@@ -10,7 +10,14 @@ import { constants } from 'node:fs'
 import logger from '@adonisjs/core/services/logger'
 import type Cluster from '#models/cluster'
 
-export type AnsibleCommand = 'clone' | 'checkout' | 'copy' | 'copy-script' | 'venv-init' | 'dependencies' | 'playbook'
+export type AnsibleCommand =
+  | 'clone'
+  | 'checkout'
+  | 'copy'
+  | 'copy-script'
+  | 'venv-init'
+  | 'dependencies'
+  | 'playbook'
 export type AnsibleStage = 'kubernetes'
 
 export interface AnsibleExecutionOptions {
@@ -57,7 +64,6 @@ export interface KubeSprayTemplateData {
 export class AnsibleExecutor {
   private streamName: string
   private clusterDir: string
-  private kubesprayDir: string
   private venvPath: string
   private cluster: Cluster | null = null
 
@@ -67,7 +73,6 @@ export class AnsibleExecutor {
   ) {
     this.streamName = RedisStreamConfig.getClusterStream(clusterId)
     this.clusterDir = join(app.makePath('storage'), `ansible/clusters/${clusterId}`)
-    this.kubesprayDir = join(this.clusterDir, 'kubespray')
     this.venvPath = join(this.clusterDir, 'venv')
   }
 
@@ -94,7 +99,7 @@ export class AnsibleExecutor {
   async executePlaybook(): Promise<void> {
     const playbookScriptPath = join(this.clusterDir, 'playbook.sh')
     const inventory = 'inventory/kibaship/inventory.ini'
-    const playbook = 'kubespray/cluster.yml'
+    const playbook = 'cluster.yml'
     const hardeningConfig = 'hardening.yaml'
     const varsConfig = 'vars.yaml'
 
@@ -207,11 +212,7 @@ export class AnsibleExecutor {
   private async cloneKubespray(): Promise<void> {
     await this.logToStream('clone_start', 'Cloning kubespray repository')
 
-    const args = [
-      'clone',
-      'https://github.com/kubernetes-sigs/kubespray.git',
-      'kubespray'
-    ]
+    const args = ['clone', 'https://github.com/kubernetes-sigs/kubespray.git', '.']
 
     await this.executeCommand('clone', 'git', args)
     await this.logToStream('clone_success', 'Kubespray repository cloned successfully')
@@ -225,7 +226,7 @@ export class AnsibleExecutor {
 
     const args = ['checkout', 'v2.28.1']
 
-    await this.executeCommand('checkout', 'git', args, undefined, this.kubesprayDir)
+    await this.executeCommand('checkout', 'git', args, undefined, this.clusterDir)
     await this.logToStream('checkout_success', 'Kubespray checked out to v2.28.1 successfully')
   }
 
@@ -246,7 +247,10 @@ export class AnsibleExecutor {
         force: true,
       })
 
-      await this.logToStream('copy_inventory_success', 'Kibaship inventory structure copied successfully')
+      await this.logToStream(
+        'copy_inventory_success',
+        'Kibaship inventory structure copied successfully'
+      )
     } catch (error) {
       const errorMessage = `Failed to copy kibaship inventory: ${error instanceof Error ? error.message : 'Unknown error'}`
       await this.logToStream('copy_inventory_error', errorMessage)
@@ -266,7 +270,10 @@ export class AnsibleExecutor {
 
       await cp(sourceHardeningPath, targetHardeningPath)
 
-      await this.logToStream('copy_hardening_success', 'Hardening configuration copied successfully')
+      await this.logToStream(
+        'copy_hardening_success',
+        'Hardening configuration copied successfully'
+      )
     } catch (error) {
       const errorMessage = `Failed to copy hardening config: ${error instanceof Error ? error.message : 'Unknown error'}`
       await this.logToStream('copy_hardening_error', errorMessage)
@@ -322,7 +329,11 @@ export class AnsibleExecutor {
         load_balancer_subdomain_identifier: `kube.${cluster.subdomainIdentifier}`,
       }
 
-      await this.compileTemplate('inventory/kibaship/inventory.ini.edge', 'inventory/kibaship/inventory.ini', templateData)
+      await this.compileTemplate(
+        'inventory/kibaship/inventory.ini.edge',
+        'inventory/kibaship/inventory.ini',
+        templateData
+      )
 
       const varsTemplatePath = join(app.makePath(), 'kubernetes/vars.yaml.edge')
       const varsOutputPath = join(this.clusterDir, 'vars.yaml')
@@ -341,7 +352,11 @@ export class AnsibleExecutor {
   /**
    * Compile a single Edge template
    */
-  private async compileTemplate(templatePath: string, outputPath: string, data: KubeSprayTemplateData): Promise<void> {
+  private async compileTemplate(
+    templatePath: string,
+    outputPath: string,
+    data: KubeSprayTemplateData
+  ): Promise<void> {
     const fullTemplatePath = join(this.clusterDir, templatePath)
     const fullOutputPath = join(this.clusterDir, outputPath)
 
@@ -380,7 +395,7 @@ export class AnsibleExecutor {
   private async installDependencies(): Promise<void> {
     await this.logToStream('deps_start', 'Installing Ansible dependencies')
 
-    const requirementsPath = join(this.kubesprayDir, 'requirements.txt')
+    const requirementsPath = join(this.clusterDir, 'requirements.txt')
     const pipPath = join(this.venvPath, 'bin', 'pip')
 
     // Check if requirements.txt exists
@@ -457,7 +472,7 @@ export class AnsibleExecutor {
       ANSIBLE_HOST_KEY_CHECKING: 'false',
 
       // Use kubespray ansible.cfg
-      ANSIBLE_CONFIG: join(this.kubesprayDir, 'ansible.cfg'),
+      ANSIBLE_CONFIG: join(this.clusterDir, 'ansible.cfg'),
 
       // Python path for virtual environment
       PATH: `${join(this.venvPath, 'bin')}:${process.env.PATH || ''}`,
