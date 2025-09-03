@@ -1,8 +1,8 @@
 import { Job } from '@rlanz/bull-queue'
 import queue from '@rlanz/bull-queue/services/main'
-import ProvisionNetworkJob from './provision_network_job.js'
 import Cluster from '#models/cluster'
 import { DateTime } from 'luxon'
+import ProvisionTalosImageJob from './provision_talos_image_job.js'
 
 interface ProvisionClusterJobPayload {
   clusterId: string
@@ -28,7 +28,7 @@ export default class ProvisionClusterJob extends Job {
 
     await cluster.save()
 
-    await queue.dispatch(ProvisionNetworkJob, payload)
+    await queue.dispatch(ProvisionTalosImageJob, payload)
   }
 
   async rescue(_payload: ProvisionClusterJobPayload) {

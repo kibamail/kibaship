@@ -12,25 +12,35 @@ import { SettingsIcon } from '../Icons/settings.svg'
 import { StackIcon } from '../Icons/stack.svg'
 import { K8sIcon } from '../Icons/k8s.svg'
 import { NavArrowDownIcon } from '../Icons/nav-arrow-down.svg'
-
+import { useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { axios } from '~/app/axios'
 import { usePage } from '@inertiajs/react'
 import { type ClusterLogEntry } from '#services/redis/cluster_logs_service'
 import React, { useEffect, useState } from 'react'
 import { TerraformStage } from '#services/terraform/terraform_executor'
-import { getStepStatus } from './ClusterProvisioningStep'
 import { useSocketIo } from '~/hooks/useSocketIo'
+import { ServerIcon } from '../Icons/server.svg'
+import { NetworkIcon } from '../Icons/network.svg'
+import { DNSIcon } from '../Icons/dns.svg'
+import { DockerIcon } from '../Icons/docker.svg'
 
 const ClusterProvisioningStep = React.lazy(() => import('./ClusterProvisioningStep'))
 
 interface ClusterProvisioningDialogProps {
   cluster: Cluster | null
   isOpen: boolean
+  onClusterUpdated: (cluster: Cluster) => void
   onOpenChange: (open: boolean) => void
 }
 
 const provisioningSteps: ProvisioningStepInfo[] = [
+  {
+    stage: 'talos-image',
+    title: 'Talos OS image',
+    description: 'Creating or locating the Talos OS system image for cluster nodes',
+    icon: <DockerIcon className="!size-4.5" />,
+  },
   {
     stage: 'network',
     title: 'Network infrastructure',
@@ -47,19 +57,25 @@ const provisioningSteps: ProvisioningStepInfo[] = [
     stage: 'load-balancers',
     title: 'Load balancers',
     description: 'Configuring load balancers for high availability and traffic distribution',
-    icon: <StackIcon className="!size-5" />,
+    icon: <NetworkIcon className="!size-5" />,
   },
   {
     stage: 'servers',
     title: 'Server provisioning',
-    description: 'Creating and configuring virtual machines for control plane and worker nodes',
-    icon: <StackIcon className="!size-5" />,
+    description: 'Creating and configuring control plane and worker servers',
+    icon: <ServerIcon className="!size-4" />,
   },
   {
     stage: 'volumes',
     title: 'Storage volumes',
     description: 'Attaching and configuring persistent storage volumes',
-    icon: <StackIcon className="!size-5" />,
+    icon: <StackIcon className="!size-5.5" />,
+  },
+  {
+    stage: 'dns',
+    title: 'DNS configuration',
+    description: 'Setup DNS for the cluster ingress.',
+    icon: <DNSIcon className="!size-5" />,
   },
   {
     stage: 'kubernetes',
@@ -71,30 +87,35 @@ const provisioningSteps: ProvisioningStepInfo[] = [
 
 function getLatestStage(cluster: Cluster | null | undefined): TerraformStage {
   if (!cluster) {
-    return 'network'
+    return 'talos-image'
   }
 
   const stagesWithStatus = provisioningSteps.map((step) => ({
     stage: step.stage,
-    status: getStepStatus(cluster, step.stage),
+    status: cluster ? cluster?.progress[step.stage] : 'pending',
   }))
 
   const latestStage = stagesWithStatus.find((stage) => stage.status === 'in_progress')?.stage
   const latestFailedStage = stagesWithStatus.find((stage) => stage.status === 'failed')?.stage
 
-  return latestStage || latestFailedStage || 'network'
+  return latestStage || latestFailedStage || 'talos-image'
 }
 
 export function ClusterProvisioningDialog({
   cluster: initialCluster,
   isOpen,
   onOpenChange,
+  onClusterUpdated
 }: ClusterProvisioningDialogProps) {
   const { props } = usePage<PageProps>()
   const queryClient = useQueryClient()
   const [expandedStage, setExpandedStage] = useState<TerraformStage>(getLatestStage(initialCluster))
 
   const socket = useSocketIo()
+  const socketRegisteredRef = useRef({
+    update: false,
+    logs: false,
+  })
 
   const clusterQuery = useQuery<Cluster>({
     queryKey: ['clusters', initialCluster?.id],
@@ -104,6 +125,7 @@ export function ClusterProvisioningDialog({
       const latestStage = getLatestStage(response.data)
 
       setExpandedStage(latestStage)
+      onClusterUpdated(response.data)
 
       return response.data
     },
@@ -133,6 +155,15 @@ export function ClusterProvisioningDialog({
       return
     }
 
+    if (socketRegisteredRef.current.update) {
+      return
+    }
+
+    socketRegisteredRef.current = {
+      ...socketRegisteredRef.current,
+      update: true,
+    }
+
     const listener = socket.on(`cluster:${cluster.id}:updated`, (data) => {
       console.log('@@@@@@@@@@@@---->CLUSTER_UPDATE_RECEIVED', data?.id)
       clusterQuery.refetch()
@@ -152,6 +183,15 @@ export function ClusterProvisioningDialog({
       socket.emit('cluster:logs', {
         clusterId: cluster?.id,
       })
+
+      if (socketRegisteredRef.current.logs) {
+        return
+      }
+
+      socketRegisteredRef.current = {
+        ...socketRegisteredRef.current,
+        logs: true,
+      }
 
       const listener = socket.on(`cluster:${clusterId}:logs`, (data) => {
         console.log('@@@@@@@@@@@@---->LOG_RECEIVED', data)
@@ -191,13 +231,11 @@ export function ClusterProvisioningDialog({
     setExpandedStage(getLatestStage(cluster))
   }, [initialCluster])
 
-  const stageStatuses = provisioningSteps.map((step) => getStepStatus(initialCluster, step.stage))
-
-  const atLeastOneFailed = stageStatuses.some((status) => status === 'failed')
+  const atLeastOneFailed = cluster?.firstFailedStage !== null
 
   return (
     <Dialog.Root open={isOpen} onOpenChange={onOpenChange}>
-      <Dialog.Content className="max-w-4xl">
+      <Dialog.Content className="!max-w-2xl">
         <Dialog.Header>
           <Dialog.Title>
             {cluster

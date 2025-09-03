@@ -1,0 +1,63 @@
+terraform {
+  required_providers {
+    digitalocean = {
+      source  = "digitalocean/digitalocean"
+      version = "~> 2.66"
+    }
+  }
+
+  backend "s3" {
+    bucket = "{{ s3_bucket }}"
+    key    = "clusters/{{ cluster_id }}/ssh-keys/terraform.tfstate"
+    region = "{{ s3_region }}"
+    encrypt = true
+  }
+}
+
+variable "do_token" {
+  description = "DigitalOcean API Token"
+  type        = string
+  sensitive   = true
+}
+
+variable "cluster_name" {
+  description = "Name of the cluster"
+  type        = string
+}
+
+variable "public_key" {
+  description = "SSH public key content"
+  type        = string
+}
+
+provider "digitalocean" {
+  token = var.do_token
+}
+
+resource "digitalocean_ssh_key" "cluster_ssh_key" {
+  name       = "${var.cluster_name}-ssh-key"
+  public_key = var.public_key
+}
+
+output "ssh_key_id" {
+  description = "ID of the created SSH key"
+  value       = digitalocean_ssh_key.cluster_ssh_key.id
+}
+
+output "ssh_key_name" {
+  description = "Name of the created SSH key"
+  value       = digitalocean_ssh_key.cluster_ssh_key.name
+}
+
+output "ssh_key_fingerprint" {
+  description = "Fingerprint of the SSH key"
+  value       = digitalocean_ssh_key.cluster_ssh_key.fingerprint
+}
+
+output "ssh_key_labels" {
+  description = "Labels applied to the SSH key"
+  value = {
+    cluster    = var.cluster_name
+    managed_by = "kibaship"
+  }
+}

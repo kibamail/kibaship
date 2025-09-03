@@ -16,7 +16,7 @@ interface TerraformOutputValue {
   value: string | number | object
 }
 
-interface HetznerServersOutput {
+interface ServersOutput {
   [key: string]: TerraformOutputValue
 }
 
@@ -38,6 +38,7 @@ export default class ProvisionServersJob extends Job {
 
     cluster.serversStartedAt = DateTime.now()
     cluster.serversCompletedAt = null
+    cluster.serversErrorAt = null
     await cluster.save()
 
     try {
@@ -50,24 +51,24 @@ export default class ProvisionServersJob extends Job {
       const executor = new TerraformExecutor(cluster.id, 'servers')
         .vars({
           ...cluster.cloudProvider?.getTerraformCredentials(),
+          location: cluster.location,
           cluster_name: cluster.subdomainIdentifier,
-          server_type: cluster.serverType as string,
+          server_type: cluster.serverType,
           network_id: cluster.providerNetworkId || '',
           ssh_key_id: cluster.sshKey?.providerId || '',
+          kube_load_balancer_id: kubeLoadBalancer?.providerId || '',
           ingress_load_balancer_id: ingressLoadBalancer?.providerId || '',
-          kube_load_balancer_id: kubeLoadBalancer?.providerId || ''
         })
+
+
 
       await executor.init()
       await executor.apply({ autoApprove: true })
 
       const { stdout } = await executor.output()
+      const output = JSON.parse(stdout as string) as ServersOutput
 
-      const output = JSON.parse(stdout as string) as HetznerServersOutput
-
-      if (cluster.cloudProvider?.type === 'hetzner') {
-        await this.updateClusterNodes(cluster.id, output)
-      }
+      await this.updateClusterNodes(cluster.id, output)
 
       cluster.serversCompletedAt = DateTime.now()
 
@@ -89,7 +90,7 @@ export default class ProvisionServersJob extends Job {
 
   private async updateClusterNodes(
     clusterId: string,
-    output: HetznerServersOutput
+    output: ServersOutput
   ): Promise<void> {
     const cluster = await Cluster.query()
       .where('id', clusterId)

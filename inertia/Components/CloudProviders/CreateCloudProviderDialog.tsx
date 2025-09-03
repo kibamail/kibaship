@@ -1,4 +1,4 @@
-import type { CloudProviderType, PageProps } from '@/types'
+import type { CloudProviderInfo, CloudProviderType, PageProps } from '~/types'
 import { useForm, usePage } from '@inertiajs/react'
 import { Button } from '@kibamail/owly/button'
 import * as Dialog from '@kibamail/owly/dialog'
@@ -8,7 +8,6 @@ import * as TextField from '@kibamail/owly/text-field'
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden'
 import { type FormEventHandler, useEffect, useState } from 'react'
 
-// Import cloud provider icons
 import { AWSIcon } from '~/Components/Icons/aws.svg'
 import { DigitalOceanIcon } from '~/Components/Icons/digital-ocean.svg'
 import { GoogleCloudIcon } from '~/Components/Icons/google-cloud.svg'
@@ -21,11 +20,9 @@ import { VultrIcon } from '~/Components/Icons/vultr.svg'
 interface CreateCloudProviderDialogProps {
   isOpen: boolean
   onOpenChange: (open: boolean) => void
-  workspaceId: string
   preselectedProviderType?: CloudProviderType
 }
 
-// Icon mapping for cloud providers
 const providerIcons: Record<CloudProviderType, React.ComponentType<{ className?: string }>> = {
   aws: AWSIcon,
   hetzner: HetznerIcon,
@@ -40,10 +37,13 @@ const providerIcons: Record<CloudProviderType, React.ComponentType<{ className?:
 export function CreateCloudProviderDialog({
   isOpen,
   onOpenChange,
-  workspaceId,
   preselectedProviderType,
 }: CreateCloudProviderDialogProps) {
-  const { cloudProviders } = usePage<PageProps>().props
+  const { props } = usePage<
+    PageProps & {
+      providers: CloudProviderInfo[]
+    }
+  >()
   const [selectedProviderType, setSelectedProviderType] = useState<CloudProviderType | ''>('')
 
   const { data, setData, post, processing, errors, reset } = useForm({
@@ -52,14 +52,16 @@ export function CreateCloudProviderDialog({
     credentials: {} as Record<string, string>,
   })
 
-  const selectedProvider = cloudProviders.find((provider) => provider.type === selectedProviderType)
+  const selectedProvider = props.providers.find(
+    (provider) => provider.type === selectedProviderType
+  )
 
   useEffect(() => {
     if (isOpen && preselectedProviderType) {
       setSelectedProviderType(preselectedProviderType)
       setData('type', preselectedProviderType)
 
-      const provider = cloudProviders.find((provider) => provider.type === preselectedProviderType)
+      const provider = props.providers.find((provider) => provider.type === preselectedProviderType)
       if (provider) {
         const emptyCredentials: Record<string, string> = {}
         provider.credentialFields.forEach((field) => {
@@ -71,14 +73,14 @@ export function CreateCloudProviderDialog({
       reset()
       setSelectedProviderType('')
     }
-  }, [isOpen, preselectedProviderType, cloudProviders, setData, reset])
+  }, [isOpen, preselectedProviderType, props.providers, setData, reset])
 
   const handleProviderTypeChange = (value: string) => {
     const providerType = value as CloudProviderType
     setSelectedProviderType(providerType)
     setData('type', providerType)
 
-    const provider = cloudProviders.find((provider) => provider.type === providerType)
+    const provider = props.providers.find((provider) => provider.type === providerType)
     if (provider) {
       const emptyCredentials: Record<string, string> = {}
       provider.credentialFields.forEach((field) => {
@@ -97,14 +99,14 @@ export function CreateCloudProviderDialog({
   const submit: FormEventHandler = (event) => {
     event.preventDefault()
 
-    post(route('workspaces.cloud-providers.store', workspaceId), {
+    post(`/w/${props.workspace.slug}/clusters/providers`, {
       onSuccess() {
         onOpenChange(false)
       },
     })
   }
 
-  const sortedProviders = [...cloudProviders].sort((a, b) => {
+  const sortedProviders = [...props.providers].sort((a, b) => {
     if (a.implemented && !b.implemented) return -1
     if (!a.implemented && b.implemented) return 1
     return 0
@@ -163,97 +165,119 @@ export function CreateCloudProviderDialog({
               {errors.type && <Select.Error>{errors.type}</Select.Error>}
             </Select.Root>
 
-            {/* Provider Name */}
-            <TextField.Root
-              required
-              name="name"
-              value={data.name}
-              autoComplete="off"
-              data-form-type="other"
-              data-lpignore="true"
-              onChange={(e) => setData('name', e.target.value)}
-              placeholder="e.g. production aws"
-            >
-              <TextField.Label>Cloud provider name</TextField.Label>
-              {errors.name && <TextField.Error>{errors.name}</TextField.Error>}
-            </TextField.Root>
+            {selectedProvider?.type === 'digital_ocean' ? (
+              <>
+                <div className="w-full flex flex-col p-3 rounded-md bg-owly-background-secondary border border-owly-border-tertiary">
+                  <Text className="text-left text-owly-content-tertiary !text-sm">
+                    To connect your digital ocean account, click on the button below to authorize
+                    access to your account.
+                  </Text>
 
-            {/* Dynamic Credential Fields */}
-            {selectedProvider && (
-              <div className="space-y-4">
-                <div className="border-t kb-border-tertiary pt-4">
-                  <div className="mb-6 flex flex-col">
-                    <Text size="lg" className="font-semibold mb-1">
-                      Credentials
-                    </Text>
-
-                    <div className="space-y-2">
-                      <Text className="kb-content-tertiary">{selectedProvider.description}</Text>
-                      <Text className="kb-content-tertiary text-sm">
-                        <a
-                          href={selectedProvider.documentationLink}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="kb-content-info ml-2 hover:text-blue-800 underline"
-                        >
-                          Learn more in our documentation →
-                        </a>
-                      </Text>
-                    </div>
+                  <div className="my-5 flex justify-center">
+                    <Button variant="secondary" asChild>
+                      <a href="/connections/cloud-providers/digital-ocean/redirect">
+                        <DigitalOceanIcon className="!size-4 mr-2" />
+                        Connect digital ocean
+                      </a>
+                    </Button>
                   </div>
-                  {selectedProvider.credentialFields.map((field) => (
-                    <div key={field.name} className="mb-4">
-                      {field.type === 'textarea' ? (
+                </div>
+              </>
+            ) : (
+              <>
+                {/* Provider Name */}
+                <TextField.Root
+                  required
+                  name="name"
+                  value={data.name}
+                  autoComplete="off"
+                  data-form-type="other"
+                  data-lpignore="true"
+                  onChange={(e) => setData('name', e.target.value)}
+                  placeholder="e.g. production aws"
+                >
+                  <TextField.Label>Cloud provider name</TextField.Label>
+                  {errors.name && <TextField.Error>{errors.name}</TextField.Error>}
+                </TextField.Root>
+
+                {selectedProvider && (
+                  <div className="space-y-4">
+                    <div className="border-t kb-border-tertiary pt-4">
+                      <div className="mb-6 flex flex-col">
+                        <Text size="lg" className="font-semibold mb-1">
+                          Credentials
+                        </Text>
+
                         <div className="space-y-2">
-                          <TextField.Label>{field.label}</TextField.Label>
-                          <textarea
-                            placeholder={field.placeholder}
-                            name={`credentials.${field.name}`}
-                            value={data.credentials[field.name] || ''}
-                            onChange={(e) => handleCredentialChange(field.name, e.target.value)}
-                            autoComplete="off"
-                            data-form-type="other"
-                            data-lpignore="true"
-                            spellCheck="false"
-                            required={field.required}
-                            rows={6}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-vertical"
-                          />
-                          {errors[`credentials.${field.name}` as keyof typeof errors] && (
-                            <TextField.Error>
-                              {errors[`credentials.${field.name}` as keyof typeof errors]}
-                            </TextField.Error>
+                          <Text className="kb-content-tertiary">
+                            {selectedProvider.description}
+                          </Text>
+                          <Text className="kb-content-tertiary text-sm">
+                            <a
+                              href={selectedProvider.documentationLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="kb-content-info ml-2 hover:text-blue-800 underline"
+                            >
+                              Learn more in our documentation →
+                            </a>
+                          </Text>
+                        </div>
+                      </div>
+                      {selectedProvider.credentialFields.map((field) => (
+                        <div key={field.name} className="mb-4">
+                          {field.type === 'textarea' ? (
+                            <div className="space-y-2">
+                              <TextField.Label>{field.label}</TextField.Label>
+                              <textarea
+                                placeholder={field.placeholder}
+                                name={`credentials.${field.name}`}
+                                value={data.credentials[field.name] || ''}
+                                onChange={(e) => handleCredentialChange(field.name, e.target.value)}
+                                autoComplete="off"
+                                data-form-type="other"
+                                data-lpignore="true"
+                                spellCheck="false"
+                                required={field.required}
+                                rows={6}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-vertical"
+                              />
+                              {errors[`credentials.${field.name}` as keyof typeof errors] && (
+                                <TextField.Error>
+                                  {errors[`credentials.${field.name}` as keyof typeof errors]}
+                                </TextField.Error>
+                              )}
+                            </div>
+                          ) : (
+                            <TextField.Root
+                              placeholder={field.placeholder}
+                              name={`credentials.${field.name}`}
+                              value={data.credentials[field.name] || ''}
+                              onChange={(e) => handleCredentialChange(field.name, e.target.value)}
+                              type={field.type === 'password' ? 'password' : 'text'}
+                              required={field.required}
+                              autoComplete="new-password"
+                              data-form-type="other"
+                              data-lpignore="true"
+                            >
+                              <TextField.Label>{field.label}</TextField.Label>
+                              {errors[`credentials.${field.name}` as keyof typeof errors] && (
+                                <TextField.Error>
+                                  {errors[`credentials.${field.name}` as keyof typeof errors]}
+                                </TextField.Error>
+                              )}
+                            </TextField.Root>
                           )}
                         </div>
-                      ) : (
-                        <TextField.Root
-                          placeholder={field.placeholder}
-                          name={`credentials.${field.name}`}
-                          value={data.credentials[field.name] || ''}
-                          onChange={(e) => handleCredentialChange(field.name, e.target.value)}
-                          type={field.type === 'password' ? 'password' : 'text'}
-                          required={field.required}
-                          autoComplete="new-password"
-                          data-form-type="other"
-                          data-lpignore="true"
-                        >
-                          <TextField.Label>{field.label}</TextField.Label>
-                          {errors[`credentials.${field.name}` as keyof typeof errors] && (
-                            <TextField.Error>
-                              {errors[`credentials.${field.name}` as keyof typeof errors]}
-                            </TextField.Error>
-                          )}
-                        </TextField.Root>
-                      )}
+                      ))}
                     </div>
-                  ))}
-                </div>
-              </div>
-            )}
+                  </div>
+                )}
 
-            {/* General credentials error */}
-            {errors.credentials && typeof errors.credentials === 'string' && (
-              <div className="kb-content-negative text-sm">{errors.credentials}</div>
+                {errors.credentials && typeof errors.credentials === 'string' && (
+                  <div className="kb-content-negative text-sm">{errors.credentials}</div>
+                )}
+              </>
             )}
           </div>
 
@@ -264,7 +288,7 @@ export function CreateCloudProviderDialog({
             <Button
               type="submit"
               loading={processing}
-              disabled={!data.type || !data.name || !selectedProvider || !workspaceId}
+              disabled={!data.type || !data.name || !selectedProvider}
             >
               Connect provider
             </Button>

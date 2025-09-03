@@ -38,3 +38,8 @@ export const http = defineConfig({
     sameSite: 'lax',
   },
 })
+
+/**
+ * Talos version configuration
+ */
+export const talosVersion = env.get('TALOS_VERSION', 'v1.11.0')

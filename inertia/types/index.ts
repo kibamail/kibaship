@@ -84,6 +84,7 @@ export interface CloudProviderRegion {
   name: string
   slug: string
   flag: string
+  availableServerTypes: Record<string, boolean>
 }
 
 export type CloudProviderRegionsByContinent = Record<string, CloudProviderRegion[]>
@@ -91,6 +92,7 @@ export type CloudProviderRegionsByContinent = Record<string, CloudProviderRegion
 export type ClusterStatus = 'provisioning' | 'healthy' | 'unhealthy'
 
 export enum ProvisioningStepName {
+  TALOS_IMAGE = 'talosImage',
   NETWORKING = 'networking',
   SSH_KEYS = 'sshKeys',
   LOAD_BALANCERS = 'loadBalancers',
@@ -114,43 +116,46 @@ export interface Cluster {
   subdomainIdentifier: string
   kind: ClusterKind
   workspaceId: string | null
-  error: string
   cloudProviderId: string | null
+  serverType: string
   status: ClusterStatus
   providerNetworkId: string | null
   providerSubnetId: string | null
+  providerImageId: string | null
+  talosVersion: string
   networkIpRange: string | null
   subnetIpRange: string | null
   publicDomain: string | null
   controlPlanesVolumeSize: number
   workersVolumeSize: number
+  deletedAt: string | null
+  dnsStartedAt: string | null
+  dnsCompletedAt: string | null
+  dnsLastCheckedAt: string | null
+  dnsErrorAt: string | null
+  talosImageStartedAt: string | null
+  talosImageCompletedAt: string | null
+  talosImageErrorAt: string | null
   networkingStartedAt: string | null
   networkingCompletedAt: string | null
-  networkingError: string | null
   networkingErrorAt: string | null
   sshKeysStartedAt: string | null
   sshKeysCompletedAt: string | null
-  sshKeysError: string | null
   sshKeysErrorAt: string | null
   loadBalancersStartedAt: string | null
   loadBalancersCompletedAt: string | null
-  loadBalancersError: string | null
   loadBalancersErrorAt: string | null
   serversStartedAt: string | null
   serversCompletedAt: string | null
-  serversError: string | null
   serversErrorAt: string | null
   volumesStartedAt: string | null
   volumesCompletedAt: string | null
-  volumesError: string | null
   volumesErrorAt: string | null
   kubernetesClusterStartedAt: string | null
   kubernetesClusterCompletedAt: string | null
-  kubernetesClusterError: string | null
   kubernetesClusterErrorAt: string | null
   kibashipOperatorStartedAt: string | null
   kibashipOperatorCompletedAt: string | null
-  kibashipOperatorError: string | null
   kibashipOperatorErrorAt: string | null
   currentProvisioningStep: string | null
   overallProvisioningStatus: string | null
@@ -163,6 +168,8 @@ export interface Cluster {
   sshKey?: ClusterSshKey
   loadBalancers?: ClusterLoadBalancer[]
   cloudProvider?: CloudProvider
+  progress: Record<TerraformStage, ProvisioningStepStatus>
+  firstFailedStage: TerraformStage|null
 }
 
 export interface ProvisioningStepInfo {
@@ -211,13 +218,14 @@ export interface ClusterSshKey {
 
 export interface ClusterLoadBalancer {
   id: string
-  cluster_id: string
+  clusterId: string
   type: ClusterLoadBalancerType
-  public_ipv4_address: string | null
-  private_ipv4_address: string | null
-  provider_id: string | null
-  created_at: string
-  updated_at: string
+  publicIpv4Address: string | null
+  privateIpv4Address: string | null
+  dnsVerifiedAt: string
+  providerId: string | null
+  createdAt: string
+  updatedAt: string
   cluster?: Cluster
 }
 

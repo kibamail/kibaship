@@ -1,4 +1,4 @@
-import type { CloudProviderRegion, CloudProviderType, PageProps } from '@/types'
+import type { CloudProviderRegion, CloudProviderType, PageProps } from '~/types'
 import { usePage } from '@inertiajs/react'
 import * as SelectField from '@kibamail/owly/select-field'
 

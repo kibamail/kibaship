@@ -9,7 +9,7 @@ import { DockerIcon } from '~/Components/Icons/docker.svg'
 import { GitIcon } from '~/Components/Icons/git.svg'
 import { PostgresIcon } from '~/Components/Icons/postgres.svg'
 import { useEffect, useState } from 'react'
-import { GitHubIcon } from '../Icons/github.svg'
+import { GithubIcon } from '../Icons/github.svg'
 import { GitLabIcon } from '../Icons/gitlab.svg'
 import { BitbucketIcon } from '../Icons/bitbucket.svg'
 import { NavArrowRightIcon } from '../Icons/nav-arrow-right.svg'
@@ -149,7 +149,7 @@ export function NewApplicationCommand({ open, onOpenChange }: NewApplicationComm
       label: hasAtLeastOneGithubConnection
         ? 'Configure github app installation'
         : 'Connect github app',
-      icon: <GitHubIcon className="size-5" />,
+      icon: <GithubIcon className="size-5" />,
       href: '/connections/github/redirect',
     },
     {
@@ -174,7 +174,7 @@ export function NewApplicationCommand({ open, onOpenChange }: NewApplicationComm
         <div className="h-3.5 mx-0.5 w-px bg-(--border-primary) transform rotate-20"></div>
         <span className="max-w-[180px] truncate">{repository.repository}</span>
 
-        <GitHubIcon className="size-3 ml-1 opacity-45" />
+        <GithubIcon className="size-3 ml-1 opacity-45" />
 
         <span className="text-xs kb-content-tertiary ml-1">
           {repository.lastUpdatedAt ? dayjs(repository.lastUpdatedAt).fromNow() : 'Never'}

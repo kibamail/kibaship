@@ -29,6 +29,9 @@ export default class ClusterLoadBalancer extends BaseModel {
   @column()
   declare providerId: string | null
 
+  @column.dateTime()
+  declare dnsVerifiedAt: DateTime
+
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime
 

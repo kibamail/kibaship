@@ -37,15 +37,6 @@ export default await Env.create(new URL('../', import.meta.url), {
   DB_PASSWORD: Env.schema.string.optional(),
   DB_DATABASE: Env.schema.string(),
 
-  /*
-  |----------------------------------------------------------
-  | Authentication server variables
-  |----------------------------------------------------------
-  */
-  OAUTH_CLIENT_ID: Env.schema.string(),
-  OAUTH_CLIENT_SECRET: Env.schema.string(),
-  OAUTH_CALLBACK_URL: Env.schema.string({ format: 'url', tld: false }),
-  OAUTH_CLIENT_BASE_URL: Env.schema.string({ format: 'url', tld: true }),
 
   /*
   |----------------------------------------------------------
@@ -113,4 +104,20 @@ export default await Env.create(new URL('../', import.meta.url), {
   S3_ENDPOINT: Env.schema.string({ format: 'url' }),
   S3_REGION: Env.schema.string(),
   S3_BUCKET: Env.schema.string(),
+
+  /*
+  |----------------------------------------------------------
+  | Digital Ocean OAuth App variables
+  |----------------------------------------------------------
+  */
+  DIGITAL_OCEAN_APP_CLIENT_ID: Env.schema.string(),
+  DIGITAL_OCEAN_APP_CLIENT_SECRET: Env.schema.string(),
+  DIGITAL_OCEAN_APP_CALLBACK_URL: Env.schema.string({ format: 'url', tld: false }),
+
+  /*
+  |----------------------------------------------------------
+  | Talos configuration
+  |----------------------------------------------------------
+  */
+  TALOS_VERSION: Env.schema.string.optional(),
 })

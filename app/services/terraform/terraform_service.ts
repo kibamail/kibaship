@@ -3,10 +3,12 @@ import app from '@adonisjs/core/services/app'
 import drive from '@adonisjs/drive/services/main'
 import env from '#start/env'
 import { join } from 'node:path'
+import { talosVersion } from '#config/app'
 import Cluster from '#models/cluster'
 import { ModelObject } from '@adonisjs/lucid/types/model'
 
 export enum TerraformTemplate {
+  TALOS_IMAGE = 'talos-image.tf',
   NETWORK = 'network.tf',
   SSH_KEYS = 'ssh-keys.tf',
   LOAD_BALANCERS = 'load-balancers.tf',
@@ -17,11 +19,15 @@ export enum TerraformTemplate {
 export interface TemplateContext {
   cluster_id: string
   cluster_name: string
+  cluster_talos_version: string
+  cluster_region: string
+  cluster_network_id: string
   network_zone: string
   location: string
-  hcloud_token: string
   s3_region: string
   s3_bucket: string
+  cluster_talos_image: string
+  cluster_ssh_key_id: string
   control_planes: Array<ModelObject & {
     id: string
     slug: string
@@ -35,6 +41,7 @@ export interface TemplateContext {
   public_key: string
   control_planes_volume_size: number
   workers_volume_size: number
+  cluster_load_balancer_domain: string
 }
 
 export interface TerraformFile {
@@ -179,46 +186,30 @@ export class TerraformService {
    * Builds comprehensive template context for all infrastructure templates
    */
   private buildTemplateContext(cluster: Cluster): TemplateContext {
-    const hcloudToken = cluster.cloudProvider?.credentials?.token
-    if (!hcloudToken) {
-      throw new Error('Cloud provider token is required')
-    }
-
     const publicKey = cluster.sshKey?.publicKey
 
-    const controlPlanes = cluster.nodes?.filter(node => node.type === 'master')?.map(node => {
-      const nodeData = node.toJSON()
-      return {
-        id: nodeData.id,
-        slug: nodeData.slug,
-        type: nodeData.type,
-        ...nodeData
-      }
-    }) || []
+    const controlPlanes = (cluster.nodes?.filter(node => node.type === 'master')?.map(node => node.toJSON()) || []) as TemplateContext['control_planes']
 
-    const workers = cluster.nodes?.filter(node => node.type === 'worker')?.map(node => {
-      const nodeData = node.toJSON()
-      return {
-        id: nodeData.id,
-        slug: nodeData.slug,
-        type: nodeData.type,
-        ...nodeData
-      }
-    }) || []
+    const workers = (cluster.nodes?.filter(node => node.type === 'worker')?.map(node => node.toJSON()) || []) as TemplateContext['workers']
 
     return {
       cluster_id: cluster.id,
       cluster_name: cluster.subdomainIdentifier,
+      cluster_talos_version: cluster.talosVersion || talosVersion,
+      cluster_region: cluster.location,
       network_zone: this.getNetworkZoneFromLocation(cluster.location),
       location: cluster.location,
-      hcloud_token: hcloudToken,
       s3_region: env.get('S3_REGION'),
       s3_bucket: env.get('S3_BUCKET'),
       control_planes: controlPlanes,
+      cluster_talos_image: cluster.providerImageId as string,
+      cluster_ssh_key_id: cluster.sshKey?.providerId as string,
       workers: workers,
+      cluster_network_id: cluster.providerNetworkId as string,
       public_key: publicKey,
       control_planes_volume_size: cluster.controlPlanesVolumeSize,
-      workers_volume_size: cluster.workersVolumeSize
+      workers_volume_size: cluster.workersVolumeSize,
+      cluster_load_balancer_domain: `kube.${cluster.subdomainIdentifier}`
     }
   }
 

@@ -1,17 +1,17 @@
 import { BaseSchema } from '@adonisjs/lucid/schema'
 
 export default class extends BaseSchema {
-  protected tableName = 'clusters'
+  protected tableName = 'cluster_load_balancers'
 
   async up() {
     this.schema.alterTable(this.tableName, (table) => {
-      table.string('server_type').nullable()
+      table.timestamp('dns_verified_at').nullable()
     })
   }
 
   async down() {
     this.schema.alterTable(this.tableName, (table) => {
-      table.dropColumn('server_type')
+      table.dropColumn('dns_verified_at')
     })
   }
 }

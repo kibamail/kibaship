@@ -1,8 +1,18 @@
 import { DateTime } from 'luxon'
-import { BaseModel, beforeCreate, column, hasMany, belongsTo, hasOne, afterUpdate } from '@adonisjs/lucid/orm'
+import {
+  BaseModel,
+  beforeCreate,
+  column,
+  hasMany,
+  belongsTo,
+  hasOne,
+  afterUpdate,
+  computed,
+} from '@adonisjs/lucid/orm'
 import { randomUUID } from 'node:crypto'
 import { SshKeyService } from '#services/ssh/ssh_key_service'
 import { TerraformStage } from '#services/terraform/terraform_executor'
+import { talosVersion } from '#config/app'
 import Project from './project.js'
 import ClusterNode from './cluster_node.js'
 import ClusterSshKey from './cluster_ssh_key.js'
@@ -14,13 +24,14 @@ import redis from '@adonisjs/redis/services/main'
 import logger from '@adonisjs/core/services/logger'
 
 export enum ProvisioningStepName {
+  TALOS_IMAGE = 'talosImage',
   NETWORKING = 'networking',
   SSH_KEYS = 'sshKeys',
   LOAD_BALANCERS = 'loadBalancers',
   SERVERS = 'servers',
   VOLUMES = 'volumes',
   K8S = 'k8s',
-  OPERATOR = 'operator'
+  OPERATOR = 'operator',
 }
 
 export type ProvisioningStepStatus = 'pending' | 'in_progress' | 'completed' | 'failed'
@@ -71,14 +82,12 @@ export default class Cluster extends BaseModel {
   @column()
   declare workspaceId: string | null
 
-  @column()
-  declare error: string
 
   @column()
   declare cloudProviderId: string | null
 
   @column()
-  declare serverType: string | null
+  declare serverType: string
 
   @column()
   declare status: ClusterStatus
@@ -88,6 +97,12 @@ export default class Cluster extends BaseModel {
 
   @column()
   declare providerSubnetId: string | null
+
+  @column()
+  declare providerImageId: string | null
+
+  @column()
+  declare talosVersion: string
 
   @column()
   declare networkIpRange: string | null
@@ -105,13 +120,34 @@ export default class Cluster extends BaseModel {
   declare workersVolumeSize: number
 
   @column.dateTime()
+  declare deletedAt: DateTime | null
+
+  @column.dateTime()
+  declare dnsStartedAt: DateTime | null
+
+  @column.dateTime()
+  declare dnsCompletedAt: DateTime | null
+
+  @column.dateTime()
+  declare dnsLastCheckedAt: DateTime | null
+
+  @column.dateTime()
+  declare dnsErrorAt: DateTime | null
+
+  @column.dateTime()
+  declare talosImageStartedAt: DateTime | null
+
+  @column.dateTime()
+  declare talosImageCompletedAt: DateTime | null
+
+  @column.dateTime()
+  declare talosImageErrorAt: DateTime | null
+
+  @column.dateTime()
   declare networkingStartedAt: DateTime | null
 
   @column.dateTime()
   declare networkingCompletedAt: DateTime | null
-
-  @column()
-  declare networkingError: string | null
 
   @column.dateTime()
   declare networkingErrorAt: DateTime | null
@@ -122,9 +158,6 @@ export default class Cluster extends BaseModel {
   @column.dateTime()
   declare sshKeysCompletedAt: DateTime | null
 
-  @column()
-  declare sshKeysError: string | null
-
   @column.dateTime()
   declare sshKeysErrorAt: DateTime | null
 
@@ -133,9 +166,6 @@ export default class Cluster extends BaseModel {
 
   @column.dateTime()
   declare loadBalancersCompletedAt: DateTime | null
-
-  @column()
-  declare loadBalancersError: string | null
 
   @column.dateTime()
   declare loadBalancersErrorAt: DateTime | null
@@ -146,9 +176,6 @@ export default class Cluster extends BaseModel {
   @column.dateTime()
   declare serversCompletedAt: DateTime | null
 
-  @column()
-  declare serversError: string | null
-
   @column.dateTime()
   declare serversErrorAt: DateTime | null
 
@@ -157,9 +184,6 @@ export default class Cluster extends BaseModel {
 
   @column.dateTime()
   declare volumesCompletedAt: DateTime | null
-
-  @column()
-  declare volumesError: string | null
 
   @column.dateTime()
   declare volumesErrorAt: DateTime | null
@@ -170,9 +194,6 @@ export default class Cluster extends BaseModel {
   @column.dateTime()
   declare kubernetesClusterCompletedAt: DateTime | null
 
-  @column()
-  declare kubernetesClusterError: string | null
-
   @column.dateTime()
   declare kubernetesClusterErrorAt: DateTime | null
 
@@ -181,9 +202,6 @@ export default class Cluster extends BaseModel {
 
   @column.dateTime()
   declare kibashipOperatorCompletedAt: DateTime | null
-
-  @column()
-  declare kibashipOperatorError: string | null
 
   @column.dateTime()
   declare kibashipOperatorErrorAt: DateTime | null
@@ -228,9 +246,12 @@ export default class Cluster extends BaseModel {
 
   @afterUpdate()
   public static async publishUpdate(cluster: Cluster) {
-    const pub = await redis.publish('cluster:updated', JSON.stringify({
-      id: cluster.id
-    }))
+    const pub = await redis.publish(
+      'cluster:updated',
+      JSON.stringify({
+        id: cluster.id,
+      })
+    )
 
     logger.info(`Published cluster update for ${cluster.id}: ${pub}`)
   }
@@ -257,16 +278,29 @@ export default class Cluster extends BaseModel {
     cluster.kind = 'all_purpose'
     cluster.subdomainIdentifier = data.subdomain_identifier
     cluster.controlPlaneEndpoint = ''
+    cluster.serverType = data.server_type
     cluster.controlPlanesVolumeSize = data.control_planes_volume_size
     cluster.workersVolumeSize = data.workers_volume_size
+    cluster.talosVersion = talosVersion
     cluster.useTransaction(trx)
 
     await cluster.save()
 
     await cluster.createSshKey(trx)
-    await cluster.createNodes(data.control_plane_nodes_count, data.worker_nodes_count, data.server_type, trx)
+    await cluster.createNodes(
+      data.control_plane_nodes_count,
+      data.worker_nodes_count,
+      data.server_type,
+      trx
+    )
 
     return cluster
+  }
+
+  public async resetProvisionProgress() {
+    this.status = 'provisioning'
+
+    await this.save()
   }
 
   public async createSshKey(trx: TransactionClientContract): Promise<ClusterSshKey> {
@@ -314,7 +348,7 @@ export default class Cluster extends BaseModel {
       nodes.push(workerNode)
     }
 
-    await Promise.all(nodes.map(node => node.save()))
+    await Promise.all(nodes.map((node) => node.save()))
   }
 
   public static complete(clusterId: string) {
@@ -324,12 +358,18 @@ export default class Cluster extends BaseModel {
       .preload('loadBalancers')
       .preload('nodes')
       .preload('sshKey')
-      .preload('nodes', nodesQuery => nodesQuery.preload('storages'))
+      .preload('nodes', (nodesQuery) => nodesQuery.preload('storages'))
       .first()
   }
 
   public getStepStatus(stage: TerraformStage): ProvisioningStepStatus {
     switch (stage) {
+      case 'talos-image':
+        if (this.talosImageCompletedAt) return 'completed'
+        if (this.talosImageErrorAt) return 'failed'
+        if (this.talosImageStartedAt) return 'in_progress'
+        return 'pending'
+
       case 'network':
         if (this.networkingCompletedAt) return 'completed'
         if (this.networkingErrorAt) return 'failed'
@@ -371,8 +411,65 @@ export default class Cluster extends BaseModel {
     }
   }
 
-  public getFirstFailedStage(): TerraformStage | null {
-    const stages: TerraformStage[] = ['network', 'ssh-keys', 'load-balancers', 'servers', 'volumes', 'kubernetes']
+  @computed()
+  public get progress() {
+    const stages: TerraformStage[] = [
+      'talos-image',
+      'network',
+      'ssh-keys',
+      'load-balancers',
+      'servers',
+      'volumes',
+      'kubernetes',
+    ]
+
+    return stages.reduce((acc, stage) => {
+      acc[stage] = this.getStepStatus(stage)
+      return acc
+    }, {} as Record<TerraformStage, ProvisioningStepStatus>)
+  }
+
+  @computed()
+  public get provisioningStatus(): ProvisioningStepStatus {
+    
+    const stages: TerraformStage[] = [
+      'talos-image',
+      'network',
+      'ssh-keys',
+      'load-balancers',
+      'servers',
+      'volumes',
+      'kubernetes',
+    ]
+
+    const statuses = stages.map(stage => this.getStepStatus(stage))
+
+    if (statuses.some(status => status === 'failed')) {
+      return 'failed'
+    }
+
+    if (statuses.some(status => status === 'in_progress')) {
+      return 'in_progress'
+    }
+
+    if (statuses.every(status => status === 'completed')) {
+      return 'completed'
+    }
+
+    return 'pending'
+  }
+
+  @computed()
+  public get firstFailedStage(): TerraformStage | null {
+    const stages: TerraformStage[] = [
+      'talos-image',
+      'network',
+      'ssh-keys',
+      'load-balancers',
+      'servers',
+      'volumes',
+      'kubernetes',
+    ]
 
     for (const stage of stages) {
       const status = this.getStepStatus(stage)

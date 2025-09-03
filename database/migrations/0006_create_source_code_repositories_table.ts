@@ -8,7 +8,7 @@ export default class extends BaseSchema {
       table.uuid('id').primary()
 
       table.string('repository')
-      table.uuid('source_code_provider_id').notNullable()
+      table.uuid('source_code_provider_id').notNullable().references('id').inTable('source_code_providers').onDelete('CASCADE')
       table.enum('visibility', ['public', 'private']).notNullable()
       table.timestamp('last_updated_at').nullable()
       table.timestamp('created_at')

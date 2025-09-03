@@ -1,0 +1,140 @@
+terraform {
+  required_providers {
+    digitalocean = {
+      source  = "digitalocean/digitalocean"
+      version = "~> 2.66"
+    }
+  }
+
+  backend "s3" {
+    bucket = "{{ s3_bucket }}"
+    key    = "clusters/{{ cluster_id }}/servers/terraform.tfstate"
+    region = "{{ s3_region }}"
+    encrypt = true
+  }
+}
+
+variable "do_token" {
+  description = "DigitalOcean API Token"
+  type        = string
+  sensitive   = true
+}
+
+variable "cluster_name" {
+  description = "Name of the cluster"
+  type        = string
+}
+
+variable "server_type" {
+  description = "Server type for all nodes"
+  type        = string
+}
+
+variable "network_id" {
+  description = "ID of the VPC"
+  type        = string
+}
+
+variable "ingress_load_balancer_id" {
+  description = "ID of the ingress load balancer"
+  type        = string
+}
+
+variable "kube_load_balancer_id" {
+  description = "ID of the Kubernetes API load balancer"
+  type        = string
+}
+
+provider "digitalocean" {
+  token = var.do_token
+}
+
+
+@each((node, index) in control_planes)
+  resource "digitalocean_droplet" "control_plane_{{ node.slug }}" {
+  name     = "{{ cluster_name }}-control-{{ index }}"
+  image    = "{{ cluster_talos_image }}"
+  size     = var.server_type
+  region   = "{{ cluster_region }}"
+  ssh_keys = ["{{ cluster_ssh_key_id }}"]
+  
+  vpc_uuid = "{{ cluster_network_id }}"
+
+  tags = [
+    "node-{{ node.id }}",
+    "control-plane-{{ cluster_id }}"
+  ]
+}
+@end
+  
+@each((node, index) in workers)
+  resource "digitalocean_droplet" "worker_{{ node.slug }}" {
+  name     = "{{ cluster_name }}-worker-{{ index }}"
+  image    = "{{ cluster_talos_image }}"
+  size     = var.server_type
+  region   = "{{ cluster_region }}"
+  ssh_keys = ["{{ cluster_ssh_key_id }}"]
+  
+  vpc_uuid = var.network_id
+
+  tags = [
+    "worker-{{ cluster_id }}",
+    "node-{{ node.id }}"
+  ]
+}
+@end
+    
+# Control Plane Server Outputs
+@each(node in control_planes)
+  output "control_plane_{{ node.slug }}_server_id" {
+  description = "Server ID for control plane node {{ node.id }}"
+  value       = digitalocean_droplet.control_plane_{{ node.slug }}.id
+}
+
+output "control_plane_{{ node.slug }}_public_ip" {
+  description = "Public IP for control plane node {{ node.id }}"
+  value       = digitalocean_droplet.control_plane_{{ node.slug }}.ipv4_address
+}
+
+output "control_plane_{{ node.slug }}_private_ip" {
+  description = "Private IP for control plane node {{ node.id }}"
+  value       = digitalocean_droplet.control_plane_{{ node.slug }}.ipv4_address_private
+}
+@end
+    
+# Worker Server Outputs
+@each(node in workers)
+  output "worker_{{ node.slug }}_server_id" {
+  description = "Server ID for worker node {{ node.id }}"
+  value       = digitalocean_droplet.worker_{{ node.slug }}.id
+}
+
+output "worker_{{ node.slug }}_public_ip" {
+  description = "Public IP for worker node {{ node.id }}"
+  value       = digitalocean_droplet.worker_{{ node.slug }}.ipv4_address
+}
+
+output "worker_{{ node.slug }}_private_ip" {
+  description = "Private IP for worker node {{ node.id }}"
+  value       = digitalocean_droplet.worker_{{ node.slug }}.ipv4_address_private
+}
+@end
+    
+# Summary Outputs
+output "control_plane_server_ids" {
+  description = "Map of control plane node IDs to server IDs"
+  value = {
+@each((node, index) in control_planes)
+  "{{ node.id }}" = digitalocean_droplet.control_plane_{{ node.slug }}.id{{ index === control_planes.length - 1 ? '' : ',' }}
+@end
+}
+}
+
+output "worker_server_ids" {
+  description = "Map of worker node IDs to server IDs"
+  value = {
+@each((node, index) in workers)
+  "{{ node.id }}" = digitalocean_droplet.worker_{{ node.slug }}.id{{ index === workers.length - 1 ? '' : ',' }}
+@end
+}
+}

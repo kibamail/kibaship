@@ -76,6 +76,7 @@ test.group('TerraformService Integration', () => {
 
     const templates = Object.values(TerraformTemplate)
     const expectedContent = {
+      [TerraformTemplate.TALOS_IMAGE]: ['hcloud_image', 'talos'],
       [TerraformTemplate.NETWORK]: ['hcloud_network', 'hcloud_network_subnet'],
       [TerraformTemplate.SSH_KEYS]: ['hcloud_ssh_key', 'var.public_key'],
       [TerraformTemplate.LOAD_BALANCERS]: ['hcloud_load_balancer', 'ingress', 'kube'],

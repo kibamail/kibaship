@@ -17,6 +17,7 @@ export default class extends BaseSchema {
 
       table.uuid('cluster_id').notNullable().references('id').inTable('clusters').onDelete('CASCADE')
       table.enum('status', ['provisioning', 'healthy', 'unhealthy']).notNullable().defaultTo('provisioning')
+      table.string('server_type').nullable()
 
       table.timestamp('created_at')
       table.timestamp('updated_at')

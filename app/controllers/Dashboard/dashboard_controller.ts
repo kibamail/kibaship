@@ -9,9 +9,9 @@ import type { HttpContext } from '@adonisjs/core/http'
 export default class DashboardController extends BaseController {
   /** Redirect user to their first available workspace */
   public async index(ctx: HttpContext) {
-    const profile = await this.profile(ctx)
+    const workspace = await this.workspace(ctx)
 
-    return ctx.response?.redirect(`/w/${profile.workspaces?.[0]?.slug}`)
+    return ctx.response?.redirect(`/w/${workspace.slug}`)
   }
 
   /** Render dashboard for specific workspace, validates user access first */

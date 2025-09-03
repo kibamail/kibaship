@@ -1,0 +1,158 @@
+terraform {
+  required_providers {
+    digitalocean = {
+      source  = "digitalocean/digitalocean"
+      version = "~> 2.66"
+    }
+  }
+
+  backend "s3" {
+    bucket = "{{ s3_bucket }}"
+    key    = "clusters/{{ cluster_id }}/volumes/terraform.tfstate"
+    region = "{{ s3_region }}"
+    encrypt = true
+  }
+}
+
+variable "do_token" {
+  description = "DigitalOcean API Token"
+  type        = string
+  sensitive   = true
+}
+
+variable "cluster_name" {
+  description = "Name of the cluster"
+  type        = string
+}
+
+variable "control_planes_volume_size" {
+  description = "Volume size for control plane nodes in GB"
+  type        = number
+}
+
+variable "workers_volume_size" {
+  description = "Volume size for worker nodes in GB"
+  type        = number
+}
+
+variable "control_plane_server_ids" {
+  description = "Map of control plane node IDs to server IDs"
+  type        = map(string)
+}
+
+variable "worker_server_ids" {
+  description = "Map of worker node IDs to server IDs"
+  type        = map(string)
+}
+
+variable "location" {
+  description = "Location for the volumes"
+  type        = string
+  default     = "nyc3"
+}
+
+provider "digitalocean" {
+  token = var.do_token
+}
+@each((node, index) in control_planes)
+  resource "digitalocean_volume" "control_plane_volume_{{ node['slug'] }}" {
+  region                   = var.location
+  name                     = "control-plane-{{ node['id'] }}-volume"
+  size                     = var.control_planes_volume_size
+  initial_filesystem_type  = "ext4"
+  description             = "Storage volume for control plane node {{ node.id }}"
+
+  tags = [
+    "control-plane-{{ node.id }}"
+  ]
+}
+
+resource "digitalocean_volume_attachment" "control_plane_attachment_{{ node['slug'] }}" {
+  droplet_id = var.control_plane_server_ids["{{ node.id }}"]
+  volume_id  = digitalocean_volume.control_plane_volume_{{ node['slug'] }}.id
+}
+@end
+
+@each((node, index) in workers)
+  resource "digitalocean_volume" "worker_volume_{{ node['slug'] }}" {
+  region                   = var.location
+  name                     = "worker-{{ node['id'] }}-volume"
+  size                     = var.workers_volume_size
+  initial_filesystem_type  = "ext4"
+  description             = "Storage volume for worker node {{ node.id }}"
+
+  tags = [
+    "worker-{{ node.id }}"
+  ]
+}
+
+resource "digitalocean_volume_attachment" "worker_attachment_{{ node['slug'] }}" {
+  droplet_id = var.worker_server_ids["{{ node.id }}"]
+  volume_id  = digitalocean_volume.worker_volume_{{ node['slug'] }}.id
+}
+@end
+
+# Individual Volume Outputs for Control Planes
+@each(node in control_planes)
+  output "control_plane_{{ node.slug }}_volume_id" {
+  description = "Volume ID for control plane node {{ node.id }}"
+  value       = digitalocean_volume.control_plane_volume_{{ node['slug'] }}.id
+}
+
+output "control_plane_{{ node.slug }}_volume_name" {
+  description = "Volume name for control plane node {{ node.id }}"
+  value       = digitalocean_volume.control_plane_volume_{{ node['slug'] }}.name
+}
+
+output "control_plane_{{ node.slug }}_volume_size" {
+  description = "Volume size for control plane node {{ node.id }}"
+  value       = digitalocean_volume.control_plane_volume_{{ node['slug'] }}.size
+}
+
+output "control_plane_{{ node.slug }}_attachment_id" {
+  description = "Volume attachment ID for control plane node {{ node.id }}"
+  value       = digitalocean_volume_attachment.control_plane_attachment_{{ node['slug'] }}.id
+}
+@end
+
+# Individual Volume Outputs for Workers
+@each(node in workers)
+  output "worker_{{ node.slug }}_volume_id" {
+  description = "Volume ID for worker node {{ node.id }}"
+  value       = digitalocean_volume.worker_volume_{{ node['slug'] }}.id
+}
+
+output "worker_{{ node.slug }}_volume_name" {
+  description = "Volume name for worker node {{ node.id }}"
+  value       = digitalocean_volume.worker_volume_{{ node['slug'] }}.name
+}
+
+output "worker_{{ node.slug }}_volume_size" {
+  description = "Volume size for worker node {{ node.id }}"
+  value       = digitalocean_volume.worker_volume_{{ node['slug'] }}.size
+}
+
+output "worker_{{ node.slug }}_attachment_id" {
+  description = "Volume attachment ID for worker node {{ node.id }}"
+  value       = digitalocean_volume_attachment.worker_attachment_{{ node['slug'] }}.id
+}
+@end
+
+# Summary Outputs
+output "control_plane_volume_ids" {
+  description = "Map of control plane node IDs to volume IDs"
+  value = {
+@each((node, index) in control_planes)
+  "{{ node.id }}" = digitalocean_volume.control_plane_volume_{{ node['slug'] }}.id{{ index === control_planes.length - 1 ? '' : ',' }}
+@end
+}
+}
+
+output "worker_volume_ids" {
+  description = "Map of worker node IDs to volume IDs"
+  value = {
+@each((node, index) in workers)
+  "{{ node.id }}" = digitalocean_volume.worker_volume_{{ node['slug'] }}.id{{ index === workers.length - 1 ? '' : ',' }}
+@end
+}
+}

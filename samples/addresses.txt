@@ -1,0 +1,176 @@
+{
+    "metadata": {
+        "created": "2025-09-03T17:41:26Z",
+        "id": "eth0/10.46.0.9/16",
+        "namespace": "network",
+        "owner": "network.AddressStatusController",
+        "phase": "running",
+        "type": "AddressStatuses.net.talos.dev",
+        "updated": "2025-09-03T17:41:26Z",
+        "version": 1
+    },
+    "node": "",
+    "spec": {
+        "address": "10.46.0.9/16",
+        "family": "inet4",
+        "flags": "permanent",
+        "linkIndex": 8,
+        "linkName": "eth0",
+        "priority": 0,
+        "scope": "link"
+    }
+}
+{
+    "metadata": {
+        "created": "2025-09-03T17:41:26Z",
+        "id": "eth0/206.189.216.207/20",
+        "namespace": "network",
+        "owner": "network.AddressStatusController",
+        "phase": "running",
+        "type": "AddressStatuses.net.talos.dev",
+        "updated": "2025-09-03T17:41:26Z",
+        "version": 1
+    },
+    "node": "",
+    "spec": {
+        "address": "206.189.216.207/20",
+        "family": "inet4",
+        "flags": "permanent",
+        "linkIndex": 8,
+        "linkName": "eth0",
+        "priority": 0,
+        "scope": "global"
+    }
+}
+{
+    "metadata": {
+        "created": "2025-09-03T17:41:25Z",
+        "id": "eth0/fe80::e4a6:e2ff:fea4:3c75/64",
+        "namespace": "network",
+        "owner": "network.AddressStatusController",
+        "phase": "running",
+        "type": "AddressStatuses.net.talos.dev",
+        "updated": "2025-09-03T17:41:26Z",
+        "version": 2
+    },
+    "node": "",
+    "spec": {
+        "address": "fe80::e4a6:e2ff:fea4:3c75/64",
+        "family": "inet6",
+        "flags": "permanent",
+        "linkIndex": 8,
+        "linkName": "eth0",
+        "priority": 0,
+        "scope": "link"
+    }
+}
+{
+    "metadata": {
+        "created": "2025-09-03T17:41:26Z",
+        "id": "eth1/10.219.0.8/16",
+        "namespace": "network",
+        "owner": "network.AddressStatusController",
+        "phase": "running",
+        "type": "AddressStatuses.net.talos.dev",
+        "updated": "2025-09-03T17:41:26Z",
+        "version": 1
+    },
+    "node": "",
+    "spec": {
+        "address": "10.219.0.8/16",
+        "family": "inet4",
+        "flags": "permanent",
+        "linkIndex": 9,
+        "linkName": "eth1",
+        "priority": 0,
+        "scope": "global"
+    }
+}
+{
+    "metadata": {
+        "created": "2025-09-03T17:41:25Z",
+        "id": "eth1/fe80::24a8:8bff:fefb:49b9/64",
+        "namespace": "network",
+        "owner": "network.AddressStatusController",
+        "phase": "running",
+        "type": "AddressStatuses.net.talos.dev",
+        "updated": "2025-09-03T17:41:27Z",
+        "version": 2
+    },
+    "node": "",
+    "spec": {
+        "address": "fe80::24a8:8bff:fefb:49b9/64",
+        "family": "inet6",
+        "flags": "permanent",
+        "linkIndex": 9,
+        "linkName": "eth1",
+        "priority": 0,
+        "scope": "link"
+    }
+}
+{
+    "metadata": {
+        "created": "2025-09-03T17:41:26Z",
+        "id": "external/206.189.216.207/32",
+        "namespace": "network",
+        "owner": "network.PlatformConfigController",
+        "phase": "running",
+        "type": "AddressStatuses.net.talos.dev",
+        "updated": "2025-09-03T17:41:26Z",
+        "version": 1
+    },
+    "node": "",
+    "spec": {
+        "address": "206.189.216.207/32",
+        "family": "inet4",
+        "flags": "",
+        "linkIndex": 0,
+        "linkName": "external",
+        "priority": 0,
+        "scope": "global"
+    }
+}
+{
+    "metadata": {
+        "created": "2025-09-03T17:41:24Z",
+        "id": "lo/127.0.0.1/8",
+        "namespace": "network",
+        "owner": "network.AddressStatusController",
+        "phase": "running",
+        "type": "AddressStatuses.net.talos.dev",
+        "updated": "2025-09-03T17:41:24Z",
+        "version": 1
+    },
+    "node": "",
+    "spec": {
+        "address": "127.0.0.1/8",
+        "family": "inet4",
+        "flags": "permanent",
+        "linkIndex": 1,
+        "linkName": "lo",
+        "priority": 0,
+        "scope": "host"
+    }
+}
+{
+    "metadata": {
+        "created": "2025-09-03T17:41:25Z",
+        "id": "lo/::1/128",
+        "namespace": "network",
+        "owner": "network.AddressStatusController",
+        "phase": "running",
+        "type": "AddressStatuses.net.talos.dev",
+        "updated": "2025-09-03T17:41:25Z",
+        "version": 1
+    },
+    "node": "",
+    "spec": {
+        "address": "::1/128",
+        "family": "inet6",
+        "flags": "permanent",
+        "linkIndex": 1,
+        "linkName": "lo",
+        "priority": 0,
+        "scope": "host"
+    }
+}

@@ -8,10 +8,10 @@ import { Text } from '@kibamail/owly/text'
 import Spinner from '../Icons/Spinner'
 import Ansi from 'ansi-to-react'
 import dayjs from 'dayjs'
-import { type TerraformStage } from '#services/terraform/terraform_executor'
 import { CheckCircleSolidIcon } from '../Icons/check-circle-solid.svg'
 import { XMarkCircleSolidIcon } from '../Icons/xmark-circle-solid.svg'
 import { ClockSolidIcon } from '../Icons/clock-solid.svg'
+import ClusterDnsStep from './ClusterDnsStep'
 
 export interface ClusterProvisioningStepProps {
   logs: ClusterLogEntry[]
@@ -20,7 +20,7 @@ export interface ClusterProvisioningStepProps {
   info: ProvisioningStepInfo
 }
 
-function getStatusIcon(status: ProvisioningStepStatus, className: string = 'h-5 w-5') {
+export function getStatusIcon(status: ProvisioningStepStatus, className: string = 'h-5 w-5') {
   switch (status) {
     case 'completed':
       return <CheckCircleSolidIcon className={`${className} text-owly-content-positive !size-4`} />
@@ -31,56 +31,6 @@ function getStatusIcon(status: ProvisioningStepStatus, className: string = 'h-5 
     case 'pending':
     default:
       return <ClockSolidIcon className={`${className} text-owly-content-tertiary !size-4`} />
-  }
-}
-
-export function getStepStatus(
-  cluster: Cluster | null,
-  stage: TerraformStage
-): ProvisioningStepStatus {
-  if (!cluster) {
-    return 'pending'
-  }
-
-  switch (stage) {
-    case 'network':
-      if (cluster.networkingCompletedAt) return 'completed'
-      if (cluster.networkingErrorAt) return 'failed'
-      if (cluster.networkingStartedAt) return 'in_progress'
-      return 'pending'
-
-    case 'ssh-keys':
-      if (cluster.sshKeysCompletedAt) return 'completed'
-      if (cluster.sshKeysErrorAt) return 'failed'
-      if (cluster.sshKeysStartedAt) return 'in_progress'
-      return 'pending'
-
-    case 'load-balancers':
-      if (cluster.loadBalancersCompletedAt) return 'completed'
-      if (cluster.loadBalancersErrorAt) return 'failed'
-      if (cluster.loadBalancersStartedAt) return 'in_progress'
-      return 'pending'
-
-    case 'servers':
-      if (cluster.serversCompletedAt) return 'completed'
-      if (cluster.serversErrorAt) return 'failed'
-      if (cluster.serversStartedAt) return 'in_progress'
-      return 'pending'
-
-    case 'volumes':
-      if (cluster.volumesCompletedAt) return 'completed'
-      if (cluster.volumesErrorAt) return 'failed'
-      if (cluster.volumesStartedAt) return 'in_progress'
-      return 'pending'
-
-    case 'kubernetes':
-      if (cluster.kubernetesClusterCompletedAt) return 'completed'
-      if (cluster.kubernetesClusterErrorAt) return 'failed'
-      if (cluster.kubernetesClusterStartedAt) return 'in_progress'
-      return 'pending'
-
-    default:
-      return 'pending'
   }
 }
 
@@ -104,7 +54,7 @@ export default function ClusterProvisioningStep({
     }, 5)
   }, [logs, active])
 
-  const status = getStepStatus(cluster, info.stage)
+  const status = cluster? cluster.progress[info.stage]: 'pending'
 
   return (
     <AccordionItem value={info.stage}>
@@ -123,22 +73,26 @@ export default function ClusterProvisioningStep({
           <Text className="!text-sm text-owly-content-tertiary">{info.description}</Text>
         </div>
 
-        <div
-          ref={ref}
-          className="w-full h-[300px] overflow-y-auto rounded-b-md px-4 bg-[hsl(0,0%,98%)]"
-        >
-          {logs.map((log) => (
-            <div key={log?.id} className="w-full flex items-start gap-4 py-1">
-              <Text className="!text-xs !font-mono shrink-0">
-                {dayjs(log?.timestamp).format('MMM DD HH:mm:ss')}
-              </Text>
+        {info.stage === 'dns' ? (
+          <ClusterDnsStep cluster={cluster} />
+        ) : (
+          <div
+            ref={ref}
+            className="w-full h-[300px] overflow-y-auto rounded-b-md px-4 bg-[hsl(0,0%,98%)]"
+          >
+            {logs.map((log) => (
+              <div key={log?.id} className="w-full flex items-start gap-4 py-1">
+                <Text className="!text-xs !font-mono shrink-0">
+                  {dayjs(log?.timestamp).format('MMM DD HH:mm:ss')}
+                </Text>
 
-              <Text className="font-mono !text-xs">
-                <Ansi>{log?.message}</Ansi>
-              </Text>
-            </div>
-          ))}
-        </div>
+                <Text className="font-mono !text-xs">
+                  <Ansi>{log?.message}</Ansi>
+                </Text>
+              </div>
+            ))}
+          </div>
+        )}
       </AccordionContent>
     </AccordionItem>
   )

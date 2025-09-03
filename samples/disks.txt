@@ -1,0 +1,158 @@
+{
+    "metadata": {
+        "created": "2025-09-03T17:41:24Z",
+        "id": "loop0",
+        "namespace": "runtime",
+        "owner": "block.DisksController",
+        "phase": "running",
+        "type": "Disks.block.talos.dev",
+        "updated": "2025-09-03T17:41:25Z",
+        "version": 2
+    },
+    "node": "",
+    "spec": {
+        "bus_path": "/virtual",
+        "cdrom": false,
+        "dev_path": "/dev/loop0",
+        "io_size": 512,
+        "pretty_size": "4.1 kB",
+        "readonly": true,
+        "sector_size": 512,
+        "size": 4096,
+        "sub_system": "/sys/class/block",
+        "symlinks": [
+            "/dev/disk/by-diskseq/9",
+            "/dev/disk/by-loop-inode/0:2-7",
+            "/dev/disk/by-loop-ref/0.sqsh"
+        ]
+    }
+}
+{
+    "metadata": {
+        "created": "2025-09-03T17:41:24Z",
+        "id": "loop1",
+        "namespace": "runtime",
+        "owner": "block.DisksController",
+        "phase": "running",
+        "type": "Disks.block.talos.dev",
+        "updated": "2025-09-03T17:41:25Z",
+        "version": 2
+    },
+    "node": "",
+    "spec": {
+        "bus_path": "/virtual",
+        "cdrom": false,
+        "dev_path": "/dev/loop1",
+        "io_size": 512,
+        "pretty_size": "73 MB",
+        "readonly": true,
+        "sector_size": 512,
+        "size": 72552448,
+        "sub_system": "/sys/class/block",
+        "symlinks": [
+            "/dev/disk/by-diskseq/10",
+            "/dev/disk/by-loop-inode/0:2-6",
+            "/dev/disk/by-loop-ref/\\x2frootfs.sqsh"
+        ]
+    }
+}
+{
+    "metadata": {
+        "created": "2025-09-03T17:41:57Z",
+        "id": "sda",
+        "namespace": "runtime",
+        "owner": "block.DisksController",
+        "phase": "running",
+        "type": "Disks.block.talos.dev",
+        "updated": "2025-09-03T17:41:57Z",
+        "version": 2
+    },
+    "node": "",
+    "spec": {
+        "bus_path": "/pci0000:00/0000:00:05.0/virtio3/host2/target2:0:0/2:0:0:1",
+        "cdrom": false,
+        "dev_path": "/dev/sda",
+        "io_size": 512,
+        "modalias": "scsi:t-0x00",
+        "model": "Volume",
+        "pretty_size": "22 GB",
+        "readonly": false,
+        "rotational": true,
+        "sector_size": 512,
+        "size": 21474836480,
+        "sub_system": "/sys/class/block",
+        "symlinks": [
+            "/dev/disk/by-diskseq/13",
+            "/dev/disk/by-id/scsi-0DO_Volume_control-plane-1e9a0cc7-5223-4f78-b184-871637fc9344-volume",
+            "/dev/disk/by-path/pci-0000:00:05.0-scsi-0:0:0:1",
+            "/dev/disk/by-uuid/ad2af1e8-e270-46e7-9682-f1b75d8e8c1f"
+        ],
+        "transport": "virtio"
+    }
+}
+{
+    "metadata": {
+        "created": "2025-09-03T17:41:25Z",
+        "id": "vda",
+        "namespace": "runtime",
+        "owner": "block.DisksController",
+        "phase": "running",
+        "type": "Disks.block.talos.dev",
+        "updated": "2025-09-03T17:41:25Z",
+        "version": 2
+    },
+    "node": "",
+    "spec": {
+        "bus_path": "/pci0000:00/0000:00:06.0/virtio4",
+        "cdrom": false,
+        "dev_path": "/dev/vda",
+        "io_size": 512,
+        "modalias": "virtio:d00000002v00001AF4",
+        "pretty_size": "97 GB",
+        "readonly": false,
+        "rotational": true,
+        "sector_size": 512,
+        "size": 96636764160,
+        "sub_system": "/sys/class/block",
+        "symlinks": [
+            "/dev/disk/by-diskseq/11",
+            "/dev/disk/by-path/pci-0000:00:06.0",
+            "/dev/disk/by-path/virtio-pci-0000:00:06.0"
+        ],
+        "transport": "virtio"
+    }
+}
+{
+    "metadata": {
+        "created": "2025-09-03T17:41:25Z",
+        "id": "vdb",
+        "namespace": "runtime",
+        "owner": "block.DisksController",
+        "phase": "running",
+        "type": "Disks.block.talos.dev",
+        "updated": "2025-09-03T17:41:25Z",
+        "version": 2
+    },
+    "node": "",
+    "spec": {
+        "bus_path": "/pci0000:00/0000:00:07.0/virtio5",
+        "cdrom": false,
+        "dev_path": "/dev/vdb",
+        "io_size": 512,
+        "modalias": "virtio:d00000002v00001AF4",
+        "pretty_size": "461 kB",
+        "readonly": true,
+        "rotational": true,
+        "sector_size": 512,
+        "size": 460800,
+        "sub_system": "/sys/class/block",
+        "symlinks": [
+            "/dev/disk/by-diskseq/12",
+            "/dev/disk/by-label/config-2",
+            "/dev/disk/by-path/pci-0000:00:07.0",
+            "/dev/disk/by-path/virtio-pci-0000:00:07.0",
+            "/dev/disk/by-uuid/2025-09-03-17-41-15-00"
+        ],
+        "transport": "virtio"
+    }
+}

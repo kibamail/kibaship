@@ -150,4 +150,17 @@ export class ChildProcess {
 
     return childProcess
   }
+
+  async executeAsync(): Promise<[{ stdout: string; stderr: string } | null, Error | null]> {
+    try {
+      const result = await execa(this._command, this._args, this._options)
+
+      return [{
+        stdout: result.stdout as string,
+        stderr: result.stderr as string,
+      }, null]
+    } catch (error) {
+      return [null, error]
+    }
+  }
 }

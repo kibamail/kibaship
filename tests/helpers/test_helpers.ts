@@ -1,8 +1,9 @@
 import User from '#models/user'
+import Workspace from '#models/workspace'
 import CloudProvider from '#models/cloud_provider'
 import Cluster from '#models/cluster'
 import { randomBytes } from 'node:crypto'
-import redis from '@adonisjs/redis/services/main'
+import hash from '@adonisjs/core/services/hash'
 import db from '@adonisjs/lucid/services/db'
 
 export interface UserWithWorkspace {
@@ -23,31 +24,80 @@ export interface TestClusterData {
 }
 
 /**
- * Creates a test user with a mock workspace profile stored in Redis
+ * Creates a test user with password authentication and a real workspace
  */
 export async function createUserWithWorkspace(): Promise<UserWithWorkspace> {
-  const user = await User.create({
-    email: `test_${randomBytes(4).toString('hex')}@example.com`,
-    oauthId: `oauth_${randomBytes(8).toString('hex')}`,
+  const email = `test_${randomBytes(4).toString('hex')}@example.com`
+  const password = await hash.make('testpassword123')
+
+  const { user, workspace } = await db.transaction(async (trx) => {
+    const user = new User()
+    user.email = email
+    user.password = password
+    user.useTransaction(trx)
+    await user.save()
+
+    const [username] = email.split('@')
+    const workspaceName = `${username}'s Workspace`
+    const slug = username.toLowerCase().replace(/[^a-z0-9]/g, '-')
+
+    const workspace = new Workspace()
+    workspace.name = workspaceName
+    workspace.slug = slug
+    workspace.userId = user.id
+    workspace.useTransaction(trx)
+    await workspace.save()
+
+    return { user, workspace }
   })
 
-  const workspaceId = `workspace_${randomBytes(8).toString('hex')}`
-  const workspaceSlug = `test-workspace-${randomBytes(4).toString('hex')}`
-  const mockProfile = {
-    id: user.oauthId,
-    email: user.email,
-    workspaces: [
-      {
-        id: workspaceId,
-        slug: workspaceSlug,
-        name: 'Test Workspace',
-      },
-    ],
+  return { 
+    user, 
+    workspaceId: workspace.id, 
+    workspaceSlug: workspace.slug 
   }
+}
 
-  await redis.set(`users:${user.id}`, JSON.stringify(mockProfile))
+/**
+ * Creates a test user with password authentication (legacy OAuth support removed)
+ */
+export async function createTestUser(email?: string, password?: string): Promise<User> {
+  const testEmail = email || `test_${randomBytes(4).toString('hex')}@example.com`
+  const testPassword = password || 'testpassword123'
 
-  return { user, workspaceId, workspaceSlug }
+  return User.create({
+    email: testEmail,
+    password: await hash.make(testPassword),
+  })
+}
+
+/**
+ * Creates a registered user with workspace for testing protected routes
+ */
+export async function createRegisteredUser(email?: string, password?: string): Promise<{ user: User; workspace: Workspace }> {
+  const testEmail = email || `registered_${randomBytes(4).toString('hex')}@example.com`
+  const testPassword = password || 'testpassword123'
+
+  return db.transaction(async (trx) => {
+    const user = new User()
+    user.email = testEmail
+    user.password = await hash.make(testPassword)
+    user.useTransaction(trx)
+    await user.save()
+
+    const [username] = testEmail.split('@')
+    const workspaceName = `${username}'s Workspace`
+    const slug = `${username.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${randomBytes(2).toString('hex')}`
+
+    const workspace = new Workspace()
+    workspace.name = workspaceName
+    workspace.slug = slug
+    workspace.userId = user.id
+    workspace.useTransaction(trx)
+    await workspace.save()
+
+    return { user, workspace }
+  })
 }
 
 /**

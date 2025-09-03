@@ -16,7 +16,7 @@ interface TerraformOutputValue {
   value: string | number | object
 }
 
-interface HetznerSshKeysOutput {
+interface SshKeysOutput {
   ssh_key_id: TerraformOutputValue
   ssh_key_name: TerraformOutputValue
   ssh_key_fingerprint: TerraformOutputValue
@@ -41,6 +41,7 @@ export default class ProvisionSshKeysJob extends Job {
 
     cluster.sshKeysStartedAt = DateTime.now()
     cluster.sshKeysCompletedAt = null
+    cluster.sshKeysErrorAt = null
     await cluster.save()
 
     try {
@@ -59,13 +60,9 @@ export default class ProvisionSshKeysJob extends Job {
       await executor.apply({ autoApprove: true })
 
       const { stdout } = await executor.output()
+      const output = JSON.parse(stdout as string) as SshKeysOutput
 
-      const output = JSON.parse(stdout as string) as HetznerSshKeysOutput
-
-      if (cluster.cloudProvider?.type === 'hetzner') {
-        cluster.sshKey.providerId = output.ssh_key_id.value as string
-      }
-
+      cluster.sshKey.providerId = output.ssh_key_id.value as string
       cluster.sshKeysCompletedAt = DateTime.now()
 
       await cluster.sshKey.save()

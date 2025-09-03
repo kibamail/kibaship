@@ -1,6 +1,6 @@
 import { Link } from '@inertiajs/react'
 import { Node, NodeProps } from '@xyflow/react'
-import { GitHubIcon } from '~/Components/Icons/github.svg'
+import { GithubIcon } from '~/Components/Icons/github.svg'
 import { useProjectPageContext } from '~/pages/projects/projects-context'
 
 export type GitRepositoryAppNode = Node<{ getApplicationUrl?: () => string }>
@@ -21,7 +21,7 @@ export function GitRepositoryAppNode({
       <div className="w-full border-b border-owly-border-tertiary">
         <div className="px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <GitHubIcon className="size-3 text-owly-content-tertiary" />
+            <GithubIcon className="size-3 text-owly-content-tertiary" />
             <span className="kb-content-tertiary font-sans !text-xs">{application?.name}</span>
           </div>
         </div>

@@ -1,0 +1,53 @@
+terraform {
+  required_providers {
+    digitalocean = {
+      source  = "digitalocean/digitalocean"
+      version = "~> 2.66"
+    }
+
+    talos = {
+      source = "siderolabs/talos"
+      version = "0.9.0"
+    }
+  }
+
+  backend "s3" {
+    bucket = "{{ s3_bucket }}"
+    key    = "clusters/{{ cluster_id }}/talos-image/terraform.tfstate"
+    region = "{{ s3_region }}"
+    encrypt = true
+  }
+}
+
+variable "do_token" {
+  description = "DigitalOcean API Token"
+  type        = string
+  sensitive   = true
+}
+
+provider "digitalocean" {
+  token = var.do_token
+}
+
+data "digitalocean_images" "existing_talos_image" {
+  filter {
+    key    = "name"
+    values = ["kibaship-talos-linux-{{ cluster_talos_version }}-{{ cluster_region }}"]
+  }
+  filter {
+    key    = "type"
+    values = ["custom"]
+  }
+}
+
+resource "digitalocean_custom_image" "talos_image" {
+  count        = length(data.digitalocean_images.existing_talos_image.images) == 0 ? 1 : 0
+  name         = "kibaship-talos-linux-{{ cluster_talos_version }}-{{ cluster_region }}"
+  url          = "https://factory.talos.dev/image/376567988ad370138ad8b2698212367b8edcb69b5fd68c80be1f2ec7d603b4ba/{{ cluster_talos_version }}/digital-ocean-amd64.raw.gz"
+  distribution = "Unknown OS"
+  regions      = ["{{ cluster_region }}"]
+}
+
+output "talos_image_id" {
+  value = length(data.digitalocean_images.existing_talos_image.images) > 0 ? data.digitalocean_images.existing_talos_image.images[0].id : digitalocean_custom_image.talos_image[0].id
+}
