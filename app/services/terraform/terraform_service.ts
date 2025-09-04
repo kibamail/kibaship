@@ -42,6 +42,12 @@ export interface TemplateContext {
   control_planes_volume_size: number
   workers_volume_size: number
   cluster_load_balancer_domain: string
+  volumes: Array<{
+    id: string
+    slug: string
+    size: number
+    node_provider_id: string
+  }>
 }
 
 export interface TerraformFile {
@@ -162,6 +168,7 @@ export class TerraformService {
     await this.init()
 
     const context = this.buildTemplateContext(cluster)
+    console.dir({context, cluster: cluster.toObject()}, {depth: null})
     const cloudProviderType = cluster.cloudProvider.type
 
     const content = await this.edge.render(`${cloudProviderType}/${templateName}`, context)
@@ -188,9 +195,23 @@ export class TerraformService {
   private buildTemplateContext(cluster: Cluster): TemplateContext {
     const publicKey = cluster.sshKey?.publicKey
 
-    const controlPlanes = (cluster.nodes?.filter(node => node.type === 'master')?.map(node => node.toJSON()) || []) as TemplateContext['control_planes']
+    const controlPlanes = (cluster.nodes?.filter(node => node.type === 'master')?.map(node => ({
+      id: node.id,
+      slug: node.slug,
+      type: node.type,
+      storage_id: (node.storages?.[0]?.id) || '',
+      storage_slug: (node.storages?.[0]?.slug) || '',
+      provider_id: node.providerId as string
+    })) || [])
 
-    const workers = (cluster.nodes?.filter(node => node.type === 'worker')?.map(node => node.toJSON()) || []) as TemplateContext['workers']
+    const workers = (cluster.nodes?.filter(node => node.type === 'worker')?.map(node => ({
+      id: node.id,
+      slug: node.slug,
+      type: node.type,
+      storage_id: (node.storages?.[0]?.id) || '',
+      storage_slug: (node.storages?.[0]?.slug) || '',
+      provider_id: node.providerId as string
+    })) || [])
 
     return {
       cluster_id: cluster.id,
@@ -209,7 +230,15 @@ export class TerraformService {
       public_key: publicKey,
       control_planes_volume_size: cluster.controlPlanesVolumeSize,
       workers_volume_size: cluster.workersVolumeSize,
-      cluster_load_balancer_domain: `kube.${cluster.subdomainIdentifier}`
+      cluster_load_balancer_domain: `kube.${cluster.subdomainIdentifier}`,
+      volumes: cluster.nodes?.map(node => 
+        node.storages.map(storage => ({
+          id: storage.id,
+          slug: storage.slug,
+          size: node.type === 'master' ? cluster.controlPlanesVolumeSize : cluster.workersVolumeSize,
+          node_provider_id: node.providerId as string
+        }))
+      ).flat()
     }
   }
 

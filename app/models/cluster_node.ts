@@ -1,5 +1,5 @@
 import { DateTime } from 'luxon'
-import { customAlphabet } from 'nanoid'
+import { NanoId } from '#utils/nano_id'
 import { BaseModel, beforeCreate, column, belongsTo, hasMany } from '@adonisjs/lucid/orm'
 import { randomUUID } from 'node:crypto'
 import Cluster from './cluster.js'
@@ -37,6 +37,16 @@ export default class ClusterNode extends BaseModel {
   })
   declare privateIpv4Address: string | null
 
+  @column({
+    columnName: 'private_network_interface'
+  })
+  declare privateNetworkInterface: string | null
+
+  @column({
+    columnName: 'public_network_interface'
+  })
+  declare publicNetworkInterface: string | null
+
   @column()
   declare clusterId: string
 
@@ -61,6 +71,6 @@ export default class ClusterNode extends BaseModel {
   @beforeCreate()
   public static async generateId(clusterNode: ClusterNode) {
     clusterNode.id = randomUUID()
-    clusterNode.slug = customAlphabet('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789')(10)
+    clusterNode.slug = NanoId.generate(10)
   }
 }

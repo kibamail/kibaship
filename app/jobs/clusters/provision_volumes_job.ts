@@ -16,7 +16,13 @@ interface TerraformOutputValue {
 }
 
 interface VolumesOutput {
-  [key: string]: TerraformOutputValue
+  // Individual volume outputs for each volume slug
+  [volumeOutputKey: string]: TerraformOutputValue
+  
+  // Summary output with all volume IDs mapped by slug
+  volume_ids: TerraformOutputValue & {
+    value: Record<string, string>
+  }
 }
 
 export default class ProvisionVolumesJob extends Job {
@@ -45,20 +51,9 @@ export default class ProvisionVolumesJob extends Job {
       const terraform = new TerraformService(payload.clusterId)
       await terraform.generate(cluster, TerraformTemplate.VOLUMES)
 
-      const controlPlaneServerIds = this.buildServerIdsMap(
-        cluster.nodes.filter((n) => n.type === 'master')
-      )
-      const workerServerIds = this.buildServerIdsMap(
-        cluster.nodes.filter((n) => n.type === 'worker')
-      )
-
       const executor = new TerraformExecutor(cluster.id, 'volumes').vars({
         ...cluster.cloudProvider?.getTerraformCredentials(),
         cluster_name: cluster.subdomainIdentifier,
-        control_planes_volume_size: cluster.controlPlanesVolumeSize,
-        workers_volume_size: cluster.workersVolumeSize,
-        control_plane_server_ids: JSON.stringify(controlPlaneServerIds),
-        worker_server_ids: JSON.stringify(workerServerIds),
         location: cluster.location,
       })
 
@@ -87,17 +82,6 @@ export default class ProvisionVolumesJob extends Job {
    */
   async rescue(_payload: ProvisionVolumesJobPayload) {}
 
-  private buildServerIdsMap(nodes: any[]): Record<string, string> {
-    const serverIds: Record<string, string> = {}
-
-    for (const node of nodes) {
-      if (node.providerId) {
-        serverIds[node.id] = node.providerId
-      }
-    }
-
-    return serverIds
-  }
 
   private async createOrUpdateVolumes(clusterId: string, output: VolumesOutput): Promise<void> {
     const cluster = await Cluster.query()
@@ -108,31 +92,25 @@ export default class ProvisionVolumesJob extends Job {
       .firstOrFail()
 
     for (const node of cluster.nodes) {
-      const nodeType = node.type === 'master' ? 'control_plane' : 'worker'
-      const volumeIdKey = `${nodeType}_${node.slug}_volume_id`
-      const attachmentIdKey = `${nodeType}_${node.slug}_attachment_id`
+      for (const storage of node.storages) {
+        const volumeIdKey = `volume_${storage.slug}_id`
+        const attachmentIdKey = `volume_${storage.slug}_attachment_id`
 
-      const volumeId = output[volumeIdKey]?.value as string
-      const attachmentId = output[attachmentIdKey]?.value as string
+        const volumeId = output[volumeIdKey]?.value as string
+        const attachmentId = output[attachmentIdKey]?.value as string
 
-      if (volumeId && attachmentId) {
-        await this.createOrUpdateNodeStorage(node.id, volumeId, attachmentId)
+        if (volumeId && attachmentId) {
+          await this.updateNodeStorage(storage, volumeId, attachmentId)
+        }
       }
     }
   }
 
-  private async createOrUpdateNodeStorage(
-    nodeId: string,
+  private async updateNodeStorage(
+    storage: ClusterNodeStorage,
     volumeId: string,
     attachmentId: string
   ): Promise<ClusterNodeStorage> {
-    let storage = await ClusterNodeStorage.query().where('cluster_node_id', nodeId).first()
-
-    if (!storage) {
-      storage = new ClusterNodeStorage()
-      storage.clusterNodeId = nodeId
-    }
-
     storage.providerId = volumeId
     storage.providerMountId = attachmentId
     storage.status = 'healthy'

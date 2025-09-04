@@ -11,25 +11,38 @@ export interface DnsVerificationResult {
 export class ClusterDnsVerificationService {
   protected resolver = new Resolver()
 
-  constructor(protected cluster: Cluster) {
-    this.init()
+  protected dnsServersToVerify = [
+    // Google DNS
+    ['8.8.8.8', '8.8.4.4'],
+
+    // Cloudflare DNs
+    ['1.1.1.1', '1.1.0.1'],
+
+    // OpenDNS
+    ['208.67.222.222', '208.67.220.220']
+  ]
+
+  constructor(protected cluster: Cluster) {}
+
+  public async verify() {
+    for (const servers of this.dnsServersToVerify) {
+      const { ingress, cluster } = await this.verifyOnDnsServers(servers)
+
+      console.log({ servers, ingress, cluster })
+
+      if (! ingress || ! cluster) {
+        return { ingress: false, cluster: false}
+      }
+    }
+
+    return { ingress: true, cluster: true }
   }
 
-  protected init() {
-    let nameservers: string[] = ['8.8.8.8', '8.8.4.4']
+  protected async verifyOnDnsServers(servers: string[]): Promise<DnsVerificationResult> {
+    this.resolver = new Resolver()
 
-    // if (this.cluster.cloudProvider.type === 'hetzner') {
-    //   nameservers = ['185.12.64.1', '185.12.64.2']
-    // }
+    this.resolver.setServers(servers)
 
-    // if (this.cluster.cloudProvider.type === 'digital_ocean') {
-    //   nameservers = ['67.207.67.2', '67.207.67.3']
-    // }
-
-    this.resolver.setServers(nameservers)
-  }
-
-  public async verify(): Promise<DnsVerificationResult> {
     const ingressLoadBalancer = this.cluster.loadBalancers.find((lb) => lb.type === 'ingress')
     const clusterLoadBalancer = this.cluster.loadBalancers.find((lb) => lb.type === 'cluster')
 

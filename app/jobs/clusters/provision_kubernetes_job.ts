@@ -2,13 +2,17 @@ import { Job } from '@rlanz/bull-queue'
 import Cluster from '#models/cluster'
 import { DateTime } from 'luxon'
 import logger from '@adonisjs/core/services/logger'
-import { TalosCtl } from '#services/talos/talos_ctl'
+import { TalosDetectionService } from '#services/talos/talos_detection_service'
+import { RedisStream } from '#utils/redis_stream'
+import { RedisStreamConfig } from '#services/redis/redis_stream_config'
 
 interface ProvisionKubernetesJobPayload {
   clusterId: string
 }
 
 export default class ProvisionKubernetesJob extends Job {
+  private streamName?: string
+
   static get $$filepath() {
     return import.meta.url
   }
@@ -17,6 +21,7 @@ export default class ProvisionKubernetesJob extends Job {
    * Base Entry point
    */
   async handle(payload: ProvisionKubernetesJobPayload) {
+    this.streamName = RedisStreamConfig.getClusterStream(payload.clusterId)
     const cluster = await Cluster.complete(payload.clusterId)
 
     if (!cluster) {
@@ -31,6 +36,8 @@ export default class ProvisionKubernetesJob extends Job {
       clusterName: cluster.subdomainIdentifier,
     })
 
+    await this.logToStream('k8s_start', `Starting Kubernetes provisioning for cluster ${cluster.subdomainIdentifier}`)
+
     cluster.kubernetesClusterStartedAt = DateTime.now()
     cluster.kubernetesClusterCompletedAt = null
     cluster.kubernetesClusterErrorAt = null
@@ -38,34 +45,25 @@ export default class ProvisionKubernetesJob extends Job {
     await cluster.save()
 
     try {
+      const detectionService = new TalosDetectionService(cluster.id, this.streamName)
 
       for (const node of cluster.nodes) {
-        const [[_disks, disksError], [addresses, addressesError]] = await Promise.all([
-          new TalosCtl().getDisks({ nodes: [node.ipv4Address as string] }),
-          new TalosCtl().getAddresses({ nodes: [node.ipv4Address as string] })
-        ])
-
-        if (disksError || addressesError) {
-          logger.error('Error fetching disks or addresses', {
-            clusterId: cluster.id,
-            nodeId: node.id,
-            disksError,
-            addressesError,
-          })
-
-
-          throw new Error(`${disksError?.message} ${addressesError?.message}`)
+        const result = await detectionService.detectAndUpdateNode(node)
+        
+        if (!result.success) {
+          throw new Error(result.error)
         }
-
-        console.dir({ addresses }, { depth: null })
-        break
       }
 
-    } finally {
-      cluster.kubernetesClusterCompletedAt = null
-      cluster.kubernetesClusterErrorAt = DateTime.now()
+      await this.logToStream('k8s_complete', 'Network interface detection completed successfully')
 
+      cluster.kubernetesClusterErrorAt = DateTime.now()
       await cluster.save()
+
+    } catch (error) {
+      cluster.kubernetesClusterErrorAt = DateTime.now()
+      await cluster.save()
+      throw error
     }
   }
 
@@ -76,5 +74,27 @@ export default class ProvisionKubernetesJob extends Job {
     logger.error('ProvisionKubernetesJob failed after all retries', {
       clusterId: payload.clusterId,
     })
+  }
+
+  /**
+   * Log a message to the Redis stream
+   */
+  private async logToStream(logType: string, message: string): Promise<void> {
+    if (!this.streamName) return
+    
+    try {
+      await new RedisStream()
+        .stream(this.streamName)
+        .fields({
+          type: logType,
+          message: message.trim(),
+          timestamp: new Date().toISOString(),
+          cluster_id: this.streamName.split(':')[2], // Extract cluster ID from stream name
+          stage: 'kubernetes'
+        })
+        .add()
+    } catch (error) {
+      console.error('Failed to log to stream:', error)
+    }
   }
 }

@@ -17,6 +17,7 @@ import Project from './project.js'
 import ClusterNode from './cluster_node.js'
 import ClusterSshKey from './cluster_ssh_key.js'
 import ClusterLoadBalancer from './cluster_load_balancer.js'
+import ClusterNodeStorage from './cluster_node_storage.js'
 import CloudProvider from './cloud_provider.js'
 import type { HasMany, BelongsTo, HasOne } from '@adonisjs/lucid/types/relations'
 import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
@@ -291,7 +292,9 @@ export default class Cluster extends BaseModel {
       data.control_plane_nodes_count,
       data.worker_nodes_count,
       data.server_type,
-      trx
+      trx,
+      data.control_planes_volume_size,
+      data.workers_volume_size
     )
 
     return cluster
@@ -324,9 +327,12 @@ export default class Cluster extends BaseModel {
     controlPlaneCount: number,
     workerCount: number,
     serverType: string,
-    trx: TransactionClientContract
+    trx: TransactionClientContract,
+    controlPlanesVolumeSize: number,
+    workersVolumeSize: number
   ): Promise<void> {
     const nodes: ClusterNode[] = []
+    const storages: ClusterNodeStorage[] = []
 
     for (let i = 0; i < controlPlaneCount; i++) {
       const controlPlaneNode = new ClusterNode()
@@ -348,7 +354,20 @@ export default class Cluster extends BaseModel {
       nodes.push(workerNode)
     }
 
+    // Save nodes first
     await Promise.all(nodes.map((node) => node.save()))
+
+    // Create storage for each node
+    for (const node of nodes) {
+      const storage = new ClusterNodeStorage()
+      storage.clusterNodeId = node.id
+      storage.status = 'provisioning'
+      storage.size = node.type === 'master' ? controlPlanesVolumeSize : workersVolumeSize
+      storage.useTransaction(trx)
+      storages.push(storage)
+    }
+
+    await Promise.all(storages.map((storage) => storage.save()))
   }
 
   public static complete(clusterId: string) {

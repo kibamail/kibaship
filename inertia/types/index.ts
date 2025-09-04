@@ -188,6 +188,8 @@ export interface ClusterNode {
   ipv4_address: string | null
   ipv6_address: string | null
   private_ipv4_address: string | null
+  private_network_interface: string | null
+  public_network_interface: string | null
   created_at: string
   updated_at: string
   cluster?: Cluster
