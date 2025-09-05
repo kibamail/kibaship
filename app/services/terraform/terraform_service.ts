@@ -13,7 +13,8 @@ export enum TerraformTemplate {
   SSH_KEYS = 'ssh-keys.tf',
   LOAD_BALANCERS = 'load-balancers.tf',
   SERVERS = 'servers.tf',
-  VOLUMES = 'volumes.tf'
+  VOLUMES = 'volumes.tf',
+  KUBERNETES = 'kubernetes.tf'
 }
 
 export interface TemplateContext {
@@ -32,11 +33,17 @@ export interface TemplateContext {
     id: string
     slug: string
     type: string
+    provider_id: string
+    ipv4_address: string | null
+    primary_disk_name: string | null
   }>
   workers: Array<ModelObject & {
     id: string
     slug: string
     type: string
+    provider_id: string
+    ipv4_address: string | null
+    primary_disk_name: string | null
   }>
   public_key: string
   control_planes_volume_size: number
@@ -168,7 +175,6 @@ export class TerraformService {
     await this.init()
 
     const context = this.buildTemplateContext(cluster)
-    console.dir({context, cluster: cluster.toObject()}, {depth: null})
     const cloudProviderType = cluster.cloudProvider.type
 
     const content = await this.edge.render(`${cloudProviderType}/${templateName}`, context)
@@ -199,44 +205,83 @@ export class TerraformService {
       id: node.id,
       slug: node.slug,
       type: node.type,
-      storage_id: (node.storages?.[0]?.id) || '',
-      storage_slug: (node.storages?.[0]?.slug) || '',
-      provider_id: node.providerId as string
+      provider_id: node.providerId as string,
+      ipv4_address: node.ipv4Address,
+      primary_disk_name: node.storages?.[0]?.diskName
     })) || [])
 
     const workers = (cluster.nodes?.filter(node => node.type === 'worker')?.map(node => ({
       id: node.id,
       slug: node.slug,
       type: node.type,
-      storage_id: (node.storages?.[0]?.id) || '',
-      storage_slug: (node.storages?.[0]?.slug) || '',
-      provider_id: node.providerId as string
+      provider_id: node.providerId as string,
+      ipv4_address: node.ipv4Address,
+      primary_disk_name: node.storages?.[0]?.diskName
     })) || [])
 
     return {
-      cluster_id: cluster.id,
-      cluster_name: cluster.subdomainIdentifier,
-      cluster_talos_version: cluster.talosVersion || talosVersion,
-      cluster_region: cluster.location,
-      network_zone: this.getNetworkZoneFromLocation(cluster.location),
-      location: cluster.location,
-      s3_region: env.get('S3_REGION'),
-      s3_bucket: env.get('S3_BUCKET'),
-      control_planes: controlPlanes,
-      cluster_talos_image: cluster.providerImageId as string,
-      cluster_ssh_key_id: cluster.sshKey?.providerId as string,
-      workers: workers,
-      cluster_network_id: cluster.providerNetworkId as string,
-      public_key: publicKey,
-      control_planes_volume_size: cluster.controlPlanesVolumeSize,
-      workers_volume_size: cluster.workersVolumeSize,
-      cluster_load_balancer_domain: `kube.${cluster.subdomainIdentifier}`,
-      volumes: cluster.nodes?.map(node => 
+      // =============================================================================
+      // GLOBAL VARIABLES - Used by ALL Terraform templates
+      // =============================================================================
+      
+      /** Used by all templates for S3 backend state storage */
+      s3_region: env.get('S3_REGION'),         // Backend state in all templates
+      s3_bucket: env.get('S3_BUCKET'),         // Backend state in all templates
+      
+      /** Core cluster identifiers used across multiple templates */
+      cluster_id: cluster.id,                  // Used by: servers.tf.edge, load-balancers.tf.edge, tagging
+      cluster_name: cluster.subdomainIdentifier, // Used by: all templates for resource naming
+      cluster_region: cluster.location,        // Used by: servers.tf.edge, talos-image.tf.edge, volumes.tf.edge
+      location: cluster.location,              // Used by: volumes.tf.edge (legacy alias for cluster_region)
+      
+      // =============================================================================
+      // INFRASTRUCTURE VARIABLES - Used by multiple infrastructure templates
+      // =============================================================================
+      
+      /** Network configuration used by servers and load balancers */
+      cluster_network_id: cluster.providerNetworkId as string, // Used by: servers.tf.edge
+      network_zone: this.getNetworkZoneFromLocation(cluster.location), // Used by: network.tf.edge
+      
+      /** SSH and security configuration */
+      cluster_ssh_key_id: cluster.sshKey?.providerId as string, // Used by: servers.tf.edge
+      public_key: publicKey,                   // Used by: ssh-keys.tf.edge
+      
+      /** Talos OS configuration */
+      cluster_talos_version: cluster.talosVersion || talosVersion, // Used by: talos-image.tf.edge
+      cluster_talos_image: cluster.providerImageId as string, // Used by: servers.tf.edge
+      
+      // =============================================================================
+      // NODE ARRAYS - Used by servers.tf.edge and talos.tf.edge
+      // =============================================================================
+      
+      /** Control plane nodes array with computed properties */
+      control_planes: controlPlanes,           // Used by: servers.tf.edge, talos.tf.edge
+      
+      /** Worker nodes array with computed properties */  
+      workers: workers,                        // Used by: servers.tf.edge, talos.tf.edge
+      
+      // =============================================================================
+      // LOAD BALANCER VARIABLES - Used by load-balancers.tf.edge and talos.tf.edge
+      // =============================================================================
+      
+      /** Load balancer domain for Kubernetes API access */
+      cluster_load_balancer_domain: `kube.${cluster.subdomainIdentifier}`, // Used by: talos.tf.edge
+      
+      // =============================================================================
+      // VOLUME-SPECIFIC VARIABLES - Used ONLY by volumes.tf.edge
+      // =============================================================================
+      
+      /** Volume sizes for different node types */
+      control_planes_volume_size: cluster.controlPlanesVolumeSize, // Used by: volumes.tf.edge (deprecated)
+      workers_volume_size: cluster.workersVolumeSize,            // Used by: volumes.tf.edge (deprecated)
+      
+      /** Dynamic volumes array with storage metadata */
+      volumes: cluster.nodes?.map(node =>     // Used by: volumes.tf.edge ONLY
         node.storages.map(storage => ({
-          id: storage.id,
-          slug: storage.slug,
+          id: storage.id,                      // Storage record ID
+          slug: storage.slug,                  // Unique storage identifier for resource naming
           size: node.type === 'master' ? cluster.controlPlanesVolumeSize : cluster.workersVolumeSize,
-          node_provider_id: node.providerId as string
+          node_provider_id: node.providerId as string // Droplet ID for volume attachment
         }))
       ).flat()
     }

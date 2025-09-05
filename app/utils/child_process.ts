@@ -15,10 +15,10 @@ export type ErrorCallback = (error: Error) => void
  *   .args(['init', '-backend-config=bucket=my-bucket'])
  *   .cwd('/path/to/working/directory')
  *   .env({ AWS_ACCESS_KEY_ID: 'key' })
- *   .onStdout((data) => console.log('OUT:', data))
- *   .onStderr((data) => console.log('ERR:', data))
- *   .onClose((code) => console.log('Exit code:', code))
- *   .onError((error) => console.error('Process error:', error))
+ *   .onStdout((data) => report('OUT:', data))
+ *   .onStderr((data) => report('ERR:', data))
+ *   .onClose((code) => report('Exit code:', code))
+ *   .onError((error) => report('Process error:', error))
  *   .execute()
  * ```
  */

@@ -28,8 +28,6 @@ export class ClusterDnsVerificationService {
     for (const servers of this.dnsServersToVerify) {
       const { ingress, cluster } = await this.verifyOnDnsServers(servers)
 
-      console.log({ servers, ingress, cluster })
-
       if (! ingress || ! cluster) {
         return { ingress: false, cluster: false}
       }

@@ -34,7 +34,7 @@ export type StreamErrorCallback = (error: Error) => void
  * await new RedisStream()
  *   .stream('events')
  *   .fields({ event: 'user_created', userId: '123' })
- *   .onAdd((id) => console.log('Added with ID:', id))
+ *   .onAdd((id) => report'Added with ID:', id))
  *   .onError((error) => console.error('Add error:', error))
  *   .add()
  * ```
@@ -45,8 +45,8 @@ export type StreamErrorCallback = (error: Error) => void
  *   .stream('events')
  *   .from('0')
  *   .count(10)
- *   .onRead((messages) => console.log('Received:', messages))
- *   .onError((error) => console.error('Read error:', error))
+ *   .onRead((messages) => report'Received:', messages))
+ *   .onError((error) => report('Read error:', error))
  *   .read()
  * ```
  * 
@@ -58,7 +58,7 @@ export type StreamErrorCallback = (error: Error) => void
  *   .consumer('worker-1')
  *   .count(5)
  *   .block(1000)
- *   .onRead((messages) => console.log('Received:', messages))
+ *   .onRead((messages) => report('Received:', messages))
  *   .readGroup()
  * ```
  */

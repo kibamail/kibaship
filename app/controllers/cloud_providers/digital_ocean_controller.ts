@@ -53,8 +53,6 @@ export default class DigitalOceanController extends BaseController {
     }
 
     public async callback(ctx: HttpContext) {
-
-        console.log(ctx.request.all())
         const workspace = await this.workspace(ctx)
 
         const [response, error] = await $trycatch(() => {

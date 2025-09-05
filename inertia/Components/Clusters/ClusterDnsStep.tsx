@@ -42,12 +42,6 @@ export default function ClusterDnsStep({ cluster }: ClusterDnsStepProps) {
       )
       return response.data
     },
-    onSuccess: (data) => {
-      console.log('DNS verification result:', data)
-    },
-    onError: (error) => {
-      console.error('DNS verification failed:', error)
-    },
   })
 
   const handleVerifyRecords = () => {

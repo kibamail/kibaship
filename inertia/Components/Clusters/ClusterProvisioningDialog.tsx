@@ -164,8 +164,7 @@ export function ClusterProvisioningDialog({
       update: true,
     }
 
-    const listener = socket.on(`cluster:${cluster.id}:updated`, (data) => {
-      console.log('@@@@@@@@@@@@---->CLUSTER_UPDATE_RECEIVED', data?.id)
+    socket.on(`cluster:${cluster.id}:updated`, () => {
       clusterQuery.refetch()
     })
 
@@ -193,9 +192,7 @@ export function ClusterProvisioningDialog({
         logs: true,
       }
 
-      const listener = socket.on(`cluster:${clusterId}:logs`, (data) => {
-        console.log('@@@@@@@@@@@@---->LOG_RECEIVED', data)
-
+      socket.on(`cluster:${clusterId}:logs`, (data) => {
         queryClient.setQueryData(
           ['clusters', clusterId, 'logs'],
           (oldData: ClusterLogEntry[] | undefined) => {

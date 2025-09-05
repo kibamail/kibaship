@@ -3,6 +3,8 @@ import Cluster from '#models/cluster'
 import { DateTime } from 'luxon'
 import logger from '@adonisjs/core/services/logger'
 import { TalosDetectionService } from '#services/talos/talos_detection_service'
+import { TerraformService, TerraformTemplate } from '#services/terraform/terraform_service'
+import { TerraformExecutor } from '#services/terraform/terraform_executor'
 import { RedisStream } from '#utils/redis_stream'
 import { RedisStreamConfig } from '#services/redis/redis_stream_config'
 
@@ -56,6 +58,25 @@ export default class ProvisionKubernetesJob extends Job {
       }
 
       await this.logToStream('k8s_complete', 'Network interface detection completed successfully')
+
+      await this.logToStream('talos_template', 'Generating Talos Terraform template')
+      const terraform = new TerraformService(payload.clusterId)
+      await terraform.generate(cluster, TerraformTemplate.KUBERNETES)
+
+      await this.logToStream('talos_plan', 'Planning Talos cluster Terraform execution')
+      const executor = new TerraformExecutor(cluster.id, 'kubernetes').vars({
+        ...cluster.cloudProvider?.getTerraformCredentials(),
+      })
+
+      await executor.init()
+      await executor.plan()
+
+      await this.logToStream('talos_plan_complete', 'Talos Terraform plan completed successfully')
+      
+      logger.info('Talos Terraform plan completed', {
+        clusterId: cluster.id,
+        clusterName: cluster.subdomainIdentifier,
+      })
 
       cluster.kubernetesClusterErrorAt = DateTime.now()
       await cluster.save()

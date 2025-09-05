@@ -8,7 +8,7 @@ import { join } from 'node:path'
 import logger from '@adonisjs/core/services/logger'
 
 export type TerraformCommand = 'init' | 'apply' | 'plan' | 'destroy'
-export type TerraformStage = 'network' | 'ssh-keys' | 'load-balancers' | 'servers' | 'volumes' | 'kubernetes' | 'talos-image' | 'dns'
+export type TerraformStage = 'network' | 'ssh-keys' | 'load-balancers' | 'servers' | 'volumes' | 'kubernetes' | 'talos-image' | 'dns' | 'talos'
 
 export interface TerraformExecutionOptions {
   autoApprove?: boolean
@@ -34,10 +34,10 @@ export type TerraformOutputCallback = (outputs: Record<string, any>) => void
  * const executor = new TerraformExecutor('cluster-123', 'network')
  *
  * await executor
- *   .onLog((type, message) => console.log(`${type}: ${message}`))
- *   .onComplete((result) => console.log('Done:', result))
- *   .onError((error) => console.error('Failed:', error))
- *   .onOutput((outputs) => console.log('Terraform outputs:', outputs))
+ *   .onLog((type, message) => report(`${type}: ${message}`))
+ *   .onComplete((result) => report('Done:', result))
+ *   .onError((error) => report('Failed:', error))
+ *   .onOutput((outputs) => report('Terraform outputs:', outputs))
  *   .init()
  *
  * await executor.apply({ autoApprove: true })
@@ -250,19 +250,19 @@ export class TerraformExecutor {
       .onStdout(async (data) => {
         await this.logToStream(`${command}_stdout`, data)
 
-        logger.info(`${command}_stdout: ${data.substring(0, 100)}...`)
+        logger.info(`${command}_stdout: ${data.substring(0, 500)}...`)
       })
       .onStderr(async (data) => {
         await this.logToStream(`${command}_stderr`, data)
 
-        logger.error(`${command}_stderr: ${data.substring(0, 100)}...`)
+        logger.error(`${command}_stderr: ${data.substring(0, 500)}...`)
       })
       .onClose(async (code) => {
         const message = `Terraform ${command} exited with code: ${code}`
 
         await this.logToStream(`${command}_close`, message)
 
-        logger.info(`${command}_close: ${message.substring(0, 100)}...`)
+        logger.info(`${command}_close: ${message.substring(0, 500)}...`)
       })
       .onError(async (error) => {
         await this.logToStream(`${command}_error`, error.message)
@@ -276,6 +276,7 @@ export class TerraformExecutor {
    * Log a message to the Redis stream
    */
   private async logToStream(logType: string, message: string): Promise<void> {
+    console.log('Logging to stream:', { logType, message, streamName: this.streamName })
     try {
       await new RedisStream()
         .stream(this.streamName)
@@ -288,7 +289,7 @@ export class TerraformExecutor {
         })
         .add()
     } catch (error) {
-      console.error('Failed to log to stream:', error)
+      logger.error('Failed to log to stream:', error)
     }
   }
 }
