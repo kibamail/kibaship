@@ -94,14 +94,8 @@ resource "digitalocean_loadbalancer" "kube" {
 
   healthcheck {
     protocol               = "tcp"
-    port                   = 6443
-    check_interval_seconds = 15
-    response_timeout_seconds = 10
-    unhealthy_threshold    = 3
-    healthy_threshold      = 3
+    port                   = 50000
   }
-
-  enable_proxy_protocol = false
 }
 
 output "ingress_load_balancer_id" {

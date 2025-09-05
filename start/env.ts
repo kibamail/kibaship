@@ -119,5 +119,6 @@ export default await Env.create(new URL('../', import.meta.url), {
   | Talos configuration
   |----------------------------------------------------------
   */
-  TALOS_VERSION: Env.schema.string.optional(),
+  TALOS_VERSION: Env.schema.string(),
+  TALOS_FACTORY_HASH: Env.schema.string(),
 })

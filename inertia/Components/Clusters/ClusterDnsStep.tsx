@@ -25,6 +25,21 @@ export default function ClusterDnsStep({ cluster }: ClusterDnsStepProps) {
     clusterValue: false,
   })
 
+  function parseSubdomainIdentifier(domain: string, loadBalancerType: 'cluster' | 'ingress' | 'tcp' | 'udp'): string {
+    if (!domain) return loadBalancerType === 'cluster' ? 'kube.*' : '*'
+    
+    const parts = domain.split('.')
+    
+    if (parts.length <= 2) {
+      return loadBalancerType === 'cluster' ? 'kube.*' : '*'
+    }
+    
+    const subdomain = parts.slice(0, -2).join('.')
+    const prefix = loadBalancerType === 'cluster' ? 'kube.' : '*.'
+    
+    return `${prefix}${subdomain}`
+  }
+
   function onValueCopied(key: keyof typeof copied, value: string) {
     navigator.clipboard?.writeText(value)
 
@@ -128,12 +143,12 @@ export default function ClusterDnsStep({ cluster }: ClusterDnsStepProps) {
                       onClick={() =>
                         onValueCopied(
                           loadBalancer?.type === 'cluster' ? 'clusterName' : 'ingressName',
-                          `${loadBalancer?.type === 'cluster' ? 'kube.' : '*.'}${cluster?.subdomainIdentifier}`
+                          parseSubdomainIdentifier(cluster?.subdomainIdentifier || '', loadBalancer?.type)
                         )
                       }
                     >
                       <button>
-                        {`${loadBalancer?.type === 'cluster' ? 'kube.' : '*.'}${cluster?.subdomainIdentifier}`}
+                        {parseSubdomainIdentifier(cluster?.subdomainIdentifier || '', loadBalancer?.type)}
 
                         {copied[
                           loadBalancer?.type === 'cluster' ? 'clusterName' : 'ingressName'

@@ -3,7 +3,7 @@ import app from '@adonisjs/core/services/app'
 import drive from '@adonisjs/drive/services/main'
 import env from '#start/env'
 import { join } from 'node:path'
-import { talosVersion } from '#config/app'
+import { talosFactoryHash, talosVersion } from '#config/app'
 import Cluster from '#models/cluster'
 import { ModelObject } from '@adonisjs/lucid/types/model'
 
@@ -21,11 +21,13 @@ export interface TemplateContext {
   cluster_id: string
   cluster_name: string
   cluster_talos_version: string
+  cluster_talos_factory_hash: string
   cluster_region: string
   cluster_network_id: string
   cluster_private_subnet: string
   cluster_pod_subnet: string
   cluster_service_subnet: string
+  cluster_subnet_mask: string
   network_zone: string
   location: string
   s3_region: string
@@ -217,6 +219,7 @@ export class TerraformService {
       type: node.type,
       provider_id: node.providerId as string,
       ipv4_address: node.ipv4Address,
+      private_ipv4_address: node.privateIpv4Address,
       primary_disk_name: node.storages?.[0]?.diskName,
       private_network_interface: node.privateNetworkInterface,
       public_network_interface: node.publicNetworkInterface
@@ -229,6 +232,7 @@ export class TerraformService {
       provider_id: node.providerId as string,
       ipv4_address: node.ipv4Address,
       primary_disk_name: node.storages?.[0]?.diskName,
+      private_ipv4_address: node.privateIpv4Address,
       private_network_interface: node.privateNetworkInterface,
       public_network_interface: node.publicNetworkInterface
     })) || [])
@@ -260,6 +264,7 @@ export class TerraformService {
       cluster_private_subnet: cluster.subnetIpRange as string, // Used by: kubernetes.tf.edge for validSubnets
       cluster_pod_subnet: '10.244.0.0/16', // Used by: kubernetes.tf.edge for pod CIDR
       cluster_service_subnet: '10.96.0.0/12', // Used by: kubernetes.tf.edge for service CIDR
+      cluster_subnet_mask: '/16',
       network_zone: this.getNetworkZoneFromLocation(cluster.location), // Used by: network.tf.edge
       
       /** SSH and security configuration */
@@ -269,7 +274,8 @@ export class TerraformService {
       /** Talos OS configuration */
       cluster_talos_version: cluster.talosVersion || talosVersion, // Used by: talos-image.tf.edge
       cluster_talos_image: cluster.providerImageId as string, // Used by: servers.tf.edge
-      
+      cluster_talos_factory_hash: talosFactoryHash, // Used by: talos-image.tf.edge
+
       // =============================================================================
       // NODE ARRAYS - Used by servers.tf.edge and kubernetes.tf.edge
       // =============================================================================

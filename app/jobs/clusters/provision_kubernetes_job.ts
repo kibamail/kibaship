@@ -50,15 +50,15 @@ export default class ProvisionKubernetesJob extends Job {
     await cluster.save()
 
     try {
-      // const detectionService = new TalosDetectionService(cluster.id, this.streamName)
+      const detectionService = new TalosDetectionService(cluster.id, this.streamName)
 
-      // for (const node of cluster.nodes) {
-      //   const result = await detectionService.detectAndUpdateNode(node)
+      for (const node of cluster.nodes) {
+        const result = await detectionService.detectAndUpdateNode(node)
         
-      //   if (!result.success) {
-      //     throw new Error(result.error)
-      //   }
-      // }
+        if (!result.success) {
+          throw new Error(result.error)
+        }
+      }
 
       await this.logToStream('k8s_complete', 'Network interface detection completed successfully')
 
@@ -72,12 +72,10 @@ export default class ProvisionKubernetesJob extends Job {
       })
 
       await executor.init()
-      // await executor.apply({autoApprove: true})
+      await executor.apply({autoApprove: true})
       // await executor.plan()
 
       const output = await executor.output()
-      
-      console.dir(output, {depth: null})
 
       // Save kubeconfig and talosconfig for debugging
       if (output.stdout) {

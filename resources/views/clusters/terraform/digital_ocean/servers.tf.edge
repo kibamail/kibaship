@@ -52,7 +52,7 @@ provider "digitalocean" {
 
 @each((node, index) in control_planes)
   resource "digitalocean_droplet" "control_plane_{{ node.slug }}" {
-  name     = "{{ cluster_name }}-control-{{ index }}"
+  name     = "cp-{{ index }}.{{ cluster_name }}"
   image    = "{{ cluster_talos_image }}"
   size     = var.server_type
   region   = "{{ cluster_region }}"
@@ -69,7 +69,7 @@ provider "digitalocean" {
   
 @each((node, index) in workers)
   resource "digitalocean_droplet" "worker_{{ node.slug }}" {
-  name     = "{{ cluster_name }}-worker-{{ index }}"
+  name     = "worker-{{ index }}.{{ cluster_name }}"
   image    = "{{ cluster_talos_image }}"
   size     = var.server_type
   region   = "{{ cluster_region }}"
