@@ -23,6 +23,9 @@ export interface TemplateContext {
   cluster_talos_version: string
   cluster_region: string
   cluster_network_id: string
+  cluster_private_subnet: string
+  cluster_pod_subnet: string
+  cluster_service_subnet: string
   network_zone: string
   location: string
   s3_region: string
@@ -36,6 +39,8 @@ export interface TemplateContext {
     provider_id: string
     ipv4_address: string | null
     primary_disk_name: string | null
+    private_network_interface: string | null
+    public_network_interface: string | null
   }>
   workers: Array<ModelObject & {
     id: string
@@ -44,6 +49,8 @@ export interface TemplateContext {
     provider_id: string
     ipv4_address: string | null
     primary_disk_name: string | null
+    private_network_interface: string | null
+    public_network_interface: string | null
   }>
   public_key: string
   control_planes_volume_size: number
@@ -55,6 +62,9 @@ export interface TemplateContext {
     size: number
     node_provider_id: string
   }>
+
+  cluster_load_balancer_private_ipv4_address: string | null
+  cluster_load_balancer_public_ipv4_address: string | null
 }
 
 export interface TerraformFile {
@@ -207,7 +217,9 @@ export class TerraformService {
       type: node.type,
       provider_id: node.providerId as string,
       ipv4_address: node.ipv4Address,
-      primary_disk_name: node.storages?.[0]?.diskName
+      primary_disk_name: node.storages?.[0]?.diskName,
+      private_network_interface: node.privateNetworkInterface,
+      public_network_interface: node.publicNetworkInterface
     })) || [])
 
     const workers = (cluster.nodes?.filter(node => node.type === 'worker')?.map(node => ({
@@ -216,8 +228,13 @@ export class TerraformService {
       type: node.type,
       provider_id: node.providerId as string,
       ipv4_address: node.ipv4Address,
-      primary_disk_name: node.storages?.[0]?.diskName
+      primary_disk_name: node.storages?.[0]?.diskName,
+      private_network_interface: node.privateNetworkInterface,
+      public_network_interface: node.publicNetworkInterface
     })) || [])
+
+
+    const loadBalancer = cluster.loadBalancers.find(lb => lb.type === 'cluster')
 
     return {
       // =============================================================================
@@ -240,6 +257,9 @@ export class TerraformService {
       
       /** Network configuration used by servers and load balancers */
       cluster_network_id: cluster.providerNetworkId as string, // Used by: servers.tf.edge
+      cluster_private_subnet: cluster.subnetIpRange as string, // Used by: kubernetes.tf.edge for validSubnets
+      cluster_pod_subnet: '10.244.0.0/16', // Used by: kubernetes.tf.edge for pod CIDR
+      cluster_service_subnet: '10.96.0.0/12', // Used by: kubernetes.tf.edge for service CIDR
       network_zone: this.getNetworkZoneFromLocation(cluster.location), // Used by: network.tf.edge
       
       /** SSH and security configuration */
@@ -251,21 +271,23 @@ export class TerraformService {
       cluster_talos_image: cluster.providerImageId as string, // Used by: servers.tf.edge
       
       // =============================================================================
-      // NODE ARRAYS - Used by servers.tf.edge and talos.tf.edge
+      // NODE ARRAYS - Used by servers.tf.edge and kubernetes.tf.edge
       // =============================================================================
       
       /** Control plane nodes array with computed properties */
-      control_planes: controlPlanes,           // Used by: servers.tf.edge, talos.tf.edge
+      control_planes: controlPlanes,           // Used by: servers.tf.edge, kubernetes.tf.edge
       
       /** Worker nodes array with computed properties */  
-      workers: workers,                        // Used by: servers.tf.edge, talos.tf.edge
+      workers: workers,                        // Used by: servers.tf.edge, kubernetes.tf.edge
       
       // =============================================================================
-      // LOAD BALANCER VARIABLES - Used by load-balancers.tf.edge and talos.tf.edge
+      // LOAD BALANCER VARIABLES - Used by load-balancers.tf.edge and kubernetes.tf.edge
       // =============================================================================
       
       /** Load balancer domain for Kubernetes API access */
-      cluster_load_balancer_domain: `kube.${cluster.subdomainIdentifier}`, // Used by: talos.tf.edge
+      cluster_load_balancer_domain: `kube.${cluster.subdomainIdentifier}`, // Used by: kubernetes.tf.edge
+      cluster_load_balancer_private_ipv4_address: loadBalancer?.privateIpv4Address as string,
+      cluster_load_balancer_public_ipv4_address: loadBalancer?.publicIpv4Address as string,
       
       // =============================================================================
       // VOLUME-SPECIFIC VARIABLES - Used ONLY by volumes.tf.edge

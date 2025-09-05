@@ -7,6 +7,9 @@ import { TerraformService, TerraformTemplate } from '#services/terraform/terrafo
 import { TerraformExecutor } from '#services/terraform/terraform_executor'
 import { RedisStream } from '#utils/redis_stream'
 import { RedisStreamConfig } from '#services/redis/redis_stream_config'
+import { resolve } from 'path'
+import app from '@adonisjs/core/services/app'
+import { writeFileSync } from 'fs'
 
 interface ProvisionKubernetesJobPayload {
   clusterId: string
@@ -47,15 +50,15 @@ export default class ProvisionKubernetesJob extends Job {
     await cluster.save()
 
     try {
-      const detectionService = new TalosDetectionService(cluster.id, this.streamName)
+      // const detectionService = new TalosDetectionService(cluster.id, this.streamName)
 
-      for (const node of cluster.nodes) {
-        const result = await detectionService.detectAndUpdateNode(node)
+      // for (const node of cluster.nodes) {
+      //   const result = await detectionService.detectAndUpdateNode(node)
         
-        if (!result.success) {
-          throw new Error(result.error)
-        }
-      }
+      //   if (!result.success) {
+      //     throw new Error(result.error)
+      //   }
+      // }
 
       await this.logToStream('k8s_complete', 'Network interface detection completed successfully')
 
@@ -69,7 +72,39 @@ export default class ProvisionKubernetesJob extends Job {
       })
 
       await executor.init()
-      await executor.plan()
+      // await executor.apply({autoApprove: true})
+      // await executor.plan()
+
+      const output = await executor.output()
+      
+      console.dir(output, {depth: null})
+
+      // Save kubeconfig and talosconfig for debugging
+      if (output.stdout) {
+        try {
+          const stdoutStr = Array.isArray(output.stdout) ? output.stdout.join('') : String(output.stdout)
+          const outputs = JSON.parse(stdoutStr)
+          
+          if (outputs.kubeconfig?.value) {
+            const kubeconfigPath = resolve(app.makePath('storage'), `kubeconfig-${cluster.id}.yaml`)
+            writeFileSync(kubeconfigPath, outputs.kubeconfig.value)
+            await this.logToStream('debug_kubeconfig', `Kubeconfig saved to ${kubeconfigPath}`)
+          }
+          
+          if (outputs.talos_config?.value) {
+            const talosconfigPath = resolve(app.makePath('storage'), `talosconfig-${cluster.id}.yaml`)
+            writeFileSync(talosconfigPath, outputs.talos_config.value)
+            await this.logToStream('debug_talosconfig', `Talosconfig saved to ${talosconfigPath}`)
+          }
+
+          // Save complete terraform output as JSON for debugging
+          const outputPath = resolve(app.makePath('storage'), `terraform-output-${cluster.id}.json`)
+          writeFileSync(outputPath, JSON.stringify(outputs, null, 2))
+          await this.logToStream('debug_terraform_output', `Complete terraform output saved to ${outputPath}`)
+        } catch (parseError) {
+          await this.logToStream('debug_error', `Failed to parse terraform output: ${parseError}`)
+        }
+      }
 
       await this.logToStream('talos_plan_complete', 'Talos Terraform plan completed successfully')
       

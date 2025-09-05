@@ -21,6 +21,55 @@ terraform {
 
 resource "talos_machine_secrets" "machine_secrets" {}
 
+locals {
+  # Base cluster configuration shared by all nodes
+  cluster_config = {
+    network = {
+      cni = {
+        name = "none"
+      }
+      podSubnets = [
+        "{{ cluster_pod_subnet }}"
+      ]
+      serviceSubnets = [
+        "{{ cluster_service_subnet }}"
+      ]
+    }
+    proxy = {
+      disabled = true
+    }
+    apiServer = {
+      certSANs = [
+        # Kube load balancer domain
+        "{{ cluster_load_balancer_domain }}",
+
+        # All cluster control plane nodes
+        @each((control, index) in control_planes)
+        "{{ control.ipv4_address }}",
+        @end
+        
+        # Kube load balancer public ipv4 address
+        "{{ cluster_load_balancer_public_ipv4_address }}",
+
+        # Kube load balancer private ipv4 address
+        "{{ cluster_load_balancer_private_ipv4_address }}"
+      ]
+    }
+  }
+
+  # Control plane specific cluster configuration
+  control_plane_cluster_config = merge(local.cluster_config, {
+    etcd = {
+      advertisedSubnets = [
+        "{{ cluster_private_subnet }}"
+      ]
+    }
+  })
+  
+  worker_machine_config = {
+  }
+}
+
 data "talos_client_configuration" "talosconfig" {
   cluster_name         = "{{ cluster_name }}"
   client_configuration = talos_machine_secrets.machine_secrets.client_configuration
@@ -52,14 +101,7 @@ resource "talos_machine_configuration_apply" "cp_config_apply" {
     yamlencode(merge(
       yamldecode(data.talos_machine_configuration.machineconfig_cp.machine_configuration),
       {
-        cluster = {
-          cni = {
-            name = "none"
-          }
-          proxy = {
-            disabled = true
-          }
-        }
+        cluster = local.control_plane_cluster_config
         machine = {
           install = {
             disk = element([
@@ -67,6 +109,35 @@ resource "talos_machine_configuration_apply" "cp_config_apply" {
               "{{ control.primary_disk_name }}"{{ index === control_planes.length - 1 ? '' : ',' }}
 @end
             ], count.index)
+          }
+          network = {
+            interfaces = [
+              {
+                # Public network interface of droplet
+                interface = element([
+@each((control, index) in control_planes)
+                  "{{ control.public_network_interface }}"{{ index === control_planes.length - 1 ? '' : ',' }}
+@end
+                ], count.index)
+                dhcp = true
+              },
+              {
+                # Private network interface of droplet
+                interface = element([
+@each((control, index) in control_planes)
+                  "{{ control.private_network_interface }}"{{ index === control_planes.length - 1 ? '' : ',' }}
+@end
+                ], count.index)
+                dhcp = true
+              }
+            ]
+          }
+          kubelet = {
+            nodeIP = {
+              validSubnets = [
+                "{{ cluster_private_subnet }}"
+              ]
+            }
           }
         }
       }
@@ -95,15 +166,38 @@ resource "talos_machine_configuration_apply" "worker_config_apply" {
     yamlencode(merge(
       yamldecode(data.talos_machine_configuration.machineconfig_worker.machine_configuration),
       {
-        cluster = {
-          cni = {
-            name = "none"
+        cluster = local.cluster_config
+        machine = merge({
+          network = {
+            interfaces = [
+              {
+                # Public network interface of droplet
+                interface = element([
+@each((worker, index) in workers)
+                  "{{ worker.public_network_interface }}"{{ index === workers.length - 1 ? '' : ',' }}
+@end
+                ], count.index)
+                dhcp = true
+              },
+              {
+                # Private network interface of droplet
+                interface = element([
+@each((worker, index) in workers)
+                  "{{ worker.private_network_interface }}"{{ index === workers.length - 1 ? '' : ',' }}
+@end
+                ], count.index)
+                dhcp = true
+              }
+            ]
           }
-          proxy = {
-            disabled = true
+          kubelet = {
+            nodeIP = {
+              validSubnets = [
+                "{{ cluster_private_subnet }}"
+              ]
+            }
           }
-        }
-        machine = {}
+        }, local.worker_machine_config)
       }
     ))
   ]
@@ -111,9 +205,30 @@ resource "talos_machine_configuration_apply" "worker_config_apply" {
 
 resource "talos_machine_bootstrap" "bootstrap" {
   client_configuration = talos_machine_secrets.machine_secrets.client_configuration
-  node                 = element([
-@each((control, index) in control_planes)
-    "{{ control.ipv4_address }}"{{ index === control_planes.length - 1 ? '' : ',' }}
-@end
-  ], 0)
+  node                 = "{{ control_planes[0].ipv4_address }}"
+
+  depends_on = [
+    talos_machine_configuration_apply.cp_config_apply,
+    talos_machine_configuration_apply.worker_config_apply
+  ]
+}
+
+resource "talos_cluster_kubeconfig" "kubeconfig" {
+  depends_on = [
+    talos_machine_bootstrap.bootstrap
+  ]
+  client_configuration = talos_machine_secrets.machine_secrets.client_configuration
+  node                 = "{{ control_planes[0].ipv4_address }}"
+}
+
+output "talos_config" {
+  description = "Talos client configuration for managing the cluster"
+  value       = data.talos_client_configuration.talosconfig.talos_config
+  sensitive   = true
+}
+
+output "kubeconfig" {
+  description = "Kubernetes configuration for accessing the cluster"
+  value       = talos_cluster_kubeconfig.kubeconfig.kubeconfig_raw
+  sensitive   = true
 }

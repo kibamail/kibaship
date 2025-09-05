@@ -276,7 +276,6 @@ export class TerraformExecutor {
    * Log a message to the Redis stream
    */
   private async logToStream(logType: string, message: string): Promise<void> {
-    console.log('Logging to stream:', { logType, message, streamName: this.streamName })
     try {
       await new RedisStream()
         .stream(this.streamName)
