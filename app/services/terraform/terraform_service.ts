@@ -24,6 +24,7 @@ export interface TemplateContext {
   cluster_talos_factory_hash: string
   cluster_region: string
   cluster_network_id: string
+  cluster_network_ip_range: string
   cluster_private_subnet: string
   cluster_pod_subnet: string
   cluster_service_subnet: string
@@ -261,6 +262,7 @@ export class TerraformService {
       
       /** Network configuration used by servers and load balancers */
       cluster_network_id: cluster.providerNetworkId as string, // Used by: servers.tf.edge
+      cluster_network_ip_range: cluster.networkIpRange as string, // Used by: network.tf.edge for VPC IP range
       cluster_private_subnet: cluster.subnetIpRange as string, // Used by: kubernetes.tf.edge for validSubnets
       cluster_pod_subnet: '10.244.0.0/16', // Used by: kubernetes.tf.edge for pod CIDR
       cluster_service_subnet: '10.96.0.0/12', // Used by: kubernetes.tf.edge for service CIDR

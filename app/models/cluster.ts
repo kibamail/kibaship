@@ -19,6 +19,7 @@ import ClusterSshKey from './cluster_ssh_key.js'
 import ClusterLoadBalancer from './cluster_load_balancer.js'
 import ClusterNodeStorage from './cluster_node_storage.js'
 import CloudProvider from './cloud_provider.js'
+import Workspace from './workspace.js'
 import type { HasMany, BelongsTo, HasOne } from '@adonisjs/lucid/types/relations'
 import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
 import redis from '@adonisjs/redis/services/main'
@@ -240,6 +241,9 @@ export default class Cluster extends BaseModel {
   @belongsTo(() => CloudProvider)
   declare cloudProvider: BelongsTo<typeof CloudProvider>
 
+  @belongsTo(() => Workspace)
+  declare workspace: BelongsTo<typeof Workspace>
+
   @beforeCreate()
   public static async generateId(cluster: Cluster) {
     cluster.id = randomUUID()
@@ -255,6 +259,27 @@ export default class Cluster extends BaseModel {
     )
 
     logger.info(`Published cluster update for ${cluster.id}: ${pub}`)
+  }
+
+  public static async getNextAvailableIpRange(userId: string): Promise<string> {
+    const maxRange = 16
+    
+    for (let i = 0; i <= maxRange; i++) {
+      const ipRange = `10.${219 + i}.0.0/16`
+      const existingCluster = await Cluster.query()
+        .where('networkIpRange', ipRange)
+        .whereHas('workspace', (workspaceQuery) => {
+          workspaceQuery.where('userId', userId)
+        })
+        .whereNull('deletedAt')
+        .first()
+      
+      if (!existingCluster) {
+        return ipRange
+      }
+    }
+    
+    throw new Error('No available IP ranges. All ranges from 10.219.0.0/16 to 10.223.0.0/16 are in use for this user.')
   }
 
   public static async createWithInfrastructure(
@@ -283,6 +308,9 @@ export default class Cluster extends BaseModel {
     cluster.controlPlanesVolumeSize = data.control_planes_volume_size
     cluster.workersVolumeSize = data.workers_volume_size
     cluster.talosVersion = talosVersion
+    const workspace = await Workspace.findOrFail(workspaceId)
+    cluster.networkIpRange = await Cluster.getNextAvailableIpRange(workspace.userId)
+    cluster.subnetIpRange = cluster.networkIpRange
     cluster.useTransaction(trx)
 
     await cluster.save()
@@ -418,6 +446,12 @@ export default class Cluster extends BaseModel {
         if (this.volumesErrorAt) return 'failed'
         if (this.volumesStartedAt) return 'in_progress'
         return 'pending'
+      
+      case 'dns':
+        if (this.dnsCompletedAt) return 'completed'
+        if (this.dnsErrorAt) return 'failed'
+        if (this.dnsStartedAt) return 'in_progress'
+        return 'pending'
 
       case 'kubernetes':
         if (this.kubernetesClusterCompletedAt) return 'completed'
@@ -439,6 +473,7 @@ export default class Cluster extends BaseModel {
       'load-balancers',
       'servers',
       'volumes',
+      'dns',
       'kubernetes',
     ]
 
@@ -458,6 +493,7 @@ export default class Cluster extends BaseModel {
       'load-balancers',
       'servers',
       'volumes',
+      'dns',
       'kubernetes',
     ]
 
