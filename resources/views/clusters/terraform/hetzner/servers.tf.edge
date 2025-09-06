@@ -20,8 +20,6 @@ variable "hcloud_token" {
   sensitive   = true
 }
 
-
-
 variable "cluster_name" {
   description = "Name of the cluster"
   type        = string
@@ -33,12 +31,7 @@ variable "server_type" {
 }
 
 variable "network_id" {
-  description = "ID of the private network"
-  type        = string
-}
-
-variable "ssh_key_id" {
-  description = "ID of the SSH key"
+  description = "ID of the network"
   type        = string
 }
 
@@ -55,62 +48,60 @@ variable "kube_load_balancer_id" {
 provider "hcloud" {
   token = var.hcloud_token
 }
+
+
 @each((node, index) in control_planes)
   resource "hcloud_server" "control_plane_{{ node.slug }}" {
-  name        = "{{ cluster_name }}-control-{{ index }}"
-  image       = "ubuntu-24.04"
+  name        = "cp-{{ index }}.{{ cluster_name }}"
+  image       = "{{ cluster_talos_image }}"
   server_type = var.server_type
-  ssh_keys    = [var.ssh_key_id]
-
+  location    = "{{ cluster_region }}"
+  ssh_keys    = ["{{ cluster_ssh_key_id }}"]
+  
   network {
     network_id = var.network_id
-    ip         = "10.0.1.{{ 20 + index }}"
   }
 
   labels = {
-    cluster     = var.cluster_name
-    type        = "control-plane"
-    node_id     = "{{ node.id }}"
-    managed_by  = "kibaship"
+    node_id    = "{{ node.id }}"
+    cluster_id = "{{ cluster_id }}"
+    node_type  = "control-plane"
+    "control-plane-{{ cluster_id }}" = "true"
+  }
+
+  public_net {
+    ipv4_enabled = true
+    ipv6_enabled = false
   }
 }
-
-resource "hcloud_load_balancer_target" "control_plane_kube_{{ node.slug }}" {
-  type             = "server"
-  load_balancer_id = var.kube_load_balancer_id
-  server_id        = hcloud_server.control_plane_{{ node.slug }}.id
-  use_private_ip   = true
-}
 @end
-
+  
 @each((node, index) in workers)
   resource "hcloud_server" "worker_{{ node.slug }}" {
-  name        = "{{ cluster_name }}-worker-{{ index }}"
-  image       = "ubuntu-24.04"
+  name        = "worker-{{ index }}.{{ cluster_name }}"
+  image       = "{{ cluster_talos_image }}"
   server_type = var.server_type
-  ssh_keys    = [var.ssh_key_id]
-
+  location    = "{{ cluster_region }}"
+  ssh_keys    = ["{{ cluster_ssh_key_id }}"]
+  
   network {
     network_id = var.network_id
-    ip         = "10.0.1.{{ 50 + index }}"
   }
 
   labels = {
-    cluster     = var.cluster_name
-    type        = "worker"
-    node_id     = "{{ node.id }}"
-    managed_by  = "kibaship"
+    node_id    = "{{ node.id }}"
+    cluster_id = "{{ cluster_id }}"
+    node_type  = "worker"
+    "worker-{{ cluster_id }}" = "true"
+  }
+
+  public_net {
+    ipv4_enabled = true
+    ipv6_enabled = false
   }
 }
-
-resource "hcloud_load_balancer_target" "worker_ingress_{{ node.slug }}" {
-  type             = "server"
-  load_balancer_id = var.ingress_load_balancer_id
-  server_id        = hcloud_server.worker_{{ node.slug }}.id
-  use_private_ip   = true
-}
 @end
-
+    
 # Control Plane Server Outputs
 @each(node in control_planes)
   output "control_plane_{{ node.slug }}_server_id" {
@@ -125,10 +116,10 @@ output "control_plane_{{ node.slug }}_public_ip" {
 
 output "control_plane_{{ node.slug }}_private_ip" {
   description = "Private IP for control plane node {{ node.id }}"
-  value       = hcloud_server.control_plane_{{ node.slug }}.network.*.ip[0]
+  value       = hcloud_server_network.control_plane_{{ node.slug }}_network.ip
 }
 @end
-
+    
 # Worker Server Outputs
 @each(node in workers)
   output "worker_{{ node.slug }}_server_id" {
@@ -143,10 +134,25 @@ output "worker_{{ node.slug }}_public_ip" {
 
 output "worker_{{ node.slug }}_private_ip" {
   description = "Private IP for worker node {{ node.id }}"
-  value       = hcloud_server.worker_{{ node.slug }}.network.*.ip[0]
+  value       = hcloud_server_network.worker_{{ node.slug }}_network.ip
 }
 @end
 
+# Server Network Attachments
+@each(node in control_planes)
+resource "hcloud_server_network" "control_plane_{{ node.slug }}_network" {
+  server_id = hcloud_server.control_plane_{{ node.slug }}.id
+  network_id = var.network_id
+}
+@end
+
+@each(node in workers)
+resource "hcloud_server_network" "worker_{{ node.slug }}_network" {
+  server_id = hcloud_server.worker_{{ node.slug }}.id
+  network_id = var.network_id
+}
+@end
+    
 # Summary Outputs
 output "control_plane_server_ids" {
   description = "Map of control plane node IDs to server IDs"

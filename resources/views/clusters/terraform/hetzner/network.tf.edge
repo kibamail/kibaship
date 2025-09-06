@@ -25,9 +25,10 @@ variable "cluster_name" {
   type        = string
 }
 
-variable "network_zone" {
-  description = "Network zone for the private network"
+variable "location" {
+  description = "Location for the network"
   type        = string
+  default     = "nbg1"
 }
 
 provider "hcloud" {
@@ -35,9 +36,8 @@ provider "hcloud" {
 }
 
 resource "hcloud_network" "cluster_network" {
-  name              = "${var.cluster_name}-network"
-  ip_range          = "{{ cluster_network_ip_range }}"
-
+  name     = "${var.cluster_name}-network"
+  ip_range = "{{ cluster_network_ip_range }}"
   labels = {
     cluster    = var.cluster_name
     managed_by = "kibaship"
@@ -45,43 +45,41 @@ resource "hcloud_network" "cluster_network" {
 }
 
 resource "hcloud_network_subnet" "cluster_subnet" {
-  type         = "cloud"
   network_id   = hcloud_network.cluster_network.id
-  network_zone = var.network_zone
-  ip_range     = "{{ cluster_private_subnet }}"
+  type         = "cloud"
+  network_zone = var.location
+  ip_range     = "{{ cluster_network_ip_range }}"
 }
 
 output "network_id" {
-  description = "ID of the created private network"
+  description = "ID of the created network"
   value       = hcloud_network.cluster_network.id
 }
 
 output "network_name" {
-  description = "Name of the created private network"
+  description = "Name of the created network"
   value       = hcloud_network.cluster_network.name
 }
 
 output "network_ip_range" {
-  description = "IP range of the private network"
+  description = "IP range of the network"
   value       = hcloud_network.cluster_network.ip_range
 }
 
-output "subnet_id" {
-  description = "ID of the created subnet"
-  value       = hcloud_network_subnet.cluster_subnet.id
-}
-
-output "subnet_ip_range" {
-  description = "IP range of the subnet"
-  value       = hcloud_network_subnet.cluster_subnet.ip_range
-}
-
-output "subnet_network_zone" {
-  description = "Network zone of the subnet"
-  value       = hcloud_network_subnet.cluster_subnet.network_zone
+output "network_location" {
+  description = "Location of the network"
+  value       = var.location
 }
 
 output "network_labels" {
   description = "Labels applied to the network"
-  value       = hcloud_network.cluster_network.labels
+  value = {
+    cluster    = var.cluster_name
+    managed_by = "kibaship"
+  }
+}
+
+output "subnet_id" {
+  description = "ID of the network subnet"
+  value       = hcloud_network_subnet.cluster_subnet.id
 }

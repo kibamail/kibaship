@@ -6,6 +6,7 @@ import { Job } from '@rlanz/bull-queue'
 import queue from '@rlanz/bull-queue/services/main'
 import { DateTime } from 'luxon'
 import ProvisionNetworkJob from './provision_network_job.js'
+import ProvisionSshKeysJob from './provision_ssh_keys_job.js'
 
 interface ProvisionTalosImageJobPayload {
   clusterId: string
@@ -59,6 +60,12 @@ export default class ProvisionTalosImageJob extends Job {
       cluster.talosImageCompletedAt = DateTime.now()
 
       await cluster.save()
+
+      if (cluster.cloudProvider.type === 'digital_ocean') {
+        await queue.dispatch(ProvisionSshKeysJob, payload)
+
+        return
+      }
 
       await queue.dispatch(ProvisionNetworkJob, payload)
     } catch (error) {

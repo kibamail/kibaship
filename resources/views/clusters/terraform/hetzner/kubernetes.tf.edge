@@ -1,8 +1,8 @@
 terraform {
   required_providers {
-    digitalocean = {
-      source  = "digitalocean/digitalocean"
-      version = "~> 2.66"
+    hcloud = {
+      source  = "hetznercloud/hcloud"
+      version = "~> 1.52"
     }
 
     talos = {
@@ -113,26 +113,16 @@ resource "talos_machine_configuration_apply" "cp_config_apply" {
           network = {
             interfaces = [
               {
-                # Public network interface of droplet
+                # Public network interface of server
                 interface = element([
 @each((control, index) in control_planes)
                   "{{ control.public_network_interface }}"{{ index === control_planes.length - 1 ? '' : ',' }}
 @end
                 ], count.index)
-                dhcp = false,
-                routes = [
-                  {
-                    network = "0.0.0.0/0",
-                    gateway = element([
-@each((control, index) in control_planes)
-                        "{{ control.public_ipv4_gateway }}"{{ index === control_planes.length - 1 ? '' : ',' }}
-@end
-                      ], count.index)
-                  }
-                ]
+                dhcp = true
               },
               {
-                # Private network interface of droplet
+                # Private network interface of server
                 interface = element([
 @each((control, index) in control_planes)
                   "{{ control.private_network_interface }}"{{ index === control_planes.length - 1 ? '' : ',' }}
@@ -188,26 +178,16 @@ resource "talos_machine_configuration_apply" "worker_config_apply" {
           network = {
             interfaces = [
               {
-                # Public network interface of droplet
+                # Public network interface of server
                 interface = element([
 @each((worker, index) in workers)
                   "{{ worker.public_network_interface }}"{{ index === workers.length - 1 ? '' : ',' }}
 @end
                 ], count.index)
-                dhcp = false,
-                routes = [
-                  {
-                    network = "0.0.0.0/0",
-                    gateway = element([
-@each((worker, index) in workers)
-                      "{{ worker.public_ipv4_gateway }}"{{ index === workers.length - 1 ? '' : ',' }}
-@end
-                    ], count.index)
-                  }
-                ]
+                dhcp = true
               },
               {
-                # Private network interface of droplet
+                # Private network interface of server
                 interface = element([
 @each((worker, index) in workers)
                   "{{ worker.private_network_interface }}"{{ index === workers.length - 1 ? '' : ',' }}
@@ -243,7 +223,7 @@ resource "time_sleep" "wait_before_bootstrap" {
     talos_machine_configuration_apply.worker_config_apply
   ]
 
-  create_duration = "5m"
+  create_duration = "2m"
 }
 
 resource "talos_machine_bootstrap" "bootstrap" {

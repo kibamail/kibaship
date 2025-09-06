@@ -20,8 +20,6 @@ variable "hcloud_token" {
   sensitive   = true
 }
 
-
-
 variable "cluster_name" {
   description = "Name of the cluster"
   type        = string
@@ -39,7 +37,6 @@ provider "hcloud" {
 resource "hcloud_ssh_key" "cluster_ssh_key" {
   name       = "${var.cluster_name}-ssh-key"
   public_key = var.public_key
-
   labels = {
     cluster    = var.cluster_name
     managed_by = "kibaship"
@@ -63,5 +60,8 @@ output "ssh_key_fingerprint" {
 
 output "ssh_key_labels" {
   description = "Labels applied to the SSH key"
-  value       = hcloud_ssh_key.cluster_ssh_key.labels
+  value = {
+    cluster    = var.cluster_name
+    managed_by = "kibaship"
+  }
 }

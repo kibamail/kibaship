@@ -31,38 +31,33 @@ provider "hcloud" {
 
 data "hcloud_images" "existing_talos_image" {
   with_selector = "name=kibaship-talos-linux-{{ cluster_talos_version }}-{{ cluster_region }}"
+}
+
+resource "hcloud_snapshot" "talos_image" {
+  count       = length(data.hcloud_images.existing_talos_image.images) == 0 ? 1 : 0
+  description = "kibaship-talos-linux-{{ cluster_talos_version }}-{{ cluster_region }}"
+  
+  labels = {
+    name        = "kibaship-talos-linux-{{ cluster_talos_version }}-{{ cluster_region }}"
+    talos_version = "{{ cluster_talos_version }}"
+    region      = "{{ cluster_region }}"
+    managed_by  = "kibaship"
+  }
+
+  # Note: This is a placeholder. In practice, you would need to:
+  # 1. Create a temporary server
+  # 2. Download and install the Talos image from factory.talos.dev
+  # 3. Take a snapshot of that server
+  # 4. Delete the temporary server
+  # This process is more complex than Digital Ocean's direct image upload
+}
+
+# For now, we'll use the Talos community Hetzner images
+data "hcloud_image" "talos" {
+  with_selector = "name~talos"
   most_recent   = true
 }
 
-# Hetzner Cloud doesn't support direct image upload from URL like DigitalOcean
-# Images need to be created via API, CLI, or from server snapshots
-# This local-exec provisioner downloads and prepares the Talos image for upload
-resource "null_resource" "talos_image_preparation" {
-  count = length(data.hcloud_images.existing_talos_image.images) == 0 ? 1 : 0
-
-  provisioner "local-exec" {
-    command = <<-EOT
-      echo "Preparing Talos Linux image for Hetzner Cloud..."
-      echo "Talos version: {{ cluster_talos_version }}"
-      echo "Region: {{ cluster_region }}"
-      echo "Image URL: https://factory.talos.dev/image/376567988ad370138ad8b2698212367b8edcb69b5fd68c80be1f2ec7d603b4ba/{{ cluster_talos_version }}/hcloud-amd64.raw.xz"
-      
-      # In a real implementation, you would:
-      # 1. Download the Talos image for Hetzner Cloud
-      # 2. Upload it via Hetzner Cloud API
-      # 3. Tag it appropriately
-      
-      # For now, we'll create a placeholder that indicates the image needs to be created
-      echo "Image preparation completed. Manual upload required via Hetzner Cloud API or CLI."
-    EOT
-  }
-
-  triggers = {
-    talos_version = "{{ cluster_talos_version }}"
-    region       = "{{ cluster_region }}"
-  }
-}
-
 output "talos_image_id" {
-  value = length(data.hcloud_images.existing_talos_image.images) > 0 ? data.hcloud_images.existing_talos_image.images[0].id : null
+  value = length(data.hcloud_images.existing_talos_image.images) > 0 ? data.hcloud_images.existing_talos_image.images[0].id : data.hcloud_image.talos.id
 }

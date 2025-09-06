@@ -223,7 +223,8 @@ export class TerraformService {
       private_ipv4_address: node.privateIpv4Address,
       primary_disk_name: node.storages?.[0]?.diskName,
       private_network_interface: node.privateNetworkInterface,
-      public_network_interface: node.publicNetworkInterface
+      public_network_interface: node.publicNetworkInterface,
+      public_ipv4_gateway: node.publicIpv4Gateway
     })) || [])
 
     const workers = (cluster.nodes?.filter(node => node.type === 'worker')?.map(node => ({
@@ -235,7 +236,8 @@ export class TerraformService {
       primary_disk_name: node.storages?.[0]?.diskName,
       private_ipv4_address: node.privateIpv4Address,
       private_network_interface: node.privateNetworkInterface,
-      public_network_interface: node.publicNetworkInterface
+      public_network_interface: node.publicNetworkInterface,
+            public_ipv4_gateway: node.publicIpv4Gateway
     })) || [])
 
 

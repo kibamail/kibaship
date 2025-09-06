@@ -1,6 +1,6 @@
 import ClusterNode from '#models/cluster_node'
 import logger from '@adonisjs/core/services/logger'
-import { TalosCtl } from '#services/talos/talos_ctl'
+import { TalosCtl, TalosRoute } from '#services/talos/talos_ctl'
 import { NetworkInterfaceDetector } from '#services/network/network_interface_detector'
 import { RedisStream } from '#utils/redis_stream'
 
@@ -10,6 +10,7 @@ export interface TalosDetectionResult {
   nodeData?: {
     privateInterface: string | null
     publicInterface: string | null
+    publicIpv4Gateway: string | null
     matchedStorageCount: number
   }
 }
@@ -27,20 +28,22 @@ export class TalosDetectionService {
     try {
       await this.logToStream('node_analysis', `Analyzing network interfaces for node ${node.slug}`)
 
-      const [[disks, disksError], [addresses, addressesError]] = await Promise.all([
+      const [[disks, disksError], [addresses, addressesError], [routes, routesError]] = await Promise.all([
         new TalosCtl().getDisks({ nodes: [node.ipv4Address as string] }),
-        new TalosCtl().getAddresses({ nodes: [node.ipv4Address as string] })
+        new TalosCtl().getAddresses({ nodes: [node.ipv4Address as string] }),
+        new TalosCtl().getRoutes({ nodes: [node.ipv4Address as string] })
       ])
 
-      if (disksError || addressesError) {
-        const errorMsg = `Error fetching node data: ${disksError?.message} ${addressesError?.message}`
+      if (disksError || addressesError || routesError) {
+        const errorMsg = `Error fetching node data: ${disksError?.message} ${addressesError?.message} ${routesError?.message}`
         await this.logToStream('error', errorMsg)
         
-        logger.error('Error fetching disks or addresses', {
+        logger.error('Error fetching disks, addresses, or routes', {
           clusterId: this.clusterId,
           nodeId: node.id,
           disksError,
           addressesError,
+          routesError,
         })
 
         return { success: false, error: errorMsg }
@@ -50,27 +53,32 @@ export class TalosDetectionService {
 
       const { privateInterface, publicInterface } = NetworkInterfaceDetector.detectNetworkInterfaces(addresses || [])
       
-      await this.logToStream('interface_detected', `Detected interfaces for node ${node.slug}: private=${privateInterface}, public=${publicInterface}`)
+      const publicIpv4Gateway = this.findPublicIpv4Gateway(routes || [], publicInterface)
       
-      logger.info('Detected network interfaces for node', {
+      await this.logToStream('interface_detected', `Detected interfaces for node ${node.slug}: private=${privateInterface}, public=${publicInterface}, gateway=${publicIpv4Gateway}`)
+      
+      logger.info('Detected network interfaces and gateway for node', {
         clusterId: this.clusterId,
         nodeId: node.id,
         privateInterface,
         publicInterface,
+        publicIpv4Gateway,
       })
 
       await node.merge({
         privateNetworkInterface: privateInterface,
         publicNetworkInterface: publicInterface,
+        publicIpv4Gateway: publicIpv4Gateway,
       }).save()
 
-      await this.logToStream('node_updated', `Updated node ${node.slug} with network interface information`)
+      await this.logToStream('node_updated', `Updated node ${node.slug} with network interface and gateway information`)
       
-      logger.info('Updated node with network interface information', {
+      logger.info('Updated node with network interface and gateway information', {
         clusterId: this.clusterId,
         nodeId: node.id,
         privateInterface,
         publicInterface,
+        publicIpv4Gateway,
         matchedStorageCount,
       })
 
@@ -79,6 +87,7 @@ export class TalosDetectionService {
         nodeData: {
           privateInterface,
           publicInterface,
+          publicIpv4Gateway,
           matchedStorageCount
         }
       }
@@ -134,6 +143,30 @@ export class TalosDetectionService {
     }
 
     return matchedCount
+  }
+
+  /**
+   * Find the public IPv4 gateway from routes
+   */
+  private findPublicIpv4Gateway(routes: TalosRoute[], publicInterface: string | null): string | null {
+    if (!publicInterface) {
+      return null
+    }
+
+    // Find route with empty dst (default gateway), inet4 family, and matching public interface
+    const defaultRoute = routes.find(route => 
+      route.spec.dst === '' && 
+      route.spec.family === 'inet4' && 
+      route.spec.outLinkName === publicInterface
+    )
+
+    logger.info('Detected public IPv4 gateway from routes', {
+      clusterId: this.clusterId,
+      publicInterface,
+      publicIpv4Gateway: defaultRoute?.spec.gateway || null,
+    })
+
+    return defaultRoute?.spec.gateway || null
   }
 
   /**

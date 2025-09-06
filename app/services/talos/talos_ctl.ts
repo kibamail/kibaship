@@ -50,6 +50,27 @@ export interface TalosAddress {
   spec: AddressSpec
 }
 
+export interface RouteSpec {
+  dst: string
+  family: 'inet4' | 'inet6'
+  flags: string
+  gateway: string
+  outLinkIndex: number
+  outLinkName: string
+  priority: number
+  protocol: string
+  scope: string
+  src: string
+  table: string
+  type: string
+}
+
+export interface TalosRoute {
+  metadata: TalosMetadata
+  node: string
+  spec: RouteSpec
+}
+
 export interface TalosCtlOptions {
   nodes?: string[]
   insecure?: boolean
@@ -119,6 +140,12 @@ export class TalosCtl {
     const args = this.buildArgs('get', 'addresses', options)
 
     return this.executeCommand<TalosAddress>('talosctl', args)
+  }
+
+  async getRoutes(options: TalosCtlOptions = {}) {
+    const args = this.buildArgs('get', 'routes', options)
+
+    return this.executeCommand<TalosRoute>('talosctl', args)
   }
 }
 

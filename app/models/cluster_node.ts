@@ -22,6 +22,11 @@ export default class ClusterNode extends BaseModel {
   declare ipv4Address: string | null
 
   @column({
+    columnName: 'public_ipv4_gateway'
+  })
+  declare publicIpv4Gateway: string | null
+
+  @column({
     columnName: 'ipv6_address'
   })
   declare ipv6Address: string | null
