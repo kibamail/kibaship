@@ -8,7 +8,7 @@ import { join } from 'node:path'
 import logger from '@adonisjs/core/services/logger'
 
 export type TerraformCommand = 'init' | 'apply' | 'plan' | 'destroy'
-export type TerraformStage = 'network' | 'ssh-keys' | 'load-balancers' | 'servers' | 'volumes' | 'talos-image' | 'dns' | 'talos'
+export type TerraformStage = 'network' | 'ssh-keys' | 'load-balancers' | 'servers' | 'volumes' | 'talos-image' | 'dns' | 'talos' | 'kubernetes-config'
 
 export interface TerraformExecutionOptions {
   autoApprove?: boolean

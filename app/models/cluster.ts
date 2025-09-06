@@ -13,6 +13,7 @@ import { randomUUID } from 'node:crypto'
 import { SshKeyService } from '#services/ssh/ssh_key_service'
 import { TerraformStage } from '#services/terraform/terraform_executor'
 import { talosVersion } from '#config/app'
+import encryption from '@adonisjs/core/services/encryption'
 import Project from './project.js'
 import ClusterNode from './cluster_node.js'
 import ClusterSshKey from './cluster_ssh_key.js'
@@ -33,6 +34,7 @@ export enum ProvisioningStepName {
   SERVERS = 'servers',
   VOLUMES = 'volumes',
   K8S = 'k8s',
+  K8S_CONFIG = 'k8sConfig',
   OPERATOR = 'operator',
 }
 
@@ -189,6 +191,14 @@ export default class Cluster extends BaseModel {
   @column.dateTime()
   declare volumesErrorAt: DateTime | null
 
+  @column.dateTime()
+  declare kubernetesConfigStartedAt: DateTime | null
+
+  @column.dateTime()
+  declare kubernetesConfigCompletedAt: DateTime | null
+
+  @column.dateTime()
+  declare kubernetesConfigErrorAt: DateTime | null
 
   @column.dateTime()
   declare kibashipOperatorStartedAt: DateTime | null
@@ -216,6 +226,25 @@ export default class Cluster extends BaseModel {
 
   @column.dateTime({ autoCreate: true, autoUpdate: true })
   declare updatedAt: DateTime
+
+  @column({
+    prepare: value => value ? encryption.encrypt(JSON.stringify(value)) : null,
+    consume: value => value ? JSON.parse(encryption.decrypt(value) || '{}') : null,
+    serializeAs: null
+  })
+  declare kubeconfig: {
+        host: string
+        clientCertificate: string
+        clientKey: string
+        clusterCaCertificate: string
+      } | null
+
+  @column({
+    prepare: value => value ? encryption.encrypt(value) : null,
+    consume: value => value ? encryption.decrypt(value) || '' : null,
+    serializeAs: null
+  })
+  declare talosConfig: string | null
 
   @hasMany(() => Project)
   declare projects: HasMany<typeof Project>
@@ -437,6 +466,12 @@ export default class Cluster extends BaseModel {
         if (this.volumesErrorAt) return 'failed'
         if (this.volumesStartedAt) return 'in_progress'
         return 'pending'
+
+      case 'kubernetes-config':
+        if (this.kubernetesConfigCompletedAt) return 'completed'
+        if (this.kubernetesConfigErrorAt) return 'failed'
+        if (this.kubernetesConfigStartedAt) return 'in_progress'
+        return 'pending'
       
       case 'dns':
         if (this.dnsCompletedAt) return 'completed'
@@ -459,6 +494,7 @@ export default class Cluster extends BaseModel {
       'load-balancers',
       'servers',
       'volumes',
+      'kubernetes-config',
       'dns',
     ]
 
@@ -478,6 +514,7 @@ export default class Cluster extends BaseModel {
       'load-balancers',
       'servers',
       'volumes',
+      'kubernetes-config',
       'dns',
     ]
 
@@ -507,6 +544,7 @@ export default class Cluster extends BaseModel {
       'load-balancers',
       'servers',
       'volumes',
+      'kubernetes-config',
     ]
 
     for (const stage of stages) {

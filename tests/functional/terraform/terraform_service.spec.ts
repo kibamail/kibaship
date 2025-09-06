@@ -82,7 +82,8 @@ test.group('TerraformService Integration', () => {
       [TerraformTemplate.LOAD_BALANCERS]: ['hcloud_load_balancer', 'ingress', 'kube'],
       [TerraformTemplate.SERVERS]: ['hcloud_server', 'control_plane_', 'worker_'],
       [TerraformTemplate.VOLUMES]: ['hcloud_volume', 'var.control_plane_server_ids', 'var.worker_server_ids'],
-      [TerraformTemplate.KUBERNETES]: ['talos_machine_configuration_apply', 'talos_machine_bootstrap']
+      [TerraformTemplate.KUBERNETES]: ['talos_machine_configuration_apply', 'talos_machine_bootstrap'],
+      [TerraformTemplate.KUBERNETES_CONFIG]: ['helm_release', 'cilium', 'helm_repository']
     }
 
     for (const template of templates) {

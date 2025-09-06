@@ -23,6 +23,7 @@ import { ServerIcon } from '../Icons/server.svg'
 import { NetworkIcon } from '../Icons/network.svg'
 import { DNSIcon } from '../Icons/dns.svg'
 import { DockerIcon } from '../Icons/docker.svg'
+import { K8sIcon } from '../Icons/k8s.svg'
 
 const ClusterProvisioningStep = React.lazy(() => import('./ClusterProvisioningStep'))
 
@@ -69,6 +70,12 @@ const provisioningSteps: ProvisioningStepInfo[] = [
     title: 'Storage volumes',
     description: 'Attaching and configuring persistent storage volumes',
     icon: <StackIcon className="!size-5.5" />,
+  },
+  {
+    stage: 'kubernetes-config',
+    title: 'Configure kubernetes cluster',
+    description: 'Installing helm charts and configuring kubernetes cluster components',
+    icon: <K8sIcon className="!size-5" />,
   },
   {
     stage: 'dns',

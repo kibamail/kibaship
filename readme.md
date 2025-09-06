@@ -30,7 +30,7 @@ cilium install \
 Actually, a much easier approach is to generate the helm template, store it as a manifest and auto apply it on talos bootstrap as an extraManifest.
 
 ```bash
-helm template \
+helm install \
     cilium \
     cilium/cilium \
     --version 1.18.0 \
@@ -46,4 +46,22 @@ helm template \
     --set=gatewayAPI.enabled=true \
     --set=gatewayAPI.enableAlpn=true \
     --set=gatewayAPI.enableAppProtocol=true
+```
+
+
+```tf
+extraManifests = [
+    # Install gateway api CRDs
+    "https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.2.0/config/crd/standard/gateway.networking.k8s.io_gatewayclasses.yaml",
+    "https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.2.0/config/crd/standard/gateway.networking.k8s.io_gateways.yaml",
+    "https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.2.0/config/crd/standard/gateway.networking.k8s.io_httproutes.yaml",
+    "https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.2.0/config/crd/standard/gateway.networking.k8s.io_referencegrants.yaml",
+    "https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.2.0/config/crd/standard/gateway.networking.k8s.io_grpcroutes.yaml",
+
+    # TCP CRDs Gateway api
+    "https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.2.0/config/crd/experimental/gateway.networking.k8s.io_tlsroutes.yaml",
+
+    # Linstor - Piraeus operator
+    "https://github.com/piraeusdatastore/piraeus-operator/releases/download/v2.9.0/manifest.yaml"
+]
 ```

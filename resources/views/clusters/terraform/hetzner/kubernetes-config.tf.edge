@@ -1,0 +1,150 @@
+# Kubernetes configuration stage for Hetzner clusters
+# This stage runs after servers are configured and handles helm installations
+
+terraform {
+  required_providers {
+    helm = {
+      source  = "hashicorp/helm"
+      version = "~> 2.12"
+    }
+    
+    kubernetes = {
+      source  = "hashicorp/kubernetes"
+      version = "~> 2.24"
+    }
+  }
+
+  backend "s3" {
+    bucket = "{{ s3_bucket }}"
+    key    = "clusters/{{ cluster_id }}/kubernetes-config/terraform.tfstate"
+    region = "{{ s3_region }}"
+    encrypt = true
+  }
+}
+
+# Variables for kubeconfig components
+variable "kube_host" {
+  type        = string
+  description = "Kubernetes cluster host"
+  sensitive   = true
+}
+
+variable "kube_client_certificate" {
+  type        = string
+  description = "Kubernetes client certificate"
+  sensitive   = true
+}
+
+variable "kube_client_key" {
+  type        = string
+  description = "Kubernetes client key"
+  sensitive   = true
+}
+
+variable "kube_cluster_ca_certificate" {
+  type        = string
+  description = "Kubernetes cluster CA certificate"
+  sensitive   = true
+}
+
+# Configure Kubernetes provider
+provider "kubernetes" {
+  host                   = var.kube_host
+  client_certificate     = base64decode(var.kube_client_certificate)
+  client_key            = base64decode(var.kube_client_key)
+  cluster_ca_certificate = base64decode(var.kube_cluster_ca_certificate)
+}
+
+# Configure Helm provider
+provider "helm" {
+  kubernetes {
+    host                   = var.kube_host
+    client_certificate     = base64decode(var.kube_client_certificate)
+    client_key            = base64decode(var.kube_client_key)
+    cluster_ca_certificate = base64decode(var.kube_cluster_ca_certificate)
+  }
+}
+
+# Install Cilium CNI
+resource "helm_release" "cilium" {
+  name       = "cilium"
+  repository = "https://helm.cilium.io"
+  chart      = "cilium"
+  version    = "1.18.0"
+  namespace  = "kube-system"
+
+  set = [
+    {
+      name  = "k8sServiceHost"
+      value = "localhost"
+    },
+    {
+      name  = "k8sServicePort"
+      value = "7445"
+    },
+    {
+      name  = "kubeProxyReplacement"
+      value = "true"
+    },
+    {
+      name  = "tunnelProtocol"
+      value = "vxlan"
+    },
+    {
+      name  = "gatewayAPI.enabled"
+      value = "true"
+    },
+    {
+      name  = "gatewayAPI.hostNetwork.enabled"
+      value = "true"
+    },
+    {
+      name  = "gatewayAPI.enableAlpn"
+      value = "true"
+    },
+    {
+      name  = "gatewayAPI.hostNetwork.nodeLabelSelector"
+      value = "ingress-ready=true"
+    },
+    {
+      name  = "gatewayAPI.enableProxyProtocol"
+      value = "true"
+    },
+    {
+      name  = "gatewayAPI.enableAppProtocol"
+      value = "true"
+    },
+    {
+      name  = "ipam.mode"
+      value = "kubernetes"
+    },
+    {
+      name  = "loadBalancer.mode"
+      value = "snat"
+    },
+    {
+      name  = "operator.replicas"
+      value = "2"
+    },
+    {
+      name  = "bpf.masquerade"
+      value = "true"
+    },
+    {
+      name  = "securityContext.capabilities.ciliumAgent"
+      value = "{CHOWN,KILL,NET_ADMIN,NET_RAW,IPC_LOCK,SYS_ADMIN,SYS_RESOURCE,DAC_OVERRIDE,FOWNER,SETGID,SETUID}"
+    },
+    {
+      name  = "securityContext.capabilities.cleanCiliumState"
+      value = "{NET_ADMIN,SYS_ADMIN,SYS_RESOURCE}"
+    },
+    {
+      name  = "cgroup.autoMount.enabled"
+      value = "false"
+    },
+    {
+      name  = "cgroup.hostRoot"
+      value = "/sys/fs/cgroup"
+    }
+  ]
+}

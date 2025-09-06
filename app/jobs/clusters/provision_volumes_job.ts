@@ -1,9 +1,11 @@
 import { Job } from '@rlanz/bull-queue'
+import queue from '@rlanz/bull-queue/services/main'
 import Cluster from '#models/cluster'
 import ClusterNodeStorage from '#models/cluster_node_storage'
 import { TerraformExecutor } from '#services/terraform/terraform_executor'
 import { TerraformService, TerraformTemplate } from '#services/terraform/terraform_service'
 import { DateTime } from 'luxon'
+import ProvisionKubernetesConfigJob from './provision_kubernetes_config_job.js'
 
 interface ProvisionVolumesJobPayload {
   clusterId: string
@@ -66,9 +68,10 @@ export default class ProvisionVolumesJob extends Job {
       await this.createOrUpdateVolumes(cluster.id, output)
 
       cluster.volumesCompletedAt = DateTime.now()
-      cluster.dnsStartedAt = DateTime.now()
 
       await cluster.save()
+
+      await queue.dispatch(ProvisionKubernetesConfigJob, payload)
     } catch (error) {
       cluster.volumesErrorAt = DateTime.now()
 

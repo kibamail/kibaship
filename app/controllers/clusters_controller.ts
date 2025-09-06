@@ -16,6 +16,7 @@ import ProvisionVolumesJob from '#jobs/clusters/provision_volumes_job'
 import DestroyClusterJob from '#jobs/clusters/destroy_cluster_job'
 import ProvisionTalosImageJob from '#jobs/clusters/provision_talos_image_job'
 import { TerraformStage } from '#services/terraform/terraform_executor'
+import ProvisionKubernetesConfigJob from '#jobs/clusters/provision_kubernetes_config_job'
 
 export default class ClustersController extends BaseController {
     public async index(ctx: HttpContext) {
@@ -135,6 +136,8 @@ export default class ClustersController extends BaseController {
                 return ProvisionVolumesJob
             case 'talos-image':
                 return ProvisionTalosImageJob
+            case 'kubernetes-config':
+                return ProvisionKubernetesConfigJob
             default:
                 throw new Error(`Unknown stage: ${stage}`)
         }

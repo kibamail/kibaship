@@ -14,7 +14,8 @@ export enum TerraformTemplate {
   LOAD_BALANCERS = 'load-balancers.tf',
   SERVERS = 'servers.tf',
   VOLUMES = 'volumes.tf',
-  KUBERNETES = 'kubernetes.tf'
+  KUBERNETES = 'kubernetes.tf',
+  KUBERNETES_CONFIG = 'kubernetes-config.tf'
 }
 
 export interface TemplateContext {
