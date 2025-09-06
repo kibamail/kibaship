@@ -77,24 +77,23 @@ export default class ProvisionKubernetesJob extends Job {
 
       const output = await executor.output()
 
-      // Save kubeconfig and talosconfig for debugging
+      // Save kubeconfig in cluster and for debugging
       if (output.stdout) {
         try {
           const stdoutStr = Array.isArray(output.stdout) ? output.stdout.join('') : String(output.stdout)
           const outputs = JSON.parse(stdoutStr)
           
           if (outputs.kubeconfig?.value) {
+            // Store kubeconfig in cluster database
+            cluster.kubeConfig = outputs.kubeconfig.value
+            await cluster.save()
+            
+            // Also save to file for debugging
             const kubeconfigPath = resolve(app.makePath('storage'), `kubeconfig-${cluster.id}.yaml`)
             writeFileSync(kubeconfigPath, outputs.kubeconfig.value)
-            await this.logToStream('debug_kubeconfig', `Kubeconfig saved to ${kubeconfigPath}`)
+            await this.logToStream('debug_kubeconfig', `Kubeconfig saved to database and ${kubeconfigPath}`)
           }
           
-          if (outputs.talos_config?.value) {
-            const talosconfigPath = resolve(app.makePath('storage'), `talosconfig-${cluster.id}.yaml`)
-            writeFileSync(talosconfigPath, outputs.talos_config.value)
-            await this.logToStream('debug_talosconfig', `Talosconfig saved to ${talosconfigPath}`)
-          }
-
           // Save complete terraform output as JSON for debugging
           const outputPath = resolve(app.makePath('storage'), `terraform-output-${cluster.id}.json`)
           writeFileSync(outputPath, JSON.stringify(outputs, null, 2))
@@ -111,7 +110,7 @@ export default class ProvisionKubernetesJob extends Job {
         clusterName: cluster.subdomainIdentifier,
       })
 
-      cluster.kubernetesClusterErrorAt = DateTime.now()
+      cluster.kubernetesClusterCompletedAt = DateTime.now()
       await cluster.save()
 
     } catch (error) {

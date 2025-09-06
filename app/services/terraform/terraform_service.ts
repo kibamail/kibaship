@@ -14,6 +14,7 @@ export enum TerraformTemplate {
   LOAD_BALANCERS = 'load-balancers.tf',
   SERVERS = 'servers.tf',
   VOLUMES = 'volumes.tf',
+  KUBERNETES_CONFIG = 'kubernetes-config.tf',
   KUBERNETES = 'kubernetes.tf'
 }
 
@@ -68,6 +69,10 @@ export interface TemplateContext {
 
   cluster_load_balancer_private_ipv4_address: string | null
   cluster_load_balancer_public_ipv4_address: string | null
+  
+  talos_config: string | null
+  control_plane_machine_config: string | null
+  worker_machine_config: string | null
 }
 
 export interface TerraformFile {
@@ -298,6 +303,11 @@ export class TerraformService {
       cluster_load_balancer_domain: `kube.${cluster.subdomainIdentifier}`, // Used by: kubernetes.tf.edge
       cluster_load_balancer_private_ipv4_address: loadBalancer?.privateIpv4Address as string,
       cluster_load_balancer_public_ipv4_address: loadBalancer?.publicIpv4Address as string,
+      
+      /** Talos configurations from KubernetesConfig step */
+      talos_config: cluster.talosConfig,
+      control_plane_machine_config: cluster.controlPlaneConfig,
+      worker_machine_config: cluster.workerConfig,
       
       // =============================================================================
       // VOLUME-SPECIFIC VARIABLES - Used ONLY by volumes.tf.edge

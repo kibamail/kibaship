@@ -151,6 +151,9 @@ export interface Cluster {
   volumesStartedAt: string | null
   volumesCompletedAt: string | null
   volumesErrorAt: string | null
+  kubernetesConfigStartedAt: string | null
+  kubernetesConfigCompletedAt: string | null
+  kubernetesConfigErrorAt: string | null
   kubernetesClusterStartedAt: string | null
   kubernetesClusterCompletedAt: string | null
   kubernetesClusterErrorAt: string | null

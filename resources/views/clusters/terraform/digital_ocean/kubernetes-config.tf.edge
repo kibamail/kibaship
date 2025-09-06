@@ -1,0 +1,185 @@
+terraform {
+  required_providers {
+    talos = {
+      source = "siderolabs/talos"
+      version = "0.9.0"
+    }
+  }
+
+  backend "s3" {
+    bucket = "{{ s3_bucket }}"
+    key    = "clusters/{{ cluster_id }}/talos-config/terraform.tfstate"
+    region = "{{ s3_region }}"
+    encrypt = true
+  }
+}
+
+resource "talos_machine_secrets" "machine_secrets" {}
+
+locals {
+  # Base cluster configuration shared by all nodes
+  cluster_config = {
+    network = {
+      cni = {
+        name = "none"
+      }
+      podSubnets = [
+        "{{ cluster_pod_subnet }}"
+      ]
+      serviceSubnets = [
+        "{{ cluster_service_subnet }}"
+      ]
+    }
+    proxy = {
+      disabled = true
+    }
+    apiServer = {
+      certSANs = [
+        # Kube load balancer domain
+        "{{ cluster_load_balancer_domain }}",
+
+        # All cluster control plane nodes
+        @each((control, index) in control_planes)
+        "{{ control.ipv4_address }}",
+        @end
+        
+        # Kube load balancer public ipv4 address
+        "{{ cluster_load_balancer_public_ipv4_address }}",
+
+        # Kube load balancer private ipv4 address
+        "{{ cluster_load_balancer_private_ipv4_address }}"
+      ]
+    }
+  }
+
+  # Control plane specific cluster configuration
+  control_plane_cluster_config = merge(local.cluster_config, {
+    etcd = {
+      advertisedSubnets = [
+        "{{ cluster_private_subnet }}"
+      ]
+    }
+  })
+  
+  worker_machine_config = {
+  }
+}
+
+data "talos_client_configuration" "talosconfig" {
+  cluster_name         = "{{ cluster_name }}"
+  client_configuration = talos_machine_secrets.machine_secrets.client_configuration
+  endpoints            = [
+@each((control, index) in control_planes)
+    "{{ control.ipv4_address }}"{{ index === control_planes.length - 1 ? '' : ',' }}
+@end
+  ]
+}
+
+data "talos_machine_configuration" "machineconfig_cp" {
+  cluster_name     = "{{ cluster_name }}"
+  cluster_endpoint = "https://{{ cluster_load_balancer_domain }}:6443"
+  machine_type     = "controlplane"
+  machine_secrets  = talos_machine_secrets.machine_secrets.machine_secrets
+}
+
+data "talos_machine_configuration" "machineconfig_worker" {
+  cluster_name     = "{{ cluster_name }}"
+  cluster_endpoint = "https://{{ cluster_load_balancer_domain }}:6443"
+  machine_type     = "worker"
+  machine_secrets  = talos_machine_secrets.machine_secrets.machine_secrets
+}
+
+output "talos_config" {
+  description = "Talos client configuration for managing the cluster"
+  value       = data.talos_client_configuration.talosconfig.talos_config
+  sensitive   = true
+}
+
+output "control_plane_machine_configuration" {
+  description = "Control plane machine configuration for applying to nodes"
+  value = yamlencode(merge(
+    yamldecode(data.talos_machine_configuration.machineconfig_cp.machine_configuration),
+    {
+      cluster = local.control_plane_cluster_config
+      machine = {
+        install = {
+          disk = "{{ control_planes[0].primary_disk_name }}"
+        }
+        network = {
+          interfaces = [
+            {
+              # Public network interface of droplet
+              interface = "{{ control_planes[0].public_network_interface }}"
+              dhcp = false,
+              routes = [
+                {
+                  network = "0.0.0.0/0",
+                  gateway = "{{ control_planes[0].public_ipv4_gateway }}"
+                }
+              ]
+            },
+            {
+              # Private network interface of droplet
+              interface = "{{ control_planes[0].private_network_interface }}"
+              dhcp = false
+              addresses = [
+                "{{ control_planes[0].private_ipv4_address }}{{ cluster_subnet_mask }}"
+              ]
+            }
+          ]
+        }
+        kubelet = {
+          nodeIP = {
+            validSubnets = [
+              "{{ cluster_private_subnet }}"
+            ]
+          }
+        }
+      }
+    }
+  ))
+  sensitive = true
+}
+
+output "worker_machine_configuration" {
+  description = "Worker machine configuration for applying to nodes"
+  value = yamlencode(merge(
+    yamldecode(data.talos_machine_configuration.machineconfig_worker.machine_configuration),
+    {
+      cluster = local.cluster_config
+      machine = merge({
+        network = {
+          interfaces = [
+            {
+              # Public network interface of droplet
+              interface = "{{ workers[0].public_network_interface }}"
+              dhcp = false,
+              routes = [
+                {
+                  network = "0.0.0.0/0",
+                  gateway = "{{ workers[0].public_ipv4_gateway }}"
+                }
+              ]
+            },
+            {
+              # Private network interface of droplet
+              interface = "{{ workers[0].private_network_interface }}"
+              dhcp = false
+              addresses = [
+                "{{ workers[0].private_ipv4_address }}{{ cluster_subnet_mask }}"
+              ]
+            }
+          ]
+        }
+        kubelet = {
+          nodeIP = {
+            validSubnets = [
+              "{{ cluster_private_subnet }}"
+            ]
+          }
+        }
+      }, local.worker_machine_config)
+    }
+  ))
+  sensitive = true
+}

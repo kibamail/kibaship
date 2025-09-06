@@ -78,6 +78,12 @@ const provisioningSteps: ProvisioningStepInfo[] = [
     icon: <DNSIcon className="!size-5" />,
   },
   {
+    stage: 'kubernetes-config',
+    title: 'Kubernetes configuration',
+    description: 'Generating Talos machine configurations and client configuration',
+    icon: <SettingsIcon className="!size-5" />,
+  },
+  {
     stage: 'kubernetes',
     title: 'Kubernetes cluster',
     description: 'Installing and configuring Kubernetes on the provisioned infrastructure',

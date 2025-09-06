@@ -10,6 +10,7 @@ import {
   computed,
 } from '@adonisjs/lucid/orm'
 import { randomUUID } from 'node:crypto'
+import encryption from '@adonisjs/core/services/encryption'
 import { SshKeyService } from '#services/ssh/ssh_key_service'
 import { TerraformStage } from '#services/terraform/terraform_executor'
 import { talosVersion } from '#config/app'
@@ -32,6 +33,7 @@ export enum ProvisioningStepName {
   LOAD_BALANCERS = 'loadBalancers',
   SERVERS = 'servers',
   VOLUMES = 'volumes',
+  KUBERNETES_CONFIG = 'kubernetesConfig',
   K8S = 'k8s',
   OPERATOR = 'operator',
 }
@@ -57,6 +59,7 @@ export interface ClusterProvisioningProgress {
     loadBalancers: ProvisioningStep
     servers: ProvisioningStep
     volumes: ProvisioningStep
+    kubernetesConfig: ProvisioningStep
     kubernetesCluster: ProvisioningStep
     kibashipOperator: ProvisioningStep
   }
@@ -105,6 +108,34 @@ export default class Cluster extends BaseModel {
 
   @column()
   declare talosVersion: string
+
+  @column({
+    prepare: value => value ? encryption.encrypt(value) : null,
+    consume: value => value ? encryption.decrypt(value) || '' : null,
+    serializeAs: null
+  })
+  declare talosConfig: string | null
+
+  @column({
+    prepare: value => value ? encryption.encrypt(value) : null,
+    consume: value => value ? encryption.decrypt(value) || '' : null,
+    serializeAs: null
+  })
+  declare kubeConfig: string | null
+
+  @column({
+    prepare: value => value ? encryption.encrypt(value) : null,
+    consume: value => value ? encryption.decrypt(value) || '' : null,
+    serializeAs: null
+  })
+  declare controlPlaneConfig: string | null
+
+  @column({
+    prepare: value => value ? encryption.encrypt(value) : null,
+    consume: value => value ? encryption.decrypt(value) || '' : null,
+    serializeAs: null
+  })
+  declare workerConfig: string | null
 
   @column()
   declare networkIpRange: string | null
@@ -189,6 +220,15 @@ export default class Cluster extends BaseModel {
 
   @column.dateTime()
   declare volumesErrorAt: DateTime | null
+
+  @column.dateTime()
+  declare kubernetesConfigStartedAt: DateTime | null
+
+  @column.dateTime()
+  declare kubernetesConfigCompletedAt: DateTime | null
+
+  @column.dateTime()
+  declare kubernetesConfigErrorAt: DateTime | null
 
   @column.dateTime()
   declare kubernetesClusterStartedAt: DateTime | null
@@ -453,6 +493,12 @@ export default class Cluster extends BaseModel {
         if (this.dnsStartedAt) return 'in_progress'
         return 'pending'
 
+      case 'kubernetes-config':
+        if (this.kubernetesConfigCompletedAt) return 'completed'
+        if (this.kubernetesConfigErrorAt) return 'failed'
+        if (this.kubernetesConfigStartedAt) return 'in_progress'
+        return 'pending'
+
       case 'kubernetes':
         if (this.kubernetesClusterCompletedAt) return 'completed'
         if (this.kubernetesClusterErrorAt) return 'failed'
@@ -474,6 +520,7 @@ export default class Cluster extends BaseModel {
       'servers',
       'volumes',
       'dns',
+      'kubernetes-config',
       'kubernetes',
     ]
 
@@ -494,6 +541,7 @@ export default class Cluster extends BaseModel {
       'servers',
       'volumes',
       'dns',
+      'kubernetes-config',
       'kubernetes',
     ]
 
@@ -523,6 +571,7 @@ export default class Cluster extends BaseModel {
       'load-balancers',
       'servers',
       'volumes',
+      'kubernetes-config',
       'kubernetes',
     ]
 
