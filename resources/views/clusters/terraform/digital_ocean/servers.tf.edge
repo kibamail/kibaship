@@ -4,6 +4,10 @@ terraform {
       source  = "digitalocean/digitalocean"
       version = "~> 2.66"
     }
+    talos = {
+      source = "siderolabs/talos"
+      version = "0.9.0"
+    }
   }
 
   backend "s3" {
@@ -49,6 +53,60 @@ provider "digitalocean" {
   token = var.do_token
 }
 
+# Talos machine secrets for cluster bootstrapping
+resource "talos_machine_secrets" "machine_secrets" {}
+
+locals {
+  # Base cluster configuration shared by all nodes
+  cluster_config = {
+    network = {
+      cni = {
+        name = "none"
+      }
+    }
+    proxy = {
+      disabled = true
+    }
+  }
+
+  # Control plane specific cluster configuration
+  control_plane_cluster_config = merge(local.cluster_config, {})
+  
+  worker_machine_config = {}
+}
+
+
+# Generate control plane machine configuration
+data "talos_machine_configuration" "machineconfig_cp" {
+  cluster_name     = "{{ cluster_name }}"
+  cluster_endpoint = "https://{{ cluster_load_balancer_public_ipv4_address }}:6443"
+  machine_type     = "controlplane"
+  machine_secrets  = talos_machine_secrets.machine_secrets.machine_secrets
+  
+  config_patches = [
+    yamlencode({
+      cluster = local.control_plane_cluster_config
+    })
+  ]
+}
+
+# Generate worker machine configuration
+data "talos_machine_configuration" "machineconfig_worker" {
+  cluster_name     = "{{ cluster_name }}"
+  cluster_endpoint = "https://{{ cluster_load_balancer_public_ipv4_address }}:6443"
+  machine_type     = "worker"
+  machine_secrets  = talos_machine_secrets.machine_secrets.machine_secrets
+  
+  config_patches = [
+    yamlencode(merge(
+      {
+        cluster = local.cluster_config
+      },
+      local.worker_machine_config
+    ))
+  ]
+}
+
 
 @each((node, index) in control_planes)
   resource "digitalocean_droplet" "control_plane_{{ node.slug }}" {
@@ -58,7 +116,8 @@ provider "digitalocean" {
   region   = "{{ cluster_region }}"
   ssh_keys = ["{{ cluster_ssh_key_id }}"]
   
-  vpc_uuid = "{{ cluster_network_id }}"
+  # Use Talos machine configuration as user data
+  user_data = data.talos_machine_configuration.machineconfig_cp.machine_configuration
 
   tags = [
     "node-{{ node.id }}",
@@ -75,7 +134,8 @@ provider "digitalocean" {
   region   = "{{ cluster_region }}"
   ssh_keys = ["{{ cluster_ssh_key_id }}"]
   
-  vpc_uuid = var.network_id
+  # Use Talos machine configuration as user data
+  user_data = data.talos_machine_configuration.machineconfig_worker.machine_configuration
 
   tags = [
     "worker-{{ cluster_id }}",
@@ -83,6 +143,60 @@ provider "digitalocean" {
   ]
 }
 @end
+
+# Generate Talos client configuration using actual droplet IP addresses
+data "talos_client_configuration" "talosconfig" {
+  cluster_name         = "{{ cluster_name }}"
+  client_configuration = talos_machine_secrets.machine_secrets.client_configuration
+  endpoints            = [
+@each((node, index) in control_planes)
+    digitalocean_droplet.control_plane_{{ node.slug }}.ipv4_address{{ index === control_planes.length - 1 ? '' : ',' }}
+@end
+  ]
+}
+
+# Apply machine configurations to nodes
+@each((node, index) in control_planes)
+resource "talos_machine_configuration_apply" "control_plane_{{ node.slug }}" {
+  client_configuration        = talos_machine_secrets.machine_secrets.client_configuration
+  machine_configuration_input = data.talos_machine_configuration.machineconfig_cp.machine_configuration
+  node                        = digitalocean_droplet.control_plane_{{ node.slug }}.ipv4_address
+}
+@end
+
+@each((node, index) in workers)
+resource "talos_machine_configuration_apply" "worker_{{ node.slug }}" {
+  client_configuration        = talos_machine_secrets.machine_secrets.client_configuration
+  machine_configuration_input = data.talos_machine_configuration.machineconfig_worker.machine_configuration
+  node                        = digitalocean_droplet.worker_{{ node.slug }}.ipv4_address
+}
+@end
+
+# Bootstrap the cluster on the first control plane node
+resource "talos_machine_bootstrap" "this" {
+  depends_on = [
+@each((node, index) in control_planes)
+    talos_machine_configuration_apply.control_plane_{{ node.slug }}{{ index === control_planes.length - 1 ? '' : ',' }}
+@end
+@if(workers && workers.length > 0)
+    ,
+@each((node, index) in workers)
+    talos_machine_configuration_apply.worker_{{ node.slug }}{{ index === workers.length - 1 ? '' : ',' }}
+@end
+@endif
+  ]
+  node                 = digitalocean_droplet.control_plane_{{ control_planes[0].slug }}.ipv4_address
+  client_configuration = talos_machine_secrets.machine_secrets.client_configuration
+}
+
+# Generate kubeconfig after cluster bootstrap
+resource "talos_cluster_kubeconfig" "this" {
+  depends_on = [
+    talos_machine_bootstrap.this
+  ]
+  client_configuration = talos_machine_secrets.machine_secrets.client_configuration
+  node                 = digitalocean_droplet.control_plane_{{ control_planes[0].slug }}.ipv4_address
+}
     
 # Control Plane Server Outputs
 @each(node in control_planes)
@@ -137,4 +251,29 @@ output "worker_server_ids" {
   "{{ node.id }}" = digitalocean_droplet.worker_{{ node.slug }}.id{{ index === workers.length - 1 ? '' : ',' }}
 @end
 }
+}
+
+# Talos Configuration Outputs
+output "talos_config" {
+  description = "Talos client configuration for managing the cluster"
+  value       = data.talos_client_configuration.talosconfig.talos_config
+  sensitive   = true
+}
+
+output "control_plane_machine_configuration" {
+  description = "Control plane machine configuration for applying to nodes"
+  value       = data.talos_machine_configuration.machineconfig_cp.machine_configuration
+  sensitive   = true
+}
+
+output "worker_machine_configuration" {
+  description = "Worker machine configuration for applying to nodes"
+  value       = data.talos_machine_configuration.machineconfig_worker.machine_configuration
+  sensitive   = true
+}
+
+output "kubeconfig" {
+  description = "Kubeconfig for accessing the Kubernetes cluster"
+  value       = talos_cluster_kubeconfig.this.kubeconfig_raw
+  sensitive   = true
 }

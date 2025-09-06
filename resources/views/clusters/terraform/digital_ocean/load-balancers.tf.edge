@@ -44,8 +44,6 @@ resource "digitalocean_loadbalancer" "ingress" {
   name   = "${var.cluster_name}"
   region = var.location
   size   = "lb-small"
-  
-  vpc_uuid = var.network_id
 
   forwarding_rule {
     entry_protocol  = "http"
@@ -80,8 +78,6 @@ resource "digitalocean_loadbalancer" "kube" {
   name   = "kube.${var.cluster_name}"
   region = var.location
   size   = "lb-small"
-  
-  vpc_uuid = var.network_id
 
   forwarding_rule {
     entry_protocol  = "tcp"

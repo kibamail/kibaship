@@ -14,7 +14,6 @@ import ProvisionLoadBalancersJob from '#jobs/clusters/provision_load_balancers_j
 import ProvisionServersJob from '#jobs/clusters/provision_servers_job'
 import ProvisionVolumesJob from '#jobs/clusters/provision_volumes_job'
 import DestroyClusterJob from '#jobs/clusters/destroy_cluster_job'
-import ProvisionKubernetesJob from '#jobs/clusters/provision_kubernetes_job'
 import ProvisionTalosImageJob from '#jobs/clusters/provision_talos_image_job'
 import { TerraformStage } from '#services/terraform/terraform_executor'
 
@@ -134,8 +133,6 @@ export default class ClustersController extends BaseController {
                 return ProvisionServersJob
             case 'volumes':
                 return ProvisionVolumesJob
-            case 'kubernetes':
-                return ProvisionKubernetesJob
             case 'talos-image':
                 return ProvisionTalosImageJob
             default:

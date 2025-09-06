@@ -1,8 +1,6 @@
-import ProvisionKubernetesJob from '#jobs/clusters/provision_kubernetes_job'
 import Cluster from '#models/cluster'
 import { ClusterDnsVerificationService } from '#services/dns/cluster_dns_verification_service'
 import type { HttpContext } from '@adonisjs/core/http'
-import queue from '@rlanz/bull-queue/services/main'
 import { DateTime } from 'luxon'
 
 export default class ClusterDnsVerifyController {
@@ -19,7 +17,8 @@ export default class ClusterDnsVerifyController {
 
         cluster.dnsLastCheckedAt = DateTime.now()
 
-        if (result.cluster && clusterLoadBalancer) {
+        // Always mark cluster load balancer as verified since we don't need kube subdomain
+        if (clusterLoadBalancer && !clusterLoadBalancer.dnsVerifiedAt) {
             clusterLoadBalancer.dnsVerifiedAt = DateTime.now()
             await clusterLoadBalancer.save()
         }
@@ -29,12 +28,8 @@ export default class ClusterDnsVerifyController {
             await ingressLoadBalancer.save()
         }
 
-        if (result.cluster && result.ingress) {
+        if (result.ingress) {
             cluster.dnsCompletedAt = DateTime.now()
-
-            await queue.dispatch(ProvisionKubernetesJob, {
-                clusterId: cluster.id
-            })
         }
 
         await cluster.save()

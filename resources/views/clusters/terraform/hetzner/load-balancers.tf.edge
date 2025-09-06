@@ -122,9 +122,6 @@ resource "hcloud_load_balancer_service" "kube_api" {
   health_check {
     protocol = "tcp"
     port     = 50000
-    interval = 15
-    timeout  = 10
-    retries  = 3
   }
 }
 

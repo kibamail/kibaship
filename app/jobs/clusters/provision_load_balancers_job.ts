@@ -5,7 +5,7 @@ import { TerraformExecutor } from '#services/terraform/terraform_executor'
 import { TerraformService, TerraformTemplate } from '#services/terraform/terraform_service'
 import { DateTime } from 'luxon'
 import queue from '@rlanz/bull-queue/services/main'
-import ProvisionKubernetesConfigJob from './provision_kubernetes_config_job.js'
+import ProvisionServersJob from './provision_servers_job.js'
 
 interface ProvisionLoadBalancersJobPayload {
   clusterId: string
@@ -84,7 +84,7 @@ export default class ProvisionLoadBalancersJob extends Job {
 
       await cluster.save()
 
-      await queue.dispatch(ProvisionKubernetesConfigJob, payload)
+      await queue.dispatch(ProvisionServersJob, payload)
 
     } catch (error) {
       cluster.loadBalancersErrorAt = DateTime.now()

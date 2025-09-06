@@ -26,18 +26,17 @@ export default function ClusterDnsStep({ cluster }: ClusterDnsStepProps) {
   })
 
   function parseSubdomainIdentifier(domain: string, loadBalancerType: 'cluster' | 'ingress' | 'tcp' | 'udp'): string {
-    if (!domain) return loadBalancerType === 'cluster' ? 'kube.*' : '*'
+    if (!domain) return '*'
     
     const parts = domain.split('.')
     
     if (parts.length <= 2) {
-      return loadBalancerType === 'cluster' ? 'kube.*' : '*'
+      return '*'
     }
     
     const subdomain = parts.slice(0, -2).join('.')
-    const prefix = loadBalancerType === 'cluster' ? 'kube.' : '*.'
     
-    return `${prefix}${subdomain}`
+    return `*.${subdomain}`
   }
 
   function onValueCopied(key: keyof typeof copied, value: string) {
@@ -73,15 +72,11 @@ export default function ClusterDnsStep({ cluster }: ClusterDnsStepProps) {
           <Alert.Title>Configure dns to ensure your cluster is accessible.</Alert.Title>
 
           <Text className="mt-4 !text-sm text-owly-content-tertiary">
-            We have provisioned your node balancers. You need to configure your DNS to point to the
-            node balancers.
+            We have provisioned your load balancers. You need to configure your DNS to point to the
+            ingress load balancer for your applications.
           </Text>
 
           <div className="flex flex-col gap-0.5 mt-2">
-            <Text className="mt-2 !text-sm text-owly-content-tertiary flex items-center gap-2">
-              <CheckIcon className="!size-4 text-owly-content-info" />
-              The cluster load balancer configures traffic to your kubernetes API.
-            </Text>
             <Text className="mt-2 !text-sm text-owly-content-tertiary flex items-center gap-2">
               <CheckIcon className="!size-4 text-owly-content-info" />
               The ingress load balancer configures traffic to your applications.
@@ -110,12 +105,12 @@ export default function ClusterDnsStep({ cluster }: ClusterDnsStepProps) {
               </tr>
             </thead>
             <tbody>
-              {cluster?.loadBalancers?.map((loadBalancer, idx) => (
+              {cluster?.loadBalancers?.filter(lb => lb.type === 'ingress')?.map((loadBalancer, idx) => (
                 <tr
                   key={loadBalancer?.id}
                   className={classNames({
                     'border-b border-owly-border-tertiary':
-                      cluster?.loadBalancers && idx < cluster?.loadBalancers?.length - 1,
+                      cluster?.loadBalancers?.filter(lb => lb.type === 'ingress') && idx < cluster?.loadBalancers?.filter(lb => lb.type === 'ingress')?.length - 1,
                   })}
                 >
                   <td className="py-2 px-3">
@@ -142,7 +137,7 @@ export default function ClusterDnsStep({ cluster }: ClusterDnsStepProps) {
                       className="!px-2 cursor-pointer"
                       onClick={() =>
                         onValueCopied(
-                          loadBalancer?.type === 'cluster' ? 'clusterName' : 'ingressName',
+                          'ingressName',
                           parseSubdomainIdentifier(cluster?.subdomainIdentifier || '', loadBalancer?.type)
                         )
                       }
@@ -150,9 +145,7 @@ export default function ClusterDnsStep({ cluster }: ClusterDnsStepProps) {
                       <button>
                         {parseSubdomainIdentifier(cluster?.subdomainIdentifier || '', loadBalancer?.type)}
 
-                        {copied[
-                          loadBalancer?.type === 'cluster' ? 'clusterName' : 'ingressName'
-                        ] ? (
+                        {copied.ingressName ? (
                           <CheckIcon />
                         ) : (
                           <CopyIcon />
@@ -168,7 +161,7 @@ export default function ClusterDnsStep({ cluster }: ClusterDnsStepProps) {
                       className="!px-2 cursor-pointer"
                       onClick={() =>
                         onValueCopied(
-                          loadBalancer?.type === 'cluster' ? 'clusterValue' : 'ingressValue',
+                          'ingressValue',
                           loadBalancer?.publicIpv4Address || ''
                         )
                       }
@@ -176,9 +169,7 @@ export default function ClusterDnsStep({ cluster }: ClusterDnsStepProps) {
                       <button>
                         {loadBalancer?.publicIpv4Address}
 
-                        {copied[
-                          loadBalancer?.type === 'cluster' ? 'clusterValue' : 'ingressValue'
-                        ] ? (
+                        {copied.ingressValue ? (
                           <CheckIcon />
                         ) : (
                           <CopyIcon />

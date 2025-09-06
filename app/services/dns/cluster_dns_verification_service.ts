@@ -26,10 +26,10 @@ export class ClusterDnsVerificationService {
 
   public async verify() {
     for (const servers of this.dnsServersToVerify) {
-      const { ingress, cluster } = await this.verifyOnDnsServers(servers)
+      const { ingress } = await this.verifyOnDnsServers(servers)
 
-      if (! ingress || ! cluster) {
-        return { ingress: false, cluster: false}
+      if (! ingress) {
+        return { ingress: false, cluster: true}
       }
     }
 
@@ -42,7 +42,6 @@ export class ClusterDnsVerificationService {
     this.resolver.setServers(servers)
 
     const ingressLoadBalancer = this.cluster.loadBalancers.find((lb) => lb.type === 'ingress')
-    const clusterLoadBalancer = this.cluster.loadBalancers.find((lb) => lb.type === 'cluster')
 
     /**
      *
@@ -50,27 +49,20 @@ export class ClusterDnsVerificationService {
      * Check a random subdomain
      */
     const ingressDomain = `${randomUUID()}.${this.cluster.subdomainIdentifier}`
-    const clusterDomain = `kube.${this.cluster.subdomainIdentifier}`
 
     const ingressVerified = await this.verifyDnsRecord(
       ingressDomain,
       ingressLoadBalancer?.publicIpv4Address || null
     )
 
-    const clusterVerified = await this.verifyDnsRecord(
-      clusterDomain,
-      clusterLoadBalancer?.publicIpv4Address || null
-    )
-
     logger.info('DNS verification completed', {
       clusterId: this.cluster.id,
       ingressVerified,
-      clusterVerified,
     })
 
     return {
       ingress: ingressVerified,
-      cluster: clusterVerified,
+      cluster: true, // Always return true for cluster since we don't need kube subdomain verification
     }
   }
 

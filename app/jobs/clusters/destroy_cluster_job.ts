@@ -1,7 +1,7 @@
 import { Job } from '@rlanz/bull-queue'
 import Cluster from '#models/cluster'
 import { TerraformExecutor, TerraformStage } from '#services/terraform/terraform_executor'
-import { TerraformService } from '#services/terraform/terraform_service'
+import { TerraformService, TerraformTemplate } from '#services/terraform/terraform_service'
 import logger from '@adonisjs/core/services/logger'
 
 interface DestroyClusterJobPayload {
@@ -26,7 +26,7 @@ export default class DestroyClusterJob extends Job {
     cluster.status = 'unhealthy'
     await cluster.save()
 
-    const stages: TerraformStage[] = ['volumes', 'servers', 'load-balancers', 'ssh-keys', 'network']
+    const stages: TerraformStage[] = ['volumes', 'servers', 'load-balancers', 'ssh-keys']
 
     for (const stage of stages) {
       try {
@@ -46,6 +46,34 @@ export default class DestroyClusterJob extends Job {
 
   private async destroyStage(cluster: Cluster, stage: TerraformStage): Promise<void> {
     logger.info(`Destroying ${stage} for cluster ${cluster.id}`)
+
+    // Debug logging for volumes stage
+    if (stage === 'volumes') {
+      logger.info(`Debug: Cluster nodes provider IDs:`, 
+        cluster.nodes.map(node => ({ 
+          id: node.id, 
+          slug: node.slug, 
+          providerId: node.providerId,
+          storages: node.storages?.map(s => s.slug) 
+        }))
+      )
+      
+      // Also debug the volumes that will be generated for the template
+      const volumes = cluster.nodes?.map(node =>
+        node.storages.map(storage => ({
+          id: storage.id,
+          slug: storage.slug,
+          size: node.type === 'master' ? cluster.controlPlanesVolumeSize : cluster.workersVolumeSize,
+          node_provider_id: node.providerId
+        }))
+      ).flat()
+      
+      logger.info(`Debug: Volumes for template:`, volumes)
+    }
+
+    // Generate terraform files for the stage before destroying
+    const terraform = new TerraformService(cluster.id)
+    await terraform.generate(cluster, this.getTerraformTemplate(stage))
 
     const ingressLoadBalancer = cluster.loadBalancers.find(lb => lb.type === 'ingress')
     const kubeLoadBalancer = cluster.loadBalancers.find(lb => lb.type === 'cluster')
@@ -71,11 +99,30 @@ export default class DestroyClusterJob extends Job {
       })
 
     try {
+      await executor.init()
       await executor.destroy({ autoApprove: true })
       logger.info(`Successfully destroyed ${stage} for cluster ${cluster.id}`)
     } catch (error) {
-      logger.error(`Failed to destroy ${stage} for cluster ${cluster.id}:`, error)
-      throw error
+      logger.error(`Failed to destroy ${stage} for cluster ${cluster.id}. skipping...`, error)
+    }
+  }
+
+  private getTerraformTemplate(stage: TerraformStage): TerraformTemplate {
+    switch (stage) {
+      case 'volumes':
+        return TerraformTemplate.VOLUMES
+      case 'servers':
+        return TerraformTemplate.SERVERS
+      case 'load-balancers':
+        return TerraformTemplate.LOAD_BALANCERS
+      case 'ssh-keys':
+        return TerraformTemplate.SSH_KEYS
+      case 'network':
+        return TerraformTemplate.NETWORK
+      case 'talos-image':
+        return TerraformTemplate.TALOS_IMAGE
+      default:
+        throw new Error(`Unknown terraform stage: ${stage}`)
     }
   }
 
