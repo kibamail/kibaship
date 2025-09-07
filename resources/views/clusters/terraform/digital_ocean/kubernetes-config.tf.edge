@@ -199,16 +199,6 @@ resource "kubectl_manifest" "piraeus_{{ crd_file.name.replace('-', '_') }}" {
 }
 @end
 
-# Wait for Piraeus operator to be ready before creating LinstorCluster
-resource "time_sleep" "wait_for_piraeus" {
-  create_duration = "30s"
-  depends_on = [
-@each((crd_file, index) in piraeus_crd_files)
-    kubectl_manifest.piraeus_{{ crd_file.name.replace('-', '_') }}{{ index === piraeus_crd_files.length - 1 ? '' : ',' }}
-@end
-  ]
-}
-
 # Install cert-manager
 resource "helm_release" "cert_manager" {
   name             = "cert-manager"
@@ -239,4 +229,20 @@ resource "helm_release" "cert_manager" {
 
   depends_on = [helm_release.cilium]
 }
+
+# Fetch each Tekton CRD file from the repository
+@each(crd_file in tekton_crd_files)
+data "http" "tekton_crd_{{ crd_file.name.replace('-', '_') }}" {
+  url = "{{ crd_file.url }}"
+}
+@end
+
+# Create kubectl_manifest resources for each Tekton CRD file
+@each(crd_file in tekton_crd_files)
+resource "kubectl_manifest" "tekton_{{ crd_file.name.replace('-', '_') }}" {
+  yaml_body = data.http.tekton_crd_{{ crd_file.name.replace('-', '_') }}.response_body
+  
+  depends_on = [helm_release.cert_manager]
+}
+@end
 
