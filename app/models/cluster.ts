@@ -201,6 +201,15 @@ export default class Cluster extends BaseModel {
   declare kubernetesConfigErrorAt: DateTime | null
 
   @column.dateTime()
+  declare kubernetesBootStartedAt: DateTime | null
+
+  @column.dateTime()
+  declare kubernetesBootCompletedAt: DateTime | null
+
+  @column.dateTime()
+  declare kubernetesBootErrorAt: DateTime | null
+
+  @column.dateTime()
   declare kibashipOperatorStartedAt: DateTime | null
 
   @column.dateTime()

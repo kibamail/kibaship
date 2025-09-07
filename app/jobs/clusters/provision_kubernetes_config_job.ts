@@ -1,9 +1,11 @@
 import { Job } from '@rlanz/bull-queue'
+import queue from '@rlanz/bull-queue/services/main'
 import Cluster from '#models/cluster'
 import { TerraformExecutor } from '#services/terraform/terraform_executor'
 import { TerraformService, TerraformTemplate } from '#services/terraform/terraform_service'
 import { KubernetesService } from '#services/kubernetes/kubernetes_service'
 import { DateTime } from 'luxon'
+import ProvisionKubernetesBootJob from './provision_kubernetes_boot_job.js'
 
 interface ProvisionKubernetesConfigJobPayload {
   clusterId: string
@@ -69,10 +71,11 @@ export default class ProvisionKubernetesConfigJob extends Job {
       await executor.init()
       await executor.apply({ autoApprove: true })
 
-      cluster.kubernetesConfigErrorAt = DateTime.now()
-      // cluster.dnsStartedAt = DateTime.now()
+      cluster.kubernetesConfigCompletedAt = DateTime.now()
 
       await cluster.save()
+
+      await queue.dispatch(ProvisionKubernetesBootJob, payload)
     } catch (error) {
       cluster.kubernetesConfigErrorAt = DateTime.now()
 

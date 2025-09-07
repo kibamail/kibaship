@@ -209,3 +209,34 @@ resource "time_sleep" "wait_for_piraeus" {
   ]
 }
 
+# Install cert-manager
+resource "helm_release" "cert_manager" {
+  name             = "cert-manager"
+  repository       = "https://charts.jetstack.io"
+  chart            = "cert-manager"
+  version          = "v1.18.2"
+  namespace        = "cert-manager"
+  create_namespace = true
+
+  set = [
+    {
+      name  = "replicaCount"
+      value = "3"
+    },
+    {
+      name  = "crds.enabled"
+      value = "true"
+    },
+    {
+      name  = "prometheus.enabled"
+      value = "false"
+    },
+    {
+      name  = "webhook.replicaCount"
+      value = "2"
+    }
+  ]
+
+  depends_on = [helm_release.cilium]
+}
+

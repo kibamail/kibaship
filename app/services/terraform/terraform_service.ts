@@ -15,7 +15,8 @@ export enum TerraformTemplate {
   SERVERS = 'servers.tf',
   VOLUMES = 'volumes.tf',
   KUBERNETES = 'kubernetes.tf',
-  KUBERNETES_CONFIG = 'kubernetes-config.tf'
+  KUBERNETES_CONFIG = 'kubernetes-config.tf',
+  KUBERNETES_BOOT = 'kubernetes-boot.tf'
 }
 
 export interface TemplateContext {

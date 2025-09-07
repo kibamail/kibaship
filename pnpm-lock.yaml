@@ -104,6 +104,9 @@ importers:
       axios:
         specifier: ^1.11.0
         version: 1.11.0
+      change-case:
+        specifier: ^5.4.4
+        version: 5.4.4
       classnames:
         specifier: ^2.5.1
         version: 2.5.1

@@ -89,6 +89,7 @@
     "@xyflow/react": "^12.8.3",
     "ansi-to-react": "^6.1.6",
     "axios": "^1.11.0",
+    "change-case": "^5.4.4",
     "classnames": "^2.5.1",
     "cmdk": "^1.1.1",
     "dayjs": "^1.11.13",
