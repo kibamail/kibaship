@@ -4,6 +4,10 @@ terraform {
       source  = "hetznercloud/hcloud"
       version = "~> 1.52"
     }
+    talos = {
+      source = "siderolabs/talos"
+      version = "0.9.0"
+    }
   }
 
   backend "s3" {
@@ -49,6 +53,73 @@ provider "hcloud" {
   token = var.hcloud_token
 }
 
+# Talos machine secrets for cluster bootstrapping
+resource "talos_machine_secrets" "machine_secrets" {}
+
+locals {
+  # Base cluster configuration shared by all nodes
+  cluster_config = {
+    network = {
+      cni = {
+        name = "none"
+      }
+    }
+    proxy = {
+      disabled = true
+    }
+  }
+
+  # Control plane specific cluster configuration
+  control_plane_cluster_config = merge(local.cluster_config, {})
+  
+  worker_machine_config = {
+      machine = {
+        kernel = {
+          modules = [
+            {
+              name       = "drbd"
+              parameters = ["usermode_helper=disabled"]
+            },
+            {
+              name       = "drbd_transport_tcp"
+              parameters = []
+            }
+          ]
+        }
+      }
+  }
+}
+
+# Generate control plane machine configuration
+data "talos_machine_configuration" "machineconfig_cp" {
+  cluster_name     = "{{ cluster_name }}"
+  cluster_endpoint = "https://{{ cluster_load_balancer_public_ipv4_address }}:6443"
+  machine_type     = "controlplane"
+  machine_secrets  = talos_machine_secrets.machine_secrets.machine_secrets
+  
+  config_patches = [
+    yamlencode({
+      cluster = local.control_plane_cluster_config
+    })
+  ]
+}
+
+# Generate worker machine configuration
+data "talos_machine_configuration" "machineconfig_worker" {
+  cluster_name     = "{{ cluster_name }}"
+  cluster_endpoint = "https://{{ cluster_load_balancer_public_ipv4_address }}:6443"
+  machine_type     = "worker"
+  machine_secrets  = talos_machine_secrets.machine_secrets.machine_secrets
+  
+  config_patches = [
+    yamlencode(merge(
+      {
+        cluster = local.cluster_config
+      },
+      local.worker_machine_config
+    ))
+  ]
+}
 
 @each((node, index) in control_planes)
   resource "hcloud_server" "control_plane_{{ node.slug }}" {
@@ -57,6 +128,9 @@ provider "hcloud" {
   server_type = var.server_type
   location    = "{{ cluster_region }}"
   ssh_keys    = ["{{ cluster_ssh_key_id }}"]
+  
+  # Use Talos machine configuration as user data
+  user_data = data.talos_machine_configuration.machineconfig_cp.machine_configuration
   
   network {
     network_id = var.network_id
@@ -83,6 +157,9 @@ provider "hcloud" {
   server_type = var.server_type
   location    = "{{ cluster_region }}"
   ssh_keys    = ["{{ cluster_ssh_key_id }}"]
+  
+  # Use Talos machine configuration as user data
+  user_data = data.talos_machine_configuration.machineconfig_worker.machine_configuration
   
   network {
     network_id = var.network_id
@@ -152,6 +229,60 @@ resource "hcloud_server_network" "worker_{{ node.slug }}_network" {
   network_id = var.network_id
 }
 @end
+
+# Generate Talos client configuration using actual server IP addresses
+data "talos_client_configuration" "talosconfig" {
+  cluster_name         = "{{ cluster_name }}"
+  client_configuration = talos_machine_secrets.machine_secrets.client_configuration
+  endpoints            = [
+@each((node, index) in control_planes)
+    hcloud_server.control_plane_{{ node.slug }}.ipv4_address{{ index === control_planes.length - 1 ? '' : ',' }}
+@end
+  ]
+}
+
+# Apply machine configurations to nodes
+@each((node, index) in control_planes)
+resource "talos_machine_configuration_apply" "control_plane_{{ node.slug }}" {
+  client_configuration        = talos_machine_secrets.machine_secrets.client_configuration
+  machine_configuration_input = data.talos_machine_configuration.machineconfig_cp.machine_configuration
+  node                        = hcloud_server.control_plane_{{ node.slug }}.ipv4_address
+}
+@end
+
+@each((node, index) in workers)
+resource "talos_machine_configuration_apply" "worker_{{ node.slug }}" {
+  client_configuration        = talos_machine_secrets.machine_secrets.client_configuration
+  machine_configuration_input = data.talos_machine_configuration.machineconfig_worker.machine_configuration
+  node                        = hcloud_server.worker_{{ node.slug }}.ipv4_address
+}
+@end
+
+# Bootstrap the cluster on the first control plane node
+resource "talos_machine_bootstrap" "this" {
+  depends_on = [
+@each((node, index) in control_planes)
+    talos_machine_configuration_apply.control_plane_{{ node.slug }}{{ index === control_planes.length - 1 ? '' : ',' }}
+@end
+@if(workers && workers.length > 0)
+    ,
+@each((node, index) in workers)
+    talos_machine_configuration_apply.worker_{{ node.slug }}{{ index === workers.length - 1 ? '' : ',' }}
+@end
+@endif
+  ]
+  node                 = hcloud_server.control_plane_{{ control_planes[0].slug }}.ipv4_address
+  client_configuration = talos_machine_secrets.machine_secrets.client_configuration
+}
+
+# Generate kubeconfig after cluster bootstrap
+resource "talos_cluster_kubeconfig" "this" {
+  depends_on = [
+    talos_machine_bootstrap.this
+  ]
+  client_configuration = talos_machine_secrets.machine_secrets.client_configuration
+  node                 = hcloud_server.control_plane_{{ control_planes[0].slug }}.ipv4_address
+}
     
 # Summary Outputs
 output "control_plane_server_ids" {
@@ -170,4 +301,29 @@ output "worker_server_ids" {
   "{{ node.id }}" = hcloud_server.worker_{{ node.slug }}.id{{ index === workers.length - 1 ? '' : ',' }}
 @end
 }
+}
+
+# Talos Configuration Outputs
+output "talos_config" {
+  description = "Talos client configuration for managing the cluster"
+  value       = talos_machine_secrets.machine_secrets.client_configuration
+  sensitive   = true
+}
+
+output "control_plane_machine_configuration" {
+  description = "Control plane machine configuration for applying to nodes"
+  value       = data.talos_machine_configuration.machineconfig_cp.machine_configuration
+  sensitive   = true
+}
+
+output "worker_machine_configuration" {
+  description = "Worker machine configuration for applying to nodes"
+  value       = data.talos_machine_configuration.machineconfig_worker.machine_configuration
+  sensitive   = true
+}
+
+output "kubeconfig" {
+  description = "Kubeconfig for accessing the Kubernetes cluster"
+  value       = talos_cluster_kubeconfig.this.kubeconfig_raw
+  sensitive   = true
 }

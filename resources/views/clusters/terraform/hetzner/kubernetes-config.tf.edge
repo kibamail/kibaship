@@ -12,6 +12,11 @@ terraform {
       source  = "hashicorp/kubernetes"
       version = "~> 2.24"
     }
+    
+    http = {
+      source  = "hashicorp/http"
+      version = "~> 3.4.0"
+    }
   }
 
   backend "s3" {
@@ -64,6 +69,7 @@ provider "helm" {
     cluster_ca_certificate = base64decode(var.kube_cluster_ca_certificate)
   }
 }
+
 
 # Install Cilium CNI
 resource "helm_release" "cilium" {
@@ -147,4 +153,539 @@ resource "helm_release" "cilium" {
       value = "/sys/fs/cgroup"
     }
   ]
+}
+
+# Install Gateway API CRDs
+data "http" "gateway_api_crds" {
+  for_each = toset([
+    "https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.2.0/config/crd/standard/gateway.networking.k8s.io_gatewayclasses.yaml",
+    "https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.2.0/config/crd/standard/gateway.networking.k8s.io_gateways.yaml",
+    "https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.2.0/config/crd/standard/gateway.networking.k8s.io_httproutes.yaml",
+    "https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.2.0/config/crd/standard/gateway.networking.k8s.io_referencegrants.yaml",
+    "https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.2.0/config/crd/standard/gateway.networking.k8s.io_grpcroutes.yaml",
+    "https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.2.0/config/crd/experimental/gateway.networking.k8s.io_tlsroutes.yaml"
+  ])
+  url = each.value
+}
+
+resource "kubernetes_manifest" "gateway_api_crds" {
+  for_each = data.http.gateway_api_crds
+  manifest = yamldecode(each.value.response_body)
+  depends_on = [helm_release.cilium]
+}
+
+# Install Piraeus operator
+data "http" "piraeus_operator" {
+  url = "https://github.com/piraeusdatastore/piraeus-operator/releases/download/v2.9.0/manifest.yaml"
+}
+
+resource "kubernetes_manifest" "piraeus_operator" {
+  manifest = yamldecode(data.http.piraeus_operator.response_body)
+  depends_on = [kubernetes_manifest.gateway_api_crds]
+}
+
+# Create LinstorCluster
+resource "kubernetes_manifest" "linstor_cluster" {
+  manifest = {
+    apiVersion = "piraeus.io/v1"
+    kind       = "LinstorCluster"
+    metadata = {
+      name      = "linstorcluster"
+      namespace = "piraeus-datastore"
+    }
+    spec = {}
+  }
+
+  depends_on = [kubernetes_manifest.piraeus_operator]
+}
+
+# Create LinstorSatelliteConfiguration
+@each((worker, index) in workers)
+resource "kubernetes_manifest" "linstor_satellite_config_{{ worker.slug }}" {
+  manifest = {
+    apiVersion = "piraeus.io/v1"
+    kind       = "LinstorSatelliteConfiguration"
+    metadata = {
+      name      = "linstor-satellite-{{ worker.slug }}"
+      namespace = "piraeus-datastore"
+    }
+    spec = {
+      nodeSelector = {
+        "kubernetes.io/hostname" = "worker-{{ index }}"
+      }
+      storagePools = [
+        {
+          name = "linstor-satellite-{{ worker.slug }}"
+          lvmThinPool = {
+            volumeGroup = "storage-pool-lvm-{{ worker.slug }}"
+            thinPool    = "storage-pool-lvm-thin-pool-{{ worker.slug }}"
+          }
+          source = {
+            hostDevices = ["{{ worker.primary_disk_name }}"]
+          }
+        }
+      ]
+      podTemplate = {
+        spec = {
+          initContainers = [
+            {
+              name   = "drbd-shutdown-guard"
+              "$patch" = "delete"
+            },
+            {
+              name   = "drbd-module-loader"
+              "$patch" = "delete"
+            }
+          ]
+          volumes = [
+            {
+              name   = "run-systemd-system"
+              "$patch" = "delete"
+            },
+            {
+              name   = "run-drbd-shutdown-guard"
+              "$patch" = "delete"
+            },
+            {
+              name   = "systemd-bus-socket"
+              "$patch" = "delete"
+            },
+            {
+              name   = "lib-modules"
+              "$patch" = "delete"
+            },
+            {
+              name   = "usr-src"
+              "$patch" = "delete"
+            },
+            {
+              name = "etc-lvm-backup"
+              hostPath = {
+                path = "/var/etc/lvm/backup"
+                type = "DirectoryOrCreate"
+              }
+            },
+            {
+              name = "etc-lvm-archive"
+              hostPath = {
+                path = "/var/etc/lvm/archive"
+                type = "DirectoryOrCreate"
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+
+  depends_on = [kubernetes_manifest.linstor_cluster]
+}
+@end
+
+# Linstor storage class
+resource "kubernetes_manifest" "linstor_storage_class" {
+  manifest = {
+    apiVersion = "storage.k8s.io/v1"
+    kind       = "StorageClass"
+    metadata = {
+      name = "linstor-storage"
+    }
+    provisioner = "linstor.csi.linbit.com"
+    parameters = {
+      ("linstor.csi.linbit.com/storagePool") = "linstor-storage"
+    }
+    reclaimPolicy        = "Delete"
+    volumeBindingMode    = "WaitForFirstConsumer"
+    allowVolumeExpansion = true
+  }
+
+  depends_on = [
+@each(worker in workers)
+    kubernetes_manifest.linstor_satellite_config_{{ worker.slug }},
+@end
+  ]
+}
+
+# Linstor replicated storage class
+resource "kubernetes_manifest" "linstor_replicated_storage_class" {
+  manifest = {
+    apiVersion = "storage.k8s.io/v1"
+    kind       = "StorageClass"
+    metadata = {
+      name = "linstor-replicated-storage"
+    }
+    provisioner = "linstor.csi.linbit.com"
+    parameters = {
+      ("linstor.csi.linbit.com/storagePool")     = "linstor-storage"
+      ("linstor.csi.linbit.com/numberOfReplicas") = "2"
+    }
+    reclaimPolicy        = "Delete"
+    volumeBindingMode    = "WaitForFirstConsumer"
+    allowVolumeExpansion = true
+  }
+
+  depends_on = [
+@each(worker in workers)
+    kubernetes_manifest.linstor_satellite_config_{{ worker.slug }},
+@end
+  ]
+}
+
+# Install cert-manager
+resource "helm_release" "cert_manager" {
+  name             = "cert-manager"
+  repository       = "oci://quay.io/jetstack/charts"
+  chart            = "cert-manager"
+  version          = "v1.18.2"
+  namespace        = "certificates"
+  create_namespace = true
+
+  set = [
+    {
+      name  = "replicaCount"
+      value = "3"
+    },
+    {
+      name  = "crds.enabled"
+      value = "true"
+    },
+    {
+      name  = "prometheus.enabled"
+      value = "false"
+    },
+    {
+      name  = "webhook.replicaCount"
+      value = "2"
+    }
+  ]
+
+  depends_on = [helm_release.cilium]
+}
+
+# Create ClusterIssuer for Let's Encrypt with DNS-01
+resource "kubernetes_manifest" "cluster_issuer" {
+  manifest = {
+    apiVersion = "cert-manager.io/v1"
+    kind       = "ClusterIssuer"
+    metadata = {
+      name = "certmanager-acme-issuer"
+      namespace = "certificates"
+    }
+    spec = {
+      acme = {
+        email  = "{{ cluster_admin_email }}"
+        server = "https://acme-v02.api.letsencrypt.org/directory"
+        privateKeySecretRef = {
+          name = "acme-certificates-private-key"
+        }
+        solvers = [
+          {
+            dns01 = {
+              webhook = {
+                groupName = "paas.kibaship.com"
+                solverName = "paas.kibaship.com"
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+
+  depends_on = [helm_release.cert_manager]
+}
+
+# Create Certificate for wildcard SSL
+resource "kubernetes_manifest" "wildcard_certificate" {
+  manifest = {
+    apiVersion = "cert-manager.io/v1"
+    kind       = "Certificate"
+    metadata = {
+      name      = "tenant-wildcard-certificate"
+      namespace = "certificates"
+    }
+    spec = {
+      secretName = "tenant-wildcard-certificate"
+      issuerRef = {
+        name = "certmanager-acme-issuer"
+        kind = "ClusterIssuer"
+      }
+      dnsNames = [
+        "*.{{ cluster_subdomain_identifier }}"
+      ]
+    }
+  }
+
+  depends_on = [kubernetes_manifest.cluster_issuer]
+}
+
+# Create ingress-gateway namespace
+resource "kubernetes_namespace" "ingress_gateway" {
+  metadata {
+    name = "ingress-gateway"
+    
+    labels = {
+      name = "ingress-gateway"
+    }
+  }
+}
+
+# Create ingress Gateway
+resource "kubernetes_manifest" "ingress_gateway" {
+  manifest = {
+    apiVersion = "gateway.networking.k8s.io/v1"
+    kind       = "Gateway"
+    metadata = {
+      name      = "ingress-gateway"
+      namespace = "ingress-gateway"
+      annotations = {
+        "io.cilium.gateway/node-selector" = "ingress-ready=true"
+      }
+    }
+    spec = {
+      gatewayClassName = "cilium"
+      listeners = [
+        {
+          name     = "http"
+          port     = 30080
+          protocol = "HTTP"
+          allowedRoutes = {
+            namespaces = {
+              from = "All"
+            }
+          }
+        },
+        {
+          name     = "https"
+          port     = 30443
+          protocol = "HTTPS"
+          tls = {
+            certificateRefs = [
+              {
+                kind      = "Secret"
+                name      = "tenant-wildcard-certificate"
+                namespace = "certificates"
+              }
+            ]
+          }
+          allowedRoutes = {
+            namespaces = {
+              from = "All"
+            }
+          }
+        }
+      ]
+    }
+  }
+
+  depends_on = [kubernetes_namespace.ingress_gateway, helm_release.cilium]
+}
+
+# Create HTTPRoute for HTTP to HTTPS redirect
+resource "kubernetes_manifest" "ingress_httproute" {
+  manifest = {
+    apiVersion = "gateway.networking.k8s.io/v1"
+    kind       = "HTTPRoute"
+    metadata = {
+      name      = "ingress"
+      namespace = "ingress-gateway"
+    }
+    spec = {
+      parentRefs = [
+        {
+          name        = "ingress-gateway"
+          sectionName = "http"
+        }
+      ]
+      hostnames = ["*.{{ cluster_subdomain_identifier }}"]
+      rules = [
+        {
+          filters = [
+            {
+              type = "RequestRedirect"
+              requestRedirect = {
+                scheme     = "https"
+                statusCode = 301
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+
+  depends_on = [kubernetes_manifest.ingress_gateway]
+}
+
+# Create HTTPS HTTPRoute
+resource "kubernetes_manifest" "ingress_https_httproute" {
+  manifest = {
+    apiVersion = "gateway.networking.k8s.io/v1"
+    kind       = "HTTPRoute"
+    metadata = {
+      name      = "ingress-https"
+      namespace = "ingress-gateway"
+    }
+    spec = {
+      parentRefs = [
+        {
+          name        = "ingress-gateway"
+          sectionName = "https"
+        }
+      ]
+      hostnames = ["*.{{ cluster_subdomain_identifier }}"]
+    }
+  }
+
+  depends_on = [kubernetes_manifest.ingress_gateway]
+}
+
+# Create ReferenceGrant for Gateway to access certificates
+resource "kubernetes_manifest" "certificate_reference_grant" {
+  manifest = {
+    apiVersion = "gateway.networking.k8s.io/v1beta1"
+    kind       = "ReferenceGrant"
+    metadata = {
+      name      = "ingress-gateway-certificate-access"
+      namespace = "certificates"
+    }
+    spec = {
+      from = [
+        {
+          group     = "gateway.networking.k8s.io"
+          kind      = "Gateway"
+          namespace = "ingress-gateway"
+        }
+      ]
+      to = [
+        {
+          group = ""
+          kind  = "Secret"
+          name  = "tenant-wildcard-certificate"
+        }
+      ]
+    }
+  }
+
+  depends_on = [kubernetes_namespace.certificates]
+}
+
+# Create deployment-not-found deployment
+resource "kubernetes_manifest" "deployment_not_found" {
+  manifest = {
+    apiVersion = "apps/v1"
+    kind       = "Deployment"
+    metadata = {
+      name      = "deployment-not-found"
+      namespace = "ingress-gateway"
+    }
+    spec = {
+      replicas = 3
+      selector = {
+        matchLabels = {
+          app = "deployment-not-found"
+        }
+      }
+      template = {
+        metadata = {
+          labels = {
+            app = "deployment-not-found"
+          }
+        }
+        spec = {
+          containers = [
+            {
+              name  = "deployment-not-found"
+              image = "ghcr.io/kibamail/kibaship-404-deployment-not-found"
+              ports = [
+                {
+                  containerPort = 3000
+                }
+              ]
+              resources = {
+                requests = {
+                  cpu    = "100m"
+                  memory = "128Mi"
+                }
+                limits = {
+                  cpu    = "200m"
+                  memory = "256Mi"
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+
+  depends_on = [kubernetes_namespace.ingress_gateway]
+}
+
+# Create deployment-not-found service
+resource "kubernetes_manifest" "deployment_not_found_service" {
+  manifest = {
+    apiVersion = "v1"
+    kind       = "Service"
+    metadata = {
+      name      = "deployment-not-found"
+      namespace = "ingress-gateway"
+    }
+    spec = {
+      selector = {
+        app = "deployment-not-found"
+      }
+      ports = [
+        {
+          protocol   = "TCP"
+          port       = 80
+          targetPort = 3000
+        }
+      ]
+    }
+  }
+
+  depends_on = [kubernetes_manifest.deployment_not_found]
+}
+
+# Create deployment-not-found HTTPRoute
+resource "kubernetes_manifest" "deployment_not_found_httproute" {
+  manifest = {
+    apiVersion = "gateway.networking.k8s.io/v1"
+    kind       = "HTTPRoute"
+    metadata = {
+      name      = "deployment-not-found"
+      namespace = "ingress-gateway"
+    }
+    spec = {
+      parentRefs = [
+        {
+          name      = "ingress-gateway"
+          namespace = "ingress-gateway"
+        }
+      ]
+      hostnames = ["*.{{ cluster_subdomain_identifier }}"]
+      rules = [
+        {
+          matches = [
+            {
+              path = {
+                type  = "PathPrefix"
+                value = "/"
+              }
+            }
+          ]
+          backendRefs = [
+            {
+              name      = "deployment-not-found"
+              namespace = "ingress-gateway"
+              port      = 80
+            }
+          ]
+        }
+      ]
+    }
+  }
+
+  depends_on = [kubernetes_manifest.deployment_not_found_service]
 }

@@ -126,15 +126,14 @@ export default class ProvisionServersJob extends Job {
     }
 
     // Save configurations to database (encrypted)
-    const talosConfig = output.talos_config?.value as string
+    const talosConfigRaw = output.talos_config?.value as Cluster['talosConfig']
     const kubeConfig = output.kubeconfig?.value as string
 
-    if (talosConfig) {
-      cluster.talosConfig = talosConfig
+    if (talosConfigRaw) {
+      cluster.talosConfig = talosConfigRaw
     }
 
     if (kubeConfig) {
-      // Parse kubeconfig to extract components and store as object
       const kubeconfigData = yaml.parse(kubeConfig)
       const clusterData = kubeconfigData.clusters[0].cluster
       const userData = kubeconfigData.users[0].user
@@ -157,16 +156,36 @@ export default class ProvisionServersJob extends Job {
     const disk = drive.use('fs')
     const configsPath = `talos-configs/${clusterId}`
     const terraformConfigsPath = `terraform/clusters/${clusterId}/configs`
+    
+    const cluster = await Cluster.find(clusterId)
+    if (!cluster) return
 
     // Extract configurations from Terraform output
-    const talosConfig = output.talos_config?.value as string
+    const talosConfigObj = output.talos_config?.value as Cluster['talosConfig']
     const controlPlaneConfig = output.control_plane_machine_configuration?.value as string
     const workerConfig = output.worker_machine_configuration?.value as string
     const kubeConfig = output.kubeconfig?.value as string
 
-    // Save talosconfig (client configuration for talosctl)
-    if (talosConfig) {
-      await disk.put(`${configsPath}/talosconfig`, talosConfig)
+    // Generate proper talosconfig YAML structure from the client configuration object
+    if (talosConfigObj && cluster.nodes) {
+      const controlPlaneEndpoints = cluster.nodes
+        .filter(node => node.type === 'master')
+        .map(node => node.ipv4Address)
+        .filter(Boolean)
+
+      const talosConfigYaml = {
+        context: cluster.subdomainIdentifier,
+        contexts: {
+          [cluster.subdomainIdentifier]: {
+            endpoints: controlPlaneEndpoints,
+            ca: talosConfigObj.ca_certificate,
+            crt: talosConfigObj.client_certificate,
+            key: talosConfigObj.client_key
+          }
+        }
+      }
+
+      await disk.put(`${configsPath}/talosconfig`, yaml.stringify(talosConfigYaml))
     }
 
     // Save control plane machine configuration as YAML

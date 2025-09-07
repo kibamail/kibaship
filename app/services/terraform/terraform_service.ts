@@ -23,6 +23,9 @@ export interface TemplateContext {
   cluster_name: string
   cluster_talos_version: string
   cluster_talos_factory_hash: string
+  talos_ca_certificate: string | null
+  talos_client_certificate: string | null
+  talos_client_key: string | null
   cluster_region: string
   cluster_network_id: string
   cluster_network_ip_range: string
@@ -36,6 +39,8 @@ export interface TemplateContext {
   s3_bucket: string
   cluster_talos_image: string
   cluster_ssh_key_id: string
+  cluster_admin_email: string
+  cluster_subdomain_identifier: string
   control_planes: Array<ModelObject & {
     id: string
     slug: string
@@ -255,9 +260,11 @@ export class TerraformService {
       /** Core cluster identifiers used across multiple templates */
       cluster_id: cluster.id,                  // Used by: servers.tf.edge, load-balancers.tf.edge, tagging
       cluster_name: cluster.subdomainIdentifier, // Used by: all templates for resource naming
+      cluster_subdomain_identifier: cluster.subdomainIdentifier,
       cluster_region: cluster.location,        // Used by: servers.tf.edge, talos-image.tf.edge, volumes.tf.edge
       location: cluster.location,              // Used by: volumes.tf.edge (legacy alias for cluster_region)
-      
+      cluster_admin_email: cluster.workspace?.user?.email as string,
+
       // =============================================================================
       // INFRASTRUCTURE VARIABLES - Used by multiple infrastructure templates
       // =============================================================================
@@ -279,6 +286,10 @@ export class TerraformService {
       cluster_talos_version: cluster.talosVersion || talosVersion, // Used by: talos-image.tf.edge
       cluster_talos_image: cluster.providerImageId as string, // Used by: servers.tf.edge
       cluster_talos_factory_hash: talosFactoryHash, // Used by: talos-image.tf.edge
+      // Individual talos certificate fields for volumes.tf.edge talos_machine_disks
+      talos_ca_certificate: cluster.talosConfig?.ca_certificate || null,
+      talos_client_certificate: cluster.talosConfig?.client_certificate || null,
+      talos_client_key: cluster.talosConfig?.client_key || null,
 
       // =============================================================================
       // NODE ARRAYS - Used by servers.tf.edge and kubernetes.tf.edge

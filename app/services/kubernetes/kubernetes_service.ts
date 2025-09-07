@@ -62,10 +62,6 @@ export class KubernetesService {
       currentContext: context.name,
     }
 
-    console.log('kubeconfig:', this.cluster.kubeconfig)
-
-    console.log('kubeconfig for cluster:', k8sConfigurationOptions)
-
     // Load the configuration
     this.kubeConfig.loadFromOptions(k8sConfigurationOptions)
   }

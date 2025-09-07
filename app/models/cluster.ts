@@ -240,11 +240,15 @@ export default class Cluster extends BaseModel {
       } | null
 
   @column({
-    prepare: value => value ? encryption.encrypt(value) : null,
-    consume: value => value ? encryption.decrypt(value) || '' : null,
+    prepare: value => value ? encryption.encrypt(JSON.stringify(value)) : null,
+    consume: value => value ? JSON.parse(encryption.decrypt(value) || '{}') : null,
     serializeAs: null
   })
-  declare talosConfig: string | null
+  declare talosConfig: {
+    ca_certificate: string
+    client_certificate: string
+    client_key: string
+  } | null
 
   @hasMany(() => Project)
   declare projects: HasMany<typeof Project>
@@ -425,6 +429,9 @@ export default class Cluster extends BaseModel {
       .preload('loadBalancers')
       .preload('nodes')
       .preload('sshKey')
+      .preload('workspace', query => {
+        query.preload('user')
+      })
       .preload('nodes', (nodesQuery) => nodesQuery.preload('storages'))
       .first()
   }

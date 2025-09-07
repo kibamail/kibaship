@@ -255,7 +255,7 @@ export class TerraformExecutor {
       .onStderr(async (data) => {
         await this.logToStream(`${command}_stderr`, data)
 
-        logger.error(`${command}_stderr: ${data.substring(0, 500)}...`)
+        logger.error(`${command}_stderr: ${data.substring(0, 1000)}...`)
       })
       .onClose(async (code) => {
         const message = `Terraform ${command} exited with code: ${code}`

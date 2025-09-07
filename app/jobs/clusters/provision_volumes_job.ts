@@ -67,12 +67,13 @@ export default class ProvisionVolumesJob extends Job {
 
       await this.createOrUpdateVolumes(cluster.id, output)
 
-      cluster.volumesCompletedAt = DateTime.now()
+      cluster.volumesErrorAt = DateTime.now()
 
       await cluster.save()
 
       await queue.dispatch(ProvisionKubernetesConfigJob, payload)
     } catch (error) {
+      console.error(error)
       cluster.volumesErrorAt = DateTime.now()
 
       await cluster.save()

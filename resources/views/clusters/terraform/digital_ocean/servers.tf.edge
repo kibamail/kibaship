@@ -271,7 +271,7 @@ output "worker_server_ids" {
 # Talos Configuration Outputs
 output "talos_config" {
   description = "Talos client configuration for managing the cluster"
-  value       = data.talos_client_configuration.talosconfig.talos_config
+  value       = talos_machine_secrets.machine_secrets.client_configuration
   sensitive   = true
 }
 
