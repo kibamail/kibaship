@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { talosFactoryHash, talosVersion } from '#config/app'
 import Cluster from '#models/cluster'
 import { ModelObject } from '@adonisjs/lucid/types/model'
-import { TEKTON_CRD_FILES, PIRAEUS_CRD_FILES } from './constants.js'
+import { TEKTON_CRD_FILES, PIRAEUS_CRD_FILES, GATEWAY_CRD_FILES } from './constants.js'
 
 export enum TerraformTemplate {
   TALOS_IMAGE = 'talos-image.tf',
@@ -33,6 +33,10 @@ export interface TemplateContext {
     readonly url: string
   }>
   tekton_crd_files: ReadonlyArray<{
+    readonly name: string
+    readonly url: string
+  }>
+  gateway_crd_files: ReadonlyArray<{
     readonly name: string
     readonly url: string
   }>
@@ -306,6 +310,7 @@ export class TerraformService {
 
       // Tekton CRD files for kubernetes-config.tf.edge or kubernetes-boot.tf.edge
       tekton_crd_files: TEKTON_CRD_FILES,
+      gateway_crd_files: GATEWAY_CRD_FILES,
 
       // =============================================================================
       // NODE ARRAYS - Used by servers.tf.edge and kubernetes.tf.edge

@@ -489,6 +489,12 @@ export default class Cluster extends BaseModel {
         if (this.kubernetesConfigStartedAt) return 'in_progress'
         return 'pending'
       
+      case 'kubernetes-boot':
+        if (this.kubernetesBootCompletedAt) return 'completed'
+        if (this.kubernetesBootErrorAt) return 'failed'
+        if (this.kubernetesBootStartedAt) return 'in_progress'
+        return 'pending'
+      
       case 'dns':
         if (this.dnsCompletedAt) return 'completed'
         if (this.dnsErrorAt) return 'failed'
@@ -511,6 +517,7 @@ export default class Cluster extends BaseModel {
       'servers',
       'volumes',
       'kubernetes-config',
+      'kubernetes-boot',
       'dns',
     ]
 
@@ -531,6 +538,7 @@ export default class Cluster extends BaseModel {
       'servers',
       'volumes',
       'kubernetes-config',
+      'kubernetes-boot',
       'dns',
     ]
 
@@ -561,6 +569,7 @@ export default class Cluster extends BaseModel {
       'servers',
       'volumes',
       'kubernetes-config',
+      'kubernetes-boot'
     ]
 
     for (const stage of stages) {

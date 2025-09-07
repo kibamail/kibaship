@@ -78,6 +78,12 @@ const provisioningSteps: ProvisioningStepInfo[] = [
     icon: <K8sIcon className="!size-5" />,
   },
   {
+    stage: 'kubernetes-boot',
+    title: 'Boot kubernetes cluster',
+    description: 'Booting and initializing the kubernetes cluster services',
+    icon: <K8sIcon className="!size-5" />,
+  },
+  {
     stage: 'dns',
     title: 'DNS configuration',
     description: 'Setup DNS for the cluster ingress.',

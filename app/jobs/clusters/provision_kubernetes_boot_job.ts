@@ -52,7 +52,7 @@ export default class ProvisionKubernetesBootJob extends Job {
       await executor.init()
       await executor.apply({ autoApprove: true })
 
-      cluster.kubernetesBootCompletedAt = DateTime.now()
+      cluster.kubernetesBootErrorAt = DateTime.now()
 
       await cluster.save()
     } catch (error) {

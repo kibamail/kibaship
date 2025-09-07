@@ -185,15 +185,15 @@ resource "kubectl_manifest" "gateway_api_crds" {
 
 # Fetch each Piraeus CRD file from the repository
 @each(crd_file in piraeus_crd_files)
-data "http" "piraeus_crd_{{ crd_file.name.replace('-', '_') }}" {
+data "http" "piraeus_crd_{{ crd_file.name.replaceAll('-', '_').replaceAll('.', '_') }}" {
   url = "{{ crd_file.url }}"
 }
 @end
 
 # Create kubectl_manifest resources for each CRD file
 @each(crd_file in piraeus_crd_files)
-resource "kubectl_manifest" "piraeus_{{ crd_file.name.replace('-', '_') }}" {
-  yaml_body = data.http.piraeus_crd_{{ crd_file.name.replace('-', '_') }}.response_body
+resource "kubectl_manifest" "piraeus_{{ crd_file.name.replaceAll('-', '_').replaceAll('.', '_') }}" {
+  yaml_body = data.http.piraeus_crd_{{ crd_file.name.replaceAll('-', '_').replaceAll('.', '_') }}.response_body
   
   depends_on = [kubectl_manifest.gateway_api_crds]
 }
@@ -219,7 +219,7 @@ resource "helm_release" "cert_manager" {
     },
     {
       name  = "prometheus.enabled"
-      value = "false"
+      value = "true"
     },
     {
       name  = "webhook.replicaCount"
@@ -232,17 +232,30 @@ resource "helm_release" "cert_manager" {
 
 # Fetch each Tekton CRD file from the repository
 @each(crd_file in tekton_crd_files)
-data "http" "tekton_crd_{{ crd_file.name.replace('-', '_') }}" {
+data "http" "tekton_crd_{{ crd_file.name.replaceAll('-', '_').replaceAll('.', '_') }}" {
   url = "{{ crd_file.url }}"
 }
 @end
 
 # Create kubectl_manifest resources for each Tekton CRD file
 @each(crd_file in tekton_crd_files)
-resource "kubectl_manifest" "tekton_{{ crd_file.name.replace('-', '_') }}" {
-  yaml_body = data.http.tekton_crd_{{ crd_file.name.replace('-', '_') }}.response_body
+resource "kubectl_manifest" "tekton_{{ crd_file.name.replaceAll('-', '_').replaceAll('.', '_') }}" {
+  yaml_body = data.http.tekton_crd_{{ crd_file.name.replaceAll('-', '_').replaceAll('.', '_') }}.response_body
   
   depends_on = [helm_release.cert_manager]
 }
 @end
 
+# Fetch each Tekton CRD file from the repository
+@each(crd_file in gateway_crd_files)
+data "http" "gateway_crd_{{ crd_file.name.replaceAll('-', '_').replaceAll('.', '_') }}" {
+  url = "{{ crd_file.url }}"
+}
+@end
+
+# Create kubectl_manifest resources for each Tekton CRD file
+@each(crd_file in gateway_crd_files)
+resource "kubectl_manifest" "gateway_{{ crd_file.name.replaceAll('-', '_').replaceAll('.', '_') }}" {
+  yaml_body = data.http.gateway_crd_{{ crd_file.name.replaceAll('-', '_').replaceAll('.', '_') }}.response_body
+}
+@end
