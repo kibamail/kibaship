@@ -4,9 +4,9 @@ import Cluster from '#models/cluster'
 import ClusterNodeStorage from '#models/cluster_node_storage'
 import { TerraformExecutor } from '#services/terraform/terraform_executor'
 import { TerraformService, TerraformTemplate } from '#services/terraform/terraform_service'
+import { TalosDetectionService } from '#services/talos/talos_detection_service'
 import { DateTime } from 'luxon'
 import ProvisionKubernetesConfigJob from './provision_kubernetes_config_job.js'
-import { writeFile, writeFileSync } from 'fs'
 
 interface ProvisionVolumesJobPayload {
   clusterId: string
@@ -14,8 +14,29 @@ interface ProvisionVolumesJobPayload {
 
 interface TerraformOutputValue {
   sensitive: boolean
-  type: string
+  type: string | string[]
   value: string | number | object
+}
+
+interface TalosDisk {
+  bus_path: string
+  cdrom: boolean
+  dev_path: string
+  io_size: number
+  modalias: string
+  model: string
+  pretty_size: string
+  readonly: boolean
+  rotational: boolean
+  secondary_disks: string[]
+  sector_size: number
+  serial: string
+  size: number
+  sub_system: string
+  symlinks: string[]
+  transport: string
+  uuid: string
+  wwid: string
 }
 
 interface VolumesOutput {
@@ -25,6 +46,11 @@ interface VolumesOutput {
   // Summary output with all volume IDs mapped by slug
   volume_ids: TerraformOutputValue & {
     value: Record<string, string>
+  }
+  
+  // Talos disk discovery outputs mapped by node slug
+  all_worker_disks: TerraformOutputValue & {
+    value: Record<string, TalosDisk[]>
   }
 }
 
@@ -66,9 +92,18 @@ export default class ProvisionVolumesJob extends Job {
       const { stdout } = await executor.output()
       const output = JSON.parse(stdout as string) as VolumesOutput
 
-      writeFileSync(`volumes-${cluster.id}.json`, JSON.stringify(output, null, 2))
-
       await this.createOrUpdateVolumes(cluster.id, output)
+
+      // After volumes are created, match disks with volume outputs
+      const nodes = await cluster.related('nodes').query().preload('storages')
+      const talosDetectionService = new TalosDetectionService(cluster.id)
+
+      for (const node of nodes) {
+        const result = await talosDetectionService.matchAndUpdateDisks(node, output)
+        if (!result.success) {
+          throw new Error(`Failed to match disks for ${node.slug}: ${result.error}`)
+        }
+      }
 
       cluster.volumesCompletedAt = DateTime.now()
 

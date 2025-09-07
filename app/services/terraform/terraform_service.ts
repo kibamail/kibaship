@@ -26,6 +26,10 @@ export interface TemplateContext {
   talos_ca_certificate: string | null
   talos_client_certificate: string | null
   talos_client_key: string | null
+  piraeus_crd_files: Array<{
+    name: string
+    url: string
+  }>
   cluster_region: string
   cluster_network_id: string
   cluster_network_ip_range: string
@@ -290,6 +294,90 @@ export class TerraformService {
       talos_ca_certificate: cluster.talosConfig?.ca_certificate || null,
       talos_client_certificate: cluster.talosConfig?.client_certificate || null,
       talos_client_key: cluster.talosConfig?.client_key || null,
+
+      // Piraeus CRD files for kubernetes-config.tf.edge
+      piraeus_crd_files: [
+        {
+          name: "01-namespace",
+          url: "https://raw.githubusercontent.com/kibamail/kibaship/main/crds/linstor/v2.9.0/01-namespace.yaml"
+        },
+        {
+          name: "02-crd-linstor-clusters",
+          url: "https://raw.githubusercontent.com/kibamail/kibaship/main/crds/linstor/v2.9.0/02-crd-linstor-clusters.yaml"
+        },
+        {
+          name: "03-crd-linstor-node-connections",
+          url: "https://raw.githubusercontent.com/kibamail/kibaship/main/crds/linstor/v2.9.0/03-crd-linstor-node-connections.yaml"
+        },
+        {
+          name: "04-crd-linstor-satellite-configurations",
+          url: "https://raw.githubusercontent.com/kibamail/kibaship/main/crds/linstor/v2.9.0/04-crd-linstor-satellite-configurations.yaml"
+        },
+        {
+          name: "05-crd-linstor-satellites",
+          url: "https://raw.githubusercontent.com/kibamail/kibaship/main/crds/linstor/v2.9.0/05-crd-linstor-satellites.yaml"
+        },
+        {
+          name: "06-service-account-piraeus-datastore",
+          url: "https://raw.githubusercontent.com/kibamail/kibaship/main/crds/linstor/v2.9.0/06-service-account-piraeus-datastore.yaml"
+        },
+        {
+          name: "07-service-account-piraeus-operator-gencert",
+          url: "https://raw.githubusercontent.com/kibamail/kibaship/main/crds/linstor/v2.9.0/07-service-account-piraeus-operator-gencert.yaml"
+        },
+        {
+          name: "08-role-piraeus-operator-gencert",
+          url: "https://raw.githubusercontent.com/kibamail/kibaship/main/crds/linstor/v2.9.0/08-role-piraeus-operator-gencert.yaml"
+        },
+        {
+          name: "09-role-piraeus-operator-leader-election-role",
+          url: "https://raw.githubusercontent.com/kibamail/kibaship/main/crds/linstor/v2.9.0/09-role-piraeus-operator-leader-election-role.yaml"
+        },
+        {
+          name: "10-cluster-role-piraeus-operator-controller-manager",
+          url: "https://raw.githubusercontent.com/kibamail/kibaship/main/crds/linstor/v2.9.0/10-cluster-role-piraeus-operator-controller-manager.yaml"
+        },
+        {
+          name: "11-cluster-role-piraeus-operator-gencert",
+          url: "https://raw.githubusercontent.com/kibamail/kibaship/main/crds/linstor/v2.9.0/11-cluster-role-piraeus-operator-gencert.yaml"
+        },
+        {
+          name: "12-role-binding-piraeus-operator-gencert",
+          url: "https://raw.githubusercontent.com/kibamail/kibaship/main/crds/linstor/v2.9.0/12-role-binding-piraeus-operator-gencert.yaml"
+        },
+        {
+          name: "13-role-binding-piraeus-operator-leader-election-rolebinding",
+          url: "https://raw.githubusercontent.com/kibamail/kibaship/main/crds/linstor/v2.9.0/13-role-binding-piraeus-operator-leader-election-rolebinding.yaml"
+        },
+        {
+          name: "14-cluster-role-binding-piraeus-operator-gencert",
+          url: "https://raw.githubusercontent.com/kibamail/kibaship/main/crds/linstor/v2.9.0/14-cluster-role-binding-piraeus-operator-gencert.yaml"
+        },
+        {
+          name: "15-cluster-role-binding-piraeus-operator-manager-rolebinding",
+          url: "https://raw.githubusercontent.com/kibamail/kibaship/main/crds/linstor/v2.9.0/15-cluster-role-binding-piraeus-operator-manager-rolebinding.yaml"
+        },
+        {
+          name: "16-config-map-piraeus-operator-image-config",
+          url: "https://raw.githubusercontent.com/kibamail/kibaship/main/crds/linstor/v2.9.0/16-config-map-piraeus-operator-image-config.yaml"
+        },
+        {
+          name: "17-piraeus-operator-webhook-service",
+          url: "https://raw.githubusercontent.com/kibamail/kibaship/main/crds/linstor/v2.9.0/17-piraeus-operator-webhook-service.yaml"
+        },
+        {
+          name: "18-deployment-piraeus-operator-controller-manager",
+          url: "https://raw.githubusercontent.com/kibamail/kibaship/main/crds/linstor/v2.9.0/18-deployment-piraeus-operator-controller-manager.yaml"
+        },
+        {
+          name: "19-piraeus-operator-gencert",
+          url: "https://raw.githubusercontent.com/kibamail/kibaship/main/crds/linstor/v2.9.0/19-piraeus-operator-gencert.yaml"
+        },
+        {
+          name: "20-validating-webhook-configuration-piraeus-operator-validating-webhook-configuration",
+          url: "https://raw.githubusercontent.com/kibamail/kibaship/main/crds/linstor/v2.9.0/20-validating-webhook-configuration-piraeus-operator-validating-webhook-configuration.yaml"
+        }
+      ],
 
       // =============================================================================
       // NODE ARRAYS - Used by servers.tf.edge and kubernetes.tf.edge

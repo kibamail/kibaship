@@ -181,41 +181,31 @@ resource "kubectl_manifest" "gateway_api_crds" {
   depends_on = [helm_release.cilium]
 }
 
-# Install Piraeus operator
-data "http" "piraeus_operator" {
-  url = "https://github.com/piraeusdatastore/piraeus-operator/releases/download/v2.9.0/manifest.yaml"
-}
+# Install Piraeus operator using individual CRD files from kibaship repository
 
-locals {
-  piraeus_operator_manifests = [
-    for manifest in split("---", data.http.piraeus_operator.response_body) :
-    manifest if length(trimspace(manifest)) > 0
+# Fetch each Piraeus CRD file from the repository
+@each(crd_file in piraeus_crd_files)
+data "http" "piraeus_crd_{{ crd_file.name.replace('-', '_') }}" {
+  url = "{{ crd_file.url }}"
+}
+@end
+
+# Create kubectl_manifest resources for each CRD file
+@each(crd_file in piraeus_crd_files)
+resource "kubectl_manifest" "piraeus_{{ crd_file.name.replace('-', '_') }}" {
+  yaml_body = data.http.piraeus_crd_{{ crd_file.name.replace('-', '_') }}.response_body
+  
+  depends_on = [kubectl_manifest.gateway_api_crds]
+}
+@end
+
+# Wait for Piraeus operator to be ready before creating LinstorCluster
+resource "time_sleep" "wait_for_piraeus" {
+  create_duration = "30s"
+  depends_on = [
+@each((crd_file, index) in piraeus_crd_files)
+    kubectl_manifest.piraeus_{{ crd_file.name.replace('-', '_') }}{{ index === piraeus_crd_files.length - 1 ? '' : ',' }}
+@end
   ]
 }
 
-resource "kubectl_manifest" "linstor_piraeus_operator" {
-  # Create a resource for each individual YAML document.
-  for_each = toset(local.piraeus_operator_manifests)
-
-  wait              = true
-  server_side_apply = true
-  yaml_body         = each.value
-
-  depends_on = [kubectl_manifest.gateway_api_crds]
-}
-
-{{--  # Create LinstorCluster
-resource "kubernetes_manifest" "linstor_cluster" {
-  manifest = {
-    apiVersion = "piraeus.io/v1"
-    kind       = "LinstorCluster"
-    metadata = {
-      name      = "linstorcluster"
-      namespace = "piraeus-datastore"
-    }
-    spec = {}
-  }
-
-  depends_on = [kubectl_manifest.linstor_piraeus_operator]
-}
-  --}}

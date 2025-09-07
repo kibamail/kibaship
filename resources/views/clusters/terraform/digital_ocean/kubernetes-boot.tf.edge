@@ -1,0 +1,202 @@
+terraform {
+  required_providers {
+    helm = {
+      source  = "hashicorp/helm"
+      version = "~> 3.0.2"
+    }
+    
+    kubernetes = {
+      source  = "hashicorp/kubernetes"
+      version = "~> 2.38.0"
+    }
+    
+    http = {
+      source  = "hashicorp/http"
+      version = "~> 3.4.0"
+    }
+
+    kubectl = {
+      source  = "gavinbunney/kubectl"
+      version = "~> 1.19.0"
+    }
+  }
+
+  backend "s3" {
+    bucket = "{{ s3_bucket }}"
+    key    = "clusters/{{ cluster_id }}/kubernetes-boot/terraform.tfstate"
+    region = "{{ s3_region }}"
+    encrypt = true
+  }
+}
+
+# Variables for kubeconfig components
+variable "kube_host" {
+  type        = string
+  description = "Kubernetes cluster host"
+  sensitive   = true
+}
+
+variable "kube_client_certificate" {
+  type        = string
+  description = "Kubernetes client certificate"
+  sensitive   = true
+}
+
+variable "kube_client_key" {
+  type        = string
+  description = "Kubernetes client key"
+  sensitive   = true
+}
+
+variable "kube_cluster_ca_certificate" {
+  type        = string
+  description = "Kubernetes cluster CA certificate"
+  sensitive   = true
+}
+
+# Configure Kubernetes provider
+provider "kubernetes" {
+  host                   = var.kube_host
+  client_certificate     = base64decode(var.kube_client_certificate)
+  client_key            = base64decode(var.kube_client_key)
+  cluster_ca_certificate = base64decode(var.kube_cluster_ca_certificate)
+}
+
+# Configure Helm provider
+provider "helm" {
+  kubernetes = {
+    host                   = var.kube_host
+    client_certificate     = base64decode(var.kube_client_certificate)
+    client_key            = base64decode(var.kube_client_key)
+    cluster_ca_certificate = base64decode(var.kube_cluster_ca_certificate)
+  }
+}
+
+# Configure kubectl provider
+provider "kubectl" {
+  host                   = var.kube_host
+  client_certificate     = base64decode(var.kube_client_certificate)
+  client_key            = base64decode(var.kube_client_key)
+  cluster_ca_certificate = base64decode(var.kube_cluster_ca_certificate)
+  load_config_file       = false
+}
+
+# Create LinstorCluster
+resource "kubectl_manifest" "linstor_cluster" {
+  yaml_body = <<-EOF
+    apiVersion: piraeus.io/v1
+    kind: LinstorCluster
+    metadata:
+      name: linstorcluster
+      namespace: piraeus-datastore
+    spec: {}
+  EOF
+
+  depends_on = [time_sleep.wait_for_piraeus]
+}
+
+# Create LinstorSatelliteConfiguration
+@each((worker, index) in workers)
+resource "kubernetes_manifest" "linstor_satellite_config_{{ worker.slug }}" {
+  manifest = {
+    apiVersion = "piraeus.io/v1"
+    kind       = "LinstorSatelliteConfiguration"
+    metadata = {
+      name      = "linstor-satellite-{{ worker.slug }}"
+    }
+    spec = {
+      nodeSelector = {
+        "kubernetes.io/hostname" = "worker-{{ index }}"
+      }
+      storagePools = [
+        {
+          name = "linstor-storage"
+          lvmThinPool = {
+            volumeGroup = "storage-pool-lvm"
+            thinPool    = "storage-pool-lvm"
+          }
+          source = {
+            hostDevices = ["{{ worker.primary_disk_name }}"]
+          }
+        }
+      ]
+      podTemplate = {
+        spec = {
+          initContainers = [
+            {
+              name   = "drbd-shutdown-guard"
+              "$patch" = "delete"
+            },
+            {
+              name   = "drbd-module-loader"
+              "$patch" = "delete"
+            }
+          ]
+          volumes = [
+            {
+              name   = "run-systemd-system"
+              "$patch" = "delete"
+            },
+            {
+              name   = "run-drbd-shutdown-guard"
+              "$patch" = "delete"
+            },
+            {
+              name   = "systemd-bus-socket"
+              "$patch" = "delete"
+            },
+            {
+              name   = "lib-modules"
+              "$patch" = "delete"
+            },
+            {
+              name   = "usr-src"
+              "$patch" = "delete"
+            },
+            {
+              name = "etc-lvm-backup"
+              hostPath = {
+                path = "/var/etc/lvm/backup"
+                type = "DirectoryOrCreate"
+              }
+            },
+            {
+              name = "etc-lvm-archive"
+              hostPath = {
+                path = "/var/etc/lvm/archive"
+                type = "DirectoryOrCreate"
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+
+  depends_on = [kubectl_manifest.linstor_cluster]
+}
+@end
+
+# Linstor storage class
+resource "kubernetes_manifest" "linstor_storage_class" {
+  manifest = {
+    apiVersion = "storage.k8s.io/v1"
+    kind       = "StorageClass"
+    metadata = {
+      name = "linstor-storage"
+    }
+    provisioner = "linstor.csi.linbit.com"
+    parameters = {
+      "linstor.csi.linbit.com/storagePool" = "linstor-storage"
+    }
+    reclaimPolicy        = "Delete"
+    volumeBindingMode    = "WaitForFirstConsumer"
+    allowVolumeExpansion = true
+  }
+
+  depends_on = [
+@each(worker in worker_nodes)
+    "kubernetes_manifest.linstor_satellite_config_{{ worker.slug }}",
+@end
+  ]
+}
