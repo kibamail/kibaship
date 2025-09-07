@@ -6,6 +6,7 @@ import { TerraformExecutor } from '#services/terraform/terraform_executor'
 import { TerraformService, TerraformTemplate } from '#services/terraform/terraform_service'
 import { DateTime } from 'luxon'
 import ProvisionKubernetesConfigJob from './provision_kubernetes_config_job.js'
+import { writeFile, writeFileSync } from 'fs'
 
 interface ProvisionVolumesJobPayload {
   clusterId: string
@@ -65,9 +66,11 @@ export default class ProvisionVolumesJob extends Job {
       const { stdout } = await executor.output()
       const output = JSON.parse(stdout as string) as VolumesOutput
 
+      writeFileSync(`volumes-${cluster.id}.json`, JSON.stringify(output, null, 2))
+
       await this.createOrUpdateVolumes(cluster.id, output)
 
-      cluster.volumesErrorAt = DateTime.now()
+      cluster.volumesCompletedAt = DateTime.now()
 
       await cluster.save()
 

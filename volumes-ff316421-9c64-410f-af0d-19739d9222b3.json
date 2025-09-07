@@ -1,0 +1,1043 @@
+{
+  "all_worker_disks": {
+    "sensitive": false,
+    "type": [
+      "object",
+      {
+        "CThCmZ2erI": [
+          "list",
+          [
+            "object",
+            {
+              "bus_path": "string",
+              "cdrom": "bool",
+              "dev_path": "string",
+              "io_size": "number",
+              "modalias": "string",
+              "model": "string",
+              "pretty_size": "string",
+              "readonly": "bool",
+              "rotational": "bool",
+              "secondary_disks": [
+                "list",
+                "string"
+              ],
+              "sector_size": "number",
+              "serial": "string",
+              "size": "number",
+              "sub_system": "string",
+              "symlinks": [
+                "list",
+                "string"
+              ],
+              "transport": "string",
+              "uuid": "string",
+              "wwid": "string"
+            }
+          ]
+        ],
+        "jxDxqlT2Ki": [
+          "list",
+          [
+            "object",
+            {
+              "bus_path": "string",
+              "cdrom": "bool",
+              "dev_path": "string",
+              "io_size": "number",
+              "modalias": "string",
+              "model": "string",
+              "pretty_size": "string",
+              "readonly": "bool",
+              "rotational": "bool",
+              "secondary_disks": [
+                "list",
+                "string"
+              ],
+              "sector_size": "number",
+              "serial": "string",
+              "size": "number",
+              "sub_system": "string",
+              "symlinks": [
+                "list",
+                "string"
+              ],
+              "transport": "string",
+              "uuid": "string",
+              "wwid": "string"
+            }
+          ]
+        ],
+        "oKzYQ827Vd": [
+          "list",
+          [
+            "object",
+            {
+              "bus_path": "string",
+              "cdrom": "bool",
+              "dev_path": "string",
+              "io_size": "number",
+              "modalias": "string",
+              "model": "string",
+              "pretty_size": "string",
+              "readonly": "bool",
+              "rotational": "bool",
+              "secondary_disks": [
+                "list",
+                "string"
+              ],
+              "sector_size": "number",
+              "serial": "string",
+              "size": "number",
+              "sub_system": "string",
+              "symlinks": [
+                "list",
+                "string"
+              ],
+              "transport": "string",
+              "uuid": "string",
+              "wwid": "string"
+            }
+          ]
+        ],
+        "oye1sPkDYP": [
+          "list",
+          [
+            "object",
+            {
+              "bus_path": "string",
+              "cdrom": "bool",
+              "dev_path": "string",
+              "io_size": "number",
+              "modalias": "string",
+              "model": "string",
+              "pretty_size": "string",
+              "readonly": "bool",
+              "rotational": "bool",
+              "secondary_disks": [
+                "list",
+                "string"
+              ],
+              "sector_size": "number",
+              "serial": "string",
+              "size": "number",
+              "sub_system": "string",
+              "symlinks": [
+                "list",
+                "string"
+              ],
+              "transport": "string",
+              "uuid": "string",
+              "wwid": "string"
+            }
+          ]
+        ],
+        "yIepqUH2cg": [
+          "list",
+          [
+            "object",
+            {
+              "bus_path": "string",
+              "cdrom": "bool",
+              "dev_path": "string",
+              "io_size": "number",
+              "modalias": "string",
+              "model": "string",
+              "pretty_size": "string",
+              "readonly": "bool",
+              "rotational": "bool",
+              "secondary_disks": [
+                "list",
+                "string"
+              ],
+              "sector_size": "number",
+              "serial": "string",
+              "size": "number",
+              "sub_system": "string",
+              "symlinks": [
+                "list",
+                "string"
+              ],
+              "transport": "string",
+              "uuid": "string",
+              "wwid": "string"
+            }
+          ]
+        ]
+      }
+    ],
+    "value": {
+      "CThCmZ2erI": [
+        {
+          "bus_path": "/pci0000:00/0000:00:05.0/virtio3/host2/target2:0:0/2:0:0:1",
+          "cdrom": false,
+          "dev_path": "/dev/sda",
+          "io_size": 512,
+          "modalias": "scsi:t-0x00",
+          "model": "Volume",
+          "pretty_size": "43 GB",
+          "readonly": false,
+          "rotational": true,
+          "secondary_disks": [],
+          "sector_size": 512,
+          "serial": "",
+          "size": 42949672960,
+          "sub_system": "/sys/class/block",
+          "symlinks": [
+            "/dev/disk/by-diskseq/13",
+            "/dev/disk/by-id/scsi-0DO_Volume_volume-gmnliptjsnga",
+            "/dev/disk/by-path/pci-0000:00:05.0-scsi-0:0:0:1",
+            "/dev/disk/by-uuid/f18bbbcb-db97-452c-ad3d-3b50ace2e666"
+          ],
+          "transport": "virtio",
+          "uuid": "",
+          "wwid": ""
+        },
+        {
+          "bus_path": "/pci0000:00/0000:00:06.0/virtio4",
+          "cdrom": false,
+          "dev_path": "/dev/vda",
+          "io_size": 512,
+          "modalias": "virtio:d00000002v00001AF4",
+          "model": "",
+          "pretty_size": "97 GB",
+          "readonly": false,
+          "rotational": true,
+          "secondary_disks": [],
+          "sector_size": 512,
+          "serial": "",
+          "size": 96636764160,
+          "sub_system": "/sys/class/block",
+          "symlinks": [
+            "/dev/disk/by-diskseq/11",
+            "/dev/disk/by-path/pci-0000:00:06.0",
+            "/dev/disk/by-path/virtio-pci-0000:00:06.0"
+          ],
+          "transport": "virtio",
+          "uuid": "",
+          "wwid": ""
+        }
+      ],
+      "jxDxqlT2Ki": [
+        {
+          "bus_path": "/pci0000:00/0000:00:05.0/virtio3/host2/target2:0:0/2:0:0:1",
+          "cdrom": false,
+          "dev_path": "/dev/sda",
+          "io_size": 512,
+          "modalias": "scsi:t-0x00",
+          "model": "Volume",
+          "pretty_size": "43 GB",
+          "readonly": false,
+          "rotational": true,
+          "secondary_disks": [],
+          "sector_size": 512,
+          "serial": "",
+          "size": 42949672960,
+          "sub_system": "/sys/class/block",
+          "symlinks": [
+            "/dev/disk/by-diskseq/13",
+            "/dev/disk/by-id/scsi-0DO_Volume_volume-abvyszefozqm",
+            "/dev/disk/by-path/pci-0000:00:05.0-scsi-0:0:0:1",
+            "/dev/disk/by-uuid/c1435825-d263-4c19-82e1-1234bf642a55"
+          ],
+          "transport": "virtio",
+          "uuid": "",
+          "wwid": ""
+        },
+        {
+          "bus_path": "/pci0000:00/0000:00:06.0/virtio4",
+          "cdrom": false,
+          "dev_path": "/dev/vda",
+          "io_size": 512,
+          "modalias": "virtio:d00000002v00001AF4",
+          "model": "",
+          "pretty_size": "97 GB",
+          "readonly": false,
+          "rotational": true,
+          "secondary_disks": [],
+          "sector_size": 512,
+          "serial": "",
+          "size": 96636764160,
+          "sub_system": "/sys/class/block",
+          "symlinks": [
+            "/dev/disk/by-diskseq/11",
+            "/dev/disk/by-path/pci-0000:00:06.0",
+            "/dev/disk/by-path/virtio-pci-0000:00:06.0"
+          ],
+          "transport": "virtio",
+          "uuid": "",
+          "wwid": ""
+        }
+      ],
+      "oKzYQ827Vd": [
+        {
+          "bus_path": "/pci0000:00/0000:00:05.0/virtio3/host2/target2:0:0/2:0:0:1",
+          "cdrom": false,
+          "dev_path": "/dev/sda",
+          "io_size": 512,
+          "modalias": "scsi:t-0x00",
+          "model": "Volume",
+          "pretty_size": "43 GB",
+          "readonly": false,
+          "rotational": true,
+          "secondary_disks": [],
+          "sector_size": 512,
+          "serial": "",
+          "size": 42949672960,
+          "sub_system": "/sys/class/block",
+          "symlinks": [
+            "/dev/disk/by-diskseq/13",
+            "/dev/disk/by-id/scsi-0DO_Volume_volume-xpsgtdtlxkvs",
+            "/dev/disk/by-path/pci-0000:00:05.0-scsi-0:0:0:1",
+            "/dev/disk/by-uuid/11192a6e-408b-4a3d-9023-dcb116ee3175"
+          ],
+          "transport": "virtio",
+          "uuid": "",
+          "wwid": ""
+        },
+        {
+          "bus_path": "/pci0000:00/0000:00:06.0/virtio4",
+          "cdrom": false,
+          "dev_path": "/dev/vda",
+          "io_size": 512,
+          "modalias": "virtio:d00000002v00001AF4",
+          "model": "",
+          "pretty_size": "97 GB",
+          "readonly": false,
+          "rotational": true,
+          "secondary_disks": [],
+          "sector_size": 512,
+          "serial": "",
+          "size": 96636764160,
+          "sub_system": "/sys/class/block",
+          "symlinks": [
+            "/dev/disk/by-diskseq/11",
+            "/dev/disk/by-path/pci-0000:00:06.0",
+            "/dev/disk/by-path/virtio-pci-0000:00:06.0"
+          ],
+          "transport": "virtio",
+          "uuid": "",
+          "wwid": ""
+        }
+      ],
+      "oye1sPkDYP": [
+        {
+          "bus_path": "/pci0000:00/0000:00:05.0/virtio3/host2/target2:0:0/2:0:0:1",
+          "cdrom": false,
+          "dev_path": "/dev/sda",
+          "io_size": 512,
+          "modalias": "scsi:t-0x00",
+          "model": "Volume",
+          "pretty_size": "43 GB",
+          "readonly": false,
+          "rotational": true,
+          "secondary_disks": [],
+          "sector_size": 512,
+          "serial": "",
+          "size": 42949672960,
+          "sub_system": "/sys/class/block",
+          "symlinks": [
+            "/dev/disk/by-diskseq/13",
+            "/dev/disk/by-id/scsi-0DO_Volume_volume-fsdrggezjhup",
+            "/dev/disk/by-path/pci-0000:00:05.0-scsi-0:0:0:1",
+            "/dev/disk/by-uuid/b38d71cd-8a53-4c3e-9dab-f825dd18222b"
+          ],
+          "transport": "virtio",
+          "uuid": "",
+          "wwid": ""
+        },
+        {
+          "bus_path": "/pci0000:00/0000:00:06.0/virtio4",
+          "cdrom": false,
+          "dev_path": "/dev/vda",
+          "io_size": 512,
+          "modalias": "virtio:d00000002v00001AF4",
+          "model": "",
+          "pretty_size": "97 GB",
+          "readonly": false,
+          "rotational": true,
+          "secondary_disks": [],
+          "sector_size": 512,
+          "serial": "",
+          "size": 96636764160,
+          "sub_system": "/sys/class/block",
+          "symlinks": [
+            "/dev/disk/by-diskseq/11",
+            "/dev/disk/by-path/pci-0000:00:06.0",
+            "/dev/disk/by-path/virtio-pci-0000:00:06.0"
+          ],
+          "transport": "virtio",
+          "uuid": "",
+          "wwid": ""
+        }
+      ],
+      "yIepqUH2cg": [
+        {
+          "bus_path": "/pci0000:00/0000:00:05.0/virtio3/host2/target2:0:0/2:0:0:1",
+          "cdrom": false,
+          "dev_path": "/dev/sda",
+          "io_size": 512,
+          "modalias": "scsi:t-0x00",
+          "model": "Volume",
+          "pretty_size": "43 GB",
+          "readonly": false,
+          "rotational": true,
+          "secondary_disks": [],
+          "sector_size": 512,
+          "serial": "",
+          "size": 42949672960,
+          "sub_system": "/sys/class/block",
+          "symlinks": [
+            "/dev/disk/by-diskseq/13",
+            "/dev/disk/by-id/scsi-0DO_Volume_volume-kpictktutjdk",
+            "/dev/disk/by-path/pci-0000:00:05.0-scsi-0:0:0:1",
+            "/dev/disk/by-uuid/78cc94c5-b3d9-44eb-9d53-e5f160336b95"
+          ],
+          "transport": "virtio",
+          "uuid": "",
+          "wwid": ""
+        },
+        {
+          "bus_path": "/pci0000:00/0000:00:06.0/virtio4",
+          "cdrom": false,
+          "dev_path": "/dev/vda",
+          "io_size": 512,
+          "modalias": "virtio:d00000002v00001AF4",
+          "model": "",
+          "pretty_size": "97 GB",
+          "readonly": false,
+          "rotational": true,
+          "secondary_disks": [],
+          "sector_size": 512,
+          "serial": "",
+          "size": 96636764160,
+          "sub_system": "/sys/class/block",
+          "symlinks": [
+            "/dev/disk/by-diskseq/11",
+            "/dev/disk/by-path/pci-0000:00:06.0",
+            "/dev/disk/by-path/virtio-pci-0000:00:06.0"
+          ],
+          "transport": "virtio",
+          "uuid": "",
+          "wwid": ""
+        }
+      ]
+    }
+  },
+  "volume_abvyszefozqm_attachment_id": {
+    "sensitive": false,
+    "type": "string",
+    "value": "517391464-6913d203-8bfd-11f0-b389-0a58ac142a39-20250907151515020200000005"
+  },
+  "volume_abvyszefozqm_id": {
+    "sensitive": false,
+    "type": "string",
+    "value": "6913d203-8bfd-11f0-b389-0a58ac142a39"
+  },
+  "volume_abvyszefozqm_name": {
+    "sensitive": false,
+    "type": "string",
+    "value": "volume-abvyszefozqm"
+  },
+  "volume_abvyszefozqm_size": {
+    "sensitive": false,
+    "type": "number",
+    "value": 40
+  },
+  "volume_ckswhejgcmtu_attachment_id": {
+    "sensitive": false,
+    "type": "string",
+    "value": "517391465-688c64af-8bfd-11f0-9f10-0a58ac142945-20250907151511091300000004"
+  },
+  "volume_ckswhejgcmtu_id": {
+    "sensitive": false,
+    "type": "string",
+    "value": "688c64af-8bfd-11f0-9f10-0a58ac142945"
+  },
+  "volume_ckswhejgcmtu_name": {
+    "sensitive": false,
+    "type": "string",
+    "value": "volume-ckswhejgcmtu"
+  },
+  "volume_ckswhejgcmtu_size": {
+    "sensitive": false,
+    "type": "number",
+    "value": 20
+  },
+  "volume_fsdrggezjhup_attachment_id": {
+    "sensitive": false,
+    "type": "string",
+    "value": "517391462-6f744cf4-8bfd-11f0-80a3-0a58ac14268a-20250907151521666400000008"
+  },
+  "volume_fsdrggezjhup_id": {
+    "sensitive": false,
+    "type": "string",
+    "value": "6f744cf4-8bfd-11f0-80a3-0a58ac14268a"
+  },
+  "volume_fsdrggezjhup_name": {
+    "sensitive": false,
+    "type": "string",
+    "value": "volume-fsdrggezjhup"
+  },
+  "volume_fsdrggezjhup_size": {
+    "sensitive": false,
+    "type": "number",
+    "value": 40
+  },
+  "volume_gmnliptjsnga_attachment_id": {
+    "sensitive": false,
+    "type": "string",
+    "value": "517391460-6f7334d7-8bfd-11f0-a639-0a58ac142777-20250907151521654700000007"
+  },
+  "volume_gmnliptjsnga_id": {
+    "sensitive": false,
+    "type": "string",
+    "value": "6f7334d7-8bfd-11f0-a639-0a58ac142777"
+  },
+  "volume_gmnliptjsnga_name": {
+    "sensitive": false,
+    "type": "string",
+    "value": "volume-gmnliptjsnga"
+  },
+  "volume_gmnliptjsnga_size": {
+    "sensitive": false,
+    "type": "number",
+    "value": 40
+  },
+  "volume_gtevguukbvvi_attachment_id": {
+    "sensitive": false,
+    "type": "string",
+    "value": "517391459-699cc3bc-8bfd-11f0-9f10-0a58ac142945-20250907151517351200000006"
+  },
+  "volume_gtevguukbvvi_id": {
+    "sensitive": false,
+    "type": "string",
+    "value": "699cc3bc-8bfd-11f0-9f10-0a58ac142945"
+  },
+  "volume_gtevguukbvvi_name": {
+    "sensitive": false,
+    "type": "string",
+    "value": "volume-gtevguukbvvi"
+  },
+  "volume_gtevguukbvvi_size": {
+    "sensitive": false,
+    "type": "number",
+    "value": 20
+  },
+  "volume_ids": {
+    "sensitive": false,
+    "type": [
+      "object",
+      {
+        "abvyszefozqm": "string",
+        "ckswhejgcmtu": "string",
+        "fsdrggezjhup": "string",
+        "gmnliptjsnga": "string",
+        "gtevguukbvvi": "string",
+        "kpictktutjdk": "string",
+        "vcewgenaqoci": "string",
+        "xpsgtdtlxkvs": "string"
+      }
+    ],
+    "value": {
+      "abvyszefozqm": "6913d203-8bfd-11f0-b389-0a58ac142a39",
+      "ckswhejgcmtu": "688c64af-8bfd-11f0-9f10-0a58ac142945",
+      "fsdrggezjhup": "6f744cf4-8bfd-11f0-80a3-0a58ac14268a",
+      "gmnliptjsnga": "6f7334d7-8bfd-11f0-a639-0a58ac142777",
+      "gtevguukbvvi": "699cc3bc-8bfd-11f0-9f10-0a58ac142945",
+      "kpictktutjdk": "6888d959-8bfd-11f0-80a3-0a58ac14268a",
+      "vcewgenaqoci": "68888dc7-8bfd-11f0-9f10-0a58ac142945",
+      "xpsgtdtlxkvs": "694bb3f4-8bfd-11f0-b389-0a58ac142a39"
+    }
+  },
+  "volume_kpictktutjdk_attachment_id": {
+    "sensitive": false,
+    "type": "string",
+    "value": "517391461-6888d959-8bfd-11f0-80a3-0a58ac14268a-20250907151509597300000001"
+  },
+  "volume_kpictktutjdk_id": {
+    "sensitive": false,
+    "type": "string",
+    "value": "6888d959-8bfd-11f0-80a3-0a58ac14268a"
+  },
+  "volume_kpictktutjdk_name": {
+    "sensitive": false,
+    "type": "string",
+    "value": "volume-kpictktutjdk"
+  },
+  "volume_kpictktutjdk_size": {
+    "sensitive": false,
+    "type": "number",
+    "value": 40
+  },
+  "volume_vcewgenaqoci_attachment_id": {
+    "sensitive": false,
+    "type": "string",
+    "value": "517391466-68888dc7-8bfd-11f0-9f10-0a58ac142945-20250907151510289500000002"
+  },
+  "volume_vcewgenaqoci_id": {
+    "sensitive": false,
+    "type": "string",
+    "value": "68888dc7-8bfd-11f0-9f10-0a58ac142945"
+  },
+  "volume_vcewgenaqoci_name": {
+    "sensitive": false,
+    "type": "string",
+    "value": "volume-vcewgenaqoci"
+  },
+  "volume_vcewgenaqoci_size": {
+    "sensitive": false,
+    "type": "number",
+    "value": 20
+  },
+  "volume_xpsgtdtlxkvs_attachment_id": {
+    "sensitive": false,
+    "type": "string",
+    "value": "517391463-694bb3f4-8bfd-11f0-b389-0a58ac142a39-20250907151510902000000003"
+  },
+  "volume_xpsgtdtlxkvs_id": {
+    "sensitive": false,
+    "type": "string",
+    "value": "694bb3f4-8bfd-11f0-b389-0a58ac142a39"
+  },
+  "volume_xpsgtdtlxkvs_name": {
+    "sensitive": false,
+    "type": "string",
+    "value": "volume-xpsgtdtlxkvs"
+  },
+  "volume_xpsgtdtlxkvs_size": {
+    "sensitive": false,
+    "type": "number",
+    "value": 40
+  },
+  "worker_CThCmZ2erI_disks": {
+    "sensitive": false,
+    "type": [
+      "list",
+      [
+        "object",
+        {
+          "bus_path": "string",
+          "cdrom": "bool",
+          "dev_path": "string",
+          "io_size": "number",
+          "modalias": "string",
+          "model": "string",
+          "pretty_size": "string",
+          "readonly": "bool",
+          "rotational": "bool",
+          "secondary_disks": [
+            "list",
+            "string"
+          ],
+          "sector_size": "number",
+          "serial": "string",
+          "size": "number",
+          "sub_system": "string",
+          "symlinks": [
+            "list",
+            "string"
+          ],
+          "transport": "string",
+          "uuid": "string",
+          "wwid": "string"
+        }
+      ]
+    ],
+    "value": [
+      {
+        "bus_path": "/pci0000:00/0000:00:05.0/virtio3/host2/target2:0:0/2:0:0:1",
+        "cdrom": false,
+        "dev_path": "/dev/sda",
+        "io_size": 512,
+        "modalias": "scsi:t-0x00",
+        "model": "Volume",
+        "pretty_size": "43 GB",
+        "readonly": false,
+        "rotational": true,
+        "secondary_disks": [],
+        "sector_size": 512,
+        "serial": "",
+        "size": 42949672960,
+        "sub_system": "/sys/class/block",
+        "symlinks": [
+          "/dev/disk/by-diskseq/13",
+          "/dev/disk/by-id/scsi-0DO_Volume_volume-gmnliptjsnga",
+          "/dev/disk/by-path/pci-0000:00:05.0-scsi-0:0:0:1",
+          "/dev/disk/by-uuid/f18bbbcb-db97-452c-ad3d-3b50ace2e666"
+        ],
+        "transport": "virtio",
+        "uuid": "",
+        "wwid": ""
+      },
+      {
+        "bus_path": "/pci0000:00/0000:00:06.0/virtio4",
+        "cdrom": false,
+        "dev_path": "/dev/vda",
+        "io_size": 512,
+        "modalias": "virtio:d00000002v00001AF4",
+        "model": "",
+        "pretty_size": "97 GB",
+        "readonly": false,
+        "rotational": true,
+        "secondary_disks": [],
+        "sector_size": 512,
+        "serial": "",
+        "size": 96636764160,
+        "sub_system": "/sys/class/block",
+        "symlinks": [
+          "/dev/disk/by-diskseq/11",
+          "/dev/disk/by-path/pci-0000:00:06.0",
+          "/dev/disk/by-path/virtio-pci-0000:00:06.0"
+        ],
+        "transport": "virtio",
+        "uuid": "",
+        "wwid": ""
+      }
+    ]
+  },
+  "worker_jxDxqlT2Ki_disks": {
+    "sensitive": false,
+    "type": [
+      "list",
+      [
+        "object",
+        {
+          "bus_path": "string",
+          "cdrom": "bool",
+          "dev_path": "string",
+          "io_size": "number",
+          "modalias": "string",
+          "model": "string",
+          "pretty_size": "string",
+          "readonly": "bool",
+          "rotational": "bool",
+          "secondary_disks": [
+            "list",
+            "string"
+          ],
+          "sector_size": "number",
+          "serial": "string",
+          "size": "number",
+          "sub_system": "string",
+          "symlinks": [
+            "list",
+            "string"
+          ],
+          "transport": "string",
+          "uuid": "string",
+          "wwid": "string"
+        }
+      ]
+    ],
+    "value": [
+      {
+        "bus_path": "/pci0000:00/0000:00:05.0/virtio3/host2/target2:0:0/2:0:0:1",
+        "cdrom": false,
+        "dev_path": "/dev/sda",
+        "io_size": 512,
+        "modalias": "scsi:t-0x00",
+        "model": "Volume",
+        "pretty_size": "43 GB",
+        "readonly": false,
+        "rotational": true,
+        "secondary_disks": [],
+        "sector_size": 512,
+        "serial": "",
+        "size": 42949672960,
+        "sub_system": "/sys/class/block",
+        "symlinks": [
+          "/dev/disk/by-diskseq/13",
+          "/dev/disk/by-id/scsi-0DO_Volume_volume-abvyszefozqm",
+          "/dev/disk/by-path/pci-0000:00:05.0-scsi-0:0:0:1",
+          "/dev/disk/by-uuid/c1435825-d263-4c19-82e1-1234bf642a55"
+        ],
+        "transport": "virtio",
+        "uuid": "",
+        "wwid": ""
+      },
+      {
+        "bus_path": "/pci0000:00/0000:00:06.0/virtio4",
+        "cdrom": false,
+        "dev_path": "/dev/vda",
+        "io_size": 512,
+        "modalias": "virtio:d00000002v00001AF4",
+        "model": "",
+        "pretty_size": "97 GB",
+        "readonly": false,
+        "rotational": true,
+        "secondary_disks": [],
+        "sector_size": 512,
+        "serial": "",
+        "size": 96636764160,
+        "sub_system": "/sys/class/block",
+        "symlinks": [
+          "/dev/disk/by-diskseq/11",
+          "/dev/disk/by-path/pci-0000:00:06.0",
+          "/dev/disk/by-path/virtio-pci-0000:00:06.0"
+        ],
+        "transport": "virtio",
+        "uuid": "",
+        "wwid": ""
+      }
+    ]
+  },
+  "worker_oKzYQ827Vd_disks": {
+    "sensitive": false,
+    "type": [
+      "list",
+      [
+        "object",
+        {
+          "bus_path": "string",
+          "cdrom": "bool",
+          "dev_path": "string",
+          "io_size": "number",
+          "modalias": "string",
+          "model": "string",
+          "pretty_size": "string",
+          "readonly": "bool",
+          "rotational": "bool",
+          "secondary_disks": [
+            "list",
+            "string"
+          ],
+          "sector_size": "number",
+          "serial": "string",
+          "size": "number",
+          "sub_system": "string",
+          "symlinks": [
+            "list",
+            "string"
+          ],
+          "transport": "string",
+          "uuid": "string",
+          "wwid": "string"
+        }
+      ]
+    ],
+    "value": [
+      {
+        "bus_path": "/pci0000:00/0000:00:05.0/virtio3/host2/target2:0:0/2:0:0:1",
+        "cdrom": false,
+        "dev_path": "/dev/sda",
+        "io_size": 512,
+        "modalias": "scsi:t-0x00",
+        "model": "Volume",
+        "pretty_size": "43 GB",
+        "readonly": false,
+        "rotational": true,
+        "secondary_disks": [],
+        "sector_size": 512,
+        "serial": "",
+        "size": 42949672960,
+        "sub_system": "/sys/class/block",
+        "symlinks": [
+          "/dev/disk/by-diskseq/13",
+          "/dev/disk/by-id/scsi-0DO_Volume_volume-xpsgtdtlxkvs",
+          "/dev/disk/by-path/pci-0000:00:05.0-scsi-0:0:0:1",
+          "/dev/disk/by-uuid/11192a6e-408b-4a3d-9023-dcb116ee3175"
+        ],
+        "transport": "virtio",
+        "uuid": "",
+        "wwid": ""
+      },
+      {
+        "bus_path": "/pci0000:00/0000:00:06.0/virtio4",
+        "cdrom": false,
+        "dev_path": "/dev/vda",
+        "io_size": 512,
+        "modalias": "virtio:d00000002v00001AF4",
+        "model": "",
+        "pretty_size": "97 GB",
+        "readonly": false,
+        "rotational": true,
+        "secondary_disks": [],
+        "sector_size": 512,
+        "serial": "",
+        "size": 96636764160,
+        "sub_system": "/sys/class/block",
+        "symlinks": [
+          "/dev/disk/by-diskseq/11",
+          "/dev/disk/by-path/pci-0000:00:06.0",
+          "/dev/disk/by-path/virtio-pci-0000:00:06.0"
+        ],
+        "transport": "virtio",
+        "uuid": "",
+        "wwid": ""
+      }
+    ]
+  },
+  "worker_oye1sPkDYP_disks": {
+    "sensitive": false,
+    "type": [
+      "list",
+      [
+        "object",
+        {
+          "bus_path": "string",
+          "cdrom": "bool",
+          "dev_path": "string",
+          "io_size": "number",
+          "modalias": "string",
+          "model": "string",
+          "pretty_size": "string",
+          "readonly": "bool",
+          "rotational": "bool",
+          "secondary_disks": [
+            "list",
+            "string"
+          ],
+          "sector_size": "number",
+          "serial": "string",
+          "size": "number",
+          "sub_system": "string",
+          "symlinks": [
+            "list",
+            "string"
+          ],
+          "transport": "string",
+          "uuid": "string",
+          "wwid": "string"
+        }
+      ]
+    ],
+    "value": [
+      {
+        "bus_path": "/pci0000:00/0000:00:05.0/virtio3/host2/target2:0:0/2:0:0:1",
+        "cdrom": false,
+        "dev_path": "/dev/sda",
+        "io_size": 512,
+        "modalias": "scsi:t-0x00",
+        "model": "Volume",
+        "pretty_size": "43 GB",
+        "readonly": false,
+        "rotational": true,
+        "secondary_disks": [],
+        "sector_size": 512,
+        "serial": "",
+        "size": 42949672960,
+        "sub_system": "/sys/class/block",
+        "symlinks": [
+          "/dev/disk/by-diskseq/13",
+          "/dev/disk/by-id/scsi-0DO_Volume_volume-fsdrggezjhup",
+          "/dev/disk/by-path/pci-0000:00:05.0-scsi-0:0:0:1",
+          "/dev/disk/by-uuid/b38d71cd-8a53-4c3e-9dab-f825dd18222b"
+        ],
+        "transport": "virtio",
+        "uuid": "",
+        "wwid": ""
+      },
+      {
+        "bus_path": "/pci0000:00/0000:00:06.0/virtio4",
+        "cdrom": false,
+        "dev_path": "/dev/vda",
+        "io_size": 512,
+        "modalias": "virtio:d00000002v00001AF4",
+        "model": "",
+        "pretty_size": "97 GB",
+        "readonly": false,
+        "rotational": true,
+        "secondary_disks": [],
+        "sector_size": 512,
+        "serial": "",
+        "size": 96636764160,
+        "sub_system": "/sys/class/block",
+        "symlinks": [
+          "/dev/disk/by-diskseq/11",
+          "/dev/disk/by-path/pci-0000:00:06.0",
+          "/dev/disk/by-path/virtio-pci-0000:00:06.0"
+        ],
+        "transport": "virtio",
+        "uuid": "",
+        "wwid": ""
+      }
+    ]
+  },
+  "worker_yIepqUH2cg_disks": {
+    "sensitive": false,
+    "type": [
+      "list",
+      [
+        "object",
+        {
+          "bus_path": "string",
+          "cdrom": "bool",
+          "dev_path": "string",
+          "io_size": "number",
+          "modalias": "string",
+          "model": "string",
+          "pretty_size": "string",
+          "readonly": "bool",
+          "rotational": "bool",
+          "secondary_disks": [
+            "list",
+            "string"
+          ],
+          "sector_size": "number",
+          "serial": "string",
+          "size": "number",
+          "sub_system": "string",
+          "symlinks": [
+            "list",
+            "string"
+          ],
+          "transport": "string",
+          "uuid": "string",
+          "wwid": "string"
+        }
+      ]
+    ],
+    "value": [
+      {
+        "bus_path": "/pci0000:00/0000:00:05.0/virtio3/host2/target2:0:0/2:0:0:1",
+        "cdrom": false,
+        "dev_path": "/dev/sda",
+        "io_size": 512,
+        "modalias": "scsi:t-0x00",
+        "model": "Volume",
+        "pretty_size": "43 GB",
+        "readonly": false,
+        "rotational": true,
+        "secondary_disks": [],
+        "sector_size": 512,
+        "serial": "",
+        "size": 42949672960,
+        "sub_system": "/sys/class/block",
+        "symlinks": [
+          "/dev/disk/by-diskseq/13",
+          "/dev/disk/by-id/scsi-0DO_Volume_volume-kpictktutjdk",
+          "/dev/disk/by-path/pci-0000:00:05.0-scsi-0:0:0:1",
+          "/dev/disk/by-uuid/78cc94c5-b3d9-44eb-9d53-e5f160336b95"
+        ],
+        "transport": "virtio",
+        "uuid": "",
+        "wwid": ""
+      },
+      {
+        "bus_path": "/pci0000:00/0000:00:06.0/virtio4",
+        "cdrom": false,
+        "dev_path": "/dev/vda",
+        "io_size": 512,
+        "modalias": "virtio:d00000002v00001AF4",
+        "model": "",
+        "pretty_size": "97 GB",
+        "readonly": false,
+        "rotational": true,
+        "secondary_disks": [],
+        "sector_size": 512,
+        "serial": "",
+        "size": 96636764160,
+        "sub_system": "/sys/class/block",
+        "symlinks": [
+          "/dev/disk/by-diskseq/11",
+          "/dev/disk/by-path/pci-0000:00:06.0",
+          "/dev/disk/by-path/virtio-pci-0000:00:06.0"
+        ],
+        "transport": "virtio",
+        "uuid": "",
+        "wwid": ""
+      }
+    ]
+  }
+}
