@@ -65,3 +65,74 @@ extraManifests = [
     "https://github.com/piraeusdatastore/piraeus-operator/releases/download/v2.9.0/manifest.yaml"
 ]
 ```
+
+# Hetzner bare metal
+
+Run the following command to identify disk unique ids:
+
+```bash
+ls -l /dev/disk/by-id
+
+# output
+
+root@rescue ~ # ls -l /dev/disk/by-id/
+total 0
+lrwxrwxrwx 1 root root 13 Sep  8 04:38 nvme-SAMSUNG_MZVL2512HCJQ-00B07_S63CNX0Y425245 -> ../../nvme0n1
+lrwxrwxrwx 1 root root 15 Sep  8 04:38 nvme-SAMSUNG_MZVL2512HCJQ-00B07_S63CNX0Y425245-part1 -> ../../nvme0n1p1
+lrwxrwxrwx 1 root root 15 Sep  8 04:38 nvme-SAMSUNG_MZVL2512HCJQ-00B07_S63CNX0Y425245-part2 -> ../../nvme0n1p2
+lrwxrwxrwx 1 root root 15 Sep  8 04:38 nvme-SAMSUNG_MZVL2512HCJQ-00B07_S63CNX0Y425245-part3 -> ../../nvme0n1p3
+lrwxrwxrwx 1 root root 13 Sep  8 04:38 nvme-SAMSUNG_MZVL2512HCJQ-00B07_S63CNX0Y425245_1 -> ../../nvme0n1
+lrwxrwxrwx 1 root root 15 Sep  8 04:38 nvme-SAMSUNG_MZVL2512HCJQ-00B07_S63CNX0Y425245_1-part1 -> ../../nvme0n1p1
+lrwxrwxrwx 1 root root 15 Sep  8 04:38 nvme-SAMSUNG_MZVL2512HCJQ-00B07_S63CNX0Y425245_1-part2 -> ../../nvme0n1p2
+lrwxrwxrwx 1 root root 15 Sep  8 04:38 nvme-SAMSUNG_MZVL2512HCJQ-00B07_S63CNX0Y425245_1-part3 -> ../../nvme0n1p3
+lrwxrwxrwx 1 root root 13 Sep  8 04:38 nvme-SAMSUNG_MZVL2512HCJQ-00B07_S63CNX0Y425254 -> ../../nvme1n1
+lrwxrwxrwx 1 root root 13 Sep  8 04:38 nvme-SAMSUNG_MZVL2512HCJQ-00B07_S63CNX0Y425254_1 -> ../../nvme1n1
+lrwxrwxrwx 1 root root 13 Sep  8 04:38 nvme-eui.002538b451b5c3fb -> ../../nvme0n1
+lrwxrwxrwx 1 root root 15 Sep  8 04:38 nvme-eui.002538b451b5c3fb-part1 -> ../../nvme0n1p1
+lrwxrwxrwx 1 root root 15 Sep  8 04:38 nvme-eui.002538b451b5c3fb-part2 -> ../../nvme0n1p2
+lrwxrwxrwx 1 root root 15 Sep  8 04:38 nvme-eui.002538b451b5c3fb-part3 -> ../../nvme0n1p3
+lrwxrwxrwx 1 root root 13 Sep  8 04:38 nvme-eui.002538b451b5c404 -> ../../nvme1n1
+```
+
+From the above output, we will install talos on `/dev/disk/by-id/nvme-SAMSUNG_MZVL2512HCJQ-00B07_S63CNX0Y425245` 
+
+We will then use `/dev/disk/by-id/nvme-SAMSUNG_MZVL2512HCJQ-00B07_S63CNX0Y425254` for linstor storage and volumes on the cluster
+
+Prepare image on factory, select drbd. 
+
+Example link download and extract:
+
+Store target disk: /dev/nvme0n1 (Always use the first attached disk on hetzner)
+
+```bash
+TARGET_DISK=/dev/disk/by-id/nvme-SAMSUNG_MZVL2512HCJQ-00B07_S63CNX0Y425254
+
+TARGET_VERSION="v1.11.0"
+```
+
+```bash
+wget https://factory.talos.dev/image/e048aaf4461ff9f9576c9a42f760f2fef566559bd4933f322853ac291e46f238/v1.11.0/metal-amd64.raw.zst
+
+zstd -d metal-amd64.raw.zst
+```
+
+Write the raw disk
+
+```bash
+dd if=metal-amd64.raw of=${TARGET_DISK} bs=1M status=progress
+
+sync
+
+# Reboot the server
+reboot
+```
+
+After the reboot, you should be able to talk to the talos os:
+
+```bash
+NODE_IP=65.109.58.113
+
+talosctl --nodes ${NODE_IP} get disks --insecure
+talosctl --nodes ${NODE_IP} get addresses --insecure
+talosctl --nodes ${NODE_IP} get links --insecure
+```

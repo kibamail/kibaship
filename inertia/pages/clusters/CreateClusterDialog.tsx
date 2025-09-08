@@ -230,7 +230,7 @@ export function CreateClusterDialog({ isOpen, onOpenChange }: CreateClusterModal
             <NumberField.Root
               name="worker_nodes_count"
               value={data.worker_nodes_count}
-              min={3}
+              min={1}
               max={50}
               onChange={(value: number) => setData('worker_nodes_count', value)}
             >
