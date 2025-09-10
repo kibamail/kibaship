@@ -169,35 +169,6 @@ resource "helm_release" "cilium" {
   ]
 }
 
-# Install Gateway API CRDs using kubectl provider for multi-document YAML
-data "http" "gateway_api_crds" {
-  url = "https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.3.0/standard-install.yaml"
-}
-
-resource "kubectl_manifest" "gateway_api_crds" {
-  yaml_body = data.http.gateway_api_crds.response_body
-  override_namespace = "kube-system"
-
-  depends_on = [helm_release.cilium]
-}
-
-# Install Piraeus operator using individual CRD files from kibaship repository
-
-# Fetch each Piraeus CRD file from the repository
-@each(crd_file in piraeus_crd_files)
-data "http" "piraeus_crd_{{ crd_file.name.replaceAll('-', '_').replaceAll('.', '_') }}" {
-  url = "{{ crd_file.url }}"
-}
-@end
-
-# Create kubectl_manifest resources for each CRD file
-@each(crd_file in piraeus_crd_files)
-resource "kubectl_manifest" "piraeus_{{ crd_file.name.replaceAll('-', '_').replaceAll('.', '_') }}" {
-  yaml_body = data.http.piraeus_crd_{{ crd_file.name.replaceAll('-', '_').replaceAll('.', '_') }}.response_body
-  
-  depends_on = [kubectl_manifest.gateway_api_crds]
-}
-@end
 
 # Install cert-manager
 resource "helm_release" "cert_manager" {
@@ -230,21 +201,36 @@ resource "helm_release" "cert_manager" {
   depends_on = [helm_release.cilium]
 }
 
-# Fetch each Tekton CRD file from the repository
-@each(crd_file in tekton_crd_files)
-data "http" "tekton_crd_{{ crd_file.name.replaceAll('-', '_').replaceAll('.', '_') }}" {
-  url = "{{ crd_file.url }}"
-}
-@end
+resource "helm_release" "piraeus_operator" {
+  name                 = "piraeus-operator"
+  repository           = "git+https://github.com/piraeusdatastore/piraeus-operator@v2.9.0"
+  chart                = "charts/piraeus"
+  create_namespace     = true
+  namespace            = "piraeus-datastore"
 
-# Create kubectl_manifest resources for each Tekton CRD file
-@each(crd_file in tekton_crd_files)
-resource "kubectl_manifest" "tekton_{{ crd_file.name.replaceAll('-', '_').replaceAll('.', '_') }}" {
-  yaml_body = data.http.tekton_crd_{{ crd_file.name.replaceAll('-', '_').replaceAll('.', '_') }}.response_body
-  
+  set = [
+    {
+      name  = "installCRDs"
+      value = "true"
+    },
+    {
+      name  = "replicaCount"
+      value = "2"
+    }
+  ]
+}
+
+# Install Tekton using Helm
+resource "helm_release" "tekton" {
+  name       = "tekton"
+  repository = "https://cdfoundation.github.io/tekton-helm-chart/"
+  chart      = "tekton-pipeline"
+  version    = "1.4.0"
+  namespace  = "tekton-pipelines"
+  create_namespace = true
+
   depends_on = [helm_release.cert_manager]
 }
-@end
 
 # Fetch each Tekton CRD file from the repository
 @each(crd_file in gateway_crd_files)
@@ -253,9 +239,15 @@ data "http" "gateway_crd_{{ crd_file.name.replaceAll('-', '_').replaceAll('.', '
 }
 @end
 
-# Create kubectl_manifest resources for each Tekton CRD file
-@each(crd_file in gateway_crd_files)
+# Create kubectl_manifest resources for each Gateway CRD file
+@each((crd_file, index) in gateway_crd_files)
 resource "kubectl_manifest" "gateway_{{ crd_file.name.replaceAll('-', '_').replaceAll('.', '_') }}" {
   yaml_body = data.http.gateway_crd_{{ crd_file.name.replaceAll('-', '_').replaceAll('.', '_') }}.response_body
+
+  @if(index === 0)
+  depends_on = [helm_release.tekton]
+  @else
+  depends_on = [kubectl_manifest.gateway_{{ gateway_crd_files[index - 1].name.replaceAll('-', '_').replaceAll('.', '_') }}]
+  @endif
 }
 @end

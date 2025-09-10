@@ -18,22 +18,30 @@ import ProvisionTalosImageJob from '#jobs/clusters/provision_talos_image_job'
 import { TerraformStage } from '#services/terraform/terraform_executor'
 import ProvisionKubernetesConfigJob from '#jobs/clusters/provision_kubernetes_config_job'
 import ProvisionKubernetesBootJob from '#jobs/clusters/provision_kubernetes_boot_job'
+import { DateTime } from 'luxon'
 
 export default class ClustersController extends BaseController {
-    public async index(ctx: HttpContext) {
+
+    protected async clustersPageProps(ctx: HttpContext) {
         const workspace = await this.workspace(ctx)
 
         const connectedProviders = await CloudProvider.query().where('workspace_id', workspace.id)
+
         const clusters = await Cluster.query().where('workspace_id', workspace.id).preload('nodes')
 
-        return ctx.inertia.render('clusters/clusters', await this.pageProps(ctx, {
+        return {
+            ...(await this.pageProps(ctx)),
+            clusters,
+            connectedProviders,
             providers: CloudProviderDefinitions.allProviders(),
             regions: CloudProviderDefinitions.allRegions(),
             serverTypes: CloudProviderDefinitions.allServerTypes(),
-            connectedProviders,
-            clusters,
             cloudProviderRegions: CloudProviderDefinitions.allRegions(),
-        }))
+        }
+    }
+
+    public async index(ctx: HttpContext) {
+        return ctx.inertia.render('clusters/clusters', await this.clustersPageProps(ctx))
     }
 
     public async show(ctx: HttpContext) {
@@ -59,6 +67,19 @@ export default class ClustersController extends BaseController {
         queue.dispatch(ProvisionClusterJob, {
             clusterId: cluster.id
         })
+
+        return ctx.response.redirect().toRoute('clusters.index', {
+            workspace: workspace.slug
+        })
+    }
+
+    public async storeBringYourOwn(ctx: HttpContext) {
+        const workspace = await this.workspace(ctx)
+        const payload = ctx.request.all()
+
+        console.log('Bring Your Own Cluster payload:', JSON.stringify(payload, null, 2))
+
+        ctx.session.flash('success', 'Bring your own cluster has been created successfully.')
 
         return ctx.response.redirect().toRoute('clusters.index', {
             workspace: workspace.slug
@@ -113,8 +134,8 @@ export default class ClustersController extends BaseController {
             .where('workspace_id', workspace.id)
             .firstOrFail()
 
-        // cluster.deletedAt = DateTime.now()
-        // await cluster.save()
+        cluster.deletedAt = DateTime.now()
+        await cluster.save()
 
         await queue.dispatch(DestroyClusterJob, { clusterId: cluster.id })
 

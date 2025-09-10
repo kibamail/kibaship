@@ -114,6 +114,13 @@ TARGET_VERSION="v1.11.0"
 wget https://factory.talos.dev/image/e048aaf4461ff9f9576c9a42f760f2fef566559bd4933f322853ac291e46f238/v1.11.0/metal-amd64.raw.zst
 
 zstd -d metal-amd64.raw.zst
+
+dd if=metal-amd64.raw of=${TARGET_DISK} bs=1M status=progress
+
+sync
+
+# Reboot the server
+reboot
 ```
 
 Write the raw disk

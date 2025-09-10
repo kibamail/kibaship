@@ -294,7 +294,7 @@ resource "kubernetes_manifest" "ingress_gateway" {
       name      = "ingress-gateway"
       namespace = "ingress-gateway"
       annotations = {
-        "io.cilium.gateway/node-selector" = "ingress-ready=true"
+        "io.cilium.gateway/node-selector" = "paas.kibaship.com/ingress=true"
       }
     }
     spec = {

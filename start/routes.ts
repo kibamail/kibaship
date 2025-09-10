@@ -34,6 +34,7 @@ router
     router.get('/:workspace/p/:project', [ProjectsController, 'show']),
     router.get('/:workspace/clusters', [ClustersController, 'index']).as('clusters.index'),
     router.post('/:workspace/clusters', [ClustersController, 'store']).as('clusters.store'),
+    router.post('/:workspace/clusters/bring-your-own', [ClustersController, 'storeBringYourOwn']).as('clusters.bring-your-own.store'),
     router.get('/:workspace/clusters/:clusterId', [ClustersController, 'show']).as('clusters.show'),
     router.get('/:workspace/clusters/:clusterId/logs', [ClusterLogsController, 'show']).as('clusters.logs'),
     router.post('/:workspace/clusters/:clusterId/restart', [ClustersController, 'restart']).as('clusters.restart'),
