@@ -203,10 +203,11 @@ resource "helm_release" "cert_manager" {
 
 resource "helm_release" "piraeus_operator" {
   name                 = "piraeus-operator"
-  repository           = "git+https://github.com/piraeusdatastore/piraeus-operator@v2.9.0"
-  chart                = "charts/piraeus"
+  repository           = "https://kibamail.github.io/piraeus-datastore-helm-charts/"
+  chart                = "piraeus"
   create_namespace     = true
   namespace            = "piraeus-datastore"
+  version              = "2.9.0"
 
   set = [
     {
@@ -218,18 +219,8 @@ resource "helm_release" "piraeus_operator" {
       value = "2"
     }
   ]
-}
 
-# Install Tekton using Helm
-resource "helm_release" "tekton" {
-  name       = "tekton"
-  repository = "https://cdfoundation.github.io/tekton-helm-chart/"
-  chart      = "tekton-pipeline"
-  version    = "1.4.0"
-  namespace  = "tekton-pipelines"
-  create_namespace = true
-
-  depends_on = [helm_release.cert_manager]
+  depends_on = [helm_release.cilium]
 }
 
 # Fetch each Tekton CRD file from the repository
@@ -244,9 +235,7 @@ data "http" "gateway_crd_{{ crd_file.name.replaceAll('-', '_').replaceAll('.', '
 resource "kubectl_manifest" "gateway_{{ crd_file.name.replaceAll('-', '_').replaceAll('.', '_') }}" {
   yaml_body = data.http.gateway_crd_{{ crd_file.name.replaceAll('-', '_').replaceAll('.', '_') }}.response_body
 
-  @if(index === 0)
-  depends_on = [helm_release.tekton]
-  @else
+  @if(index > 0)
   depends_on = [kubectl_manifest.gateway_{{ gateway_crd_files[index - 1].name.replaceAll('-', '_').replaceAll('.', '_') }}]
   @endif
 }

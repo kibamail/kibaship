@@ -140,29 +140,6 @@ export function CreateCloudProviderCluster({
       </NumberField.Root>
 
       <NumberField.Root
-        name="control_planes_volume_size"
-        value={data.control_planes_volume_size}
-        min={10}
-        max={500}
-        increments={10}
-        onChange={(value: number) => setData('control_planes_volume_size', value)}
-      >
-        <NumberField.Label>Control Plane Volume Size (GB)</NumberField.Label>
-        <NumberField.Field placeholder="Enter volume size in GB">
-          <NumberField.DecrementButton />
-          <NumberField.IncrementButton />
-          <NumberField.Hint>
-            Storage size for each control plane node (10-500 GB)
-          </NumberField.Hint>
-          {errors.control_planes_volume_size && (
-            <NumberField.Error>
-              {formatErrorMessage(errors.control_planes_volume_size)}
-            </NumberField.Error>
-          )}
-        </NumberField.Field>
-      </NumberField.Root>
-
-      <NumberField.Root
         name="workers_volume_size"
         value={data.workers_volume_size}
         min={10}

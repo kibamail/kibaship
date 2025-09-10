@@ -51,10 +51,6 @@ export const createClusterValidator = vine.compile(
       .min(1)
       .max(100),
     server_type: vine.string().trim().minLength(1),
-    control_planes_volume_size: vine
-      .number()
-      .min(10)
-      .max(500),
     workers_volume_size: vine
       .number()
       .min(10)

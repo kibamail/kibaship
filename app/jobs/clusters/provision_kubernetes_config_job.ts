@@ -71,12 +71,13 @@ export default class ProvisionKubernetesConfigJob extends Job {
       await executor.init()
       await executor.apply({ autoApprove: true })
 
-      cluster.kubernetesConfigErrorAt = DateTime.now()
+      cluster.kubernetesConfigCompletedAt = DateTime.now()
 
       await cluster.save()
 
-      // await queue.dispatch(ProvisionKubernetesBootJob, payload)
+      await queue.dispatch(ProvisionKubernetesBootJob, payload)
     } catch (error) {
+      console.error('Error in ProvisionKubernetesConfigJob:', error)
       cluster.kubernetesConfigErrorAt = DateTime.now()
 
       await cluster.save()

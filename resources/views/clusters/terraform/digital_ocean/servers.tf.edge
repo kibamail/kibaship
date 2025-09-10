@@ -74,6 +74,12 @@ locals {
   
   worker_machine_config = {
       machine = {
+        features = {
+          hostDNS = {
+            enabled = true
+            forwardKubeDNSToHost = false
+          }
+        }
         kernel = {
           modules = [
             {

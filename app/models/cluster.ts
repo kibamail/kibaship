@@ -242,11 +242,11 @@ export default class Cluster extends BaseModel {
     serializeAs: null
   })
   declare kubeconfig: {
-        host: string
-        clientCertificate: string
-        clientKey: string
-        clusterCaCertificate: string
-      } | null
+    host: string
+    clientCertificate: string
+    clientKey: string
+    clusterCaCertificate: string
+  } | null
 
   @column({
     prepare: value => value ? encryption.encrypt(JSON.stringify(value)) : null,
@@ -296,7 +296,7 @@ export default class Cluster extends BaseModel {
 
   public static async getNextAvailableIpRange(userId: string): Promise<string> {
     const maxRange = 16
-    
+
     for (let i = 0; i <= maxRange; i++) {
       const ipRange = `10.${219 + i}.0.0/16`
       const existingCluster = await Cluster.query()
@@ -306,12 +306,12 @@ export default class Cluster extends BaseModel {
         })
         .whereNull('deletedAt')
         .first()
-      
+
       if (!existingCluster) {
         return ipRange
       }
     }
-    
+
     throw new Error('No available IP ranges. All ranges from 10.219.0.0/16 to 10.223.0.0/16 are in use for this user.')
   }
 
@@ -323,7 +323,6 @@ export default class Cluster extends BaseModel {
       control_plane_nodes_count: number
       worker_nodes_count: number
       server_type: string
-      control_planes_volume_size: number
       workers_volume_size: number
     },
     workspaceId: string,
@@ -338,7 +337,7 @@ export default class Cluster extends BaseModel {
     cluster.subdomainIdentifier = data.subdomain_identifier
     cluster.controlPlaneEndpoint = ''
     cluster.serverType = data.server_type
-    cluster.controlPlanesVolumeSize = data.control_planes_volume_size
+    cluster.controlPlanesVolumeSize = 0
     cluster.workersVolumeSize = data.workers_volume_size
     cluster.talosVersion = talosVersion
     const workspace = await Workspace.findOrFail(workspaceId)
@@ -354,7 +353,7 @@ export default class Cluster extends BaseModel {
       data.worker_nodes_count,
       data.server_type,
       trx,
-      data.control_planes_volume_size,
+      0, // todo: remove logic for control plane volumes
       data.workers_volume_size
     )
 
@@ -420,12 +419,16 @@ export default class Cluster extends BaseModel {
 
     // Create storage for each node
     for (const node of nodes) {
-      const storage = new ClusterNodeStorage()
-      storage.clusterNodeId = node.id
-      storage.status = 'provisioning'
-      storage.size = node.type === 'master' ? controlPlanesVolumeSize : workersVolumeSize
-      storage.useTransaction(trx)
-      storages.push(storage)
+      const size = node.type === 'master' ? controlPlanesVolumeSize : workersVolumeSize
+
+      if (size > 0) {
+        const storage = new ClusterNodeStorage()
+        storage.clusterNodeId = node.id
+        storage.status = 'provisioning'
+        storage.size = size
+        storage.useTransaction(trx)
+        storages.push(storage)
+      }
     }
 
     await Promise.all(storages.map((storage) => storage.save()))
@@ -488,13 +491,13 @@ export default class Cluster extends BaseModel {
         if (this.kubernetesConfigErrorAt) return 'failed'
         if (this.kubernetesConfigStartedAt) return 'in_progress'
         return 'pending'
-      
+
       case 'kubernetes-boot':
         if (this.kubernetesBootCompletedAt) return 'completed'
         if (this.kubernetesBootErrorAt) return 'failed'
         if (this.kubernetesBootStartedAt) return 'in_progress'
         return 'pending'
-      
+
       case 'dns':
         if (this.dnsCompletedAt) return 'completed'
         if (this.dnsErrorAt) return 'failed'
@@ -529,7 +532,7 @@ export default class Cluster extends BaseModel {
 
   @computed()
   public get provisioningStatus(): ProvisioningStepStatus {
-    
+
     const stages: TerraformStage[] = [
       'talos-image',
       'network',

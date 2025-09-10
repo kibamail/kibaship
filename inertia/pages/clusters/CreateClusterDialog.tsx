@@ -49,7 +49,7 @@ export function CreateClusterDialog({ isOpen, onOpenChange }: CreateClusterModal
     control_plane_nodes_count: 3,
     worker_nodes_count: 3,
     server_type: '',
-    control_planes_volume_size: 20,
+    control_planes_volume_size: 0,
     workers_volume_size: 20,
   })
 
