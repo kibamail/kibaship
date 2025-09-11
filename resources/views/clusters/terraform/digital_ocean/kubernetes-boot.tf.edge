@@ -249,7 +249,7 @@ resource "kubernetes_manifest" "certificate_reference_grant" {
     apiVersion = "gateway.networking.k8s.io/v1beta1"
     kind       = "ReferenceGrant"
     metadata = {
-      name      = "certificate-access"
+      name      = "ingress-gateway-certificate-access"
       namespace = "certificates"
     }
     spec = {
