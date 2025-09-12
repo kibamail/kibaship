@@ -17,8 +17,18 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"context"
+	"fmt"
+	"regexp"
+	"strings"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	ctrl "sigs.k8s.io/controller-runtime"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
 // DeploymentPhase represents the current phase of the deployment
@@ -136,6 +146,7 @@ type DeploymentStatus struct {
 // +kubebuilder:printcolumn:name="Current Run",type="string",JSONPath=".status.currentPipelineRun.name"
 // +kubebuilder:printcolumn:name="Last Success",type="string",JSONPath=".status.lastSuccessfulRun.name"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
+// +kubebuilder:webhook:path=/validate-platform-operator-kibaship-com-v1alpha1-deployment,mutating=false,failurePolicy=fail,sideEffects=None,groups=platform.operator.kibaship.com,resources=deployments,verbs=create;update,versions=v1alpha1,name=vdeployment.kb.io,admissionReviewVersions=v1
 
 // Deployment is the Schema for the deployments API.
 type Deployment struct {
@@ -157,4 +168,165 @@ type DeploymentList struct {
 
 func init() {
 	SchemeBuilder.Register(&Deployment{}, &DeploymentList{})
+}
+
+var _ webhook.CustomValidator = &Deployment{}
+
+// ValidateCreate implements webhook.CustomValidator so a webhook will be registered for the type
+func (r *Deployment) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+	deploymentlog := logf.Log.WithName("deployment-resource")
+	deploymentlog.Info("validate create", "name", r.Name)
+
+	return nil, r.validateDeployment()
+}
+
+// ValidateUpdate implements webhook.CustomValidator so a webhook will be registered for the type
+func (r *Deployment) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
+	deploymentlog := logf.Log.WithName("deployment-resource")
+	deploymentlog.Info("validate update", "name", r.Name)
+
+	return nil, r.validateDeployment()
+}
+
+// ValidateDelete implements webhook.CustomValidator so a webhook will be registered for the type
+func (r *Deployment) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+	deploymentlog := logf.Log.WithName("deployment-resource")
+	deploymentlog.Info("validate delete", "name", r.Name)
+
+	return nil, nil
+}
+
+// validateDeployment validates the Deployment resource
+func (r *Deployment) validateDeployment() error {
+	var errors []string
+
+	// Validate deployment name format: project-<project-slug>-app-<app-slug>-deployment-<deployment-slug>-kibaship-com
+	if !r.isValidDeploymentName() {
+		errors = append(errors, fmt.Sprintf("deployment name '%s' must follow format 'project-<project-slug>-app-<app-slug>-deployment-<deployment-slug>-kibaship-com'", r.Name))
+	}
+
+	if len(errors) > 0 {
+		return fmt.Errorf("validation failed: %v", errors)
+	}
+
+	return nil
+}
+
+// isValidDeploymentName validates if the deployment name follows the required format
+func (r *Deployment) isValidDeploymentName() bool {
+	// Pattern: project-<project-slug>-app-<app-slug>-deployment-<deployment-slug>-kibaship-com
+	// All slugs should be valid DNS labels (lowercase alphanumeric with hyphens)
+	pattern := regexp.MustCompile(`^project-[a-z0-9]([a-z0-9-]*[a-z0-9])?-app-[a-z0-9]([a-z0-9-]*[a-z0-9])?-deployment-[a-z0-9]([a-z0-9-]*[a-z0-9])?-kibaship-com$`)
+	return pattern.MatchString(r.Name)
+}
+
+// GetProjectSlugFromName extracts the project slug from deployment name
+func (r *Deployment) GetProjectSlugFromName() string {
+	// Extract project slug from name format
+	if !r.isValidDeploymentName() {
+		return ""
+	}
+
+	parts := strings.Split(r.Name, "-")
+	if len(parts) < 7 {
+		return ""
+	}
+
+	// Find the "app" delimiter and extract everything between "project" and "app"
+	projectStart := 1 // after "project-"
+	appIndex := -1
+	for i, part := range parts {
+		if part == "app" {
+			appIndex = i
+			break
+		}
+	}
+
+	if appIndex == -1 || appIndex <= projectStart {
+		return ""
+	}
+
+	return strings.Join(parts[projectStart:appIndex], "-")
+}
+
+// GetAppSlugFromName extracts the app slug from deployment name
+func (r *Deployment) GetAppSlugFromName() string {
+	// Extract app slug from name format
+	if !r.isValidDeploymentName() {
+		return ""
+	}
+
+	parts := strings.Split(r.Name, "-")
+	if len(parts) < 7 {
+		return ""
+	}
+
+	// Find "app" and "deployment" delimiters
+	appIndex := -1
+	deploymentIndex := -1
+	for i, part := range parts {
+		if part == "app" {
+			appIndex = i
+		} else if part == "deployment" && appIndex != -1 {
+			deploymentIndex = i
+			break
+		}
+	}
+
+	if appIndex == -1 || deploymentIndex == -1 || deploymentIndex <= appIndex+1 {
+		return ""
+	}
+
+	return strings.Join(parts[appIndex+1:deploymentIndex], "-")
+}
+
+// GetDeploymentSlugFromName extracts the deployment slug from deployment name
+func (r *Deployment) GetDeploymentSlugFromName() string {
+	// Extract deployment slug from name format
+	if !r.isValidDeploymentName() {
+		return ""
+	}
+
+	parts := strings.Split(r.Name, "-")
+	if len(parts) < 7 {
+		return ""
+	}
+
+	// Find "deployment" and "kibaship" delimiters
+	deploymentIndex := -1
+	kibashipIndex := -1
+	for i, part := range parts {
+		if part == "deployment" {
+			deploymentIndex = i
+		} else if part == "kibaship" {
+			kibashipIndex = i
+			break
+		}
+	}
+
+	if deploymentIndex == -1 || kibashipIndex == -1 || kibashipIndex <= deploymentIndex+1 {
+		return ""
+	}
+
+	return strings.Join(parts[deploymentIndex+1:kibashipIndex], "-")
+}
+
+// GenerateExpectedApplicationName generates the expected application name for this deployment
+func (r *Deployment) GenerateExpectedApplicationName() string {
+	projectSlug := r.GetProjectSlugFromName()
+	appSlug := r.GetAppSlugFromName()
+
+	if projectSlug == "" || appSlug == "" {
+		return ""
+	}
+
+	return fmt.Sprintf("project-%s-app-%s-kibaship-com", projectSlug, appSlug)
+}
+
+// SetupWebhookWithManager will setup the manager to manage the webhooks
+func (r *Deployment) SetupWebhookWithManager(mgr ctrl.Manager) error {
+	return ctrl.NewWebhookManagedBy(mgr).
+		For(r).
+		WithValidator(r).
+		Complete()
 }

@@ -17,8 +17,18 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"context"
+	"fmt"
+	"regexp"
+	"strings"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	ctrl "sigs.k8s.io/controller-runtime"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
 // ApplicationType defines the type of application
@@ -243,6 +253,7 @@ type ApplicationStatus struct {
 // +kubebuilder:printcolumn:name="Project",type="string",JSONPath=".spec.projectRef.name"
 // +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
+// +kubebuilder:webhook:path=/validate-platform-operator-kibaship-com-v1alpha1-application,mutating=false,failurePolicy=fail,sideEffects=None,groups=platform.operator.kibaship.com,resources=applications,verbs=create;update,versions=v1alpha1,name=vapplication.kb.io,admissionReviewVersions=v1
 
 // Application is the Schema for the applications API.
 type Application struct {
@@ -264,4 +275,122 @@ type ApplicationList struct {
 
 func init() {
 	SchemeBuilder.Register(&Application{}, &ApplicationList{})
+}
+
+var _ webhook.CustomValidator = &Application{}
+
+// ValidateCreate implements webhook.CustomValidator so a webhook will be registered for the type
+func (r *Application) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+	applicationlog := logf.Log.WithName("application-resource")
+	applicationlog.Info("validate create", "name", r.Name)
+
+	return nil, r.validateApplication()
+}
+
+// ValidateUpdate implements webhook.CustomValidator so a webhook will be registered for the type
+func (r *Application) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
+	applicationlog := logf.Log.WithName("application-resource")
+	applicationlog.Info("validate update", "name", r.Name)
+
+	return nil, r.validateApplication()
+}
+
+// ValidateDelete implements webhook.CustomValidator so a webhook will be registered for the type
+func (r *Application) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+	applicationlog := logf.Log.WithName("application-resource")
+	applicationlog.Info("validate delete", "name", r.Name)
+
+	return nil, nil
+}
+
+// validateApplication validates the Application resource
+func (r *Application) validateApplication() error {
+	var errors []string
+
+	// Validate application name format: project-<project-slug>-app-<app-slug>-kibaship-com
+	if !r.isValidApplicationName() {
+		errors = append(errors, fmt.Sprintf("application name '%s' must follow format 'project-<project-slug>-app-<app-slug>-kibaship-com'", r.Name))
+	}
+
+	if len(errors) > 0 {
+		return fmt.Errorf("validation failed: %v", errors)
+	}
+
+	return nil
+}
+
+// isValidApplicationName validates if the application name follows the required format
+func (r *Application) isValidApplicationName() bool {
+	// Pattern: project-<project-slug>-app-<app-slug>-kibaship-com
+	// project-slug and app-slug should be valid DNS labels (lowercase alphanumeric with hyphens)
+	pattern := regexp.MustCompile(`^project-[a-z0-9]([a-z0-9-]*[a-z0-9])?-app-[a-z0-9]([a-z0-9-]*[a-z0-9])?-kibaship-com$`)
+	return pattern.MatchString(r.Name)
+}
+
+// GetProjectSlugFromName extracts the project slug from application name
+func (r *Application) GetProjectSlugFromName() string {
+	// Extract project slug from name format: project-<project-slug>-app-<app-slug>-kibaship-com
+	if !r.isValidApplicationName() {
+		return ""
+	}
+
+	parts := strings.Split(r.Name, "-")
+	if len(parts) < 5 {
+		return ""
+	}
+
+	// Find the "app" delimiter and extract everything between "project" and "app"
+	projectStart := 1 // after "project-"
+	appIndex := -1
+	for i, part := range parts {
+		if part == "app" {
+			appIndex = i
+			break
+		}
+	}
+
+	if appIndex == -1 || appIndex <= projectStart {
+		return ""
+	}
+
+	return strings.Join(parts[projectStart:appIndex], "-")
+}
+
+// GetAppSlugFromName extracts the app slug from application name
+func (r *Application) GetAppSlugFromName() string {
+	// Extract app slug from name format: project-<project-slug>-app-<app-slug>-kibaship-com
+	if !r.isValidApplicationName() {
+		return ""
+	}
+
+	parts := strings.Split(r.Name, "-")
+	if len(parts) < 5 {
+		return ""
+	}
+
+	// Find the "app" delimiter and extract everything between "app" and "kibaship"
+	appIndex := -1
+	kibashipIndex := -1
+	for i, part := range parts {
+		if part == "app" {
+			appIndex = i
+		} else if part == "kibaship" {
+			kibashipIndex = i
+			break
+		}
+	}
+
+	if appIndex == -1 || kibashipIndex == -1 || kibashipIndex <= appIndex+1 {
+		return ""
+	}
+
+	return strings.Join(parts[appIndex+1:kibashipIndex], "-")
+}
+
+// SetupWebhookWithManager will setup the manager to manage the webhooks
+func (r *Application) SetupWebhookWithManager(mgr ctrl.Manager) error {
+	return ctrl.NewWebhookManagedBy(mgr).
+		For(r).
+		WithValidator(r).
+		Complete()
 }

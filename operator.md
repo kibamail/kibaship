@@ -417,6 +417,11 @@ All managed resources are labeled with:
 
 ### Application Resource
 
+**Naming Requirements:**
+- **Format**: `project-<project-slug>-app-<app-slug>-kibaship-com`
+- **Example**: `project-mystore-app-frontend-kibaship-com`
+- **Validation**: Enforced via admission webhooks
+
 **Required Fields:**
 - `spec.projectRef.name`: Reference to parent project
 - `spec.type`: Application type enum value
@@ -427,8 +432,14 @@ All managed resources are labeled with:
 
 ### Deployment Resource
 
+**Naming Requirements:**
+- **Format**: `project-<project-slug>-app-<app-slug>-deployment-<deployment-slug>-kibaship-com`
+- **Example**: `project-mystore-app-frontend-deployment-staging-kibaship-com`
+- **Validation**: Enforced via admission webhooks
+- **Consistency**: Project and app slugs must match the referenced Application
+
 **Required Fields:**
-- `spec.applicationRef.name`: Reference to parent application
+- `spec.applicationRef.name`: Reference to parent application (must follow Application naming format)
 
 **Status Tracking:**
 - Pipeline run history (last 5 runs)

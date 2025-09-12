@@ -33,7 +33,7 @@ import (
 
 var _ = Describe("Application Controller", func() {
 	Context("When reconciling a resource", func() {
-		const resourceName = "test-resource"
+		const resourceName = "project-myproject-app-myapp-kibaship-com"
 
 		ctx := context.Background()
 
@@ -144,7 +144,7 @@ var _ = Describe("Application Controller", func() {
 			By("Creating a GitRepository application")
 			gitApp := &platformv1alpha1.Application{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-git-app",
+					Name:      "project-myproject-app-gitapp-kibaship-com",
 					Namespace: "default",
 					Labels: map[string]string{
 						"platform.kibaship.com/uuid": "550e8400-e29b-41d4-a716-446655440010",
@@ -184,7 +184,7 @@ var _ = Describe("Application Controller", func() {
 			By("Creating a MySQL application")
 			mysqlApp := &platformv1alpha1.Application{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-mysql-app",
+					Name:      "project-myproject-app-mysqlapp-kibaship-com",
 					Namespace: "default",
 					Labels: map[string]string{
 						"platform.kibaship.com/uuid": "550e8400-e29b-41d4-a716-446655440011",
@@ -216,7 +216,7 @@ var _ = Describe("Application Controller", func() {
 			By("Creating a GitRepository application with invalid repo format")
 			invalidGitApp := &platformv1alpha1.Application{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-invalid-git-app",
+					Name:      "project-myproject-app-invalidgitapp-kibaship-com",
 					Namespace: "default",
 					Labels: map[string]string{
 						"platform.kibaship.com/uuid": "550e8400-e29b-41d4-a716-446655440012",
@@ -244,7 +244,7 @@ var _ = Describe("Application Controller", func() {
 			By("Creating an application with all required fields")
 			validApp := &platformv1alpha1.Application{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-valid-app",
+					Name:      "project-myproject-app-validapp-kibaship-com",
 					Namespace: "default",
 					Labels: map[string]string{
 						"platform.kibaship.com/uuid": "550e8400-e29b-41d4-a716-446655440013",
@@ -273,7 +273,7 @@ var _ = Describe("Application Controller", func() {
 			By("Creating a GitRepository application with minimal fields")
 			minimalGitApp := &platformv1alpha1.Application{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-minimal-git-app",
+					Name:      "project-myproject-app-minimalgitapp-kibaship-com",
 					Namespace: "default",
 					Labels: map[string]string{
 						"platform.kibaship.com/uuid": "550e8400-e29b-41d4-a716-446655440014",
@@ -307,7 +307,7 @@ var _ = Describe("Application Controller", func() {
 			By("Creating a GitRepository application with SPA output directory")
 			spaGitApp := &platformv1alpha1.Application{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-spa-git-app",
+					Name:      "project-myproject-app-spagitapp-kibaship-com",
 					Namespace: "default",
 					Labels: map[string]string{
 						"platform.kibaship.com/uuid": "550e8400-e29b-41d4-a716-446655440015",
@@ -342,7 +342,7 @@ var _ = Describe("Application Controller", func() {
 			By("Creating an Application with only PaaS UUID")
 			testApp := &platformv1alpha1.Application{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-uuid-labeling",
+					Name:      "project-myproject-app-uuidtest-kibaship-com",
 					Namespace: "default",
 					Labels: map[string]string{
 						"platform.kibaship.com/uuid": "550e8400-e29b-41d4-a716-446655440100",
