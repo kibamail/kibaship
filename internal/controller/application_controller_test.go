@@ -110,7 +110,7 @@ var _ = Describe("Application Controller", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			// Second reconcile creates deployment
+			// Second reconcile handles application logic
 			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: typeNamespacedName,
 			})
@@ -124,28 +124,20 @@ var _ = Describe("Application Controller", func() {
 			By("Verifying the Application has the project UUID label")
 			Expect(updatedApp.Labels).To(HaveKeyWithValue("platform.kibaship.com/project-uuid", "550e8400-e29b-41d4-a716-446655440000"))
 
-			By("Verifying a Deployment was created")
-			deploymentName := resourceName + "-deployment"
-			deploymentKey := types.NamespacedName{
-				Name:      deploymentName,
-				Namespace: "default",
-			}
-			var deployment platformv1alpha1.Deployment
-			Eventually(func() error {
-				return k8sClient.Get(ctx, deploymentKey, &deployment)
-			}).Should(Succeed())
-
-			By("Verifying the Deployment references the Application")
-			Expect(deployment.Spec.ApplicationRef.Name).To(Equal(resourceName))
-
 			By("Verifying the Application status is updated")
 			Eventually(func() []metav1.Condition {
 				Expect(k8sClient.Get(ctx, typeNamespacedName, &updatedApp)).To(Succeed())
 				return updatedApp.Status.Conditions
 			}).Should(ContainElement(MatchFields(IgnoreExtras, Fields{
-				"Type":   Equal("DeploymentReady"),
+				"Type":   Equal("Ready"),
 				"Status": Equal(metav1.ConditionTrue),
 			})))
+
+			By("Verifying the Application phase is Ready")
+			Eventually(func() string {
+				Expect(k8sClient.Get(ctx, typeNamespacedName, &updatedApp)).To(Succeed())
+				return updatedApp.Status.Phase
+			}).Should(Equal("Ready"))
 		})
 
 		It("should validate GitRepository application type", func() {
@@ -346,159 +338,6 @@ var _ = Describe("Application Controller", func() {
 			}()
 		})
 
-		It("should update existing Deployment when Application is modified", func() {
-			By("Creating an Application")
-			testApp := &platformv1alpha1.Application{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-update-deployment",
-					Namespace: "default",
-					Labels: map[string]string{
-						"platform.kibaship.com/uuid": "550e8400-e29b-41d4-a716-446655440004",
-					},
-				},
-				Spec: platformv1alpha1.ApplicationSpec{
-					ProjectRef: corev1.LocalObjectReference{
-						Name: "test-project",
-					},
-					Type: platformv1alpha1.ApplicationTypeGitRepository,
-					GitRepository: &platformv1alpha1.GitRepositoryConfig{
-						Provider:   platformv1alpha1.GitProviderGitHub,
-						Repository: "myorg/test-repo",
-						SecretRef: corev1.LocalObjectReference{
-							Name: "git-token",
-						},
-					},
-				},
-			}
-			Expect(k8sClient.Create(ctx, testApp)).To(Succeed())
-
-			By("Reconciling to create the Deployment")
-			controllerReconciler := &ApplicationReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
-			}
-			// First reconcile adds finalizer
-			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: types.NamespacedName{
-					Name:      testApp.Name,
-					Namespace: testApp.Namespace,
-				},
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			// Second reconcile creates deployment
-			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: types.NamespacedName{
-					Name:      testApp.Name,
-					Namespace: testApp.Namespace,
-				},
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			By("Modifying the Application")
-			var updatedApp platformv1alpha1.Application
-			Expect(k8sClient.Get(ctx, types.NamespacedName{
-				Name:      testApp.Name,
-				Namespace: testApp.Namespace,
-			}, &updatedApp)).To(Succeed())
-
-			updatedApp.Spec.GitRepository.Repository = "myorg/updated-repo"
-			Expect(k8sClient.Update(ctx, &updatedApp)).To(Succeed())
-
-			By("Reconciling again")
-			// This should be a single reconcile since finalizer already exists
-			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: types.NamespacedName{
-					Name:      testApp.Name,
-					Namespace: testApp.Namespace,
-				},
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			By("Verifying the Deployment still exists and references the Application")
-			deploymentName := testApp.Name + "-deployment"
-			var deployment platformv1alpha1.Deployment
-			Expect(k8sClient.Get(ctx, types.NamespacedName{
-				Name:      deploymentName,
-				Namespace: testApp.Namespace,
-			}, &deployment)).To(Succeed())
-			Expect(deployment.Spec.ApplicationRef.Name).To(Equal(testApp.Name))
-
-			// Cleanup
-			defer func() {
-				Expect(k8sClient.Delete(ctx, &updatedApp)).To(Succeed())
-			}()
-		})
-
-		It("should create a Deployment when Application is created", func() {
-			By("Creating an Application")
-			testApp := &platformv1alpha1.Application{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-create-deployment",
-					Namespace: "default",
-					Labels: map[string]string{
-						"platform.kibaship.com/uuid": "550e8400-e29b-41d4-a716-446655440002",
-					},
-				},
-				Spec: platformv1alpha1.ApplicationSpec{
-					ProjectRef: corev1.LocalObjectReference{
-						Name: "test-project",
-					},
-					Type: platformv1alpha1.ApplicationTypeGitRepository,
-					GitRepository: &platformv1alpha1.GitRepositoryConfig{
-						Provider:   platformv1alpha1.GitProviderGitHub,
-						Repository: "myorg/test-repo",
-						SecretRef: corev1.LocalObjectReference{
-							Name: "git-token",
-						},
-					},
-				},
-			}
-			Expect(k8sClient.Create(ctx, testApp)).To(Succeed())
-
-			By("Reconciling the Application")
-			controllerReconciler := &ApplicationReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
-			}
-			// First reconcile adds finalizer
-			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: types.NamespacedName{
-					Name:      testApp.Name,
-					Namespace: testApp.Namespace,
-				},
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			// Second reconcile creates deployment
-			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: types.NamespacedName{
-					Name:      testApp.Name,
-					Namespace: testApp.Namespace,
-				},
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			By("Verifying the Deployment was created")
-			deploymentName := testApp.Name + "-deployment"
-			var deployment platformv1alpha1.Deployment
-			Eventually(func() error {
-				return k8sClient.Get(ctx, types.NamespacedName{
-					Name:      deploymentName,
-					Namespace: testApp.Namespace,
-				}, &deployment)
-			}).Should(Succeed())
-
-			By("Verifying the Deployment has correct labels")
-			Expect(deployment.Labels).To(HaveKeyWithValue("platform.operator.kibaship.com/application", testApp.Name))
-			Expect(deployment.Labels).To(HaveKeyWithValue("app.kubernetes.io/name", testApp.Name))
-
-			// Cleanup
-			defer func() {
-				Expect(k8sClient.Delete(ctx, testApp)).To(Succeed())
-			}()
-		})
-
 		It("should set project UUID label when reconciling Application", func() {
 			By("Creating an Application with only PaaS UUID")
 			testApp := &platformv1alpha1.Application{
@@ -593,142 +432,5 @@ var _ = Describe("Application Controller", func() {
 			}()
 		})
 
-		It("should efficiently delete Deployments using label selector", func() {
-			By("Creating multiple applications to test label selector efficiency")
-
-			// Create first application and deployment
-			app1 := &platformv1alpha1.Application{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-label-selector-1",
-					Namespace: "default",
-					Labels: map[string]string{
-						"platform.kibaship.com/uuid": "550e8400-e29b-41d4-a716-446655440000",
-					},
-				},
-				Spec: platformv1alpha1.ApplicationSpec{
-					ProjectRef: corev1.LocalObjectReference{
-						Name: "test-project",
-					},
-					Type: "GitRepository",
-					GitRepository: &platformv1alpha1.GitRepositoryConfig{
-						Provider:   "github.com",
-						Repository: "user/repo1",
-						Branch:     "main",
-					},
-				},
-			}
-			Expect(k8sClient.Create(ctx, app1)).To(Succeed())
-
-			// Create second application and deployment
-			app2 := &platformv1alpha1.Application{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-label-selector-2",
-					Namespace: "default",
-					Labels: map[string]string{
-						"platform.kibaship.com/uuid": "550e8400-e29b-41d4-a716-446655440001",
-					},
-				},
-				Spec: platformv1alpha1.ApplicationSpec{
-					ProjectRef: corev1.LocalObjectReference{
-						Name: "test-project",
-					},
-					Type: "GitRepository",
-					GitRepository: &platformv1alpha1.GitRepositoryConfig{
-						Provider:   "github.com",
-						Repository: "user/repo2",
-						Branch:     "main",
-					},
-				},
-			}
-			Expect(k8sClient.Create(ctx, app2)).To(Succeed())
-
-			// Create reconciler instance
-			controllerReconciler := &ApplicationReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
-			}
-
-			// Reconcile both applications to create their deployments
-			// First reconcile adds finalizer for app1
-			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: types.NamespacedName{
-					Name:      app1.Name,
-					Namespace: app1.Namespace,
-				},
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			// Second reconcile creates deployment for app1
-			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: types.NamespacedName{
-					Name:      app1.Name,
-					Namespace: app1.Namespace,
-				},
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			// First reconcile adds finalizer for app2
-			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: types.NamespacedName{
-					Name:      app2.Name,
-					Namespace: app2.Namespace,
-				},
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			// Second reconcile creates deployment for app2
-			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: types.NamespacedName{
-					Name:      app2.Name,
-					Namespace: app2.Namespace,
-				},
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			// Verify both deployments exist
-			var deployment1 platformv1alpha1.Deployment
-			Expect(k8sClient.Get(ctx, types.NamespacedName{
-				Name:      "test-label-selector-1-deployment",
-				Namespace: app1.Namespace,
-			}, &deployment1)).To(Succeed())
-
-			var deployment2 platformv1alpha1.Deployment
-			Expect(k8sClient.Get(ctx, types.NamespacedName{
-				Name:      "test-label-selector-2-deployment",
-				Namespace: app2.Namespace,
-			}, &deployment2)).To(Succeed())
-
-			// Verify deployments have correct labels
-			Expect(deployment1.Labels["platform.operator.kibaship.com/application"]).To(Equal("test-label-selector-1"))
-			Expect(deployment2.Labels["platform.operator.kibaship.com/application"]).To(Equal("test-label-selector-2"))
-
-			// Delete first application - this should only delete its associated deployment
-			Expect(k8sClient.Delete(ctx, app1)).To(Succeed())
-
-			// Reconcile deletion
-			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: types.NamespacedName{
-					Name:      app1.Name,
-					Namespace: app1.Namespace,
-				},
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			// Verify only deployment1 is deleted, deployment2 still exists
-			err = k8sClient.Get(ctx, types.NamespacedName{
-				Name:      "test-label-selector-1-deployment",
-				Namespace: app1.Namespace,
-			}, &deployment1)
-			Expect(errors.IsNotFound(err)).To(BeTrue())
-
-			// deployment2 should still exist
-			Expect(k8sClient.Get(ctx, types.NamespacedName{
-				Name:      "test-label-selector-2-deployment",
-				Namespace: app2.Namespace,
-			}, &deployment2)).To(Succeed())
-
-			// Cleanup
-			Expect(k8sClient.Delete(ctx, app2)).To(Succeed())
-		})
 	})
 })

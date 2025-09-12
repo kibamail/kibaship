@@ -178,13 +178,12 @@ Based on `spec.type`, different configuration validation occurs:
 - Cluster: includes replica count (min 1, default 3)
 - Optional: secret reference for credentials
 
-#### 2.3 Automatic Deployment Creation
+#### 2.3 Application Status Update
 
-**Step 5: Deployment Resource Creation**
-- Automatically creates corresponding `Deployment` resource
-- Links deployment to application via `spec.applicationRef`
-- Inherits UUID labels from application
-- Deployment handles CI/CD pipeline orchestration
+**Step 5: Status Update**
+- Updates application status to "Ready" 
+- Sets conditions for application readiness
+- No automatic resource creation occurs
 
 ### 3. Project Deletion Workflow
 
@@ -236,28 +235,35 @@ Application Deletion Event → ApplicationReconciler.handleDeletion()
 ```
 
 **Step 1: Dependent Resource Cleanup**
-- Finds and deletes associated `Deployment` resources
-- Uses label selector matching to find dependent resources
+- Finds and deletes associated `Deployment` resources using label selector
+- Uses label `platform.operator.kibaship.com/application: {app-name}` to find dependent deployments
+- Deployments must be explicitly created by users or other systems
 
 **Step 2: Finalizer Removal**
 - Removes finalizer `platform.operator.kibaship.com/application-finalizer`
 - Completes Application deletion
 
-### 5. Deployment Management (Future Implementation)
+### 5. Deployment Management 
 
-The `DeploymentReconciler` is currently a stub but will handle:
+Deployments are separate resources that reference Applications but are **not automatically created**:
 
-#### 5.1 Pipeline Orchestration
+#### 5.1 Deployment Creation
+- Users must explicitly create `Deployment` resources
+- Each Deployment must reference an Application via `spec.applicationRef`
+- Multiple Deployments can reference the same Application (one-to-many relationship)
+- Examples: staging deployment, production deployment, feature branch deployments
+
+#### 5.2 Pipeline Orchestration (Future Implementation)
 - Integration with Tekton PipelineRuns
-- Git webhook handling for automatic builds
+- Git webhook handling for automatic builds  
 - Image building and registry management
 
-#### 5.2 Status Tracking
+#### 5.3 Status Tracking
 - Pipeline run status monitoring
 - Build artifact tracking (images, digests)
 - Deployment history maintenance
 
-#### 5.3 Phases Management
+#### 5.4 Phases Management
 ```
 Initializing → Running → Succeeded/Failed → Waiting
 ```

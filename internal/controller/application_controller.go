@@ -20,7 +20,6 @@ import (
 	"context"
 	"fmt"
 
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -156,85 +155,14 @@ func (r *ApplicationReconciler) handleApplicationReconcile(ctx context.Context, 
 
 	log.Info("Reconciling Application")
 
-	// Ensure Deployment exists for this Application
-	deployment, err := r.ensureDeployment(ctx, app)
-	if err != nil {
-		log.Error(err, "Failed to ensure Deployment")
-		return ctrl.Result{}, err
-	}
-
 	// Update Application status
-	if err := r.updateApplicationStatus(ctx, app, deployment); err != nil {
+	if err := r.updateApplicationStatus(ctx, app); err != nil {
 		log.Error(err, "Failed to update Application status")
 		return ctrl.Result{}, err
 	}
 
 	log.Info("Successfully reconciled Application")
 	return ctrl.Result{}, nil
-}
-
-// ensureDeployment ensures a Deployment exists for the Application
-func (r *ApplicationReconciler) ensureDeployment(ctx context.Context, app *platformv1alpha1.Application) (*platformv1alpha1.Deployment, error) {
-	log := logf.FromContext(ctx).WithValues("application", app.Name, "namespace", app.Namespace)
-
-	// Generate Deployment name based on Application name
-	deploymentName := fmt.Sprintf("%s-deployment", app.Name)
-
-	// Check if Deployment already exists
-	var existingDeployment platformv1alpha1.Deployment
-	err := r.Get(ctx, types.NamespacedName{
-		Name:      deploymentName,
-		Namespace: app.Namespace,
-	}, &existingDeployment)
-
-	if err == nil {
-		// Deployment exists, check if it needs to be updated
-		if existingDeployment.Spec.ApplicationRef.Name != app.Name {
-			// Update the Deployment to reference the correct Application
-			existingDeployment.Spec.ApplicationRef.Name = app.Name
-			if err := r.Update(ctx, &existingDeployment); err != nil {
-				return nil, fmt.Errorf("failed to update existing Deployment: %w", err)
-			}
-			log.Info("Updated existing Deployment", "deployment", deploymentName)
-		}
-		return &existingDeployment, nil
-	}
-
-	if !errors.IsNotFound(err) {
-		return nil, fmt.Errorf("failed to get Deployment: %w", err)
-	}
-
-	// Create new Deployment
-	newDeployment := &platformv1alpha1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      deploymentName,
-			Namespace: app.Namespace,
-			Labels: map[string]string{
-				"app.kubernetes.io/name":                     app.Name,
-				"app.kubernetes.io/component":                "deployment",
-				"app.kubernetes.io/managed-by":               "kibaship-operator",
-				"platform.operator.kibaship.com/application": app.Name,
-			},
-		},
-		Spec: platformv1alpha1.DeploymentSpec{
-			ApplicationRef: corev1.LocalObjectReference{
-				Name: app.Name,
-			},
-		},
-	}
-
-	// Set owner reference so the Deployment is cleaned up when Application is deleted
-	if err := controllerutil.SetControllerReference(app, newDeployment, r.Scheme); err != nil {
-		return nil, fmt.Errorf("failed to set controller reference: %w", err)
-	}
-
-	// Create the Deployment
-	if err := r.Create(ctx, newDeployment); err != nil {
-		return nil, fmt.Errorf("failed to create Deployment: %w", err)
-	}
-
-	log.Info("Created new Deployment", "deployment", deploymentName)
-	return newDeployment, nil
 }
 
 // ensureUUIDLabels ensures that the Application has the correct UUID labels
@@ -290,18 +218,19 @@ func (r *ApplicationReconciler) getProjectUUID(ctx context.Context, app *platfor
 	return projectUUID, nil
 }
 
-// updateApplicationStatus updates the Application status based on the Deployment
-func (r *ApplicationReconciler) updateApplicationStatus(ctx context.Context, app *platformv1alpha1.Application, deployment *platformv1alpha1.Deployment) error {
+// updateApplicationStatus updates the Application status
+func (r *ApplicationReconciler) updateApplicationStatus(ctx context.Context, app *platformv1alpha1.Application) error {
 	// Update the Application status to reflect the current state
 	app.Status.ObservedGeneration = app.Generation
+	app.Status.Phase = "Ready"
 
-	// Set condition based on deployment existence
+	// Set condition for application readiness
 	condition := metav1.Condition{
-		Type:               "DeploymentReady",
+		Type:               "Ready",
 		Status:             metav1.ConditionTrue,
 		LastTransitionTime: metav1.Now(),
-		Reason:             "DeploymentCreated",
-		Message:            fmt.Sprintf("Deployment %s created successfully", deployment.Name),
+		Reason:             "ApplicationReady",
+		Message:            "Application is ready",
 	}
 
 	// Update or add the condition
@@ -329,7 +258,6 @@ func (r *ApplicationReconciler) updateApplicationStatus(ctx context.Context, app
 func (r *ApplicationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&platformv1alpha1.Application{}).
-		Owns(&platformv1alpha1.Deployment{}).
 		Named("application").
 		Complete(r)
 }
