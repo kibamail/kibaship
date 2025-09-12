@@ -67,6 +67,15 @@ const (
 	RoleBindingNamePrefix = "project-"
 	// RoleBindingNameSuffix is the suffix for the role binding name
 	RoleBindingNameSuffix = "-admin-binding-kibaship-com"
+
+	// Tekton constants
+	TektonNamespace = "tekton-pipelines"
+	TektonRoleName  = "tekton-tasks-reader"
+
+	// TektonRoleBindingNamePrefix is the prefix for the tekton role binding name
+	TektonRoleBindingNamePrefix = "project-"
+	// TektonRoleBindingNameSuffix is the suffix for the tekton role binding name
+	TektonRoleBindingNameSuffix = "-tekton-tasks-reader-binding-kibaship-com"
 )
 
 // NamespaceManager handles namespace operations for projects
@@ -202,6 +211,11 @@ func (nm *NamespaceManager) generateRoleBindingName(projectName string) string {
 	return RoleBindingNamePrefix + projectName + RoleBindingNameSuffix
 }
 
+// generateTektonRoleBindingName generates the Tekton role binding name for a project
+func (nm *NamespaceManager) generateTektonRoleBindingName(projectName string) string {
+	return TektonRoleBindingNamePrefix + projectName + TektonRoleBindingNameSuffix
+}
+
 // generateNamespaceLabels creates the labels for a project namespace
 func (nm *NamespaceManager) generateNamespaceLabels(project *platformv1alpha1.Project) map[string]string {
 	labels := map[string]string{
@@ -264,6 +278,11 @@ func (nm *NamespaceManager) CreateProjectServiceAccount(ctx context.Context, nam
 	// Create the role binding
 	if err := nm.createRoleBinding(ctx, namespace, project); err != nil {
 		return fmt.Errorf("failed to create role binding: %w", err)
+	}
+
+	// Create Tekton integration
+	if err := nm.createTektonIntegration(ctx, namespace, project); err != nil {
+		return fmt.Errorf("failed to create Tekton integration: %w", err)
 	}
 
 	log.Info("Successfully created service account with admin permissions", "project", project.Name, "namespace", namespace.Name)
@@ -429,5 +448,181 @@ func (nm *NamespaceManager) deleteServiceAccountResources(ctx context.Context, n
 		log.Error(err, "Failed to delete service account", "name", serviceAccountName, "namespace", namespace.Name)
 	}
 
+	// Delete Tekton role binding
+	tektonRoleBindingName := nm.generateTektonRoleBindingName(project.Name)
+	tektonRoleBinding := &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      tektonRoleBindingName,
+			Namespace: TektonNamespace,
+		},
+	}
+	if err := nm.Delete(ctx, tektonRoleBinding); err != nil && !errors.IsNotFound(err) {
+		log.Error(err, "Failed to delete Tekton role binding", "name", tektonRoleBindingName, "namespace", TektonNamespace)
+	}
+
 	log.Info("Service account resources cleanup completed", "project", project.Name, "namespace", namespace.Name)
+}
+
+// createTektonIntegration creates Tekton role and role binding for the project
+func (nm *NamespaceManager) createTektonIntegration(ctx context.Context, namespace *corev1.Namespace, project *platformv1alpha1.Project) error {
+	log := logf.FromContext(ctx)
+
+	log.Info("Creating Tekton integration for project", "project", project.Name, "tektonNamespace", TektonNamespace)
+
+	// Ensure the tekton-tasks-reader role exists
+	if err := nm.ensureTektonTasksReaderRole(ctx); err != nil {
+		return fmt.Errorf("failed to ensure Tekton tasks reader role: %w", err)
+	}
+
+	// Create role binding from project service account to tekton role
+	if err := nm.createTektonRoleBinding(ctx, namespace, project); err != nil {
+		return fmt.Errorf("failed to create Tekton role binding: %w", err)
+	}
+
+	log.Info("Successfully created Tekton integration", "project", project.Name, "tektonNamespace", TektonNamespace)
+	return nil
+}
+
+// ensureTektonTasksReaderRole ensures the tekton-tasks-reader role exists in tekton-pipelines namespace
+func (nm *NamespaceManager) ensureTektonTasksReaderRole(ctx context.Context) error {
+	log := logf.FromContext(ctx)
+
+	// Ensure tekton-pipelines namespace exists
+	if err := nm.ensureTektonNamespace(ctx); err != nil {
+		return fmt.Errorf("failed to ensure Tekton namespace: %w", err)
+	}
+
+	// Check if role already exists
+	existingRole := &rbacv1.Role{}
+	err := nm.Get(ctx, types.NamespacedName{
+		Name:      TektonRoleName,
+		Namespace: TektonNamespace,
+	}, existingRole)
+
+	if err == nil {
+		log.Info("Tekton tasks reader role already exists", "role", TektonRoleName, "namespace", TektonNamespace)
+		return nil
+	}
+
+	if !errors.IsNotFound(err) {
+		return fmt.Errorf("failed to check if Tekton role exists: %w", err)
+	}
+
+	// Create the role
+	role := &rbacv1.Role{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      TektonRoleName,
+			Namespace: TektonNamespace,
+			Labels: map[string]string{
+				ManagedByLabel: ManagedByValue,
+			},
+			Annotations: map[string]string{
+				"platform.kibaship.com/created-by": "kibaship-operator",
+				"platform.kibaship.com/purpose":    "Allow projects to read Tekton tasks",
+			},
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{"tekton.dev"},
+				Resources: []string{"tasks"},
+				Verbs:     []string{"get", "list", "watch"},
+			},
+		},
+	}
+
+	if err := nm.Create(ctx, role); err != nil && !errors.IsAlreadyExists(err) {
+		return fmt.Errorf("failed to create Tekton tasks reader role: %w", err)
+	}
+
+	log.Info("Created Tekton tasks reader role", "role", TektonRoleName, "namespace", TektonNamespace)
+	return nil
+}
+
+// createTektonRoleBinding creates a role binding from project service account to tekton-tasks-reader role
+func (nm *NamespaceManager) createTektonRoleBinding(ctx context.Context, namespace *corev1.Namespace, project *platformv1alpha1.Project) error {
+	log := logf.FromContext(ctx)
+
+	roleBindingName := nm.generateTektonRoleBindingName(project.Name)
+
+	roleBinding := &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      roleBindingName,
+			Namespace: TektonNamespace,
+			Labels: map[string]string{
+				ManagedByLabel:   ManagedByValue,
+				ProjectNameLabel: project.Name,
+			},
+			Annotations: map[string]string{
+				"platform.kibaship.com/created-by": "kibaship-operator",
+				"platform.kibaship.com/project":    project.Name,
+				"platform.kibaship.com/purpose":    "Allow project service account to read Tekton tasks",
+			},
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      nm.generateServiceAccountName(project.Name),
+				Namespace: namespace.Name,
+			},
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "Role",
+			Name:     TektonRoleName,
+		},
+	}
+
+	// Copy project UUID labels if they exist
+	if projectUUID, exists := project.Labels[ProjectUUIDLabel]; exists {
+		roleBinding.Labels[ProjectUUIDLabel] = projectUUID
+	}
+	if workspaceUUID, exists := project.Labels[WorkspaceUUIDLabel]; exists {
+		roleBinding.Labels[WorkspaceUUIDLabel] = workspaceUUID
+	}
+
+	if err := nm.Create(ctx, roleBinding); err != nil && !errors.IsAlreadyExists(err) {
+		return fmt.Errorf("failed to create Tekton role binding: %w", err)
+	}
+
+	log.Info("Created Tekton role binding", "roleBinding", roleBindingName, "namespace", TektonNamespace, "project", project.Name)
+	return nil
+}
+
+// ensureTektonNamespace ensures the tekton-pipelines namespace exists
+func (nm *NamespaceManager) ensureTektonNamespace(ctx context.Context) error {
+	log := logf.FromContext(ctx)
+
+	// Check if namespace already exists
+	existingNamespace := &corev1.Namespace{}
+	err := nm.Get(ctx, types.NamespacedName{Name: TektonNamespace}, existingNamespace)
+
+	if err == nil {
+		log.Info("Tekton namespace already exists", "namespace", TektonNamespace)
+		return nil
+	}
+
+	if !errors.IsNotFound(err) {
+		return fmt.Errorf("failed to check if Tekton namespace exists: %w", err)
+	}
+
+	// Create the namespace
+	namespace := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: TektonNamespace,
+			Labels: map[string]string{
+				ManagedByLabel: ManagedByValue,
+			},
+			Annotations: map[string]string{
+				"platform.kibaship.com/created-by": "kibaship-operator",
+				"platform.kibaship.com/purpose":    "Tekton Pipelines namespace for task management",
+			},
+		},
+	}
+
+	if err := nm.Create(ctx, namespace); err != nil && !errors.IsAlreadyExists(err) {
+		return fmt.Errorf("failed to create Tekton namespace: %w", err)
+	}
+
+	log.Info("Created Tekton namespace", "namespace", TektonNamespace)
+	return nil
 }

@@ -438,4 +438,5 @@ var _ = Describe("NamespaceManager", func() {
 			Expect(errors.IsNotFound(err)).To(BeTrue())
 		})
 	})
+
 })
