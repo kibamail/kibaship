@@ -84,6 +84,39 @@ This document provides a comprehensive, actionable checklist to bring the Kibash
 - [ ] Optional tracing
   - Description: Add OpenTelemetry hooks optionally; trace reconcile spans including external calls (e.g., Tekton)
 
+
+## Code quality, performance and bug risks
+- [ ] Consistent error handling and wrapping
+  - Description: Use errors.Is/As with wrapped errors; prefer fmt.Errorf("…: %w", err). Avoid double-logging (log once at the edge) and return rich errors for callers to decide on requeue.
+- [ ] Context propagation and cancellation
+  - Description: Pass context from Reconcile all the way down; avoid context.Background in helpers; set timeouts for external calls. Respect ctx.Done in long-running ops.
+- [ ] Guard against hot loops and no-op updates
+  - Description: Compare desired vs current using semantic equality before Patch/Update; avoid writing status/spec when no drift; gate on metadata.generation where applicable.
+- [ ] Safe Patch/Status patterns
+  - Description: Prefer Patch with client.MergeFrom for spec and Status().Patch for status updates; avoid Update to reduce conflicts; handle client.IgnoreNotFound.
+- [ ] Nil/zero-value and pointer safety
+  - Description: Check pointers/slices/maps before dereference or len; avoid mutating shared map fields; use DeepCopy() before in-place modifications.
+- [ ] Concurrency and race safety
+  - Description: Keep reconciler fields immutable after Start; avoid shared mutable state; run tests with -race and fix data races; guard goroutines with ctx.
+- [ ] Event predicates and indexing for performance
+  - Description: Add predicates to ignore status-only updates and unchanged fields; add indexers for frequently queried fields/selectors to avoid full list scans.
+- [ ] Workqueue rate limiting and backoff
+  - Description: Use exponential rate limiter on queues; categorize retryable vs terminal errors; set MaxConcurrentReconciles per controller based on load.
+- [ ] Logging quality
+  - Description: Use structured logging with keys (controller, namespace, name, generation, retry); avoid logging secrets; reduce noisy info logs in hot paths.
+- [ ] Linting and static analysis baseline
+  - Description: Adopt golangci-lint with linters: govet, staticcheck, errcheck, ineffassign, gosimple, revive, gocyclo (threshold), gofumpt, depguard, forbidigo. Enforce in CI.
+- [ ] Test helpers for common patterns
+  - Description: Create helpers for building CRs, asserting Conditions, and reconciling twice for idempotency; add table-driven tests for validators.
+- [ ] Known bug risk: unconditional Ready statuses
+  - Description: Ensure Application/Deployment readiness derives from underlying resources/validations; add negative tests to prevent regressions.
+- [ ] Known bug risk: finalizer removal on failure paths
+  - Description: Always attempt finalizer removal after successful cleanup; ensure retries on partial failures; verify with deletion e2e.
+- [ ] Known bug risk: namespace/RBAC drift
+  - Description: Reconcile Role/RoleBinding changes safely; avoid flipping on every run; ensure least changes and tolerate external additions via labels/owner hints.
+- [ ] Known bug risk: panics from regex/UUID helpers
+  - Description: Centralize and fuzz-test validators; protect against nil inputs and boundary lengths; avoid expensive regex backtracking.
+
 ## Security and multi-tenancy
 - [ ] Drop cluster-scoped writes for optional integrations
   - Description: Avoid creating cluster namespaces/roles that are not strictly needed; rely on platform install prereqs
