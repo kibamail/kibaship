@@ -351,6 +351,8 @@ var _ = Describe("NamespaceManager", func() {
 			By("Verifying role has correct labels")
 			Expect(role.Labels[ManagedByLabel]).To(Equal(ManagedByValue))
 			Expect(role.Labels[ProjectNameLabel]).To(Equal(testProject.Name))
+			Expect(role.Labels[ProjectUUIDLabel]).To(Equal("550e8400-e29b-41d4-a716-446655440010"))
+			Expect(role.Labels[WorkspaceUUIDLabel]).To(Equal("6ba7b810-9dad-11d1-80b4-00c04fd430d0"))
 		})
 
 		It("should create role binding connecting service account to role", func() {
@@ -377,6 +379,8 @@ var _ = Describe("NamespaceManager", func() {
 			By("Verifying role binding has correct labels")
 			Expect(roleBinding.Labels[ManagedByLabel]).To(Equal(ManagedByValue))
 			Expect(roleBinding.Labels[ProjectNameLabel]).To(Equal(testProject.Name))
+			Expect(roleBinding.Labels[ProjectUUIDLabel]).To(Equal("550e8400-e29b-41d4-a716-446655440010"))
+			Expect(roleBinding.Labels[WorkspaceUUIDLabel]).To(Equal("6ba7b810-9dad-11d1-80b4-00c04fd430d0"))
 		})
 
 	})
