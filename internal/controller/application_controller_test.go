@@ -163,7 +163,8 @@ var _ = Describe("Application Controller", func() {
 						BuildCommand:       "npm install && npm run build",
 						StartCommand:       "npm start",
 						SpaOutputDirectory: "dist",
-						SecretRef: corev1.LocalObjectReference{
+						PublicAccess:       false,
+						SecretRef: &corev1.LocalObjectReference{
 							Name: "git-token",
 						},
 						Env: &corev1.LocalObjectReference{
@@ -230,7 +231,7 @@ var _ = Describe("Application Controller", func() {
 					GitRepository: &platformv1alpha1.GitRepositoryConfig{
 						Provider:   platformv1alpha1.GitProviderGitHub,
 						Repository: "invalid-repo-format",
-						SecretRef: corev1.LocalObjectReference{
+						SecretRef: &corev1.LocalObjectReference{
 							Name: "git-token",
 						},
 					},
@@ -285,9 +286,10 @@ var _ = Describe("Application Controller", func() {
 					},
 					Type: platformv1alpha1.ApplicationTypeGitRepository,
 					GitRepository: &platformv1alpha1.GitRepositoryConfig{
-						Provider:   platformv1alpha1.GitProviderGitHub,
-						Repository: "myorg/minimal-repo",
-						SecretRef: corev1.LocalObjectReference{
+						Provider:     platformv1alpha1.GitProviderGitHub,
+						Repository:   "myorg/minimal-repo",
+						PublicAccess: false,
+						SecretRef: &corev1.LocalObjectReference{
 							Name: "git-token",
 						},
 						// rootDirectory should default to "./"
@@ -324,7 +326,8 @@ var _ = Describe("Application Controller", func() {
 						Branch:             "main",
 						BuildCommand:       "npm run build",
 						SpaOutputDirectory: "build",
-						SecretRef: corev1.LocalObjectReference{
+						PublicAccess:       false,
+						SecretRef: &corev1.LocalObjectReference{
 							Name: "git-token",
 						},
 					},
@@ -429,6 +432,179 @@ var _ = Describe("Application Controller", func() {
 			// Cleanup
 			defer func() {
 				Expect(k8sClient.Delete(ctx, testApp)).To(Succeed())
+			}()
+		})
+
+		It("should allow GitRepository with PublicAccess true and no SecretRef", func() {
+			By("Creating a GitRepository application with PublicAccess=true and no SecretRef")
+			publicGitApp := &platformv1alpha1.Application{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "project-myproject-app-publicgitapp-kibaship-com",
+					Namespace: "default",
+					Labels: map[string]string{
+						"platform.kibaship.com/uuid": "550e8400-e29b-41d4-a716-446655440020",
+					},
+				},
+				Spec: platformv1alpha1.ApplicationSpec{
+					ProjectRef: corev1.LocalObjectReference{
+						Name: "test-project",
+					},
+					Type: platformv1alpha1.ApplicationTypeGitRepository,
+					GitRepository: &platformv1alpha1.GitRepositoryConfig{
+						Provider:     platformv1alpha1.GitProviderGitHub,
+						Repository:   "myorg/public-repo",
+						PublicAccess: true,
+						// No SecretRef provided - should be allowed
+					},
+				},
+			}
+			err := k8sClient.Create(ctx, publicGitApp)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Cleanup
+			defer func() {
+				Expect(k8sClient.Delete(ctx, publicGitApp)).To(Succeed())
+			}()
+		})
+
+		It("should allow GitRepository with PublicAccess true and optional SecretRef", func() {
+			By("Creating a GitRepository application with PublicAccess=true and SecretRef provided")
+			publicGitAppWithSecret := &platformv1alpha1.Application{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "project-myproject-app-publicwithsecret-kibaship-com",
+					Namespace: "default",
+					Labels: map[string]string{
+						"platform.kibaship.com/uuid": "550e8400-e29b-41d4-a716-446655440021",
+					},
+				},
+				Spec: platformv1alpha1.ApplicationSpec{
+					ProjectRef: corev1.LocalObjectReference{
+						Name: "test-project",
+					},
+					Type: platformv1alpha1.ApplicationTypeGitRepository,
+					GitRepository: &platformv1alpha1.GitRepositoryConfig{
+						Provider:     platformv1alpha1.GitProviderGitHub,
+						Repository:   "myorg/public-repo-with-secret",
+						PublicAccess: true,
+						SecretRef: &corev1.LocalObjectReference{
+							Name: "optional-git-token",
+						},
+					},
+				},
+			}
+			err := k8sClient.Create(ctx, publicGitAppWithSecret)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Cleanup
+			defer func() {
+				Expect(k8sClient.Delete(ctx, publicGitAppWithSecret)).To(Succeed())
+			}()
+		})
+
+		It("should allow GitRepository with PublicAccess false and SecretRef provided", func() {
+			By("Creating a GitRepository application with PublicAccess=false and SecretRef provided")
+			privateGitApp := &platformv1alpha1.Application{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "project-myproject-app-privategitapp-kibaship-com",
+					Namespace: "default",
+					Labels: map[string]string{
+						"platform.kibaship.com/uuid": "550e8400-e29b-41d4-a716-446655440022",
+					},
+				},
+				Spec: platformv1alpha1.ApplicationSpec{
+					ProjectRef: corev1.LocalObjectReference{
+						Name: "test-project",
+					},
+					Type: platformv1alpha1.ApplicationTypeGitRepository,
+					GitRepository: &platformv1alpha1.GitRepositoryConfig{
+						Provider:     platformv1alpha1.GitProviderGitHub,
+						Repository:   "myorg/private-repo",
+						PublicAccess: false,
+						SecretRef: &corev1.LocalObjectReference{
+							Name: "required-git-token",
+						},
+					},
+				},
+			}
+			err := k8sClient.Create(ctx, privateGitApp)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Cleanup
+			defer func() {
+				Expect(k8sClient.Delete(ctx, privateGitApp)).To(Succeed())
+			}()
+		})
+
+		It("should reject GitRepository with PublicAccess false and no SecretRef", func() {
+			By("Testing validation directly for GitRepository application with PublicAccess=false and no SecretRef")
+			invalidPrivateGitApp := &platformv1alpha1.Application{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "project-myproject-app-invalidprivate-kibaship-com",
+					Namespace: "default",
+					Labels: map[string]string{
+						"platform.kibaship.com/uuid": "550e8400-e29b-41d4-a716-446655440023",
+					},
+				},
+				Spec: platformv1alpha1.ApplicationSpec{
+					ProjectRef: corev1.LocalObjectReference{
+						Name: "test-project",
+					},
+					Type: platformv1alpha1.ApplicationTypeGitRepository,
+					GitRepository: &platformv1alpha1.GitRepositoryConfig{
+						Provider:     platformv1alpha1.GitProviderGitHub,
+						Repository:   "myorg/private-repo-no-secret",
+						PublicAccess: false,
+						// No SecretRef provided - should be rejected
+					},
+				},
+			}
+
+			// Test the validation method directly since webhook validation doesn't run in unit tests
+			_, err := invalidPrivateGitApp.ValidateCreate(ctx, invalidPrivateGitApp)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("SecretRef is required when PublicAccess is false"))
+		})
+
+		It("should default PublicAccess to false when not specified", func() {
+			By("Creating a GitRepository application without specifying PublicAccess")
+			defaultPublicAccessApp := &platformv1alpha1.Application{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "project-myproject-app-defaultaccess-kibaship-com",
+					Namespace: "default",
+					Labels: map[string]string{
+						"platform.kibaship.com/uuid": "550e8400-e29b-41d4-a716-446655440024",
+					},
+				},
+				Spec: platformv1alpha1.ApplicationSpec{
+					ProjectRef: corev1.LocalObjectReference{
+						Name: "test-project",
+					},
+					Type: platformv1alpha1.ApplicationTypeGitRepository,
+					GitRepository: &platformv1alpha1.GitRepositoryConfig{
+						Provider:   platformv1alpha1.GitProviderGitHub,
+						Repository: "myorg/default-access-repo",
+						// PublicAccess not specified - should default to false
+						SecretRef: &corev1.LocalObjectReference{
+							Name: "git-token",
+						},
+					},
+				},
+			}
+			err := k8sClient.Create(ctx, defaultPublicAccessApp)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Verify that PublicAccess defaults to false
+			var createdApp platformv1alpha1.Application
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name:      defaultPublicAccessApp.Name,
+				Namespace: defaultPublicAccessApp.Namespace,
+			}, &createdApp)).To(Succeed())
+
+			Expect(createdApp.Spec.GitRepository.PublicAccess).To(BeFalse())
+
+			// Cleanup
+			defer func() {
+				Expect(k8sClient.Delete(ctx, &createdApp)).To(Succeed())
 			}()
 		})
 

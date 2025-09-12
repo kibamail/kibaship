@@ -120,6 +120,12 @@ spec:
                     - gitlab.com
                     - bitbucket.com
                     type: string
+                  publicAccess:
+                    default: false
+                    description: |-
+                      PublicAccess indicates if the repository is publicly accessible
+                      If true, SecretRef is optional. If false, SecretRef is required and must exist in project namespace
+                    type: boolean
                   repository:
                     description: Repository is the repository name in the format <org-name>/<repo-name>
                     pattern: ^[a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+$
@@ -130,8 +136,9 @@ spec:
                       (optional, defaults to ./)
                     type: string
                   secretRef:
-                    description: SecretRef references the secret containing the git
-                      access token
+                    description: |-
+                      SecretRef references the secret containing the git access token
+                      Required when PublicAccess is false, optional when PublicAccess is true
                     properties:
                       name:
                         default: ""
@@ -155,7 +162,6 @@ spec:
                 required:
                 - provider
                 - repository
-                - secretRef
                 type: object
               mysql:
                 description: MySQL contains configuration for MySQL applications

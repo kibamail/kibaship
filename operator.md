@@ -165,8 +165,10 @@ Based on `spec.type`, different configuration validation occurs:
 **GitRepository Applications:**
 - Validates provider (github.com, gitlab.com, bitbucket.com)
 - Validates repository format: `^[a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+$`
-- Validates secret reference for Git access tokens
-- Optional: branch, path, build/start commands
+- **PublicAccess Field**: Controls access validation behavior
+  - When `PublicAccess: true` - SecretRef is optional (for public repositories)
+  - When `PublicAccess: false` (default) - SecretRef is required and must exist in project namespace
+- Optional: branch, path, build/start commands, environment variables, SPA output directory
 
 **DockerImage Applications:**
 - Validates image reference format
@@ -342,9 +344,15 @@ spec:
 ### Webhooks and Validation
 
 **Admission Webhooks:**
-- Project validation webhook ensures required UUID labels
-- Validates UUID format using regex patterns
-- Prevents creation of invalid resources
+- **Project validation webhook**: Ensures required UUID labels and validates UUID format
+- **Application validation webhook**: Enforces naming conventions and application-specific rules
+  - Validates application names follow pattern: `project-<project-slug>-app-<app-slug>-kibaship-com`
+  - **GitRepository validation**: 
+    - When `PublicAccess: false` (default), validates that `SecretRef` is provided
+    - When `PublicAccess: true`, `SecretRef` validation is skipped
+    - Repository format validation: `^[a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+$`
+- **Deployment validation webhook**: Enforces naming pattern for deployments
+- All webhooks use regex patterns and prevent creation of invalid resources
 
 ## Troubleshooting
 
@@ -357,8 +365,12 @@ spec:
 
 **Application Deployment Issues:**
 1. Invalid project reference - ensure referenced project exists
-2. Git access secrets - verify secret exists and has correct permissions
-3. Resource limits - check project application type configurations
+2. **Git access configuration**:
+   - For private repositories (`PublicAccess: false`), ensure SecretRef is provided and secret exists in project namespace
+   - For public repositories (`PublicAccess: true`), SecretRef is optional but can be provided for authenticated access
+   - Verify secret contains valid git access token with appropriate repository permissions
+3. Repository format - ensure repository follows pattern `<org-name>/<repo-name>`
+4. Resource limits - check project application type configurations
 
 **Cleanup Issues:**
 1. Finalizers stuck - check for dependent resources preventing deletion
@@ -429,6 +441,23 @@ All managed resources are labeled with:
 **Type-Specific Configuration:**
 - Each application type has its own configuration section
 - Only the section matching `spec.type` needs to be populated
+
+**GitRepository Configuration:**
+- `provider` (required): Git provider (github.com, gitlab.com, bitbucket.com)
+- `repository` (required): Repository name in format `<org-name>/<repo-name>`
+- `publicAccess` (optional, default: false): Controls SecretRef validation
+  - `true`: Repository is publicly accessible, SecretRef is optional
+  - `false`: Repository requires authentication, SecretRef is mandatory
+- `secretRef` (conditional): Reference to secret containing git access token
+  - Required when `publicAccess: false`
+  - Optional when `publicAccess: true`
+- `branch` (optional): Git branch to use (defaults to main/master)
+- `path` (optional): Path within repository (defaults to root)
+- `rootDirectory` (optional, default: "./"): Root directory for the application
+- `buildCommand` (optional): Command to build the application
+- `startCommand` (optional): Command to start the application
+- `env` (optional): Reference to secret containing environment variables
+- `spaOutputDirectory` (optional): Output directory for SPA builds
 
 ### Deployment Resource
 

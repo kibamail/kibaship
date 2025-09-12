@@ -74,9 +74,16 @@ type GitRepositoryConfig struct {
 	// +kubebuilder:validation:Pattern=`^[a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+$`
 	Repository string `json:"repository"`
 
+	// PublicAccess indicates if the repository is publicly accessible
+	// If true, SecretRef is optional. If false, SecretRef is required and must exist in project namespace
+	// +kubebuilder:default=false
+	// +optional
+	PublicAccess bool `json:"publicAccess,omitempty"`
+
 	// SecretRef references the secret containing the git access token
-	// +kubebuilder:validation:Required
-	SecretRef corev1.LocalObjectReference `json:"secretRef"`
+	// Required when PublicAccess is false, optional when PublicAccess is true
+	// +optional
+	SecretRef *corev1.LocalObjectReference `json:"secretRef,omitempty"`
 
 	// Branch is the git branch to use (optional, defaults to main/master)
 	// +optional
@@ -312,8 +319,34 @@ func (r *Application) validateApplication() error {
 		errors = append(errors, fmt.Sprintf("application name '%s' must follow format 'project-<project-slug>-app-<app-slug>-kibaship-com'", r.Name))
 	}
 
+	// Validate GitRepository configuration
+	if r.Spec.Type == ApplicationTypeGitRepository && r.Spec.GitRepository != nil {
+		if err := r.validateGitRepository(); err != nil {
+			errors = append(errors, err.Error())
+		}
+	}
+
 	if len(errors) > 0 {
 		return fmt.Errorf("validation failed: %v", errors)
+	}
+
+	return nil
+}
+
+// validateGitRepository validates GitRepository configuration
+func (r *Application) validateGitRepository() error {
+	gitRepo := r.Spec.GitRepository
+
+	// Validate SecretRef based on PublicAccess setting
+	if !gitRepo.PublicAccess {
+		// For private repositories, SecretRef is required
+		if gitRepo.SecretRef == nil {
+			return fmt.Errorf("SecretRef is required when PublicAccess is false")
+		}
+
+		// TODO: In a real implementation, we would validate that the secret exists in the project namespace
+		// This would require access to the Kubernetes client, which isn't available in the webhook validation
+		// The actual secret existence validation should be done in the controller reconcile loop
 	}
 
 	return nil
