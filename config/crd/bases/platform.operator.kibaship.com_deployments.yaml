@@ -70,6 +70,21 @@ spec:
                     type: string
                 type: object
                 x-kubernetes-map-type: atomic
+              gitRepository:
+                description: |-
+                  GitRepository contains configuration for GitRepository deployments
+                  Required when ApplicationRef points to a GitRepository application
+                properties:
+                  branch:
+                    description: Branch is the git branch to use (optional, defaults
+                      to application branch)
+                    type: string
+                  commitSHA:
+                    description: CommitSHA is the specific commit hash to deploy
+                    type: string
+                required:
+                - commitSHA
+                type: object
             required:
             - applicationRef
             type: object

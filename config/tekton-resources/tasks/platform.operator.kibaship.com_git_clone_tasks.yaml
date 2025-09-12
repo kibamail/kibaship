@@ -1,7 +1,7 @@
 apiVersion: tekton.dev/v1
 kind: Task
 metadata:
-  name: task-git-clone-kibaship-com
+  name: tekton-task-git-clone-kibaship-com
   namespace: tekton-pipelines
   annotations:
     tekton.dev/displayName: "Simple Git Clone with Token"

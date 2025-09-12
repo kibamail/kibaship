@@ -97,11 +97,27 @@ type ImageInfo struct {
 	CommitSha string `json:"commitSha"`
 }
 
+// GitRepositoryDeploymentConfig defines the configuration for GitRepository deployments
+type GitRepositoryDeploymentConfig struct {
+	// CommitSHA is the specific commit hash to deploy
+	// +kubebuilder:validation:Required
+	CommitSHA string `json:"commitSHA"`
+	
+	// Branch is the git branch to use (optional, defaults to application branch)
+	// +optional
+	Branch string `json:"branch,omitempty"`
+}
+
 // DeploymentSpec defines the desired state of Deployment.
 type DeploymentSpec struct {
 	// ApplicationRef references the Application this deployment belongs to
 	// +kubebuilder:validation:Required
 	ApplicationRef corev1.LocalObjectReference `json:"applicationRef"`
+	
+	// GitRepository contains configuration for GitRepository deployments
+	// Required when ApplicationRef points to a GitRepository application
+	// +optional
+	GitRepository *GitRepositoryDeploymentConfig `json:"gitRepository,omitempty"`
 }
 
 // DeploymentStatus defines the observed state of Deployment.
@@ -204,6 +220,10 @@ func (r *Deployment) validateDeployment() error {
 	if !r.isValidDeploymentName() {
 		errors = append(errors, fmt.Sprintf("deployment name '%s' must follow format 'project-<project-slug>-app-<app-slug>-deployment-<deployment-slug>-kibaship-com'", r.Name))
 	}
+
+	// TODO: Add validation for GitRepository config when application type is GitRepository
+	// This would require fetching the application, which isn't available in webhook validation
+	// The validation should be done in the controller reconcile loop
 
 	if len(errors) > 0 {
 		return fmt.Errorf("validation failed: %v", errors)
