@@ -66,7 +66,11 @@ var _ = BeforeSuite(func() {
 
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{
-		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "config", "crd", "bases")},
+		CRDDirectoryPaths: []string{
+			filepath.Join("..", "..", "config", "crd", "bases"),
+			filepath.Join("..", "..", "config", "test-resources", "tekton", "v1.4.0"),
+			filepath.Join("..", "..", "config", "tekton-resources", "tasks"),
+		},
 		ErrorIfCRDPathMissing: true,
 	}
 
