@@ -194,11 +194,12 @@ func isValidUUID(uuid string) bool {
 // GetProjectByNamespace finds a project that owns the given namespace
 func (pv *ProjectValidator) GetProjectByNamespace(ctx context.Context, namespaceName string) (*platformv1alpha1.Project, error) {
 	// Extract project name from namespace name
-	if !strings.HasPrefix(namespaceName, NamespacePrefix) {
+	if !strings.HasPrefix(namespaceName, NamespacePrefix) || !strings.HasSuffix(namespaceName, NamespaceSuffix) {
 		return nil, fmt.Errorf("namespace '%s' is not a project namespace", namespaceName)
 	}
 
 	projectName := strings.TrimPrefix(namespaceName, NamespacePrefix)
+	projectName = strings.TrimSuffix(projectName, NamespaceSuffix)
 
 	// Get the project
 	project := &platformv1alpha1.Project{}

@@ -22,6 +22,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -79,14 +80,14 @@ var _ = Describe("NamespaceManager", func() {
 	})
 
 	Describe("GenerateNamespaceName", func() {
-		It("should generate correct namespace name with prefix", func() {
+		It("should generate correct namespace name with prefix and suffix", func() {
 			result := namespaceManager.GenerateNamespaceName("my-project")
-			Expect(result).To(Equal("kibaship-project-my-project"))
+			Expect(result).To(Equal("project-my-project-kibaship-com"))
 		})
 
 		It("should handle project names with hyphens", func() {
 			result := namespaceManager.GenerateNamespaceName("my-test-project")
-			Expect(result).To(Equal("kibaship-project-my-test-project"))
+			Expect(result).To(Equal("project-my-test-project-kibaship-com"))
 		})
 	})
 
@@ -98,7 +99,7 @@ var _ = Describe("NamespaceManager", func() {
 			Expect(namespace).NotTo(BeNil())
 
 			By("Verifying namespace properties")
-			expectedName := "kibaship-project-test-namespace-project"
+			expectedName := "project-test-namespace-project-kibaship-com"
 			Expect(namespace.Name).To(Equal(expectedName))
 
 			By("Verifying namespace labels")
@@ -133,7 +134,7 @@ var _ = Describe("NamespaceManager", func() {
 
 		It("should fail if namespace exists for different project", func() {
 			By("Creating a namespace manually with different project UUID")
-			conflictingNamespaceName := "kibaship-project-conflict-test"
+			conflictingNamespaceName := "project-conflict-test-kibaship-com"
 			conflictingNamespace := &corev1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: conflictingNamespaceName,
@@ -281,12 +282,160 @@ var _ = Describe("NamespaceManager", func() {
 			for _, ns := range namespaces {
 				foundNames = append(foundNames, ns.Name)
 			}
-			Expect(foundNames).To(ContainElement("kibaship-project-list-test-project-1"))
-			Expect(foundNames).To(ContainElement("kibaship-project-list-test-project-2"))
+			Expect(foundNames).To(ContainElement("project-list-test-project-1-kibaship-com"))
+			Expect(foundNames).To(ContainElement("project-list-test-project-2-kibaship-com"))
 
 			By("Cleaning up")
 			Expect(k8sClient.Delete(ctx, project1)).To(Succeed())
 			Expect(k8sClient.Delete(ctx, project2)).To(Succeed())
+		})
+	})
+
+	Describe("CreateProjectServiceAccount", func() {
+		var testNamespace *corev1.Namespace
+
+		BeforeEach(func() {
+			// Create a test namespace first
+			var err error
+			testNamespace, err = namespaceManager.CreateProjectNamespace(ctx, testProject)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(testNamespace).NotTo(BeNil())
+		})
+
+		AfterEach(func() {
+			// Clean up namespace (this will also clean up all namespace-scoped resources)
+			if testNamespace != nil {
+				err := k8sClient.Delete(ctx, testNamespace)
+				if err != nil && !errors.IsNotFound(err) {
+					// Ignore cleanup errors in tests
+				}
+			}
+		})
+
+		It("should create service account with all required resources", func() {
+			By("Verifying service account was created")
+			serviceAccount := &corev1.ServiceAccount{}
+			err := k8sClient.Get(ctx, types.NamespacedName{
+				Name:      namespaceManager.generateServiceAccountName(testProject.Name),
+				Namespace: testNamespace.Name,
+			}, serviceAccount)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Verifying service account has correct labels")
+			Expect(serviceAccount.Labels[ManagedByLabel]).To(Equal(ManagedByValue))
+			Expect(serviceAccount.Labels[ProjectNameLabel]).To(Equal(testProject.Name))
+			Expect(serviceAccount.Labels[ProjectUUIDLabel]).To(Equal("550e8400-e29b-41d4-a716-446655440010"))
+			Expect(serviceAccount.Labels[WorkspaceUUIDLabel]).To(Equal("6ba7b810-9dad-11d1-80b4-00c04fd430d0"))
+
+			By("Verifying service account has correct annotations")
+			Expect(serviceAccount.Annotations["platform.kibaship.com/created-by"]).To(Equal("kibaship-operator"))
+			Expect(serviceAccount.Annotations["platform.kibaship.com/project"]).To(Equal(testProject.Name))
+		})
+
+		It("should create admin role with all permissions", func() {
+			By("Verifying role was created")
+			role := &rbacv1.Role{}
+			err := k8sClient.Get(ctx, types.NamespacedName{
+				Name:      namespaceManager.generateRoleName(testProject.Name),
+				Namespace: testNamespace.Name,
+			}, role)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Verifying role has all permissions")
+			Expect(role.Rules).To(HaveLen(1))
+			rule := role.Rules[0]
+			Expect(rule.APIGroups).To(ContainElement("*"))
+			Expect(rule.Resources).To(ContainElement("*"))
+			Expect(rule.Verbs).To(ContainElement("*"))
+
+			By("Verifying role has correct labels")
+			Expect(role.Labels[ManagedByLabel]).To(Equal(ManagedByValue))
+			Expect(role.Labels[ProjectNameLabel]).To(Equal(testProject.Name))
+		})
+
+		It("should create role binding connecting service account to role", func() {
+			By("Verifying role binding was created")
+			roleBinding := &rbacv1.RoleBinding{}
+			err := k8sClient.Get(ctx, types.NamespacedName{
+				Name:      namespaceManager.generateRoleBindingName(testProject.Name),
+				Namespace: testNamespace.Name,
+			}, roleBinding)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Verifying role binding has correct subject")
+			Expect(roleBinding.Subjects).To(HaveLen(1))
+			subject := roleBinding.Subjects[0]
+			Expect(subject.Kind).To(Equal("ServiceAccount"))
+			Expect(subject.Name).To(Equal(namespaceManager.generateServiceAccountName(testProject.Name)))
+			Expect(subject.Namespace).To(Equal(testNamespace.Name))
+
+			By("Verifying role binding has correct role reference")
+			Expect(roleBinding.RoleRef.APIGroup).To(Equal("rbac.authorization.k8s.io"))
+			Expect(roleBinding.RoleRef.Kind).To(Equal("Role"))
+			Expect(roleBinding.RoleRef.Name).To(Equal(namespaceManager.generateRoleName(testProject.Name)))
+
+			By("Verifying role binding has correct labels")
+			Expect(roleBinding.Labels[ManagedByLabel]).To(Equal(ManagedByValue))
+			Expect(roleBinding.Labels[ProjectNameLabel]).To(Equal(testProject.Name))
+		})
+
+	})
+
+	Describe("deleteServiceAccountResources", func() {
+		var testNamespace *corev1.Namespace
+
+		BeforeEach(func() {
+			// Create a test namespace with service account resources
+			var err error
+			testNamespace, err = namespaceManager.CreateProjectNamespace(ctx, testProject)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(testNamespace).NotTo(BeNil())
+		})
+
+		AfterEach(func() {
+			// Clean up namespace
+			if testNamespace != nil {
+				err := k8sClient.Delete(ctx, testNamespace)
+				if err != nil && !errors.IsNotFound(err) {
+					// Ignore cleanup errors in tests
+				}
+			}
+		})
+
+		It("should clean up all service account resources", func() {
+			By("Verifying resources exist before cleanup")
+			serviceAccount := &corev1.ServiceAccount{}
+			err := k8sClient.Get(ctx, types.NamespacedName{
+				Name:      namespaceManager.generateServiceAccountName(testProject.Name),
+				Namespace: testNamespace.Name,
+			}, serviceAccount)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Cleaning up service account resources")
+			namespaceManager.deleteServiceAccountResources(ctx, testNamespace, testProject)
+
+			By("Verifying service account was deleted")
+			err = k8sClient.Get(ctx, types.NamespacedName{
+				Name:      namespaceManager.generateServiceAccountName(testProject.Name),
+				Namespace: testNamespace.Name,
+			}, serviceAccount)
+			Expect(errors.IsNotFound(err)).To(BeTrue())
+
+			By("Verifying role was deleted")
+			role := &rbacv1.Role{}
+			err = k8sClient.Get(ctx, types.NamespacedName{
+				Name:      namespaceManager.generateRoleName(testProject.Name),
+				Namespace: testNamespace.Name,
+			}, role)
+			Expect(errors.IsNotFound(err)).To(BeTrue())
+
+			By("Verifying role binding was deleted")
+			roleBinding := &rbacv1.RoleBinding{}
+			err = k8sClient.Get(ctx, types.NamespacedName{
+				Name:      namespaceManager.generateRoleBindingName(testProject.Name),
+				Namespace: testNamespace.Name,
+			}, roleBinding)
+			Expect(errors.IsNotFound(err)).To(BeTrue())
 		})
 	})
 })

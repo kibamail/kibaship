@@ -89,10 +89,11 @@ var _ = Describe("Project Controller", func() {
 			err = k8sClient.Get(ctx, typeNamespacedName, updatedProject)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(updatedProject.Status.Phase).To(Equal("Ready"))
-			Expect(updatedProject.Status.NamespaceName).To(ContainSubstring("kibaship-project-"))
+			Expect(updatedProject.Status.NamespaceName).To(ContainSubstring("project-"))
+			Expect(updatedProject.Status.NamespaceName).To(ContainSubstring("-kibaship-com"))
 
 			By("Verifying that a namespace was created for the project")
-			expectedNamespaceName := NamespacePrefix + resourceName
+			expectedNamespaceName := NamespacePrefix + resourceName + NamespaceSuffix
 			namespace := &corev1.Namespace{}
 			err = k8sClient.Get(ctx, types.NamespacedName{Name: expectedNamespaceName}, namespace)
 			Expect(err).NotTo(HaveOccurred())
@@ -188,7 +189,7 @@ var _ = Describe("Project Controller", func() {
 			By("Creating a conflicting namespace first")
 			conflictingNamespace := &corev1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: NamespacePrefix + "conflicting-project",
+					Name: NamespacePrefix + "conflicting-project" + NamespaceSuffix,
 					Labels: map[string]string{
 						ManagedByLabel:   ManagedByValue,
 						ProjectNameLabel: "conflicting-project",
@@ -273,7 +274,7 @@ var _ = Describe("Project Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Verifying namespace was created")
-			namespaceName := NamespacePrefix + "owner-ref-project"
+			namespaceName := NamespacePrefix + "owner-ref-project" + NamespaceSuffix
 			namespace := &corev1.Namespace{}
 			err = k8sClient.Get(ctx, types.NamespacedName{Name: namespaceName}, namespace)
 			Expect(err).NotTo(HaveOccurred())

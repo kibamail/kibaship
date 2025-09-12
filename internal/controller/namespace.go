@@ -21,6 +21,7 @@ import (
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -32,7 +33,10 @@ import (
 
 const (
 	// NamespacePrefix is the prefix used for project namespaces
-	NamespacePrefix = "kibaship-project-"
+	NamespacePrefix = "project-"
+
+	// NamespaceSuffix is the suffix used for project namespaces
+	NamespaceSuffix = "-kibaship-com"
 
 	// ProjectUUIDLabel is the label key for project UUID
 	ProjectUUIDLabel = "platform.kibaship.com/uuid"
@@ -48,6 +52,21 @@ const (
 
 	// ManagedByValue is the value for the managed-by label
 	ManagedByValue = "kibaship-operator"
+
+	// ServiceAccountNamePrefix is the prefix for the service account name
+	ServiceAccountNamePrefix = "project-"
+	// ServiceAccountNameSuffix is the suffix for the service account name
+	ServiceAccountNameSuffix = "-sa-kibaship-com"
+
+	// RoleNamePrefix is the prefix for the role name
+	RoleNamePrefix = "project-"
+	// RoleNameSuffix is the suffix for the role name
+	RoleNameSuffix = "-admin-role-kibaship-com"
+
+	// RoleBindingNamePrefix is the prefix for the role binding name
+	RoleBindingNamePrefix = "project-"
+	// RoleBindingNameSuffix is the suffix for the role binding name
+	RoleBindingNameSuffix = "-admin-binding-kibaship-com"
 )
 
 // NamespaceManager handles namespace operations for projects
@@ -106,6 +125,13 @@ func (nm *NamespaceManager) CreateProjectNamespace(ctx context.Context, project 
 		return nil, fmt.Errorf("failed to create namespace: %w", err)
 	}
 
+	// Create service account with all permissions in the namespace
+	if err := nm.CreateProjectServiceAccount(ctx, namespace, project); err != nil {
+		// Try to clean up the namespace if service account creation fails
+		nm.Delete(ctx, namespace)
+		return nil, fmt.Errorf("failed to create service account for project: %w", err)
+	}
+
 	log.Info("Successfully created namespace for project", "project", project.Name, "namespace", namespaceName)
 	return namespace, nil
 }
@@ -127,6 +153,9 @@ func (nm *NamespaceManager) DeleteProjectNamespace(ctx context.Context, project 
 	if err != nil {
 		return fmt.Errorf("failed to get namespace: %w", err)
 	}
+
+	// Clean up service account resources first (optional, as they'll be deleted with namespace)
+	nm.deleteServiceAccountResources(ctx, namespace, project)
 
 	if err := nm.Delete(ctx, namespace); err != nil {
 		if errors.IsNotFound(err) {
@@ -155,7 +184,22 @@ func (nm *NamespaceManager) GetProjectNamespace(ctx context.Context, project *pl
 
 // GenerateNamespaceName generates the namespace name for a project
 func (nm *NamespaceManager) GenerateNamespaceName(projectName string) string {
-	return NamespacePrefix + projectName
+	return NamespacePrefix + projectName + NamespaceSuffix
+}
+
+// generateServiceAccountName generates the service account name for a project
+func (nm *NamespaceManager) generateServiceAccountName(projectName string) string {
+	return ServiceAccountNamePrefix + projectName + ServiceAccountNameSuffix
+}
+
+// generateRoleName generates the role name for a project
+func (nm *NamespaceManager) generateRoleName(projectName string) string {
+	return RoleNamePrefix + projectName + RoleNameSuffix
+}
+
+// generateRoleBindingName generates the role binding name for a project
+func (nm *NamespaceManager) generateRoleBindingName(projectName string) string {
+	return RoleBindingNamePrefix + projectName + RoleBindingNameSuffix
 }
 
 // generateNamespaceLabels creates the labels for a project namespace
@@ -199,4 +243,191 @@ func (nm *NamespaceManager) IsProjectNamespaceUnique(ctx context.Context, projec
 	}
 
 	return false, nil // Namespace exists and belongs to different project
+}
+
+// CreateProjectServiceAccount creates a service account with all permissions in the project namespace
+func (nm *NamespaceManager) CreateProjectServiceAccount(ctx context.Context, namespace *corev1.Namespace, project *platformv1alpha1.Project) error {
+	log := logf.FromContext(ctx)
+
+	log.Info("Creating service account for project", "project", project.Name, "namespace", namespace.Name)
+
+	// Create the service account
+	if err := nm.createServiceAccount(ctx, namespace, project); err != nil {
+		return fmt.Errorf("failed to create service account: %w", err)
+	}
+
+	// Create the role with all permissions
+	if err := nm.createAdminRole(ctx, namespace, project); err != nil {
+		return fmt.Errorf("failed to create admin role: %w", err)
+	}
+
+	// Create the role binding
+	if err := nm.createRoleBinding(ctx, namespace, project); err != nil {
+		return fmt.Errorf("failed to create role binding: %w", err)
+	}
+
+	log.Info("Successfully created service account with admin permissions", "project", project.Name, "namespace", namespace.Name)
+	return nil
+}
+
+// createServiceAccount creates the service account in the namespace
+func (nm *NamespaceManager) createServiceAccount(ctx context.Context, namespace *corev1.Namespace, project *platformv1alpha1.Project) error {
+	serviceAccount := &corev1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      nm.generateServiceAccountName(project.Name),
+			Namespace: namespace.Name,
+			Labels: map[string]string{
+				ManagedByLabel:   ManagedByValue,
+				ProjectNameLabel: project.Name,
+			},
+			Annotations: map[string]string{
+				"platform.kibaship.com/created-by": "kibaship-operator",
+				"platform.kibaship.com/project":    project.Name,
+			},
+		},
+	}
+
+	// Copy project UUID labels if they exist
+	if projectUUID, exists := project.Labels[ProjectUUIDLabel]; exists {
+		serviceAccount.Labels[ProjectUUIDLabel] = projectUUID
+	}
+	if workspaceUUID, exists := project.Labels[WorkspaceUUIDLabel]; exists {
+		serviceAccount.Labels[WorkspaceUUIDLabel] = workspaceUUID
+	}
+
+	if err := nm.Create(ctx, serviceAccount); err != nil && !errors.IsAlreadyExists(err) {
+		return err
+	}
+
+	return nil
+}
+
+// createAdminRole creates a role with all permissions in the namespace
+func (nm *NamespaceManager) createAdminRole(ctx context.Context, namespace *corev1.Namespace, project *platformv1alpha1.Project) error {
+	role := &rbacv1.Role{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      nm.generateRoleName(project.Name),
+			Namespace: namespace.Name,
+			Labels: map[string]string{
+				ManagedByLabel:   ManagedByValue,
+				ProjectNameLabel: project.Name,
+			},
+			Annotations: map[string]string{
+				"platform.kibaship.com/created-by": "kibaship-operator",
+				"platform.kibaship.com/project":    project.Name,
+			},
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{"*"},
+				Resources: []string{"*"},
+				Verbs:     []string{"*"},
+			},
+		},
+	}
+
+	// Copy project UUID labels if they exist
+	if projectUUID, exists := project.Labels[ProjectUUIDLabel]; exists {
+		role.Labels[ProjectUUIDLabel] = projectUUID
+	}
+	if workspaceUUID, exists := project.Labels[WorkspaceUUIDLabel]; exists {
+		role.Labels[WorkspaceUUIDLabel] = workspaceUUID
+	}
+
+	if err := nm.Create(ctx, role); err != nil && !errors.IsAlreadyExists(err) {
+		return err
+	}
+
+	return nil
+}
+
+// createRoleBinding creates a role binding between the service account and the admin role
+func (nm *NamespaceManager) createRoleBinding(ctx context.Context, namespace *corev1.Namespace, project *platformv1alpha1.Project) error {
+	roleBinding := &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      nm.generateRoleBindingName(project.Name),
+			Namespace: namespace.Name,
+			Labels: map[string]string{
+				ManagedByLabel:   ManagedByValue,
+				ProjectNameLabel: project.Name,
+			},
+			Annotations: map[string]string{
+				"platform.kibaship.com/created-by": "kibaship-operator",
+				"platform.kibaship.com/project":    project.Name,
+			},
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      nm.generateServiceAccountName(project.Name),
+				Namespace: namespace.Name,
+			},
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "Role",
+			Name:     nm.generateRoleName(project.Name),
+		},
+	}
+
+	// Copy project UUID labels if they exist
+	if projectUUID, exists := project.Labels[ProjectUUIDLabel]; exists {
+		roleBinding.Labels[ProjectUUIDLabel] = projectUUID
+	}
+	if workspaceUUID, exists := project.Labels[WorkspaceUUIDLabel]; exists {
+		roleBinding.Labels[WorkspaceUUIDLabel] = workspaceUUID
+	}
+
+	if err := nm.Create(ctx, roleBinding); err != nil && !errors.IsAlreadyExists(err) {
+		return err
+	}
+
+	return nil
+}
+
+// deleteServiceAccountResources cleans up service account, role, and role binding
+// Note: These resources are namespace-scoped so they will be automatically deleted
+// when the namespace is deleted, but we delete them explicitly for better logging
+func (nm *NamespaceManager) deleteServiceAccountResources(ctx context.Context, namespace *corev1.Namespace, project *platformv1alpha1.Project) {
+	log := logf.FromContext(ctx)
+
+	log.Info("Cleaning up service account resources", "project", project.Name, "namespace", namespace.Name)
+
+	// Delete role binding
+	roleBindingName := nm.generateRoleBindingName(project.Name)
+	roleBinding := &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      roleBindingName,
+			Namespace: namespace.Name,
+		},
+	}
+	if err := nm.Delete(ctx, roleBinding); err != nil && !errors.IsNotFound(err) {
+		log.Error(err, "Failed to delete role binding", "name", roleBindingName, "namespace", namespace.Name)
+	}
+
+	// Delete role
+	roleName := nm.generateRoleName(project.Name)
+	role := &rbacv1.Role{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      roleName,
+			Namespace: namespace.Name,
+		},
+	}
+	if err := nm.Delete(ctx, role); err != nil && !errors.IsNotFound(err) {
+		log.Error(err, "Failed to delete role", "name", roleName, "namespace", namespace.Name)
+	}
+
+	// Delete service account
+	serviceAccountName := nm.generateServiceAccountName(project.Name)
+	serviceAccount := &corev1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      serviceAccountName,
+			Namespace: namespace.Name,
+		},
+	}
+	if err := nm.Delete(ctx, serviceAccount); err != nil && !errors.IsNotFound(err) {
+		log.Error(err, "Failed to delete service account", "name", serviceAccountName, "namespace", namespace.Name)
+	}
+
+	log.Info("Service account resources cleanup completed", "project", project.Name, "namespace", namespace.Name)
 }
