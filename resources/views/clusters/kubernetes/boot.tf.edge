@@ -1,27 +1,22 @@
-# Kubernetes configuration stage for Digital Ocean clusters
-# This stage runs after servers are configured and handles helm installations
+# Kubernetes boot deployment stage for Digital Ocean clusters
+# This stage runs after kubernetes-config and handles application deployments
 
 terraform {
   required_providers {
-    helm = {
-      source  = "hashicorp/helm"
-      version = "~> 3.0.2"
-    }
-    
     kubernetes = {
       source  = "hashicorp/kubernetes"
       version = "~> 2.38.0"
     }
     
-    http = {
-      source  = "hashicorp/http"
-      version = "~> 3.4.0"
+    kubectl = {
+      source  = "gavinbunney/kubectl"
+      version = "~> 1.19.0"
     }
   }
 
   backend "s3" {
     bucket = "{{ s3_bucket }}"
-    key    = "clusters/{{ cluster_id }}/kubernetes-config/terraform.tfstate"
+    key    = "clusters/{{ cluster_id }}/kubernetes-boot/terraform.tfstate"
     region = "{{ s3_region }}"
     encrypt = true
   }
@@ -60,301 +55,70 @@ provider "kubernetes" {
   cluster_ca_certificate = base64decode(var.kube_cluster_ca_certificate)
 }
 
-# Configure Helm provider
-provider "helm" {
-  kubernetes = {
-    host                   = var.kube_host
-    client_certificate     = base64decode(var.kube_client_certificate)
-    client_key            = base64decode(var.kube_client_key)
-    cluster_ca_certificate = base64decode(var.kube_cluster_ca_certificate)
-  }
+# Configure kubectl provider
+provider "kubectl" {
+  host                   = var.kube_host
+  client_certificate     = base64decode(var.kube_client_certificate)
+  client_key            = base64decode(var.kube_client_key)
+  cluster_ca_certificate = base64decode(var.kube_cluster_ca_certificate)
+  load_config_file       = false
 }
 
+# Configure openebs pools
 
-# Install Cilium CNI
-resource "helm_release" "cilium" {
-  name       = "cilium"
-  repository = "https://helm.cilium.io"
-  chart      = "cilium"
-  version    = "1.18.0"
-  namespace  = "kube-system"
-
-  set = [
-    {
-      name  = "k8sServiceHost"
-      value = "localhost"
-    },
-    {
-      name  = "k8sServicePort"
-      value = "7445"
-    },
-    {
-      name  = "kubeProxyReplacement"
-      value = "true"
-    },
-    {
-      name  = "tunnelProtocol"
-      value = "vxlan"
-    },
-    {
-      name  = "gatewayAPI.enabled"
-      value = "true"
-    },
-    {
-      name  = "gatewayAPI.hostNetwork.enabled"
-      value = "true"
-    },
-    {
-      name  = "gatewayAPI.enableAlpn"
-      value = "true"
-    },
-    {
-      name  = "gatewayAPI.hostNetwork.nodeLabelSelector"
-      value = "ingress.kibaship.com/ready=true"
-    },
-    {
-      name  = "gatewayAPI.enableProxyProtocol"
-      value = "true"
-    },
-    {
-      name  = "gatewayAPI.enableAppProtocol"
-      value = "true"
-    },
-    {
-      name  = "ipam.mode"
-      value = "kubernetes"
-    },
-    {
-      name  = "loadBalancer.mode"
-      value = "snat"
-    },
-    {
-      name  = "operator.replicas"
-      value = "2"
-    },
-    {
-      name  = "bpf.masquerade"
-      value = "false"
-    },
-    {
-      name   = "hostLegacyRouting",
-      value  = "true"
-    }
-    {
-      name  = "securityContext.capabilities.ciliumAgent"
-      value = "{CHOWN,KILL,NET_ADMIN,NET_RAW,IPC_LOCK,SYS_ADMIN,SYS_RESOURCE,DAC_OVERRIDE,FOWNER,SETGID,SETUID}"
-    },
-    {
-      name  = "securityContext.capabilities.cleanCiliumState"
-      value = "{NET_ADMIN,SYS_ADMIN,SYS_RESOURCE}"
-    },
-    {
-      name  = "cgroup.autoMount.enabled"
-      value = "false"
-    },
-    {
-      name  = "cgroup.hostRoot"
-      value = "/sys/fs/cgroup"
-    }
-  ]
-}
-
-# Install Gateway API CRDs
-data "http" "gateway_api_crds" {
-  url = "https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.3.0/standard-install.yaml"
-}
-
-resource "kubernetes_manifest" "gateway_api_crds" {
-  manifest = yamldecode(data.http.gateway_api_crds.response_body)
-  depends_on = [helm_release.cilium]
-}
-
-# Install Piraeus operator
-data "http" "piraeus_operator" {
-  url = "https://github.com/piraeusdatastore/piraeus-operator/releases/download/v2.9.0/manifest.yaml"
-}
-
-resource "kubernetes_manifest" "piraeus_operator" {
-  manifest = yamldecode(data.http.piraeus_operator.response_body)
-  depends_on = [kubernetes_manifest.gateway_api_crds]
-}
-
-# Create LinstorCluster
-resource "kubernetes_manifest" "linstor_cluster" {
-  manifest = {
-    apiVersion = "piraeus.io/v1"
-    kind       = "LinstorCluster"
-    metadata = {
-      name      = "linstorcluster"
-      namespace = "piraeus-datastore"
-    }
-    spec = {}
-  }
-
-  depends_on = [kubernetes_manifest.piraeus_operator]
-}
-
-# Create LinstorSatelliteConfiguration
 @each((worker, index) in workers)
-resource "kubernetes_manifest" "linstor_satellite_config_{{ worker.slug }}" {
+resource "kubernetes_manifest" "openebs_disk_pool_{{ worker.slug.toLowerCase() }}" {
   manifest = {
-    apiVersion = "piraeus.io/v1"
-    kind       = "LinstorSatelliteConfiguration"
+    apiVersion = "openebs.io/v1beta3"
+    kind       = "DiskPool"
     metadata = {
-      name      = "linstor-satellite-{{ worker.slug }}"
-      namespace = "piraeus-datastore"
+      name      = "mayastor-pool-{{ worker.slug.toLowerCase() }}"
+      namespace = "openebs"
     }
     spec = {
-      nodeSelector = {
-        "kubernetes.io/hostname" = "worker-{{ index }}"
-      }
-      storagePools = [
-        {
-          name = "linstor-storage"
-          lvmThinPool = {
-            volumeGroup = "storage-pool-lvm"
-            thinPool    = "storage-pool-lvm"
-          }
-          source = {
-            hostDevices = ["{{ worker.primary_disk_name }}"]
-          }
-        }
-      ]
-      podTemplate = {
-        spec = {
-          initContainers = [
-            {
-              name   = "drbd-shutdown-guard"
-              "$patch" = "delete"
-            },
-            {
-              name   = "drbd-module-loader"
-              "$patch" = "delete"
-            }
-          ]
-          volumes = [
-            {
-              name   = "run-systemd-system"
-              "$patch" = "delete"
-            },
-            {
-              name   = "run-drbd-shutdown-guard"
-              "$patch" = "delete"
-            },
-            {
-              name   = "systemd-bus-socket"
-              "$patch" = "delete"
-            },
-            {
-              name   = "lib-modules"
-              "$patch" = "delete"
-            },
-            {
-              name   = "usr-src"
-              "$patch" = "delete"
-            },
-            {
-              name = "etc-lvm-backup"
-              hostPath = {
-                path = "/var/etc/lvm/backup"
-                type = "DirectoryOrCreate"
-              }
-            },
-            {
-              name = "etc-lvm-archive"
-              hostPath = {
-                path = "/var/etc/lvm/archive"
-                type = "DirectoryOrCreate"
-              }
-            }
-          ]
-        }
-      }
+      node = "worker-{{ index }}"
+      disks = ["aio://{{ worker.primary_disk_name }}"]
     }
   }
-
-  depends_on = [kubernetes_manifest.linstor_cluster]
 }
 @end
 
-# Linstor storage class
-resource "kubernetes_manifest" "linstor_storage_class" {
+# Create OpenEBS Mayastor StorageClass with 1 replica
+resource "kubernetes_manifest" "storage_class_replica_1" {
   manifest = {
     apiVersion = "storage.k8s.io/v1"
     kind       = "StorageClass"
     metadata = {
-      name = "linstor-storage"
+      name      = "storage-replica-1"
     }
-    provisioner = "linstor.csi.linbit.com"
     parameters = {
-      "linstor.csi.linbit.com/storagePool" = "linstor-storage"
+      protocol = "nvmf"
+      repl     = "1"
+      thin     = "true"
     }
-    reclaimPolicy        = "Delete"
-    volumeBindingMode    = "WaitForFirstConsumer"
+    provisioner = "io.openebs.csi-mayastor"
+    volumeBindingMode = "WaitForFirstConsumer"
     allowVolumeExpansion = true
   }
-
-  depends_on = [
-@each(worker in worker_nodes)
-    "kubernetes_manifest.linstor_satellite_config_{{ worker.slug }}",
-@end
-  ]
 }
 
-# Linstor replicated storage class
-resource "kubernetes_manifest" "linstor_replicated_storage_class" {
+# Create OpenEBS Mayastor StorageClass with 2 replicas
+resource "kubernetes_manifest" "storage_class_replica_2" {
   manifest = {
     apiVersion = "storage.k8s.io/v1"
     kind       = "StorageClass"
     metadata = {
-      name = "linstor-replicated-storage"
+      name      = "storage-replica-2"
     }
-    provisioner = "linstor.csi.linbit.com"
     parameters = {
-      "linstor.csi.linbit.com/storagePool"     = "linstor-storage"
-      "linstor.csi.linbit.com/numberOfReplicas" = "2"
+      protocol = "nvmf"
+      repl     = "2"
+      thin      = "true"
     }
-    reclaimPolicy        = "Delete"
-    volumeBindingMode    = "WaitForFirstConsumer"
+    provisioner = "io.openebs.csi-mayastor"
+    volumeBindingMode = "WaitForFirstConsumer"
     allowVolumeExpansion = true
   }
-
-  depends_on = [
-@each(worker in worker_nodes)
-    "kubernetes_manifest.linstor_satellite_config_{{ worker.slug }}",
-@end
-  ]
-}
-
-# Install cert-manager
-resource "helm_release" "cert_manager" {
-  name             = "cert-manager"
-  repository       = "https://charts.jetstack.io"
-  chart            = "cert-manager"
-  version          = "v1.18.2"
-  namespace        = "cert-manager"
-  create_namespace = true
-
-  set = [
-    {
-      name  = "replicaCount"
-      value = "3"
-    },
-    {
-      name  = "crds.enabled"
-      value = "true"
-    },
-    {
-      name  = "prometheus.enabled"
-      value = "false"
-    },
-    {
-      name  = "webhook.replicaCount"
-      value = "2"
-    }
-  ]
-
-  depends_on = [helm_release.cilium]
 }
 
 # Create ClusterIssuer for Let's Encrypt with DNS-01
@@ -385,8 +149,13 @@ resource "kubernetes_manifest" "cluster_issuer" {
       }
     }
   }
+}
 
-  depends_on = [helm_release.cert_manager]
+# Create certificates namespace
+resource "kubernetes_namespace" "certificates" {
+  metadata {
+    name = "certificates"
+  }
 }
 
 # Create Certificate for wildcard SSL
@@ -413,6 +182,36 @@ resource "kubernetes_manifest" "wildcard_certificate" {
   depends_on = [kubernetes_manifest.cluster_issuer, kubernetes_namespace.certificates]
 }
 
+# Create ReferenceGrant for Gateway to access certificates
+resource "kubernetes_manifest" "certificate_reference_grant" {
+  manifest = {
+    apiVersion = "gateway.networking.k8s.io/v1beta1"
+    kind       = "ReferenceGrant"
+    metadata = {
+      name      = "ingress-gateway-certificate-access"
+      namespace = "certificates"
+    }
+    spec = {
+      from = [
+        {
+          group     = "gateway.networking.k8s.io"
+          kind      = "Gateway"
+          namespace = "ingress-gateway"
+        }
+      ]
+      to = [
+        {
+          group = ""
+          kind  = "Secret"
+          name  = "tenant-wildcard-certificate"
+        }
+      ]
+    }
+  }
+
+  depends_on = [kubernetes_namespace.certificates]
+}
+
 # Create ingress-gateway namespace
 resource "kubernetes_namespace" "ingress_gateway" {
   metadata {
@@ -423,7 +222,6 @@ resource "kubernetes_namespace" "ingress_gateway" {
     }
   }
 
-  depends_on = [kubernetes_manifest.gateway_api_crds]
 }
 
 # Create ingress Gateway
@@ -534,43 +332,6 @@ resource "kubernetes_manifest" "ingress_https_httproute" {
   }
 
   depends_on = [kubernetes_manifest.ingress_gateway]
-}
-
-# Create certificates namespace
-resource "kubernetes_namespace" "certificates" {
-  metadata {
-    name = "certificates"
-  }
-}
-
-# Create ReferenceGrant for Gateway to access certificates
-resource "kubernetes_manifest" "certificate_reference_grant" {
-  manifest = {
-    apiVersion = "gateway.networking.k8s.io/v1beta1"
-    kind       = "ReferenceGrant"
-    metadata = {
-      name      = "certificate-access"
-      namespace = "certificates"
-    }
-    spec = {
-      from = [
-        {
-          group     = "gateway.networking.k8s.io"
-          kind      = "Gateway"
-          namespace = "ingress-gateway"
-        }
-      ]
-      to = [
-        {
-          group = ""
-          kind  = "Secret"
-          name  = "tenant-wildcard-certificate"
-        }
-      ]
-    }
-  }
-
-  depends_on = [kubernetes_namespace.certificates]
 }
 
 # Create deployment-not-found deployment

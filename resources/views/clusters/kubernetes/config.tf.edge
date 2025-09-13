@@ -248,7 +248,6 @@ resource "helm_release" "openebs" {
   depends_on = [helm_release.cilium]
 }
 
-
 # Install MySQL Operator
 resource "helm_release" "mysql_operator" {
   name             = "mysql-operator"
@@ -272,26 +271,6 @@ resource "helm_release" "mysql_operator" {
 
   depends_on = [helm_release.cilium]
 }
-
-# Fetch each Valkey CRD file from the repository
-@each(crd_file in valkey_crd_files)
-data "http" "valkey_crd_{{ crd_file.name }}" {
-  url = "{{ crd_file.url }}"
-}
-@end
-
-# Create kubectl_manifest resources for each Valkey CRD file
-@each((crd_file, index) in valkey_crd_files)
-resource "kubectl_manifest" "valkey_{{ crd_file.name }}" {
-  yaml_body = data.http.valkey_crd_{{ crd_file.name }}.response_body
-
-  @if(index > 0)
-  depends_on = [kubectl_manifest.valkey_{{ valkey_crd_files[index - 1].name }}]
-  @else
-  depends_on = [helm_release.cilium]
-  @endif
-}
-@end
 
 # Fetch each Tekton CRD file from the repository
 @each(crd_file in tekton_crd_files)

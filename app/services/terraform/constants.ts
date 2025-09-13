@@ -339,3 +339,50 @@ export const TEKTON_CRD_FILES = [
     url: "https://raw.githubusercontent.com/kibamail/kibaship/main/crds/tekton/v1.4.0/75_tekton_pipelines_webhook_service.yaml"
   }
 ] as const
+
+export const VALKEY_CRD_FILES = [
+  {
+    name: "01-valkey-operator-system-namespace",
+    url: "https://raw.githubusercontent.com/kibamail/kibaship/main/crds/valkey/v0.0.59/01-valkey-operator-system-namespace.yaml"
+  },
+  {
+    name: "02-valkeys.hyperspike.io-custom-resource-definition",
+    url: "https://raw.githubusercontent.com/kibamail/kibaship/main/crds/valkey/v0.0.59/02-valkeys.hyperspike.io-custom-resource-definition.yaml"
+  },
+  {
+    name: "03-valkey-operator-controller-manager-service-account",
+    url: "https://raw.githubusercontent.com/kibamail/kibaship/main/crds/valkey/v0.0.59/03-valkey-operator-controller-manager-service-account.yaml"
+  },
+  {
+    name: "04-valkey-operator-leader-election-role-role",
+    url: "https://raw.githubusercontent.com/kibamail/kibaship/main/crds/valkey/v0.0.59/04-valkey-operator-leader-election-role-role.yaml"
+  },
+  {
+    name: "05-valkey-operator-manager-role-cluster-role",
+    url: "https://raw.githubusercontent.com/kibamail/kibaship/main/crds/valkey/v0.0.59/05-valkey-operator-manager-role-cluster-role.yaml"
+  },
+  {
+    name: "06-valkey-operator-valkey-editor-role-cluster-role",
+    url: "https://raw.githubusercontent.com/kibamail/kibaship/main/crds/valkey/v0.0.59/06-valkey-operator-valkey-editor-role-cluster-role.yaml"
+  },
+  {
+    name: "07-valkey-operator-valkey-viewer-role-cluster-role",
+    url: "https://raw.githubusercontent.com/kibamail/kibaship/main/crds/valkey/v0.0.59/07-valkey-operator-valkey-viewer-role-cluster-role.yaml"
+  },
+  {
+    name: "08-valkey-operator-leader-election-rolebinding-role-binding",
+    url: "https://raw.githubusercontent.com/kibamail/kibaship/main/crds/valkey/v0.0.59/08-valkey-operator-leader-election-rolebinding-role-binding.yaml"
+  },
+  {
+    name: "09-valkey-operator-manager-rolebinding-cluster-role-binding",
+    url: "https://raw.githubusercontent.com/kibamail/kibaship/main/crds/valkey/v0.0.59/09-valkey-operator-manager-rolebinding-cluster-role-binding.yaml"
+  },
+  {
+    name: "10-valkey-operator-config-config-map",
+    url: "https://raw.githubusercontent.com/kibamail/kibaship/main/crds/valkey/v0.0.59/10-valkey-operator-config-config-map.yaml"
+  },
+  {
+    name: "11-valkey-operator-controller-manager-deployment",
+    url: "https://raw.githubusercontent.com/kibamail/kibaship/main/crds/valkey/v0.0.59/11-valkey-operator-controller-manager-deployment.yaml"
+  }
+] as const
