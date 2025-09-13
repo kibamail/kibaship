@@ -70,29 +70,50 @@ locals {
   }
 
   # Control plane specific cluster configuration
-  control_plane_cluster_config = merge(local.cluster_config, {})
+  control_plane_cluster_config = merge(local.cluster_config, {
+    apiServer = {
+      admissionControl = [
+        {
+          name = "PodSecurity"
+          configuration = {
+            apiVersion = "pod-security.admission.config.k8s.io/v1beta1"
+            kind = "PodSecurityConfiguration"
+            exemptions = {
+              namespaces = [
+                "openebs"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  })
   
   worker_machine_config = {
       machine = {
+        sysctls = {
+          "vm.nr_hugepages" = "1024"
+        }
+        nodeLabels = {
+          "openebs.io/engine" = "mayastor"
+        }
         features = {
           hostDNS = {
             enabled = true
             forwardKubeDNSToHost = false
           }
         }
-        kernel = {
-          modules = [
+        kubelet = {
+          extraMounts = [
             {
-              name       = "drbd"
-              parameters = ["usermode_helper=disabled"]
-            },
-            {
-              name       = "drbd_transport_tcp"
-              parameters = []
-            },
-            {
-              name       = "dm-thin-pool"
-              parameters = []
+              destination = "/var/local"
+              type = "bind"
+              source = "/var/local"
+              options = [
+                "bind",
+                "rshared",
+                "rw"
+              ]
             }
           ]
         }

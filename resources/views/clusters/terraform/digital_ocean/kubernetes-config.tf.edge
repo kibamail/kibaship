@@ -201,6 +201,33 @@ resource "helm_release" "cert_manager" {
   depends_on = [helm_release.cilium]
 }
 
+# Install OpenEBS with Mayastor
+resource "helm_release" "openebs" {
+  name             = "openebs"
+  repository       = "https://openebs.github.io/openebs"
+  chart            = "openebs"
+  namespace        = "openebs"
+  create_namespace = true
+  cleanup_on_fail  = true
+  version          = "4.3.3"
+
+  set = [{
+    name  = "mayastor.csi.node.initContainers.enabled"
+    value = "false"
+  }, {
+    name  = "engines.local.lvm.enabled"
+    value = "true"
+  }, {
+    name  = "engines.local.zfs.enabled"
+    value = "false"
+  }, {
+    name  = "engines.local.replicated.mayastor.enabled"
+    value = "true"
+  }]
+
+  depends_on = [helm_release.cilium]
+}
+
 # Install MySQL Operator
 resource "helm_release" "mysql_operator" {
   name             = "mysql-operator"
@@ -239,28 +266,6 @@ resource "kubectl_manifest" "gateway_{{ crd_file.name }}" {
 
   @if(index > 0)
   depends_on = [kubectl_manifest.gateway_{{ gateway_crd_files[index - 1].name }}]
-  @else
-  depends_on = [helm_release.cilium]
-  @endif
-}
-@end
-
-# Fetch each LINSTOR CRD file from the repository
-@each(crd_file in linstor_crd_files)
-data "http" "linstor_crd_{{ crd_file.name }}" {
-  url = "{{ crd_file.url }}"
-}
-@end
-
-# Create kubectl_manifest resources for each LINSTOR CRD file
-@each((crd_file, index) in linstor_crd_files)
-resource "kubectl_manifest" "linstor_{{ crd_file.name }}" {
-  yaml_body = data.http.linstor_crd_{{ crd_file.name }}.response_body
-
-  wait_for_rollout = {{ (crd_file.waitForRollout) }}
-
-  @if(index > 0)
-  depends_on = [kubectl_manifest.linstor_{{ linstor_crd_files[index - 1].name }}]
   @else
   depends_on = [helm_release.cilium]
   @endif

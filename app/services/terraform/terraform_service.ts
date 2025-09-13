@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { talosFactoryHash, talosVersion } from '#config/app'
 import Cluster from '#models/cluster'
 import { ModelObject } from '@adonisjs/lucid/types/model'
-import { GATEWAY_CRD_FILES, LINSTOR_CRD_FILES, TEKTON_CRD_FILES } from './constants.js'
+import { GATEWAY_CRD_FILES, TEKTON_CRD_FILES } from './constants.js'
 
 export enum TerraformTemplate {
   TALOS_IMAGE = 'talos-image.tf',
@@ -31,11 +31,6 @@ export interface TemplateContext {
   gateway_crd_files: ReadonlyArray<{
     readonly name: string
     readonly url: string
-  }>
-  linstor_crd_files: ReadonlyArray<{
-    readonly name: string
-    readonly url: string
-    readonly dontWaitForRollout?: boolean
   }>
   tekton_crd_files: ReadonlyArray<{
     readonly name: string
@@ -308,7 +303,6 @@ export class TerraformService {
 
 
       gateway_crd_files: GATEWAY_CRD_FILES,
-      linstor_crd_files: LINSTOR_CRD_FILES.map(file => ({...file, waitForRollout: file.waitForRollout === false ? false : true})),
       tekton_crd_files: TEKTON_CRD_FILES,
 
       // =============================================================================
