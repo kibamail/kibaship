@@ -201,42 +201,88 @@ resource "helm_release" "cert_manager" {
   depends_on = [helm_release.cilium]
 }
 
-resource "helm_release" "piraeus_operator" {
-  name                 = "piraeus-operator"
-  repository           = "https://kibamail.github.io/piraeus-datastore-helm-charts/"
-  chart                = "piraeus"
-  create_namespace     = true
-  namespace            = "piraeus-datastore"
-  version              = "2.9.0"
+# Install MySQL Operator
+resource "helm_release" "mysql_operator" {
+  name             = "mysql-operator"
+  repository       = "https://mysql.github.io/mysql-operator/"
+  chart            = "mysql-operator"
+  version          = "2.2.5"
+  namespace        = "mysql-operator"
+  create_namespace = true
+  cleanup_on_fail  = true
 
   set = [
     {
-      name  = "installCRDs"
-      value = "true"
+      name  = "replicas"
+      value = "3"
     },
     {
-      name  = "replicaCount"
-      value = "2"
+      name  = "envs.k8sClusterDomain"
+      value = "cluster.local"
     }
   ]
 
   depends_on = [helm_release.cilium]
 }
 
-# Fetch each Tekton CRD file from the repository
+# Fetch each Gateway CRD file from the repository
 @each(crd_file in gateway_crd_files)
-data "http" "gateway_crd_{{ crd_file.name.replaceAll('-', '_').replaceAll('.', '_') }}" {
+data "http" "gateway_crd_{{ crd_file.name }}" {
   url = "{{ crd_file.url }}"
 }
 @end
 
 # Create kubectl_manifest resources for each Gateway CRD file
 @each((crd_file, index) in gateway_crd_files)
-resource "kubectl_manifest" "gateway_{{ crd_file.name.replaceAll('-', '_').replaceAll('.', '_') }}" {
-  yaml_body = data.http.gateway_crd_{{ crd_file.name.replaceAll('-', '_').replaceAll('.', '_') }}.response_body
+resource "kubectl_manifest" "gateway_{{ crd_file.name }}" {
+  yaml_body = data.http.gateway_crd_{{ crd_file.name }}.response_body
 
   @if(index > 0)
-  depends_on = [kubectl_manifest.gateway_{{ gateway_crd_files[index - 1].name.replaceAll('-', '_').replaceAll('.', '_') }}]
+  depends_on = [kubectl_manifest.gateway_{{ gateway_crd_files[index - 1].name }}]
+  @else
+  depends_on = [helm_release.cilium]
+  @endif
+}
+@end
+
+# Fetch each LINSTOR CRD file from the repository
+@each(crd_file in linstor_crd_files)
+data "http" "linstor_crd_{{ crd_file.name }}" {
+  url = "{{ crd_file.url }}"
+}
+@end
+
+# Create kubectl_manifest resources for each LINSTOR CRD file
+@each((crd_file, index) in linstor_crd_files)
+resource "kubectl_manifest" "linstor_{{ crd_file.name }}" {
+  yaml_body = data.http.linstor_crd_{{ crd_file.name }}.response_body
+
+  wait_for_rollout = {{ (crd_file.waitForRollout) }}
+
+  @if(index > 0)
+  depends_on = [kubectl_manifest.linstor_{{ linstor_crd_files[index - 1].name }}]
+  @else
+  depends_on = [helm_release.cilium]
+  @endif
+}
+@end
+
+# Fetch each Tekton CRD file from the repository
+@each(crd_file in tekton_crd_files)
+data "http" "tekton_crd_{{ crd_file.name }}" {
+  url = "{{ crd_file.url }}"
+}
+@end
+
+# Create kubectl_manifest resources for each Tekton CRD file
+@each((crd_file, index) in tekton_crd_files)
+resource "kubectl_manifest" "tekton_{{ crd_file.name }}" {
+  yaml_body = data.http.tekton_crd_{{ crd_file.name }}.response_body
+
+  @if(index > 0)
+  depends_on = [kubectl_manifest.tekton_{{ tekton_crd_files[index - 1].name }}]
+  @else
+  depends_on = [helm_release.cilium]
   @endif
 }
 @end

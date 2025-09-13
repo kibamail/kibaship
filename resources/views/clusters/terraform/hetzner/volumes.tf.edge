@@ -44,7 +44,6 @@ resource "hcloud_volume" "volume_{{ volume.slug }}" {
   name     = "volume-{{ volume.slug }}"
   size     = {{ volume.size }}
   location = var.location
-  format   = "ext4"
   labels = {
     volume_id  = "{{ volume.id }}"
     volume_slug = "{{ volume.slug }}"

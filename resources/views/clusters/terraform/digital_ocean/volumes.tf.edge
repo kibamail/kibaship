@@ -44,7 +44,6 @@ resource "digitalocean_volume" "volume_{{ volume.slug }}" {
   region                   = var.location
   name                     = "volume-{{ volume.slug }}"
   size                     = {{ volume.size }}
-  initial_filesystem_type  = "ext4"
   description             = "Storage volume {{ volume.id }}"
 
   tags = [

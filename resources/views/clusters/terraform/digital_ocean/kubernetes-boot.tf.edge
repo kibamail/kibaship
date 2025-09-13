@@ -168,7 +168,33 @@ resource "kubernetes_manifest" "linstor_storage_class" {
     }
     provisioner = "linstor.csi.linbit.com"
     parameters = {
+      "linstor.csi.linbit.com/storagePool" = "linstor-storage",
+      "linstor.csi.linbit.com/placementCount" = "1"
+    }
+    reclaimPolicy        = "Delete"
+    volumeBindingMode    = "WaitForFirstConsumer"
+    allowVolumeExpansion = true
+  }
+
+  depends_on = [
+@each(worker in workers)
+    kubernetes_manifest.linstor_satellite_config_{{ worker.slug.toLowerCase() }},
+@end
+  ]
+}
+
+# Linstor replicated storage class
+resource "kubernetes_manifest" "linstor_replicated_storage_class" {
+  manifest = {
+    apiVersion = "storage.k8s.io/v1"
+    kind       = "StorageClass"
+    metadata = {
+      name = "linstor-replicated-storage"
+    }
+    provisioner = "linstor.csi.linbit.com"
+    parameters = {
       "linstor.csi.linbit.com/storagePool" = "linstor-storage"
+      "linstor.csi.linbit.com/placementCount" = "2"
     }
     reclaimPolicy        = "Delete"
     volumeBindingMode    = "WaitForFirstConsumer"
