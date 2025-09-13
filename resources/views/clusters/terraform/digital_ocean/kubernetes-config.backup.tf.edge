@@ -110,7 +110,7 @@ resource "helm_release" "cilium" {
     },
     {
       name  = "gatewayAPI.hostNetwork.nodeLabelSelector"
-      value = "ingress-ready=true"
+      value = "ingress.kibaship.com/ready=true"
     },
     {
       name  = "gatewayAPI.enableProxyProtocol"
@@ -435,7 +435,7 @@ resource "kubernetes_manifest" "ingress_gateway" {
       name      = "ingress-gateway"
       namespace = "ingress-gateway"
       annotations = {
-        "io.cilium.gateway/node-selector" = "ingress-ready=true"
+        "io.cilium.gateway/node-selector" = "ingress.kibaship.com/ready=true"
       }
     }
     spec = {

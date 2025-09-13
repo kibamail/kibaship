@@ -95,7 +95,8 @@ locals {
           "vm.nr_hugepages" = "1024"
         }
         nodeLabels = {
-          "openebs.io/engine" = "mayastor"
+          "openebs.io/engine" = "mayastor",
+          "ingress.kibaship.com/ready" = "true"
         }
         features = {
           hostDNS = {

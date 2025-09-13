@@ -85,6 +85,24 @@ provider "kubectl" {
 }
 
 
+# Fetch each Gateway CRD file from the repository
+@each(crd_file in gateway_crd_files)
+data "http" "gateway_crd_{{ crd_file.name }}" {
+  url = "{{ crd_file.url }}"
+}
+@end
+
+# Create kubectl_manifest resources for each Gateway CRD file
+@each((crd_file, index) in gateway_crd_files)
+resource "kubectl_manifest" "gateway_{{ crd_file.name }}" {
+  yaml_body = data.http.gateway_crd_{{ crd_file.name }}.response_body
+
+  @if(index > 0)
+  depends_on = [kubectl_manifest.gateway_{{ gateway_crd_files[index - 1].name }}]
+  @endif
+}
+@end
+
 # Install Cilium CNI
 resource "helm_release" "cilium" {
   name       = "cilium"
@@ -124,7 +142,7 @@ resource "helm_release" "cilium" {
     },
     {
       name  = "gatewayAPI.hostNetwork.nodeLabelSelector"
-      value = "ingress-ready=true"
+      value = "ingress.kibaship.com/ready=true"
     },
     {
       name  = "gatewayAPI.enableProxyProtocol"
@@ -167,6 +185,8 @@ resource "helm_release" "cilium" {
       value = "/sys/fs/cgroup"
     }
   ]
+
+  depends_on = [kubectl_manifest.gateway_{{ gateway_crd_files[gateway_crd_files.length - 1].name }}]
 }
 
 
@@ -251,26 +271,6 @@ resource "helm_release" "mysql_operator" {
 
   depends_on = [helm_release.cilium]
 }
-
-# Fetch each Gateway CRD file from the repository
-@each(crd_file in gateway_crd_files)
-data "http" "gateway_crd_{{ crd_file.name }}" {
-  url = "{{ crd_file.url }}"
-}
-@end
-
-# Create kubectl_manifest resources for each Gateway CRD file
-@each((crd_file, index) in gateway_crd_files)
-resource "kubectl_manifest" "gateway_{{ crd_file.name }}" {
-  yaml_body = data.http.gateway_crd_{{ crd_file.name }}.response_body
-
-  @if(index > 0)
-  depends_on = [kubectl_manifest.gateway_{{ gateway_crd_files[index - 1].name }}]
-  @else
-  depends_on = [helm_release.cilium]
-  @endif
-}
-@end
 
 # Fetch each Tekton CRD file from the repository
 @each(crd_file in tekton_crd_files)
