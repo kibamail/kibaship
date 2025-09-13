@@ -102,7 +102,7 @@ type GitRepositoryDeploymentConfig struct {
 	// CommitSHA is the specific commit hash to deploy
 	// +kubebuilder:validation:Required
 	CommitSHA string `json:"commitSHA"`
-	
+
 	// Branch is the git branch to use (optional, defaults to application branch)
 	// +optional
 	Branch string `json:"branch,omitempty"`
@@ -113,7 +113,7 @@ type DeploymentSpec struct {
 	// ApplicationRef references the Application this deployment belongs to
 	// +kubebuilder:validation:Required
 	ApplicationRef corev1.LocalObjectReference `json:"applicationRef"`
-	
+
 	// GitRepository contains configuration for GitRepository deployments
 	// Required when ApplicationRef points to a GitRepository application
 	// +optional

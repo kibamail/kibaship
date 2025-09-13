@@ -124,6 +124,10 @@ var _ = Describe("Deployment Controller", func() {
 					},
 					Spec: platformv1alpha1.DeploymentSpec{
 						ApplicationRef: corev1.LocalObjectReference{Name: testApplication.Name},
+						GitRepository: &platformv1alpha1.GitRepositoryDeploymentConfig{
+							CommitSHA: "abc123def456",
+							Branch:    "main",
+						},
 					},
 				}
 				Expect(k8sClient.Create(ctx, testDeployment)).To(Succeed())
@@ -404,11 +408,15 @@ var _ = Describe("Deployment Controller", func() {
 			Expect(pipelineRun.Spec.Workspaces).To(HaveLen(1))
 			Expect(pipelineRun.Spec.Workspaces[0].Name).To(Equal("deployment-testdeploy-application-testapp-kibaship-com"))
 			Expect(pipelineRun.Spec.Workspaces[0].VolumeClaimTemplate).NotTo(BeNil())
-			
+
 			// Verify PVC storage allocation is 24GB
 			pvc := pipelineRun.Spec.Workspaces[0].VolumeClaimTemplate
 			storageRequest := pvc.Spec.Resources.Requests["storage"]
 			Expect(storageRequest.String()).To(Equal("24Gi"))
+
+			// Verify storage class is set to storage-replica-1
+			Expect(pvc.Spec.StorageClassName).NotTo(BeNil())
+			Expect(*pvc.Spec.StorageClassName).To(Equal("storage-replica-1"))
 		})
 
 		It("should allocate 24GB storage for PipelineRun workspace PVC", func() {
@@ -462,43 +470,121 @@ var _ = Describe("Deployment Controller", func() {
 			Expect(pipelineRun.Spec.Workspaces).To(HaveLen(1))
 			workspace := pipelineRun.Spec.Workspaces[0]
 			Expect(workspace.VolumeClaimTemplate).NotTo(BeNil())
-			
+
 			pvc := workspace.VolumeClaimTemplate
 			storageRequest := pvc.Spec.Resources.Requests["storage"]
 			Expect(storageRequest.String()).To(Equal("24Gi"))
-			
+
+			// Verify storage class is set to storage-replica-1
+			Expect(pvc.Spec.StorageClassName).NotTo(BeNil())
+			Expect(*pvc.Spec.StorageClassName).To(Equal("storage-replica-1"))
+
 			// Also verify access mode is ReadWriteOnce
 			Expect(pvc.Spec.AccessModes).To(ContainElement(corev1.ReadWriteOnce))
 		})
 
-		It("should use application branch when deployment branch is not specified", func() {
-			// Create project
-			Expect(k8sClient.Create(ctx, testProject)).To(Succeed())
-
-			// Create GitRepository application with specific branch
-			testApplication.Spec.Type = platformv1alpha1.ApplicationTypeGitRepository
-			testApplication.Spec.GitRepository = &platformv1alpha1.GitRepositoryConfig{
-				Provider:     platformv1alpha1.GitProviderGitHub,
-				Repository:   "user/test-repo",
-				Branch:       "develop",
-				PublicAccess: true,
+		It("should use storage-replica-1 storage class for PipelineRun workspace PVC", func() {
+			// Create fresh application for this test
+			app := &platformv1alpha1.Application{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "project-teststorageclass-app-testapp-kibaship-com",
+					Namespace: testNamespace.Name,
+				},
+				Spec: platformv1alpha1.ApplicationSpec{
+					ProjectRef: corev1.LocalObjectReference{Name: testProject.Name},
+					Type:       platformv1alpha1.ApplicationTypeGitRepository,
+					GitRepository: &platformv1alpha1.GitRepositoryConfig{
+						Provider:     platformv1alpha1.GitProviderGitHub,
+						Repository:   "user/test-repo",
+						Branch:       "main",
+						PublicAccess: true,
+					},
+				},
 			}
-			Expect(k8sClient.Create(ctx, testApplication)).To(Succeed())
+			Expect(k8sClient.Create(ctx, app)).To(Succeed())
 
-			// Create deployment without branch specification
-			testDeployment.Spec.GitRepository = &platformv1alpha1.GitRepositoryDeploymentConfig{
-				CommitSHA: "abc123def456",
-				// Branch is omitted - should use application's branch
+			// Create fresh deployment for this test
+			deployment := &platformv1alpha1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "project-teststorageclass-app-testapp-deployment-storageclass-kibaship-com",
+					Namespace: testNamespace.Name,
+				},
+				Spec: platformv1alpha1.DeploymentSpec{
+					ApplicationRef: corev1.LocalObjectReference{Name: app.Name},
+					GitRepository: &platformv1alpha1.GitRepositoryDeploymentConfig{
+						CommitSHA: "abc123def456",
+					},
+				},
 			}
-			Expect(k8sClient.Create(ctx, testDeployment)).To(Succeed())
+			Expect(k8sClient.Create(ctx, deployment)).To(Succeed())
 
 			// Reconcile deployment twice
-			err := reconcileDeploymentTwice(ctx, deploymentReconciler, testDeployment)
+			err := reconcileDeploymentTwice(ctx, deploymentReconciler, deployment)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Verify PipelineRun was created
+			pipelineRun := &tektonv1.PipelineRun{}
+			expectedPipelineRunName := fmt.Sprintf("project-teststorageclass-app-testapp-deployment-storageclass-run-%d", deployment.Generation)
+			pipelineRunKey := types.NamespacedName{Name: expectedPipelineRunName, Namespace: testNamespace.Name}
+			Eventually(func() error {
+				return k8sClient.Get(ctx, pipelineRunKey, pipelineRun)
+			}, time.Second*10, time.Millisecond*250).Should(Succeed())
+
+			// Focus specifically on storage class verification
+			Expect(pipelineRun.Spec.Workspaces).To(HaveLen(1))
+			workspace := pipelineRun.Spec.Workspaces[0]
+			Expect(workspace.VolumeClaimTemplate).NotTo(BeNil())
+
+			pvc := workspace.VolumeClaimTemplate
+
+			// Primary assertion: storage class must be storage-replica-1
+			Expect(pvc.Spec.StorageClassName).NotTo(BeNil(), "StorageClassName should not be nil")
+			Expect(*pvc.Spec.StorageClassName).To(Equal("storage-replica-1"), "StorageClassName should be 'storage-replica-1'")
+		})
+
+		It("should use application branch when deployment branch is not specified", func() {
+			// Create fresh application for this test
+			app := &platformv1alpha1.Application{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "project-testbranch-app-testapp-kibaship-com",
+					Namespace: testNamespace.Name,
+				},
+				Spec: platformv1alpha1.ApplicationSpec{
+					ProjectRef: corev1.LocalObjectReference{Name: testProject.Name},
+					Type:       platformv1alpha1.ApplicationTypeGitRepository,
+					GitRepository: &platformv1alpha1.GitRepositoryConfig{
+						Provider:     platformv1alpha1.GitProviderGitHub,
+						Repository:   "user/test-repo",
+						Branch:       "develop",
+						PublicAccess: true,
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, app)).To(Succeed())
+
+			// Create fresh deployment without branch specification
+			deployment := &platformv1alpha1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "project-testbranch-app-testapp-deployment-testbranch-kibaship-com",
+					Namespace: testNamespace.Name,
+				},
+				Spec: platformv1alpha1.DeploymentSpec{
+					ApplicationRef: corev1.LocalObjectReference{Name: app.Name},
+					GitRepository: &platformv1alpha1.GitRepositoryDeploymentConfig{
+						CommitSHA: "abc123def456",
+						// Branch is omitted - should use application's branch
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, deployment)).To(Succeed())
+
+			// Reconcile deployment twice
+			err := reconcileDeploymentTwice(ctx, deploymentReconciler, deployment)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Verify PipelineRun uses application's branch
 			pipelineRun := &tektonv1.PipelineRun{}
-			expectedPipelineRunName := fmt.Sprintf("project-test-project-app-test-app-deployment-test-deployment-run-%d", testDeployment.Generation)
+			expectedPipelineRunName := fmt.Sprintf("project-testbranch-app-testapp-deployment-testbranch-run-%d", deployment.Generation)
 			pipelineRunKey := types.NamespacedName{Name: expectedPipelineRunName, Namespace: testNamespace.Name}
 			Eventually(func() error {
 				return k8sClient.Get(ctx, pipelineRunKey, pipelineRun)
@@ -517,31 +603,46 @@ var _ = Describe("Deployment Controller", func() {
 		})
 
 		It("should not create duplicate PipelineRun for same generation", func() {
-			// Create project
-			Expect(k8sClient.Create(ctx, testProject)).To(Succeed())
-
-			// Create GitRepository application
-			testApplication.Spec.Type = platformv1alpha1.ApplicationTypeGitRepository
-			testApplication.Spec.GitRepository = &platformv1alpha1.GitRepositoryConfig{
-				Provider:     platformv1alpha1.GitProviderGitHub,
-				Repository:   "user/test-repo",
-				Branch:       "main",
-				PublicAccess: true,
+			// Create fresh application for this test
+			app := &platformv1alpha1.Application{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "project-testdup-app-testapp-kibaship-com",
+					Namespace: testNamespace.Name,
+				},
+				Spec: platformv1alpha1.ApplicationSpec{
+					ProjectRef: corev1.LocalObjectReference{Name: testProject.Name},
+					Type:       platformv1alpha1.ApplicationTypeGitRepository,
+					GitRepository: &platformv1alpha1.GitRepositoryConfig{
+						Provider:     platformv1alpha1.GitProviderGitHub,
+						Repository:   "user/test-repo",
+						Branch:       "main",
+						PublicAccess: true,
+					},
+				},
 			}
-			Expect(k8sClient.Create(ctx, testApplication)).To(Succeed())
+			Expect(k8sClient.Create(ctx, app)).To(Succeed())
 
-			// Create deployment with GitRepository configuration
-			testDeployment.Spec.GitRepository = &platformv1alpha1.GitRepositoryDeploymentConfig{
-				CommitSHA: "abc123def456",
+			// Create fresh deployment for this test
+			deployment := &platformv1alpha1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "project-testdup-app-testapp-deployment-testdup-kibaship-com",
+					Namespace: testNamespace.Name,
+				},
+				Spec: platformv1alpha1.DeploymentSpec{
+					ApplicationRef: corev1.LocalObjectReference{Name: app.Name},
+					GitRepository: &platformv1alpha1.GitRepositoryDeploymentConfig{
+						CommitSHA: "abc123def456",
+					},
+				},
 			}
-			Expect(k8sClient.Create(ctx, testDeployment)).To(Succeed())
+			Expect(k8sClient.Create(ctx, deployment)).To(Succeed())
 
 			// Reconcile deployment twice
-			err := reconcileDeploymentTwice(ctx, deploymentReconciler, testDeployment)
+			err := reconcileDeploymentTwice(ctx, deploymentReconciler, deployment)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Verify first PipelineRun was created
-			expectedPipelineRunName := fmt.Sprintf("project-test-project-app-test-app-deployment-test-deployment-run-%d", testDeployment.Generation)
+			expectedPipelineRunName := fmt.Sprintf("project-testdup-app-testapp-deployment-testdup-run-%d", deployment.Generation)
 			pipelineRunKey := types.NamespacedName{Name: expectedPipelineRunName, Namespace: testNamespace.Name}
 			pipelineRun := &tektonv1.PipelineRun{}
 			Eventually(func() error {
@@ -554,8 +655,8 @@ var _ = Describe("Deployment Controller", func() {
 			// Reconcile again - should not create duplicate
 			_, err = deploymentReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: types.NamespacedName{
-					Name:      testDeployment.Name,
-					Namespace: testDeployment.Namespace,
+					Name:      deployment.Name,
+					Namespace: deployment.Namespace,
 				},
 			})
 			Expect(err).NotTo(HaveOccurred())
@@ -566,28 +667,43 @@ var _ = Describe("Deployment Controller", func() {
 		})
 
 		It("should require GitRepository configuration for GitRepository applications", func() {
-			// Create project
-			Expect(k8sClient.Create(ctx, testProject)).To(Succeed())
-
-			// Create GitRepository application
-			testApplication.Spec.Type = platformv1alpha1.ApplicationTypeGitRepository
-			testApplication.Spec.GitRepository = &platformv1alpha1.GitRepositoryConfig{
-				Provider:     platformv1alpha1.GitProviderGitHub,
-				Repository:   "user/test-repo",
-				Branch:       "main",
-				PublicAccess: true,
+			// Create fresh application for this test
+			app := &platformv1alpha1.Application{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "project-testrequired-app-testapp-kibaship-com",
+					Namespace: testNamespace.Name,
+				},
+				Spec: platformv1alpha1.ApplicationSpec{
+					ProjectRef: corev1.LocalObjectReference{Name: testProject.Name},
+					Type:       platformv1alpha1.ApplicationTypeGitRepository,
+					GitRepository: &platformv1alpha1.GitRepositoryConfig{
+						Provider:     platformv1alpha1.GitProviderGitHub,
+						Repository:   "user/test-repo",
+						Branch:       "main",
+						PublicAccess: true,
+					},
+				},
 			}
-			Expect(k8sClient.Create(ctx, testApplication)).To(Succeed())
+			Expect(k8sClient.Create(ctx, app)).To(Succeed())
 
-			// Create deployment WITHOUT GitRepository configuration
-			// testDeployment.Spec.GitRepository is nil by default
-			Expect(k8sClient.Create(ctx, testDeployment)).To(Succeed())
+			// Create fresh deployment WITHOUT GitRepository configuration
+			deployment := &platformv1alpha1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "project-testrequired-app-testapp-deployment-testrequired-kibaship-com",
+					Namespace: testNamespace.Name,
+				},
+				Spec: platformv1alpha1.DeploymentSpec{
+					ApplicationRef: corev1.LocalObjectReference{Name: app.Name},
+					// GitRepository is intentionally nil to test validation
+				},
+			}
+			Expect(k8sClient.Create(ctx, deployment)).To(Succeed())
 
 			// First reconcile to add finalizer
 			_, err := deploymentReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: types.NamespacedName{
-					Name:      testDeployment.Name,
-					Namespace: testDeployment.Namespace,
+					Name:      deployment.Name,
+					Namespace: deployment.Namespace,
 				},
 			})
 			Expect(err).NotTo(HaveOccurred())
@@ -595,8 +711,8 @@ var _ = Describe("Deployment Controller", func() {
 			// Second reconcile should fail due to missing GitRepository configuration
 			_, err = deploymentReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: types.NamespacedName{
-					Name:      testDeployment.Name,
-					Namespace: testDeployment.Namespace,
+					Name:      deployment.Name,
+					Namespace: deployment.Namespace,
 				},
 			})
 			Expect(err).To(HaveOccurred())
@@ -643,6 +759,10 @@ var _ = Describe("Deployment Controller", func() {
 						},
 						Spec: platformv1alpha1.DeploymentSpec{
 							ApplicationRef: corev1.LocalObjectReference{Name: app.Name},
+							GitRepository: &platformv1alpha1.GitRepositoryDeploymentConfig{
+								CommitSHA: "abc123def456",
+								Branch:    "main",
+							},
 						},
 					}
 					Expect(k8sClient.Create(ctx, deployment)).To(Succeed())

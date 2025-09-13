@@ -436,6 +436,7 @@ func (r *DeploymentReconciler) createPipelineRun(ctx context.Context, deployment
 							AccessModes: []corev1.PersistentVolumeAccessMode{
 								corev1.ReadWriteOnce,
 							},
+							StorageClassName: func() *string { s := "storage-replica-1"; return &s }(),
 							Resources: corev1.VolumeResourceRequirements{
 								Requests: corev1.ResourceList{
 									corev1.ResourceStorage: resource.MustParse("24Gi"),
