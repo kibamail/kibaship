@@ -27,7 +27,10 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	platformv1alpha1 "github.com/kibamail/kibaship-operator/api/v1alpha1"
@@ -792,6 +795,469 @@ var _ = Describe("Deployment Controller", func() {
 			})
 		})
 	})
+
+	Describe("MySQL Deployment", func() {
+		Context("When deployment references MySQL application", func() {
+			var testMySQLApp *platformv1alpha1.Application
+
+			BeforeEach(func() {
+				// Create MySQL application
+				testMySQLApp = &platformv1alpha1.Application{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "project-test123-app-mysqlapp-kibaship-com",
+						Namespace: testNamespace.Name,
+					},
+					Spec: platformv1alpha1.ApplicationSpec{
+						ProjectRef: corev1.LocalObjectReference{Name: testProject.Name},
+						Type:       platformv1alpha1.ApplicationTypeMySQL,
+						MySQL: &platformv1alpha1.MySQLConfig{
+							Version: "8.0.28",
+						},
+					},
+				}
+				Expect(k8sClient.Create(ctx, testMySQLApp)).To(Succeed())
+			})
+
+			AfterEach(func() {
+				if testMySQLApp != nil {
+					k8sClient.Delete(ctx, testMySQLApp)
+				}
+			})
+
+			It("should create MySQL credentials secret and InnoDBCluster for new deployment", func() {
+				// Create MySQL deployment
+				testDeployment = &platformv1alpha1.Deployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "project-test123-app-mysqlapp-deployment-deploy1-kibaship-com",
+						Namespace: testNamespace.Name,
+					},
+					Spec: platformv1alpha1.DeploymentSpec{
+						ApplicationRef: corev1.LocalObjectReference{Name: testMySQLApp.Name},
+					},
+				}
+				Expect(k8sClient.Create(ctx, testDeployment)).To(Succeed())
+
+				// Reconcile deployment twice (first adds finalizer, second creates resources)
+				err := reconcileDeploymentTwice(ctx, deploymentReconciler, testDeployment)
+				Expect(err).NotTo(HaveOccurred())
+
+				// Verify MySQL credentials secret was created
+				secret := &corev1.Secret{}
+				expectedSecretName := "project-test123-app-mysqlapp-mysql-credentials-kibaship-com"
+				secretKey := types.NamespacedName{Name: expectedSecretName, Namespace: testNamespace.Name}
+				Eventually(func() error {
+					return k8sClient.Get(ctx, secretKey, secret)
+				}, time.Second*10, time.Millisecond*250).Should(Succeed())
+
+				// Verify secret contains correct keys (Data field when read back from cluster)
+				Expect(string(secret.Data["rootUser"])).To(Equal("root"))
+				Expect(string(secret.Data["rootHost"])).To(Equal("%"))
+				Expect(string(secret.Data["rootPassword"])).To(HaveLen(32))                   // 32 character password
+				Expect(string(secret.Data["rootPassword"])).To(MatchRegexp("^[a-zA-Z0-9]+$")) // Alphanumeric only
+
+				// Verify secret has correct labels
+				Expect(secret.Labels["app.kubernetes.io/name"]).To(Equal("project-test123"))
+				Expect(secret.Labels["app.kubernetes.io/managed-by"]).To(Equal("kibaship"))
+				Expect(secret.Labels["app.kubernetes.io/component"]).To(Equal("mysql-credentials"))
+				Expect(secret.Labels["project.kibaship.com/slug"]).To(Equal("test123"))
+
+				// Verify InnoDBCluster was created
+				cluster := &unstructured.Unstructured{}
+				cluster.SetGroupVersionKind(schema.GroupVersionKind{
+					Group:   "mysql.oracle.com",
+					Version: "v2",
+					Kind:    "InnoDBCluster",
+				})
+				expectedClusterName := "test123-mysqlapp-mysql"
+				clusterKey := types.NamespacedName{Name: expectedClusterName, Namespace: testNamespace.Name}
+				Eventually(func() error {
+					return k8sClient.Get(ctx, clusterKey, cluster)
+				}, time.Second*10, time.Millisecond*250).Should(Succeed())
+
+				// Verify InnoDBCluster has correct configuration
+				spec, _, err := unstructured.NestedMap(cluster.Object, "spec")
+				Expect(err).NotTo(HaveOccurred())
+
+				Expect(spec["secretName"]).To(Equal(expectedSecretName))
+				Expect(spec["tlsUseSelfSigned"]).To(BeTrue())
+				Expect(spec["instances"]).To(Equal(int64(1)))
+				Expect(spec["version"]).To(Equal("8.0.28"))
+
+				// Verify router configuration
+				router, _, err := unstructured.NestedMap(spec, "router")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(router["instances"]).To(Equal(int64(0)))
+
+				// Verify storage configuration
+				pvcTemplate, _, err := unstructured.NestedMap(spec, "datadirVolumeClaimTemplate")
+				Expect(err).NotTo(HaveOccurred())
+				pvcSpec, _, err := unstructured.NestedMap(pvcTemplate, "spec")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(pvcSpec["storageClassName"]).To(Equal("storage-replica-2"))
+
+				resources, _, err := unstructured.NestedMap(pvcSpec, "resources")
+				Expect(err).NotTo(HaveOccurred())
+				requests, _, err := unstructured.NestedMap(resources, "requests")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(requests["storage"]).To(Equal("512Mi"))
+
+				// Verify InnoDBCluster has correct labels
+				Expect(cluster.GetLabels()["app.kubernetes.io/name"]).To(Equal("project-test123"))
+				Expect(cluster.GetLabels()["app.kubernetes.io/managed-by"]).To(Equal("kibaship"))
+				Expect(cluster.GetLabels()["app.kubernetes.io/component"]).To(Equal("mysql-database"))
+				Expect(cluster.GetLabels()["project.kibaship.com/slug"]).To(Equal("test123"))
+			})
+
+			It("should handle existing deployments gracefully", func() {
+				// Create first MySQL deployment
+				firstDeployment := &platformv1alpha1.Deployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "project-test123-app-mysqlapp-deployment-deploy1-kibaship-com",
+						Namespace: testNamespace.Name,
+					},
+					Spec: platformv1alpha1.DeploymentSpec{
+						ApplicationRef: corev1.LocalObjectReference{Name: testMySQLApp.Name},
+					},
+				}
+				Expect(k8sClient.Create(ctx, firstDeployment)).To(Succeed())
+
+				// Reconcile first deployment
+				err := reconcileDeploymentTwice(ctx, deploymentReconciler, firstDeployment)
+				Expect(err).NotTo(HaveOccurred())
+
+				// Verify resources were created for first deployment
+				secret := &corev1.Secret{}
+				expectedSecretName := "project-test123-app-mysqlapp-mysql-credentials-kibaship-com"
+				secretKey := types.NamespacedName{Name: expectedSecretName, Namespace: testNamespace.Name}
+				Eventually(func() error {
+					return k8sClient.Get(ctx, secretKey, secret)
+				}, time.Second*10, time.Millisecond*250).Should(Succeed())
+
+				cluster := &unstructured.Unstructured{}
+				cluster.SetGroupVersionKind(schema.GroupVersionKind{
+					Group:   "mysql.oracle.com",
+					Version: "v2",
+					Kind:    "InnoDBCluster",
+				})
+				expectedClusterName := "test123-mysqlapp-mysql"
+				clusterKey := types.NamespacedName{Name: expectedClusterName, Namespace: testNamespace.Name}
+				Eventually(func() error {
+					return k8sClient.Get(ctx, clusterKey, cluster)
+				}, time.Second*10, time.Millisecond*250).Should(Succeed())
+
+				// Create second MySQL deployment for the same application
+				testDeployment = &platformv1alpha1.Deployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "project-test123-app-mysqlapp-deployment-deploy2-kibaship-com",
+						Namespace: testNamespace.Name,
+					},
+					Spec: platformv1alpha1.DeploymentSpec{
+						ApplicationRef: corev1.LocalObjectReference{Name: testMySQLApp.Name},
+					},
+				}
+				Expect(k8sClient.Create(ctx, testDeployment)).To(Succeed())
+
+				// Reconcile second deployment
+				err = reconcileDeploymentTwice(ctx, deploymentReconciler, testDeployment)
+				Expect(err).NotTo(HaveOccurred())
+
+				// Verify that no duplicate resources were created (should reuse existing ones)
+				secretList := &corev1.SecretList{}
+				Expect(k8sClient.List(ctx, secretList, client.InNamespace(testNamespace.Name))).To(Succeed())
+
+				mysqlSecretsCount := 0
+				for _, s := range secretList.Items {
+					if s.Labels["app.kubernetes.io/component"] == "mysql-credentials" {
+						mysqlSecretsCount++
+					}
+				}
+				Expect(mysqlSecretsCount).To(Equal(1), "Should only have one MySQL credentials secret")
+
+				clusterList := &unstructured.UnstructuredList{}
+				clusterList.SetGroupVersionKind(schema.GroupVersionKind{
+					Group:   "mysql.oracle.com",
+					Version: "v2",
+					Kind:    "InnoDBClusterList",
+				})
+				Expect(k8sClient.List(ctx, clusterList, client.InNamespace(testNamespace.Name))).To(Succeed())
+				Expect(clusterList.Items).To(HaveLen(1), "Should only have one InnoDBCluster")
+
+				// Clean up first deployment
+				k8sClient.Delete(ctx, firstDeployment)
+			})
+
+			It("should use default MySQL version when none specified", func() {
+				// Create MySQL application without version
+				appWithoutVersion := &platformv1alpha1.Application{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "project-test123-app-mysql-no-version-kibaship-com",
+						Namespace: testNamespace.Name,
+					},
+					Spec: platformv1alpha1.ApplicationSpec{
+						ProjectRef: corev1.LocalObjectReference{Name: testProject.Name},
+						Type:       platformv1alpha1.ApplicationTypeMySQL,
+						MySQL:      &platformv1alpha1.MySQLConfig{}, // No version specified
+					},
+				}
+				Expect(k8sClient.Create(ctx, appWithoutVersion)).To(Succeed())
+				defer k8sClient.Delete(ctx, appWithoutVersion)
+
+				// Create MySQL deployment
+				testDeployment = &platformv1alpha1.Deployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "project-test123-app-mysql-no-version-deployment-deploy1-kibaship-com",
+						Namespace: testNamespace.Name,
+					},
+					Spec: platformv1alpha1.DeploymentSpec{
+						ApplicationRef: corev1.LocalObjectReference{Name: appWithoutVersion.Name},
+					},
+				}
+				Expect(k8sClient.Create(ctx, testDeployment)).To(Succeed())
+
+				// Reconcile deployment
+				err := reconcileDeploymentTwice(ctx, deploymentReconciler, testDeployment)
+				Expect(err).NotTo(HaveOccurred())
+
+				// Verify InnoDBCluster was created without version (should use operator default)
+				cluster := &unstructured.Unstructured{}
+				cluster.SetGroupVersionKind(schema.GroupVersionKind{
+					Group:   "mysql.oracle.com",
+					Version: "v2",
+					Kind:    "InnoDBCluster",
+				})
+				expectedClusterName := "test123-mysql-no-version-mysql"
+				clusterKey := types.NamespacedName{Name: expectedClusterName, Namespace: testNamespace.Name}
+				Eventually(func() error {
+					return k8sClient.Get(ctx, clusterKey, cluster)
+				}, time.Second*10, time.Millisecond*250).Should(Succeed())
+
+				// Version should not be set, allowing the MySQL operator to use its default
+				spec, _, err := unstructured.NestedMap(cluster.Object, "spec")
+				Expect(err).NotTo(HaveOccurred())
+				_, found := spec["version"]
+				Expect(found).To(BeFalse(), "Version should not be set when not specified in application config")
+			})
+
+			It("should handle MySQL application without MySQL config", func() {
+				// Create MySQL application without MySQL config
+				appWithoutConfig := &platformv1alpha1.Application{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "project-test123-app-mysql-no-config-kibaship-com",
+						Namespace: testNamespace.Name,
+					},
+					Spec: platformv1alpha1.ApplicationSpec{
+						ProjectRef: corev1.LocalObjectReference{Name: testProject.Name},
+						Type:       platformv1alpha1.ApplicationTypeMySQL,
+						// MySQL config is nil
+					},
+				}
+				Expect(k8sClient.Create(ctx, appWithoutConfig)).To(Succeed())
+				defer k8sClient.Delete(ctx, appWithoutConfig)
+
+				// Create MySQL deployment
+				testDeployment = &platformv1alpha1.Deployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "project-test123-app-mysql-no-config-deployment-deploy1-kibaship-com",
+						Namespace: testNamespace.Name,
+					},
+					Spec: platformv1alpha1.DeploymentSpec{
+						ApplicationRef: corev1.LocalObjectReference{Name: appWithoutConfig.Name},
+					},
+				}
+				Expect(k8sClient.Create(ctx, testDeployment)).To(Succeed())
+
+				// Reconcile deployment
+				err := reconcileDeploymentTwice(ctx, deploymentReconciler, testDeployment)
+				Expect(err).NotTo(HaveOccurred())
+
+				// Verify resources were still created successfully
+				secret := &corev1.Secret{}
+				expectedSecretName := "project-test123-app-mysql-no-config-mysql-credentials-kibaship-com"
+				secretKey := types.NamespacedName{Name: expectedSecretName, Namespace: testNamespace.Name}
+				Eventually(func() error {
+					return k8sClient.Get(ctx, secretKey, secret)
+				}, time.Second*10, time.Millisecond*250).Should(Succeed())
+
+				cluster := &unstructured.Unstructured{}
+				cluster.SetGroupVersionKind(schema.GroupVersionKind{
+					Group:   "mysql.oracle.com",
+					Version: "v2",
+					Kind:    "InnoDBCluster",
+				})
+				expectedClusterName := "test123-mysql-no-config-mysql"
+				clusterKey := types.NamespacedName{Name: expectedClusterName, Namespace: testNamespace.Name}
+				Eventually(func() error {
+					return k8sClient.Get(ctx, clusterKey, cluster)
+				}, time.Second*10, time.Millisecond*250).Should(Succeed())
+			})
+		})
+
+		Context("Error Handling", func() {
+			It("should handle invalid deployment name format", func() {
+				// Create MySQL application
+				testMySQLApp := &platformv1alpha1.Application{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "project-test123-app-mysqlapp-kibaship-com",
+						Namespace: testNamespace.Name,
+					},
+					Spec: platformv1alpha1.ApplicationSpec{
+						ProjectRef: corev1.LocalObjectReference{Name: testProject.Name},
+						Type:       platformv1alpha1.ApplicationTypeMySQL,
+					},
+				}
+				Expect(k8sClient.Create(ctx, testMySQLApp)).To(Succeed())
+				defer k8sClient.Delete(ctx, testMySQLApp)
+
+				// Create deployment with invalid name format
+				testDeployment = &platformv1alpha1.Deployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "invalid-deployment-name",
+						Namespace: testNamespace.Name,
+					},
+					Spec: platformv1alpha1.DeploymentSpec{
+						ApplicationRef: corev1.LocalObjectReference{Name: testMySQLApp.Name},
+					},
+				}
+				Expect(k8sClient.Create(ctx, testDeployment)).To(Succeed())
+
+				// Reconcile deployment - should fail gracefully
+				_, err := deploymentReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: types.NamespacedName{
+						Name:      testDeployment.Name,
+						Namespace: testDeployment.Namespace,
+					},
+				})
+
+				// First reconcile adds finalizer and succeeds
+				Expect(err).NotTo(HaveOccurred())
+
+				// Second reconcile should fail due to invalid name format
+				_, err = deploymentReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: types.NamespacedName{
+						Name:      testDeployment.Name,
+						Namespace: testDeployment.Namespace,
+					},
+				})
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("failed to extract slugs from deployment name"))
+			})
+		})
+	})
+
+	Describe("MySQL Utility Functions", func() {
+		Context("Password generation", func() {
+			It("should generate secure 32-character alphanumeric passwords", func() {
+				password, err := generateSecurePassword(32)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(password).To(HaveLen(32))
+				Expect(password).To(MatchRegexp("^[a-zA-Z0-9]+$"))
+			})
+
+			It("should generate different passwords on each call", func() {
+				password1, err := generateSecurePassword(32)
+				Expect(err).NotTo(HaveOccurred())
+
+				password2, err := generateSecurePassword(32)
+				Expect(err).NotTo(HaveOccurred())
+
+				Expect(password1).NotTo(Equal(password2))
+			})
+		})
+
+		Context("Name extraction", func() {
+			It("should correctly extract project and app slugs from deployment name", func() {
+				deploymentName := "project-test123-app-myapp-deployment-deploy1-kibaship-com"
+				projectSlug, appSlug, err := extractProjectAndAppSlugs(deploymentName)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(projectSlug).To(Equal("test123"))
+				Expect(appSlug).To(Equal("myapp"))
+			})
+
+			It("should handle complex multi-part slugs", func() {
+				deploymentName := "project-test-123-prod-app-my-app-name-deployment-deploy-1-kibaship-com"
+				projectSlug, appSlug, err := extractProjectAndAppSlugs(deploymentName)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(projectSlug).To(Equal("test-123-prod"))
+				Expect(appSlug).To(Equal("my-app-name"))
+			})
+
+			It("should return error for invalid deployment name", func() {
+				_, _, err := extractProjectAndAppSlugs("invalid-name-format")
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("invalid deployment name format"))
+			})
+		})
+
+		Context("Resource name generation", func() {
+			It("should generate correct MySQL resource names", func() {
+				secretName, clusterName := generateMySQLResourceNames(nil, "testproject", "myapp")
+
+				Expect(secretName).To(Equal("project-testproject-app-myapp-mysql-credentials-kibaship-com"))
+				Expect(clusterName).To(Equal("testproject-myapp-mysql"))
+			})
+		})
+
+		Context("Existing deployment detection", func() {
+			It("should detect existing deployments for same application", func() {
+				app := &platformv1alpha1.Application{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test-app",
+					},
+				}
+
+				existingDeployment := platformv1alpha1.Deployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "existing-deployment",
+						Namespace: "test-ns",
+					},
+					Spec: platformv1alpha1.DeploymentSpec{
+						ApplicationRef: corev1.LocalObjectReference{Name: "test-app"},
+					},
+				}
+
+				currentDeployment := &platformv1alpha1.Deployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "current-deployment",
+						Namespace: "test-ns",
+					},
+					Spec: platformv1alpha1.DeploymentSpec{
+						ApplicationRef: corev1.LocalObjectReference{Name: "test-app"},
+					},
+				}
+
+				deployments := []platformv1alpha1.Deployment{existingDeployment}
+				hasExisting := checkForExistingMySQLDeployments(deployments, currentDeployment, app)
+
+				Expect(hasExisting).To(BeTrue())
+			})
+
+			It("should not detect itself as existing deployment", func() {
+				app := &platformv1alpha1.Application{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test-app",
+					},
+				}
+
+				currentDeployment := &platformv1alpha1.Deployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "current-deployment",
+						Namespace: "test-ns",
+					},
+					Spec: platformv1alpha1.DeploymentSpec{
+						ApplicationRef: corev1.LocalObjectReference{Name: "test-app"},
+					},
+				}
+
+				deployments := []platformv1alpha1.Deployment{*currentDeployment}
+				hasExisting := checkForExistingMySQLDeployments(deployments, currentDeployment, app)
+
+				Expect(hasExisting).To(BeFalse())
+			})
+		})
+	})
+
 })
 
 // Helper function to reconcile deployment twice (finalizer + actual logic)

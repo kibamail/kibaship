@@ -25,7 +25,9 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -58,6 +60,8 @@ type DeploymentReconciler struct {
 // +kubebuilder:rbac:groups=platform.operator.kibaship.com,resources=applications,verbs=get;list;watch
 // +kubebuilder:rbac:groups=tekton.dev,resources=pipelines,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=tekton.dev,resources=pipelineruns,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=mysql.oracle.com,resources=innodbclusters,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -104,6 +108,14 @@ func (r *DeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	if app.Spec.Type == platformv1alpha1.ApplicationTypeGitRepository {
 		if err := r.handleGitRepositoryDeployment(ctx, &deployment, &app); err != nil {
 			log.Error(err, "Failed to handle GitRepository deployment")
+			return ctrl.Result{}, err
+		}
+	}
+
+	// Check if Application is of type MySQL
+	if app.Spec.Type == platformv1alpha1.ApplicationTypeMySQL {
+		if err := r.handleMySQLDeployment(ctx, &deployment, &app); err != nil {
+			log.Error(err, "Failed to handle MySQL deployment")
 			return ctrl.Result{}, err
 		}
 	}
@@ -178,6 +190,113 @@ func (r *DeploymentReconciler) handleGitRepositoryDeployment(ctx context.Context
 	// Create PipelineRun for the deployment
 	if err := r.createPipelineRun(ctx, deployment, app, pipelineName); err != nil {
 		return fmt.Errorf("failed to create PipelineRun: %w", err)
+	}
+
+	return nil
+}
+
+// handleMySQLDeployment handles deployments for MySQL applications
+func (r *DeploymentReconciler) handleMySQLDeployment(ctx context.Context, deployment *platformv1alpha1.Deployment, app *platformv1alpha1.Application) error {
+	log := logf.FromContext(ctx).WithValues("deployment", deployment.Name, "application", app.Name)
+
+	// Validate MySQL configuration
+	if err := validateMySQLConfiguration(app); err != nil {
+		return fmt.Errorf("invalid MySQL configuration: %w", err)
+	}
+
+	// Extract project and app slugs from deployment name
+	projectSlug, appSlug, err := extractProjectAndAppSlugs(deployment.Name)
+	if err != nil {
+		return fmt.Errorf("failed to extract slugs from deployment name: %w", err)
+	}
+
+	// Check for existing deployments of this application
+	var deploymentList platformv1alpha1.DeploymentList
+	if err := r.List(ctx, &deploymentList, client.InNamespace(deployment.Namespace)); err != nil {
+		return fmt.Errorf("failed to list deployments: %w", err)
+	}
+
+	// Check if other deployments exist for this application
+	hasExistingDeployments := checkForExistingMySQLDeployments(deploymentList.Items, deployment, app)
+	if hasExistingDeployments {
+		log.Info("Existing MySQL deployments found for this application - treating as config change")
+		// TODO: Handle configuration updates for existing MySQL deployments
+		// For now, we'll just log and return successfully
+		return nil
+	}
+
+	log.Info("No existing MySQL deployments found - creating new InnoDBCluster")
+
+	// Generate resource names
+	secretName, clusterName := generateMySQLResourceNames(deployment, projectSlug, appSlug)
+
+	// Check if secret already exists
+	existingSecret := &corev1.Secret{}
+	err = r.Get(ctx, types.NamespacedName{
+		Name:      secretName,
+		Namespace: deployment.Namespace,
+	}, existingSecret)
+
+	if err != nil && !errors.IsNotFound(err) {
+		return fmt.Errorf("failed to check for existing secret: %w", err)
+	}
+
+	// Create secret if it doesn't exist
+	if errors.IsNotFound(err) {
+		log.Info("Creating MySQL credentials secret", "secretName", secretName)
+		secret, err := generateMySQLCredentialsSecret(deployment, projectSlug, appSlug, deployment.Namespace)
+		if err != nil {
+			return fmt.Errorf("failed to generate MySQL credentials secret: %w", err)
+		}
+
+		// Set owner reference to the deployment
+		if err := controllerutil.SetControllerReference(deployment, secret, r.Scheme); err != nil {
+			return fmt.Errorf("failed to set controller reference on secret: %w", err)
+		}
+
+		if err := r.Create(ctx, secret); err != nil {
+			return fmt.Errorf("failed to create MySQL credentials secret: %w", err)
+		}
+		log.Info("Successfully created MySQL credentials secret", "secretName", secretName)
+	} else {
+		log.Info("MySQL credentials secret already exists", "secretName", secretName)
+	}
+
+	// Check if InnoDBCluster already exists
+	existingCluster := &unstructured.Unstructured{}
+	existingCluster.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   "mysql.oracle.com",
+		Version: "v2",
+		Kind:    "InnoDBCluster",
+	})
+	err = r.Get(ctx, types.NamespacedName{
+		Name:      clusterName,
+		Namespace: deployment.Namespace,
+	}, existingCluster)
+
+	if err != nil && !errors.IsNotFound(err) {
+		return fmt.Errorf("failed to check for existing InnoDBCluster: %w", err)
+	}
+
+	// Create InnoDBCluster if it doesn't exist
+	if errors.IsNotFound(err) {
+		log.Info("Creating InnoDBCluster", "clusterName", clusterName)
+		cluster, err := generateInnoDBCluster(deployment, app, projectSlug, appSlug, secretName, deployment.Namespace)
+		if err != nil {
+			return fmt.Errorf("failed to generate InnoDBCluster: %w", err)
+		}
+
+		// Set owner reference to the deployment
+		if err := controllerutil.SetControllerReference(deployment, cluster, r.Scheme); err != nil {
+			return fmt.Errorf("failed to set controller reference on InnoDBCluster: %w", err)
+		}
+
+		if err := r.Create(ctx, cluster); err != nil {
+			return fmt.Errorf("failed to create InnoDBCluster: %w", err)
+		}
+		log.Info("Successfully created InnoDBCluster", "clusterName", clusterName)
+	} else {
+		log.Info("InnoDBCluster already exists", "clusterName", clusterName)
 	}
 
 	return nil

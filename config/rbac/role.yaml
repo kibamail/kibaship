@@ -8,6 +8,7 @@ rules:
   - ""
   resources:
   - namespaces
+  - secrets
   verbs:
   - create
   - delete
@@ -22,6 +23,18 @@ rules:
   - '*'
   verbs:
   - '*'
+- apiGroups:
+  - mysql.oracle.com
+  resources:
+  - innodbclusters
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
 - apiGroups:
   - platform.operator.kibaship.com
   resources:

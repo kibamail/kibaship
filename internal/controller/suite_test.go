@@ -74,6 +74,7 @@ var _ = BeforeSuite(func() {
 			filepath.Join("..", "..", "config", "crd", "bases"),
 			filepath.Join("..", "..", "config", "test-resources", "tekton", "v1.4.0"),
 			filepath.Join("..", "..", "config", "tekton-resources", "tasks"),
+			filepath.Join("..", "..", "config", "test-resources", "mysql-operator", "v9.4.0"),
 		},
 		ErrorIfCRDPathMissing: true,
 	}
