@@ -93,23 +93,24 @@ jobs:
         mkdir -p charts
         helm package deploy/helm/kibaship-operator/ --destination ./charts/
 
+    - name: Extract metadata for Docker
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        tags: |
+          type=raw,value=v${{ steps.version.outputs.VERSION }}
+          type=raw,value=latest
+
     - name: Build and push Docker image
-      uses: docker/build-push-action@v5
+      uses: docker/build-push-action@v6
       with:
         context: .
         platforms: linux/amd64,linux/arm64
         push: true
-        tags: |
-          ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:v${{ steps.version.outputs.VERSION }}
-          ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-        labels: |
-          org.opencontainers.image.title=KibaShip Operator
-          org.opencontainers.image.description=Kubernetes operator for managing KibaShip applications and domains
-          org.opencontainers.image.url=https://github.com/kibamail/kibaship-operator
-          org.opencontainers.image.source=https://github.com/kibamail/kibaship-operator
-          org.opencontainers.image.version=v${{ steps.version.outputs.VERSION }}
-          org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
-          org.opencontainers.image.revision=${{ github.sha }}
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        provenance: false
 
     - name: Generate release notes
       id: release_notes
