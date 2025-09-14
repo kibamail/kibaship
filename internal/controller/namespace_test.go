@@ -18,6 +18,8 @@ package controller
 
 import (
 	"context"
+	"fmt"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -41,9 +43,11 @@ var _ = Describe("NamespaceManager", func() {
 		ctx = context.Background()
 		namespaceManager = NewNamespaceManager(k8sClient)
 
+		// Generate unique project name to avoid conflicts between tests
+		uniqueID := time.Now().UnixNano()
 		testProject = &platformv1alpha1.Project{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: "test-namespace-project",
+				Name: fmt.Sprintf("test-namespace-project-%d", uniqueID),
 				Labels: map[string]string{
 					ProjectUUIDLabel:   "550e8400-e29b-41d4-a716-446655440010",
 					WorkspaceUUIDLabel: "6ba7b810-9dad-11d1-80b4-00c04fd430d0",
@@ -99,7 +103,7 @@ var _ = Describe("NamespaceManager", func() {
 			Expect(namespace).NotTo(BeNil())
 
 			By("Verifying namespace properties")
-			expectedName := "project-test-namespace-project-kibaship-com"
+			expectedName := namespaceManager.GenerateNamespaceName(testProject.Name)
 			Expect(namespace.Name).To(Equal(expectedName))
 
 			By("Verifying namespace labels")

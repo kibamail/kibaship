@@ -17,6 +17,7 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"flag"
 	"os"
 
@@ -122,6 +123,13 @@ func main() {
 	}
 	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up ready check")
+		os.Exit(1)
+	}
+
+	// Provision system Valkey cluster
+	valkeyProvisioner := controller.NewValkeyProvisioner(mgr.GetClient())
+	if err := valkeyProvisioner.ProvisionSystemValkeyCluster(context.Background()); err != nil {
+		setupLog.Error(err, "Failed to provision system Valkey cluster")
 		os.Exit(1)
 	}
 
