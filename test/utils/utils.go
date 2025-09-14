@@ -34,9 +34,6 @@ const (
 
 	certmanagerVersion = "v1.16.3"
 	certmanagerURLTmpl = "https://github.com/cert-manager/cert-manager/releases/download/%s/cert-manager.yaml"
-
-	tektonPipelinesVersion = "v0.63.0"
-	tektonPipelinesURLTmpl = "https://storage.googleapis.com/tekton-releases/pipeline/previous/%s/release.yaml"
 )
 
 func warnError(err error) {
