@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.22'
+
+    - name: Cache Go modules
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+
+    - name: Download dependencies
+      run: go mod download
+
+    - name: Run tests
+      run: |
+        make setup-envtest
+        make test
+
+    - name: Run linting
+      uses: golangci/golangci-lint-action@v6
+      with:
+        version: latest
+        skip-cache: true
+
+    - name: Build project
+      run: make build
+
+    - name: Verify manifests are up-to-date
+      run: |
+        make manifests
+        make build-installer
+        if [ -n "$(git status --porcelain)" ]; then
+          echo "❌ Generated files are not up-to-date. Please run 'make manifests build-installer' and commit the changes."
+          git status --porcelain
+          exit 1
+        fi
+
+    - name: Build Docker image (test only)
+      run: make docker-build
+
+    - name: Validate Helm chart
+      run: |
+        helm lint deploy/helm/kibaship-operator/
+        helm template test-release deploy/helm/kibaship-operator/ --debug
+
+    - name: Test kustomize build
+      run: |
+        make kustomize
+        ./bin/kustomize build config/default > /dev/null
+        ./bin/kustomize build config/tekton-resources > /dev/null
