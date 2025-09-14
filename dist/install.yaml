@@ -1631,7 +1631,7 @@ spec:
           value: myapps.kibaship.com
         - name: KIBASHIP_OPERATOR_DEFAULT_PORT
           value: "3000"
-        image: ghcr.io/kibamail/kibaship-operator:v0.0.2
+        image: ghcr.io/kibamail/kibaship-operator:v0.0.3
         livenessProbe:
           httpGet:
             path: /healthz
