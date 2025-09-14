@@ -57,7 +57,7 @@ This checklist ensures that all necessary steps are completed before releasing a
 - [ ] **Rollback Plan**: Document rollback procedure if issues arise
 
 ### 🤖 CI/CD Pipeline
-- [ ] **GitHub Actions**: Release workflow is configured and functional
+- [ ] **GitHub Actions**: build-and-push workflow is configured and functional
 - [ ] **Registry Access**: GHCR permissions are set up for publishing
 - [ ] **Branch Protection**: Main branch is protected and requires PR reviews
 - [ ] **Secrets**: No hardcoded secrets in workflows or code

@@ -34,6 +34,9 @@ const (
 
 	certmanagerVersion = "v1.16.3"
 	certmanagerURLTmpl = "https://github.com/cert-manager/cert-manager/releases/download/%s/cert-manager.yaml"
+
+	tektonPipelinesVersion = "v0.63.0"
+	tektonPipelinesURLTmpl = "https://storage.googleapis.com/tekton-releases/pipeline/previous/%s/release.yaml"
 )
 
 func warnError(err error) {
@@ -251,4 +254,92 @@ func UncommentCode(filename, target, prefix string) error {
 	}
 
 	return nil
+}
+
+// InstallTektonPipelines installs Tekton Pipelines CRDs only to support Task resources
+// For e2e tests, we only need the CRDs to allow the operator to deploy Task resources
+func InstallTektonPipelines() error {
+	// Create a minimal Tekton Task CRD installation for testing
+	taskCRD := `
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: tasks.tekton.dev
+  labels:
+    app.kubernetes.io/instance: default
+    app.kubernetes.io/part-of: tekton-pipelines
+spec:
+  group: tekton.dev
+  versions:
+  - name: v1
+    served: true
+    storage: true
+    schema:
+      openAPIV3Schema:
+        type: object
+        x-kubernetes-preserve-unknown-fields: true
+  scope: Namespaced
+  names:
+    plural: tasks
+    singular: task
+    kind: Task
+    shortNames:
+    - t
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: tekton-pipelines
+  labels:
+    app.kubernetes.io/instance: default
+    app.kubernetes.io/part-of: tekton-pipelines
+`
+
+	// Apply the minimal CRD configuration
+	cmd := exec.Command("kubectl", "apply", "-f", "-")
+	cmd.Stdin = strings.NewReader(taskCRD)
+	_, err := Run(cmd)
+	return err
+}
+
+// UninstallTektonPipelines uninstalls Tekton CRDs and namespace
+func UninstallTektonPipelines() {
+	// Delete Task CRD
+	cmd := exec.Command("kubectl", "delete", "crd", "tasks.tekton.dev")
+	if _, err := Run(cmd); err != nil {
+		warnError(err)
+	}
+
+	// Delete tekton-pipelines namespace
+	cmd = exec.Command("kubectl", "delete", "namespace", "tekton-pipelines")
+	if _, err := Run(cmd); err != nil {
+		warnError(err)
+	}
+}
+
+// IsTektonPipelinesCRDsInstalled checks if any Tekton Pipelines CRDs are installed
+func IsTektonPipelinesCRDsInstalled() bool {
+	tektonCRDs := []string{
+		"tasks.tekton.dev",
+		"taskruns.tekton.dev",
+		"pipelines.tekton.dev",
+		"pipelineruns.tekton.dev",
+	}
+
+	cmd := exec.Command("kubectl", "get", "crds")
+	output, err := Run(cmd)
+	if err != nil {
+		return false
+	}
+
+	crdList := GetNonEmptyLines(output)
+	for _, crd := range tektonCRDs {
+		for _, line := range crdList {
+			if strings.Contains(line, crd) {
+				return true
+			}
+		}
+	}
+
+	return false
 }

@@ -24,7 +24,7 @@ helm-charts/
 
 ### 3. Add GitHub Action to main operator repo
 ```yaml
-# .github/workflows/release.yml (addition)
+# .github/workflows/build-and-push.yml (addition)
 helm-release:
   needs: release
   runs-on: ubuntu-latest
@@ -82,7 +82,7 @@ helm install kibaship-operator oci://ghcr.io/kibamail/charts/kibaship-operator -
 The current CI/CD can be extended to package and attach the chart:
 
 ```yaml
-# .github/workflows/release.yml (addition)
+# .github/workflows/build-and-push.yml (addition)
 - name: Package Helm Chart
   run: |
     helm package deploy/helm/kibaship-operator/ --destination ./charts/

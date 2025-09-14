@@ -31,11 +31,15 @@ import (
 var (
 	// Optional Environment Variables:
 	// - CERT_MANAGER_INSTALL_SKIP=true: Skips CertManager installation during test setup.
-	// These variables are useful if CertManager is already installed, avoiding
+	// - TEKTON_PIPELINES_INSTALL_SKIP=true: Skips Tekton Pipelines installation during test setup.
+	// These variables are useful if these components are already installed, avoiding
 	// re-installation and conflicts.
-	skipCertManagerInstall = os.Getenv("CERT_MANAGER_INSTALL_SKIP") == "true"
+	skipCertManagerInstall     = os.Getenv("CERT_MANAGER_INSTALL_SKIP") == "true"
+	skipTektonPipelinesInstall = os.Getenv("TEKTON_PIPELINES_INSTALL_SKIP") == "true"
 	// isCertManagerAlreadyInstalled will be set true when CertManager CRDs be found on the cluster
 	isCertManagerAlreadyInstalled = false
+	// isTektonPipelinesAlreadyInstalled will be set true when Tekton Pipelines CRDs be found on the cluster
+	isTektonPipelinesAlreadyInstalled = false
 
 	// projectImage is the name of the image which will be build and loaded
 	// with the code source changes to be tested.
@@ -78,9 +82,27 @@ var _ = BeforeSuite(func() {
 			_, _ = fmt.Fprintf(GinkgoWriter, "WARNING: CertManager is already installed. Skipping installation...\n")
 		}
 	}
+
+	// Setup Tekton Pipelines before the suite if not skipped and if not already installed
+	if !skipTektonPipelinesInstall {
+		By("checking if Tekton Pipelines is installed already")
+		isTektonPipelinesAlreadyInstalled = utils.IsTektonPipelinesCRDsInstalled()
+		if !isTektonPipelinesAlreadyInstalled {
+			_, _ = fmt.Fprintf(GinkgoWriter, "Installing Tekton Pipelines...\n")
+			Expect(utils.InstallTektonPipelines()).To(Succeed(), "Failed to install Tekton Pipelines")
+		} else {
+			_, _ = fmt.Fprintf(GinkgoWriter, "WARNING: Tekton Pipelines is already installed. Skipping installation...\n")
+		}
+	}
 })
 
 var _ = AfterSuite(func() {
+	// Teardown Tekton Pipelines after the suite if not skipped and if it was not already installed
+	if !skipTektonPipelinesInstall && !isTektonPipelinesAlreadyInstalled {
+		_, _ = fmt.Fprintf(GinkgoWriter, "Uninstalling Tekton Pipelines...\n")
+		utils.UninstallTektonPipelines()
+	}
+
 	// Teardown CertManager after the suite if not skipped and if it was not already installed
 	if !skipCertManagerInstall && !isCertManagerAlreadyInstalled {
 		_, _ = fmt.Fprintf(GinkgoWriter, "Uninstalling CertManager...\n")
