@@ -39,7 +39,21 @@ jobs:
 
     - name: Extract version from tag
       id: version
-      run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+      run: |
+        # Debug info
+        echo "GITHUB_REF: ${GITHUB_REF}"
+        echo "GITHUB_REF_NAME: ${GITHUB_REF_NAME}"
+        echo "GITHUB_SHA: ${GITHUB_SHA}"
+
+        # Extract version from tag, ensuring it's properly formatted
+        if [[ "${GITHUB_REF}" =~ ^refs/tags/v(.+)$ ]]; then
+          VERSION="${BASH_REMATCH[1]}"
+          echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+          echo "✅ Extracted version: ${VERSION}"
+        else
+          echo "❌ Error: Invalid tag format: ${GITHUB_REF}"
+          exit 1
+        fi
 
     - name: Verify version consistency
       run: |
