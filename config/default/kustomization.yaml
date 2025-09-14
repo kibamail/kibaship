@@ -36,6 +36,21 @@ patches:
 # Uncomment the following replacements to add the cert-manager CA injection annotations
 # [CERTMANAGER] To enable cert-manager, uncomment all sections with 'CERTMANAGER'.
 replacements:
+# Fix Certificate issuerRef to point to the correct Issuer name after namePrefix
+- source:
+    kind: Issuer
+    group: cert-manager.io
+    version: v1
+    name: selfsigned-issuer
+    fieldPath: .metadata.name
+  targets:
+  - select:
+      kind: Certificate
+      group: cert-manager.io
+      version: v1
+      name: serving-cert
+    fieldPaths:
+    - .spec.issuerRef.name
 - source:
     kind: Certificate
     group: cert-manager.io

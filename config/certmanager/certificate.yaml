@@ -30,7 +30,7 @@ metadata:
   namespace: system
 spec:
   # Service names to generate certificates for
-  # These correspond to the webhook service
+  # These will match the service after kustomize applies namePrefix
   dnsNames:
   - webhook-service.system.svc
   - webhook-service.system.svc.cluster.local

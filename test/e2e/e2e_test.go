@@ -57,6 +57,30 @@ var _ = Describe("Manager", Ordered, func() {
 		cmd = exec.Command("make", "deploy", fmt.Sprintf("IMG=%s", projectImage))
 		_, err = utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred(), "Failed to deploy the controller-manager")
+
+		By("waiting for webhook certificates to be ready")
+		Eventually(func() error {
+			// First check if Certificate resource exists (kustomize adds namePrefix)
+			cmd := exec.Command("kubectl", "get", "certificate", "kibaship-operator-serving-cert", "-n", namespace)
+			if _, err := utils.Run(cmd); err != nil {
+				_, _ = fmt.Fprintf(GinkgoWriter, "Certificate resource not found: %v\n", err)
+				return err
+			}
+
+			// Check Certificate status
+			cmd = exec.Command("kubectl", "describe", "certificate", "kibaship-operator-serving-cert", "-n", namespace)
+			if output, err := utils.Run(cmd); err == nil {
+				_, _ = fmt.Fprintf(GinkgoWriter, "Certificate status:\n%s\n", output)
+			}
+
+			// Check if secret exists
+			cmd = exec.Command("kubectl", "get", "secret", "webhook-server-certs", "-n", namespace)
+			_, err := utils.Run(cmd)
+			if err != nil {
+				_, _ = fmt.Fprintf(GinkgoWriter, "Secret not found: %v\n", err)
+			}
+			return err
+		}, time.Minute*3, time.Second*10).Should(Succeed(), "Webhook server certificates should be created by cert-manager")
 	})
 
 	// After all tests have been executed, clean up by undeploying the controller, uninstalling CRDs,
