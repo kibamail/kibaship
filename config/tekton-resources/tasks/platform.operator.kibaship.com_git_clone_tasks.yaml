@@ -2,9 +2,9 @@ apiVersion: tekton.dev/v1
 kind: Task
 metadata:
   name: tekton-task-git-clone-kibaship-com
-  namespace: tekton-pipelines
   annotations:
     tekton.dev/displayName: "Simple Git Clone with Token"
+    platform.kibaship.com/created-by: "kibaship-operator"
 spec:
   description: >-
     A simplified git clone task that uses an access token from a secret

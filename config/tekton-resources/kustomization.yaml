@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Override namespace for Tekton resources - they must be in tekton-pipelines namespace
+namespace: tekton-pipelines
+
+# Tekton resources for KibaShip operator
+resources:
+  - tasks/platform.operator.kibaship.com_git_clone_tasks.yaml
+
+# Labels to add to all Tekton resources
+labels:
+- pairs:
+    app.kubernetes.io/name: kibaship-operator
+    app.kubernetes.io/managed-by: kibaship-operator
+    app.kubernetes.io/component: tekton-integration

@@ -1752,3 +1752,87 @@ webhooks:
     resources:
     - projects
   sideEffects: None
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  annotations:
+    platform.kibaship.com/created-by: kibaship-operator
+    tekton.dev/displayName: Simple Git Clone with Token
+  labels:
+    app.kubernetes.io/component: tekton-integration
+    app.kubernetes.io/managed-by: kibaship-operator
+    app.kubernetes.io/name: kibaship-operator
+  name: tekton-task-git-clone-kibaship-com
+  namespace: tekton-pipelines
+spec:
+  description: A simplified git clone task that uses an access token from a secret
+    to clone a specific branch and commit from a repository.
+  params:
+  - description: Repository URL to clone from.
+    name: url
+    type: string
+  - description: Branch name to checkout (required).
+    name: branch
+    type: string
+  - description: Specific commit hash to checkout (required).
+    name: commit
+    type: string
+  - description: Name of the secret containing the access token.
+    name: token-secret
+    type: string
+  results:
+  - description: The commit SHA that was checked out.
+    name: commit
+  - description: The repository URL that was cloned.
+    name: url
+  steps:
+  - env:
+    - name: REPO_URL
+      value: $(params.url)
+    - name: BRANCH_NAME
+      value: $(params.branch)
+    - name: COMMIT_HASH
+      value: $(params.commit)
+    - name: ACCESS_TOKEN
+      valueFrom:
+        secretKeyRef:
+          key: token
+          name: $(params.token-secret)
+    - name: WORKSPACE_PATH
+      value: $(workspaces.output.path)
+    image: alpine/git:latest
+    name: clone
+    script: |
+      #!/bin/sh
+      set -e
+
+      echo "Starting git clone..."
+
+      # Create authenticated URL by injecting token
+      AUTH_URL=$(echo "$REPO_URL" | sed "s|https://|https://x-access-token:${ACCESS_TOKEN}@|")
+
+      # Clone the repository with the specific branch
+      git clone --branch "$BRANCH_NAME" --single-branch "$AUTH_URL" "$WORKSPACE_PATH/repo"
+
+      # Navigate to the cloned repository
+      cd "$WORKSPACE_PATH/repo"
+
+      # Checkout the specific commit
+      git checkout "$COMMIT_HASH"
+
+      # Verify we're on the correct commit
+      ACTUAL_COMMIT=$(git rev-parse HEAD)
+      if [ "$ACTUAL_COMMIT" != "$COMMIT_HASH" ]; then
+        echo "Error: Expected commit $COMMIT_HASH but got $ACTUAL_COMMIT"
+        exit 1
+      fi
+
+      echo "Successfully cloned $REPO_URL at commit $COMMIT_HASH"
+
+      # Write results
+      echo -n "$COMMIT_HASH" > $(results.commit.path)
+      echo -n "$REPO_URL" > $(results.url.path)
+  workspaces:
+  - description: The git repo will be cloned into this workspace.
+    name: output
