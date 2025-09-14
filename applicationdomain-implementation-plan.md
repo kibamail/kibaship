@@ -72,7 +72,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: kibaship-operator-config
-  namespace: kibaship-operator-system
+  namespace: kibaship-operator
 data:
   operator-domain: "myapps.kibaship.com"
 ```

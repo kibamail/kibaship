@@ -15,7 +15,7 @@ A simple and opinionated Helm chart for deploying the KibaShip Operator with aut
 helm install kibaship-operator deploy/helm/kibaship-operator \
   --set operator.domain=your-apps.example.com \
   --create-namespace \
-  --namespace kibaship-operator-system
+  --namespace kibaship-operator
 ```
 
 ### 2. Production Installation
@@ -43,7 +43,7 @@ EOF
 helm install kibaship-operator deploy/helm/kibaship-operator \
   -f production-values.yaml \
   --create-namespace \
-  --namespace kibaship-operator-system
+  --namespace kibaship-operator
 ```
 
 ### 3. Development Installation
@@ -54,7 +54,7 @@ helm install kibaship-operator deploy/helm/kibaship-operator \
   --set debug.enabled=true \
   --set debug.level=debug \
   --create-namespace \
-  --namespace kibaship-operator-system
+  --namespace kibaship-operator
 ```
 
 ## Configuration
@@ -140,16 +140,16 @@ Check if the installation was successful:
 
 ```bash
 # Check deployment status
-kubectl get deployment -n kibaship-operator-system
+kubectl get deployment -n kibaship-operator
 
 # Check pods are running
-kubectl get pods -n kibaship-operator-system
+kubectl get pods -n kibaship-operator
 
 # Check CRDs are installed
 kubectl get crd | grep platform.operator.kibaship.com
 
 # View logs
-kubectl logs -f deployment/kibaship-operator-controller-manager -n kibaship-operator-system
+kubectl logs -f deployment/kibaship-operator-controller-manager -n kibaship-operator
 ```
 
 ## Testing
@@ -203,20 +203,20 @@ helm upgrade kibaship-operator deploy/helm/kibaship-operator \
 
 ```bash
 # Check Helm release status
-helm status kibaship-operator -n kibaship-operator-system
+helm status kibaship-operator -n kibaship-operator
 
 # View current values
-helm get values kibaship-operator -n kibaship-operator-system
+helm get values kibaship-operator -n kibaship-operator
 ```
 
 ### Uninstall
 
 ```bash
 # Remove the operator
-helm uninstall kibaship-operator -n kibaship-operator-system
+helm uninstall kibaship-operator -n kibaship-operator
 
 # Optionally remove namespace (will delete all resources)
-kubectl delete namespace kibaship-operator-system
+kubectl delete namespace kibaship-operator
 ```
 
 ## Troubleshooting
@@ -237,13 +237,13 @@ helm install kibaship-operator deploy/helm/kibaship-operator \
 **2. Check operator configuration:**
 ```bash
 kubectl get deployment kibaship-operator-controller-manager \
-  -n kibaship-operator-system -o yaml | grep KIBASHIP_OPERATOR_DOMAIN
+  -n kibaship-operator -o yaml | grep KIBASHIP_OPERATOR_DOMAIN
 ```
 
 **3. Check logs for errors:**
 ```bash
 kubectl logs -f deployment/kibaship-operator-controller-manager \
-  -n kibaship-operator-system
+  -n kibaship-operator
 ```
 
 ## Why This Chart is Simple

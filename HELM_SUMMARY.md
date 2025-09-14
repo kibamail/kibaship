@@ -45,7 +45,7 @@ Essential settings:
 helm install kibaship-operator deploy/helm/kibaship-operator \
   --set operator.domain=your-apps.example.com \
   --create-namespace \
-  --namespace kibaship-operator-system
+  --namespace kibaship-operator
 ```
 
 ### Production Install
@@ -74,7 +74,7 @@ EOF
 helm install kibaship-operator deploy/helm/kibaship-operator \
   -f production-values.yaml \
   --create-namespace \
-  --namespace kibaship-operator-system
+  --namespace kibaship-operator
 ```
 
 ### Development Install
@@ -84,7 +84,7 @@ helm install kibaship-operator deploy/helm/kibaship-operator \
   --set webhook.enabled=false \
   --set debug.enabled=true \
   --create-namespace \
-  --namespace kibaship-operator-system
+  --namespace kibaship-operator
 ```
 
 ## ✅ Validation & Testing
@@ -111,15 +111,15 @@ The Helm chart has been thoroughly tested:
 
 ```bash
 # Status
-helm status kibaship-operator -n kibaship-operator-system
+helm status kibaship-operator -n kibaship-operator
 
 # Upgrade
 helm upgrade kibaship-operator deploy/helm/kibaship-operator \
   --set controllerManager.image.tag=v0.2.0 \
-  --namespace kibaship-operator-system
+  --namespace kibaship-operator
 
 # Uninstall
-helm uninstall kibaship-operator -n kibaship-operator-system
+helm uninstall kibaship-operator -n kibaship-operator
 ```
 
 ## 🎉 Benefits of Helm Installation
@@ -163,13 +163,13 @@ helm uninstall kibaship-operator -n kibaship-operator-system
 # Install
 helm install kibaship-operator deploy/helm/kibaship-operator \
   --set operator.domain=your-domain.com \
-  --create-namespace --namespace kibaship-operator-system
+  --create-namespace --namespace kibaship-operator
 
 # Check status
-kubectl get pods -n kibaship-operator-system
+kubectl get pods -n kibaship-operator
 
 # View logs
-kubectl logs -f deployment/kibaship-operator-controller-manager -n kibaship-operator-system
+kubectl logs -f deployment/kibaship-operator-controller-manager -n kibaship-operator
 
 # Test ApplicationDomain creation
 kubectl apply -f config/samples/demo_automatic_domain_creation.yaml

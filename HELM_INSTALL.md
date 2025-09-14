@@ -10,7 +10,7 @@ The KibaShip Operator provides a **simple, opinionated** Helm chart with minimal
 helm install kibaship-operator deploy/helm/kibaship-operator \
   --set operator.domain=your-apps.example.com \
   --create-namespace \
-  --namespace kibaship-operator-system
+  --namespace kibaship-operator
 ```
 
 That's it! Everything else is automatically configured.
@@ -43,7 +43,7 @@ That's it! Everything else is automatically configured.
 helm install kibaship-operator deploy/helm/kibaship-operator \
   --set operator.domain=myapps.example.com \
   --create-namespace \
-  --namespace kibaship-operator-system
+  --namespace kibaship-operator
 ```
 
 ### Production Setup
@@ -66,7 +66,7 @@ EOF
 helm install kibaship-operator deploy/helm/kibaship-operator \
   -f production-values.yaml \
   --create-namespace \
-  --namespace kibaship-operator-system
+  --namespace kibaship-operator
 ```
 
 ### Development Setup
@@ -76,14 +76,14 @@ helm install kibaship-operator deploy/helm/kibaship-operator \
   --set debug.enabled=true \
   --set debug.level=debug \
   --create-namespace \
-  --namespace kibaship-operator-system
+  --namespace kibaship-operator
 ```
 
 ## ✅ Verification
 
 ```bash
 # Check if everything is running
-kubectl get pods -n kibaship-operator-system
+kubectl get pods -n kibaship-operator
 
 # Test ApplicationDomain creation
 kubectl apply -f - <<EOF
@@ -124,13 +124,13 @@ helm upgrade kibaship-operator deploy/helm/kibaship-operator \
 
 ### Check Status
 ```bash
-helm status kibaship-operator -n kibaship-operator-system
-kubectl logs -f deployment/kibaship-operator-controller-manager -n kibaship-operator-system
+helm status kibaship-operator -n kibaship-operator
+kubectl logs -f deployment/kibaship-operator-controller-manager -n kibaship-operator
 ```
 
 ### Uninstall
 ```bash
-helm uninstall kibaship-operator -n kibaship-operator-system
+helm uninstall kibaship-operator -n kibaship-operator
 ```
 
 ## 🎯 Why Simple?
@@ -167,7 +167,7 @@ helm install kibaship-operator deploy/helm/kibaship-operator \
 **Problem**: Check if domain is configured
 ```bash
 kubectl get deployment kibaship-operator-controller-manager \
-  -n kibaship-operator-system -o yaml | grep KIBASHIP_OPERATOR_DOMAIN
+  -n kibaship-operator -o yaml | grep KIBASHIP_OPERATOR_DOMAIN
 ```
 
 For advanced configuration needs, see the [detailed chart documentation](deploy/helm/kibaship-operator/README.md) or use the kubectl deployment method.

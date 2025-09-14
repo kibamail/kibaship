@@ -35,12 +35,12 @@ kubectl apply -f https://github.com/kibamail/kibaship-operator/releases/latest/d
 
 # 2. Configure your domain
 kubectl set env deployment/kibaship-operator-controller-manager \
-  -n kibaship-operator-system \
+  -n kibaship-operator \
   KIBASHIP_OPERATOR_DOMAIN=your-apps.example.com \
   KIBASHIP_OPERATOR_DEFAULT_PORT=3000
 
 # 3. Verify installation
-kubectl get deployment -n kibaship-operator-system
+kubectl get deployment -n kibaship-operator
 ```
 
 ### For Developers
@@ -117,7 +117,7 @@ kubectl apply --dry-run=client -f dist/install.yaml
 
 # Test deployment
 kubectl apply -f dist/install.yaml
-kubectl get pods -n kibaship-operator-system
+kubectl get pods -n kibaship-operator
 ```
 
 ## 🚦 Next Steps

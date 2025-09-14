@@ -28,7 +28,7 @@ import (
 )
 
 // namespace where the project is deployed in
-const namespace = "kibaship-operator-system"
+const namespace = "kibaship-operator"
 
 var _ = Describe("Manager", Ordered, func() {
 	var controllerPodName string

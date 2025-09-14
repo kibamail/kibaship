@@ -12,7 +12,7 @@ kubectl apply -f https://github.com/kibamail/kibaship-operator/releases/latest/d
 
 ```bash
 kubectl set env deployment/kibaship-operator-controller-manager \
-  -n kibaship-operator-system \
+  -n kibaship-operator \
   KIBASHIP_OPERATOR_DOMAIN=your-apps.example.com \
   KIBASHIP_OPERATOR_DEFAULT_PORT=3000
 ```
@@ -21,7 +21,7 @@ kubectl set env deployment/kibaship-operator-controller-manager \
 
 ```bash
 # Check operator status
-kubectl get deployment -n kibaship-operator-system
+kubectl get deployment -n kibaship-operator
 
 # Test with a sample application
 kubectl apply -f - <<EOF

@@ -1,0 +1,4 @@
+resources:
+- certificate.yaml
+
+# +kubebuilder:scaffold:crdkustomizecainjectionpatch

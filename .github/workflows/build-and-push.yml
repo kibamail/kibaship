@@ -141,7 +141,7 @@ jobs:
 
           ```bash
           kubectl set env deployment/kibaship-operator-controller-manager \
-            -n kibaship-operator-system \
+            -n kibaship-operator \
             KIBASHIP_OPERATOR_DOMAIN=your-domain.com \
             KIBASHIP_OPERATOR_DEFAULT_PORT=3000
           ```

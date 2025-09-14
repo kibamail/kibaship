@@ -521,7 +521,7 @@ All managed resources include:
 **Debug Commands:**
 ```bash
 # Check operator logs
-kubectl logs -n kibaship-operator-system deployment/controller-manager
+kubectl logs -n kibaship-operator deployment/controller-manager
 
 # Verify project resources
 kubectl get projects -o yaml

@@ -5,7 +5,7 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: kibaship-operator
     control-plane: controller-manager
-  name: kibaship-operator-system
+  name: kibaship-operator
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
@@ -1436,7 +1436,7 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: kibaship-operator
   name: kibaship-operator-controller-manager
-  namespace: kibaship-operator-system
+  namespace: kibaship-operator
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
@@ -1445,7 +1445,7 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: kibaship-operator
   name: kibaship-operator-leader-election-role
-  namespace: kibaship-operator-system
+  namespace: kibaship-operator
 rules:
 - apiGroups:
   - ""
@@ -1571,7 +1571,7 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: kibaship-operator
   name: kibaship-operator-leader-election-rolebinding
-  namespace: kibaship-operator-system
+  namespace: kibaship-operator
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
@@ -1579,7 +1579,7 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: kibaship-operator-controller-manager
-  namespace: kibaship-operator-system
+  namespace: kibaship-operator
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -1595,7 +1595,28 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: kibaship-operator-controller-manager
-  namespace: kibaship-operator-system
+  namespace: kibaship-operator
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/component: webhook
+    app.kubernetes.io/created-by: kibaship-operator
+    app.kubernetes.io/instance: webhook-service
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: webhook-service
+    app.kubernetes.io/part-of: kibaship-operator
+  name: kibaship-operator-webhook-service
+  namespace: kibaship-operator
+spec:
+  ports:
+  - name: webhook-server
+    port: 443
+    protocol: TCP
+    targetPort: 9443
+  selector:
+    control-plane: controller-manager
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -1605,7 +1626,7 @@ metadata:
     app.kubernetes.io/name: kibaship-operator
     control-plane: controller-manager
   name: kibaship-operator-controller-manager
-  namespace: kibaship-operator-system
+  namespace: kibaship-operator
 spec:
   replicas: 1
   selector:
@@ -1639,7 +1660,10 @@ spec:
           initialDelaySeconds: 15
           periodSeconds: 20
         name: manager
-        ports: []
+        ports:
+        - containerPort: 9443
+          name: webhook-server
+          protocol: TCP
         readinessProbe:
           httpGet:
             path: /readyz
@@ -1658,26 +1682,71 @@ spec:
           capabilities:
             drop:
             - ALL
-        volumeMounts: []
+        volumeMounts:
+        - mountPath: /tmp/k8s-webhook-server/serving-certs
+          name: cert
+          readOnly: true
       securityContext:
         runAsNonRoot: true
         seccompProfile:
           type: RuntimeDefault
       serviceAccountName: kibaship-operator-controller-manager
       terminationGracePeriodSeconds: 10
-      volumes: []
+      volumes:
+      - name: cert
+        secret:
+          defaultMode: 420
+          secretName: webhook-server-certs
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  labels:
+    app.kubernetes.io/component: certificate
+    app.kubernetes.io/created-by: kibaship-operator
+    app.kubernetes.io/instance: serving-cert
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: certificate
+    app.kubernetes.io/part-of: kibaship-operator
+  name: kibaship-operator-serving-cert
+  namespace: kibaship-operator
+spec:
+  dnsNames:
+  - webhook-service.system.svc
+  - webhook-service.system.svc.cluster.local
+  issuerRef:
+    kind: Issuer
+    name: selfsigned-issuer
+  secretName: webhook-server-certs
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  labels:
+    app.kubernetes.io/component: certificate
+    app.kubernetes.io/created-by: kibaship-operator
+    app.kubernetes.io/instance: serving-cert
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: certificate
+    app.kubernetes.io/part-of: kibaship-operator
+  name: kibaship-operator-selfsigned-issuer
+  namespace: kibaship-operator
+spec:
+  selfSigned: {}
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
+  annotations:
+    cert-manager.io/inject-ca-from: kibaship-operator/kibaship-operator-serving-cert
   name: kibaship-operator-validating-webhook-configuration
 webhooks:
 - admissionReviewVersions:
   - v1
   clientConfig:
     service:
-      name: webhook-service
-      namespace: system
+      name: kibaship-operator-webhook-service
+      namespace: kibaship-operator
       path: /validate-platform-operator-kibaship-com-v1alpha1-application
   failurePolicy: Fail
   name: vapplication.kb.io
@@ -1696,8 +1765,8 @@ webhooks:
   - v1
   clientConfig:
     service:
-      name: webhook-service
-      namespace: system
+      name: kibaship-operator-webhook-service
+      namespace: kibaship-operator
       path: /validate-platform-operator-kibaship-com-v1alpha1-applicationdomain
   failurePolicy: Fail
   name: vapplicationdomain.kb.io
@@ -1716,8 +1785,8 @@ webhooks:
   - v1
   clientConfig:
     service:
-      name: webhook-service
-      namespace: system
+      name: kibaship-operator-webhook-service
+      namespace: kibaship-operator
       path: /validate-platform-operator-kibaship-com-v1alpha1-deployment
   failurePolicy: Fail
   name: vdeployment.kb.io
@@ -1736,8 +1805,8 @@ webhooks:
   - v1
   clientConfig:
     service:
-      name: webhook-service
-      namespace: system
+      name: kibaship-operator-webhook-service
+      namespace: kibaship-operator
       path: /validate-platform-operator-kibaship-com-v1alpha1-project
   failurePolicy: Fail
   name: vproject.kb.io

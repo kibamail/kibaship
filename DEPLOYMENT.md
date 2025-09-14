@@ -18,7 +18,7 @@ This guide provides comprehensive instructions for deploying the KibaShip Operat
 helm install kibaship-operator deploy/helm/kibaship-operator \
   --set operator.domain=your-apps.example.com \
   --create-namespace \
-  --namespace kibaship-operator-system
+  --namespace kibaship-operator
 ```
 
 #### Option 2: kubectl
@@ -35,7 +35,7 @@ After deployment, configure your operator domain:
 
 ```bash
 kubectl set env deployment/kibaship-operator-controller-manager \
-  -n kibaship-operator-system \
+  -n kibaship-operator \
   KIBASHIP_OPERATOR_DOMAIN=your-apps.example.com \
   KIBASHIP_OPERATOR_DEFAULT_PORT=3000
 ```
@@ -107,13 +107,13 @@ git push origin v0.1.0
 helm install kibaship-operator deploy/helm/kibaship-operator \
   --set operator.domain=your-apps.example.com \
   --create-namespace \
-  --namespace kibaship-operator-system
+  --namespace kibaship-operator
 
 # With custom values file
 helm install kibaship-operator deploy/helm/kibaship-operator \
   -f custom-values.yaml \
   --create-namespace \
-  --namespace kibaship-operator-system
+  --namespace kibaship-operator
 ```
 
 See [HELM_INSTALL.md](./HELM_INSTALL.md) for detailed Helm installation instructions.
@@ -169,7 +169,7 @@ env:
 
 ```bash
 kubectl set env deployment/kibaship-operator-controller-manager \
-  -n kibaship-operator-system \
+  -n kibaship-operator \
   KIBASHIP_OPERATOR_DOMAIN=your-apps.example.com \
   KIBASHIP_OPERATOR_DEFAULT_PORT=3000
 ```
@@ -181,7 +181,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: kibaship-operator-config
-  namespace: kibaship-operator-system
+  namespace: kibaship-operator
 data:
   KIBASHIP_OPERATOR_DOMAIN: "your-apps.example.com"
   KIBASHIP_OPERATOR_DEFAULT_PORT: "3000"
@@ -234,10 +234,10 @@ kubectl apply -k config/environments/production
 
 ```bash
 # Check operator deployment
-kubectl get deployment -n kibaship-operator-system
+kubectl get deployment -n kibaship-operator
 
 # Check operator logs
-kubectl logs -f deployment/kibaship-operator-controller-manager -n kibaship-operator-system
+kubectl logs -f deployment/kibaship-operator-controller-manager -n kibaship-operator
 
 # Verify CRDs are installed
 kubectl get crd | grep platform.operator.kibaship.com
@@ -267,17 +267,17 @@ kubectl get applicationdomain -n default -o yaml
 docker pull ghcr.io/kibamail/kibaship-operator:v0.1.0
 
 # Check if the image is public or if auth is needed
-kubectl get events -n kibaship-operator-system
+kubectl get events -n kibaship-operator
 ```
 
 #### 2. Webhook Failures
 
 ```bash
 # Check webhook service
-kubectl get svc -n kibaship-operator-system
+kubectl get svc -n kibaship-operator
 
 # Check certificate status
-kubectl get certificates -n kibaship-operator-system
+kubectl get certificates -n kibaship-operator
 
 # Check webhook configuration
 kubectl get validatingwebhookconfigurations
@@ -287,23 +287,23 @@ kubectl get validatingwebhookconfigurations
 
 ```bash
 # Check current environment variables
-kubectl get deployment kibaship-operator-controller-manager -n kibaship-operator-system -o yaml | grep -A 10 env:
+kubectl get deployment kibaship-operator-controller-manager -n kibaship-operator -o yaml | grep -A 10 env:
 
 # Validate configuration
-kubectl logs deployment/kibaship-operator-controller-manager -n kibaship-operator-system | grep -i "operator configuration"
+kubectl logs deployment/kibaship-operator-controller-manager -n kibaship-operator | grep -i "operator configuration"
 ```
 
 ### Debug Commands
 
 ```bash
 # Get all resources in operator namespace
-kubectl get all -n kibaship-operator-system
+kubectl get all -n kibaship-operator
 
 # Describe problematic pods
-kubectl describe pod -l control-plane=controller-manager -n kibaship-operator-system
+kubectl describe pod -l control-plane=controller-manager -n kibaship-operator
 
 # Check RBAC permissions
-kubectl auth can-i create applications --as=system:serviceaccount:kibaship-operator-system:kibaship-operator-controller-manager
+kubectl auth can-i create applications --as=system:serviceaccount:kibaship-operator:kibaship-operator-controller-manager
 ```
 
 ## Cleanup
@@ -315,7 +315,7 @@ kubectl auth can-i create applications --as=system:serviceaccount:kibaship-opera
 kubectl delete -f dist/install.yaml
 
 # Or remove components individually
-kubectl delete namespace kibaship-operator-system
+kubectl delete namespace kibaship-operator
 kubectl delete crd projects.platform.operator.kibaship.com
 kubectl delete crd applications.platform.operator.kibaship.com
 kubectl delete crd deployments.platform.operator.kibaship.com
@@ -352,7 +352,7 @@ The operator includes health check endpoints:
    ```
 4. Verify the upgrade:
    ```bash
-   kubectl rollout status deployment/kibaship-operator-controller-manager -n kibaship-operator-system
+   kubectl rollout status deployment/kibaship-operator-controller-manager -n kibaship-operator
    ```
 
 ## Development Setup

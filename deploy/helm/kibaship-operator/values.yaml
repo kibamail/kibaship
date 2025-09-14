@@ -43,7 +43,7 @@ debug:
 # - Webhooks: Auto-enabled for ApplicationDomain validation
 # - Security: Non-root containers with security contexts
 # - Service Account: Auto-created with proper annotations
-# - Namespace: Auto-created as kibaship-operator-system
+# - Namespace: Auto-created as kibaship-operator
 # - CRDs: Auto-installed (Project, Application, Deployment, ApplicationDomain)
 # - Health Checks: Auto-configured liveness/readiness probes
 #
