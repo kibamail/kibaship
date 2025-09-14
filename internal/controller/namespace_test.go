@@ -64,13 +64,13 @@ var _ = Describe("NamespaceManager", func() {
 			namespaceName := namespaceManager.GenerateNamespaceName(testProject.Name)
 			namespace := &corev1.Namespace{}
 			if err := k8sClient.Get(ctx, types.NamespacedName{Name: namespaceName}, namespace); err == nil {
-				k8sClient.Delete(ctx, namespace)
+				_ = k8sClient.Delete(ctx, namespace)
 			}
 		}
 
 		// Cleanup test project
 		if testProject != nil {
-			k8sClient.Delete(ctx, testProject)
+			_ = k8sClient.Delete(ctx, testProject)
 		}
 
 		// Wait for cleanup to complete
@@ -309,10 +309,15 @@ var _ = Describe("NamespaceManager", func() {
 		AfterEach(func() {
 			// Clean up namespace (this will also clean up all namespace-scoped resources)
 			if testNamespace != nil {
+				// First, try to clean up service account resources which might have finalizers
+				namespaceManager.deleteServiceAccountResources(ctx, testNamespace, testProject)
+
 				err := k8sClient.Delete(ctx, testNamespace)
 				if err != nil && !errors.IsNotFound(err) {
-					// Ignore cleanup errors in tests
+					GinkgoWriter.Printf("Failed to clean up namespace: %v\n", err)
 				}
+				// Note: We don't wait for namespace deletion in tests to avoid timeouts
+				// The test environment will clean up namespaces eventually
 			}
 		})
 
@@ -405,7 +410,7 @@ var _ = Describe("NamespaceManager", func() {
 			if testNamespace != nil {
 				err := k8sClient.Delete(ctx, testNamespace)
 				if err != nil && !errors.IsNotFound(err) {
-					// Ignore cleanup errors in tests
+					GinkgoWriter.Printf("Failed to clean up namespace: %v\n", err)
 				}
 			}
 		})

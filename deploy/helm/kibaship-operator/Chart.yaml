@@ -1,0 +1,20 @@
+apiVersion: v2
+name: kibaship-operator
+description: A Kubernetes operator for managing KibaShip applications and their domains
+type: application
+version: 0.1.0
+appVersion: "0.0.1"
+home: https://github.com/kibamail/kibaship-operator
+sources:
+  - https://github.com/kibamail/kibaship-operator
+maintainers:
+  - name: KibaMail Team
+    url: https://github.com/kibamail
+keywords:
+  - operator
+  - kubernetes
+  - paas
+  - domain-management
+  - applications
+annotations:
+  category: Infrastructure

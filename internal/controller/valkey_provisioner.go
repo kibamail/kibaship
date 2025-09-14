@@ -35,9 +35,9 @@ type ValkeyProvisioner struct {
 }
 
 // NewValkeyProvisioner creates a new ValkeyProvisioner
-func NewValkeyProvisioner(client client.Client) *ValkeyProvisioner {
+func NewValkeyProvisioner(k8sClient client.Client) *ValkeyProvisioner {
 	return &ValkeyProvisioner{
-		Client: client,
+		Client: k8sClient,
 	}
 }
 
@@ -46,10 +46,7 @@ func (p *ValkeyProvisioner) ProvisionSystemValkeyCluster(ctx context.Context) er
 	log := logf.FromContext(ctx).WithName("valkey-provisioner")
 
 	// Get the operator namespace
-	namespace, err := getOperatorNamespace()
-	if err != nil {
-		return fmt.Errorf("failed to determine operator namespace: %w", err)
-	}
+	namespace := getOperatorNamespace()
 
 	// Generate cluster name following naming conventions
 	clusterName := generateSystemValkeyClusterName()
@@ -177,23 +174,23 @@ func generateSystemValkeyCluster(name, namespace string) *unstructured.Unstructu
 }
 
 // getOperatorNamespace returns the namespace where the operator is running
-func getOperatorNamespace() (string, error) {
+func getOperatorNamespace() string {
 	// First try to get from environment variable (standard for operators)
 	if ns := os.Getenv("OPERATOR_NAMESPACE"); ns != "" {
-		return ns, nil
+		return ns
 	}
 
 	// Fallback to POD_NAMESPACE (common alternative)
 	if ns := os.Getenv("POD_NAMESPACE"); ns != "" {
-		return ns, nil
+		return ns
 	}
 
 	// Try to read from the service account token file (when running in-cluster)
 	namespace, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
 	if err == nil {
-		return string(namespace), nil
+		return string(namespace)
 	}
 
 	// Final fallback - assume default operator namespace
-	return "kibaship-system", nil
+	return "kibaship-system"
 }

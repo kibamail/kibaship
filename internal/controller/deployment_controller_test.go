@@ -37,6 +37,10 @@ import (
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 )
 
+const (
+	expectedPipelineName = "project-test123-app-myapp-deployment-web-git-repository-pipeline-kibaship-com"
+)
+
 var _ = Describe("Deployment Controller", func() {
 	var (
 		ctx                  context.Context
@@ -81,16 +85,16 @@ var _ = Describe("Deployment Controller", func() {
 	AfterEach(func() {
 		// Clean up test resources
 		if testDeployment != nil {
-			k8sClient.Delete(ctx, testDeployment)
+			_ = k8sClient.Delete(ctx, testDeployment)
 		}
 		if testApplication != nil {
-			k8sClient.Delete(ctx, testApplication)
+			_ = k8sClient.Delete(ctx, testApplication)
 		}
 		if testProject != nil {
-			k8sClient.Delete(ctx, testProject)
+			_ = k8sClient.Delete(ctx, testProject)
 		}
 		if testNamespace != nil {
-			k8sClient.Delete(ctx, testNamespace)
+			_ = k8sClient.Delete(ctx, testNamespace)
 		}
 	})
 
@@ -147,7 +151,6 @@ var _ = Describe("Deployment Controller", func() {
 				Expect(err).NotTo(HaveOccurred())
 
 				By("Verifying the pipeline was created")
-				expectedPipelineName := "project-test123-app-myapp-deployment-web-git-repository-pipeline-kibaship-com"
 				GinkgoWriter.Printf("Expected pipeline name: %s\n", expectedPipelineName)
 				pipeline := &tektonv1.Pipeline{}
 				Eventually(func() error {
@@ -214,7 +217,6 @@ var _ = Describe("Deployment Controller", func() {
 				Expect(err).NotTo(HaveOccurred())
 
 				By("Verifying pipeline uses 'main' as default branch")
-				expectedPipelineName := "project-test123-app-myapp-deployment-web-git-repository-pipeline-kibaship-com"
 				pipeline := &tektonv1.Pipeline{}
 				Eventually(func() error {
 					return k8sClient.Get(ctx, types.NamespacedName{
@@ -820,7 +822,7 @@ var _ = Describe("Deployment Controller", func() {
 
 			AfterEach(func() {
 				if testMySQLApp != nil {
-					k8sClient.Delete(ctx, testMySQLApp)
+					_ = k8sClient.Delete(ctx, testMySQLApp)
 				}
 			})
 
@@ -983,7 +985,7 @@ var _ = Describe("Deployment Controller", func() {
 				Expect(clusterList.Items).To(HaveLen(1), "Should only have one InnoDBCluster")
 
 				// Clean up first deployment
-				k8sClient.Delete(ctx, firstDeployment)
+				_ = k8sClient.Delete(ctx, firstDeployment)
 			})
 
 			It("should use default MySQL version when none specified", func() {
@@ -1000,7 +1002,7 @@ var _ = Describe("Deployment Controller", func() {
 					},
 				}
 				Expect(k8sClient.Create(ctx, appWithoutVersion)).To(Succeed())
-				defer k8sClient.Delete(ctx, appWithoutVersion)
+				defer func() { _ = k8sClient.Delete(ctx, appWithoutVersion) }()
 
 				// Create MySQL deployment
 				testDeployment = &platformv1alpha1.Deployment{
@@ -1052,7 +1054,7 @@ var _ = Describe("Deployment Controller", func() {
 					},
 				}
 				Expect(k8sClient.Create(ctx, appWithoutConfig)).To(Succeed())
-				defer k8sClient.Delete(ctx, appWithoutConfig)
+				defer func() { _ = k8sClient.Delete(ctx, appWithoutConfig) }()
 
 				// Create MySQL deployment
 				testDeployment = &platformv1alpha1.Deployment{
@@ -1106,7 +1108,7 @@ var _ = Describe("Deployment Controller", func() {
 					},
 				}
 				Expect(k8sClient.Create(ctx, testMySQLApp)).To(Succeed())
-				defer k8sClient.Delete(ctx, testMySQLApp)
+				defer func() { _ = k8sClient.Delete(ctx, testMySQLApp) }()
 
 				// Create deployment with invalid name format
 				testDeployment = &platformv1alpha1.Deployment{
@@ -1147,17 +1149,17 @@ var _ = Describe("Deployment Controller", func() {
 	Describe("MySQL Utility Functions", func() {
 		Context("Password generation", func() {
 			It("should generate secure 32-character alphanumeric passwords", func() {
-				password, err := generateSecurePassword(32)
+				password, err := generateSecurePassword()
 				Expect(err).NotTo(HaveOccurred())
 				Expect(password).To(HaveLen(32))
 				Expect(password).To(MatchRegexp("^[a-zA-Z0-9]+$"))
 			})
 
 			It("should generate different passwords on each call", func() {
-				password1, err := generateSecurePassword(32)
+				password1, err := generateSecurePassword()
 				Expect(err).NotTo(HaveOccurred())
 
-				password2, err := generateSecurePassword(32)
+				password2, err := generateSecurePassword()
 				Expect(err).NotTo(HaveOccurred())
 
 				Expect(password1).NotTo(Equal(password2))

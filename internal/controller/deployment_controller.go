@@ -281,10 +281,7 @@ func (r *DeploymentReconciler) handleMySQLDeployment(ctx context.Context, deploy
 	// Create InnoDBCluster if it doesn't exist
 	if errors.IsNotFound(err) {
 		log.Info("Creating InnoDBCluster", "clusterName", clusterName)
-		cluster, err := generateInnoDBCluster(deployment, app, projectSlug, appSlug, secretName, deployment.Namespace)
-		if err != nil {
-			return fmt.Errorf("failed to generate InnoDBCluster: %w", err)
-		}
+		cluster := generateInnoDBCluster(deployment, app, projectSlug, appSlug, secretName, deployment.Namespace)
 
 		// Set owner reference to the deployment
 		if err := controllerutil.SetControllerReference(deployment, cluster, r.Scheme); err != nil {

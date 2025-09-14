@@ -84,9 +84,9 @@ type NamespaceManager struct {
 }
 
 // NewNamespaceManager creates a new NamespaceManager
-func NewNamespaceManager(client client.Client) *NamespaceManager {
+func NewNamespaceManager(k8sClient client.Client) *NamespaceManager {
 	return &NamespaceManager{
-		Client: client,
+		Client: k8sClient,
 	}
 }
 
@@ -137,7 +137,7 @@ func (nm *NamespaceManager) CreateProjectNamespace(ctx context.Context, project 
 	// Create service account with all permissions in the namespace
 	if err := nm.CreateProjectServiceAccount(ctx, namespace, project); err != nil {
 		// Try to clean up the namespace if service account creation fails
-		nm.Delete(ctx, namespace)
+		_ = nm.Delete(ctx, namespace)
 		return nil, fmt.Errorf("failed to create service account for project: %w", err)
 	}
 

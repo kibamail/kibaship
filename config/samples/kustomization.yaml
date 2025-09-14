@@ -3,4 +3,5 @@ resources:
 - platform_v1alpha1_project.yaml
 - platform_v1alpha1_application.yaml
 - platform_v1alpha1_deployment.yaml
+- platform_v1alpha1_applicationdomain.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples

@@ -1,0 +1,8 @@
+# Namespace is always created for the operator
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ include "kibaship-operator.namespace" . }}
+  labels:
+    {{- include "kibaship-operator.labels" . | nindent 4 }}
+    control-plane: controller-manager

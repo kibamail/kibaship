@@ -39,7 +39,7 @@ const (
 
 // generateMySQLCredentialsSecret creates a secret with MySQL root credentials
 func generateMySQLCredentialsSecret(deployment *platformv1alpha1.Deployment, projectSlug, appSlug string, namespace string) (*corev1.Secret, error) {
-	password, err := generateSecurePassword(passwordLength)
+	password, err := generateSecurePassword()
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate MySQL password: %w", err)
 	}
@@ -74,7 +74,7 @@ func generateMySQLCredentialsSecret(deployment *platformv1alpha1.Deployment, pro
 }
 
 // generateInnoDBCluster creates an InnoDBCluster resource for MySQL deployment
-func generateInnoDBCluster(deployment *platformv1alpha1.Deployment, app *platformv1alpha1.Application, projectSlug, appSlug string, secretName, namespace string) (*unstructured.Unstructured, error) {
+func generateInnoDBCluster(deployment *platformv1alpha1.Deployment, app *platformv1alpha1.Application, projectSlug, appSlug string, secretName, namespace string) *unstructured.Unstructured {
 	// MySQL operator has a 40-character limit, so we need shorter names
 	clusterName := fmt.Sprintf("%s-%s-mysql", projectSlug, appSlug)
 
@@ -146,15 +146,15 @@ func generateInnoDBCluster(deployment *platformv1alpha1.Deployment, app *platfor
 		spec["version"] = app.Spec.MySQL.Version
 	}
 
-	return cluster, nil
+	return cluster
 }
 
 // generateSecurePassword generates a cryptographically secure random password
-func generateSecurePassword(length int) (string, error) {
-	password := make([]byte, length)
+func generateSecurePassword() (string, error) {
+	password := make([]byte, passwordLength)
 	charsLen := big.NewInt(int64(len(alphanumericChars)))
 
-	for i := 0; i < length; i++ {
+	for i := 0; i < passwordLength; i++ {
 		charIndex, err := rand.Int(rand.Reader, charsLen)
 		if err != nil {
 			return "", fmt.Errorf("failed to generate random character: %w", err)

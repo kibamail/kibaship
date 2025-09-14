@@ -373,10 +373,11 @@ func (r *Application) GetProjectSlugFromName() string {
 	}
 
 	// Find the "app" delimiter and extract everything between "project" and "app"
+	const appDelimiter = "app"
 	projectStart := 1 // after "project-"
 	appIndex := -1
 	for i, part := range parts {
-		if part == "app" {
+		if part == appDelimiter {
 			appIndex = i
 			break
 		}

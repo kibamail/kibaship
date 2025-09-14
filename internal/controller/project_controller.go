@@ -127,8 +127,9 @@ func (r *ProjectReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	// Update status to indicate project is ready
-	if project.Status.Phase != "Ready" {
-		project.Status.Phase = "Ready"
+	const readyPhase = "Ready"
+	if project.Status.Phase != readyPhase {
+		project.Status.Phase = readyPhase
 		project.Status.NamespaceName = namespace.Name
 		project.Status.Message = "Project is ready"
 		now := metav1.Now()
@@ -187,12 +188,12 @@ func (r *ProjectReconciler) updateStatusWithError(ctx context.Context, project *
 }
 
 // NewProjectReconciler creates a new ProjectReconciler with required dependencies
-func NewProjectReconciler(client client.Client, scheme *runtime.Scheme) *ProjectReconciler {
+func NewProjectReconciler(k8sClient client.Client, scheme *runtime.Scheme) *ProjectReconciler {
 	return &ProjectReconciler{
-		Client:           client,
+		Client:           k8sClient,
 		Scheme:           scheme,
-		NamespaceManager: NewNamespaceManager(client),
-		Validator:        NewProjectValidator(client),
+		NamespaceManager: NewNamespaceManager(k8sClient),
+		Validator:        NewProjectValidator(k8sClient),
 	}
 }
 

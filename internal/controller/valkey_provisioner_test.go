@@ -27,6 +27,10 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
+const (
+	defaultNS = "default"
+)
+
 var _ = Describe("ValkeyProvisioner", func() {
 	var (
 		provisioner *ValkeyProvisioner
@@ -55,8 +59,12 @@ var _ = Describe("ValkeyProvisioner", func() {
 
 	Describe("generateSystemValkeyCluster", func() {
 		It("should create Valkey cluster with correct configuration", func() {
-			name := "test-valkey-cluster"
-			namespace := "test-namespace"
+			const (
+				testValkeyName = "test-valkey-cluster"
+				testNamespace  = "test-namespace"
+			)
+			name := testValkeyName
+			namespace := testNamespace
 
 			valkey := generateSystemValkeyCluster(name, namespace)
 
@@ -79,28 +87,23 @@ var _ = Describe("ValkeyProvisioner", func() {
 			Expect(annotations["platform.kibaship.com/role"]).To(Equal("system-cache"))
 
 			// Check spec fields directly from the unstructured object
-			nodes, found, err := unstructured.NestedInt64(valkey.Object, "spec", "nodes")
-			Expect(err).NotTo(HaveOccurred())
+			nodes, found, _ := unstructured.NestedInt64(valkey.Object, "spec", "nodes")
 			Expect(found).To(BeTrue())
 			Expect(nodes).To(Equal(int64(3)))
 
-			replicas, found, err := unstructured.NestedInt64(valkey.Object, "spec", "replicas")
-			Expect(err).NotTo(HaveOccurred())
+			replicas, found, _ := unstructured.NestedInt64(valkey.Object, "spec", "replicas")
 			Expect(found).To(BeTrue())
 			Expect(replicas).To(Equal(int64(2)))
 
-			tls, found, err := unstructured.NestedBool(valkey.Object, "spec", "tls")
-			Expect(err).NotTo(HaveOccurred())
+			tls, found, _ := unstructured.NestedBool(valkey.Object, "spec", "tls")
 			Expect(found).To(BeTrue())
 			Expect(tls).To(BeFalse())
 
-			prometheus, found, err := unstructured.NestedBool(valkey.Object, "spec", "prometheus")
-			Expect(err).NotTo(HaveOccurred())
+			prometheus, found, _ := unstructured.NestedBool(valkey.Object, "spec", "prometheus")
 			Expect(found).To(BeTrue())
 			Expect(prometheus).To(BeTrue())
 
-			volumePermissions, found, err := unstructured.NestedBool(valkey.Object, "spec", "volumePermissions")
-			Expect(err).NotTo(HaveOccurred())
+			volumePermissions, found, _ := unstructured.NestedBool(valkey.Object, "spec", "volumePermissions")
 			Expect(found).To(BeTrue())
 			Expect(volumePermissions).To(BeTrue())
 		})
@@ -112,24 +115,20 @@ var _ = Describe("ValkeyProvisioner", func() {
 			valkey := generateSystemValkeyCluster(name, namespace)
 
 			// Check resource limits
-			cpuLimit, found, err := unstructured.NestedString(valkey.Object, "spec", "resources", "limits", "cpu")
-			Expect(err).NotTo(HaveOccurred())
+			cpuLimit, found, _ := unstructured.NestedString(valkey.Object, "spec", "resources", "limits", "cpu")
 			Expect(found).To(BeTrue())
 			Expect(cpuLimit).To(Equal("100m"))
 
-			memoryLimit, found, err := unstructured.NestedString(valkey.Object, "spec", "resources", "limits", "memory")
-			Expect(err).NotTo(HaveOccurred())
+			memoryLimit, found, _ := unstructured.NestedString(valkey.Object, "spec", "resources", "limits", "memory")
 			Expect(found).To(BeTrue())
 			Expect(memoryLimit).To(Equal("128Mi"))
 
 			// Check resource requests
-			cpuRequest, found, err := unstructured.NestedString(valkey.Object, "spec", "resources", "requests", "cpu")
-			Expect(err).NotTo(HaveOccurred())
+			cpuRequest, found, _ := unstructured.NestedString(valkey.Object, "spec", "resources", "requests", "cpu")
 			Expect(found).To(BeTrue())
 			Expect(cpuRequest).To(Equal("100m"))
 
-			memoryRequest, found, err := unstructured.NestedString(valkey.Object, "spec", "resources", "requests", "memory")
-			Expect(err).NotTo(HaveOccurred())
+			memoryRequest, found, _ := unstructured.NestedString(valkey.Object, "spec", "resources", "requests", "memory")
 			Expect(found).To(BeTrue())
 			Expect(memoryRequest).To(Equal("128Mi"))
 		})
@@ -141,20 +140,17 @@ var _ = Describe("ValkeyProvisioner", func() {
 			valkey := generateSystemValkeyCluster(name, namespace)
 
 			// Check storage access modes
-			accessModes, found, err := unstructured.NestedStringSlice(valkey.Object, "spec", "storage", "spec", "accessModes")
-			Expect(err).NotTo(HaveOccurred())
+			accessModes, found, _ := unstructured.NestedStringSlice(valkey.Object, "spec", "storage", "spec", "accessModes")
 			Expect(found).To(BeTrue())
 			Expect(accessModes).To(Equal([]string{"ReadWriteOnce"}))
 
 			// Check storage class name
-			storageClassName, found, err := unstructured.NestedString(valkey.Object, "spec", "storage", "spec", "storageClassName")
-			Expect(err).NotTo(HaveOccurred())
+			storageClassName, found, _ := unstructured.NestedString(valkey.Object, "spec", "storage", "spec", "storageClassName")
 			Expect(found).To(BeTrue())
 			Expect(storageClassName).To(Equal("storage-replica-1"))
 
 			// Check storage size
-			storageSize, found, err := unstructured.NestedString(valkey.Object, "spec", "storage", "spec", "resources", "requests", "storage")
-			Expect(err).NotTo(HaveOccurred())
+			storageSize, found, _ := unstructured.NestedString(valkey.Object, "spec", "storage", "spec", "resources", "requests", "storage")
 			Expect(found).To(BeTrue())
 			Expect(storageSize).To(Equal("1Gi"))
 		})
@@ -163,52 +159,47 @@ var _ = Describe("ValkeyProvisioner", func() {
 	Describe("getOperatorNamespace", func() {
 		BeforeEach(func() {
 			// Clear environment variables before each test
-			os.Unsetenv("OPERATOR_NAMESPACE")
-			os.Unsetenv("POD_NAMESPACE")
+			_ = os.Unsetenv("OPERATOR_NAMESPACE")
+			_ = os.Unsetenv("POD_NAMESPACE")
 		})
 
 		AfterEach(func() {
 			// Clean up environment variables after each test
-			os.Unsetenv("OPERATOR_NAMESPACE")
-			os.Unsetenv("POD_NAMESPACE")
+			_ = os.Unsetenv("OPERATOR_NAMESPACE")
+			_ = os.Unsetenv("POD_NAMESPACE")
 		})
 
 		It("should return OPERATOR_NAMESPACE when set", func() {
-			os.Setenv("OPERATOR_NAMESPACE", "test-operator-namespace")
+			_ = os.Setenv("OPERATOR_NAMESPACE", "test-operator-namespace")
 
-			namespace, err := getOperatorNamespace()
-			Expect(err).NotTo(HaveOccurred())
+			namespace := getOperatorNamespace()
 			Expect(namespace).To(Equal("test-operator-namespace"))
 		})
 
 		It("should return POD_NAMESPACE when OPERATOR_NAMESPACE not set", func() {
-			os.Setenv("POD_NAMESPACE", "test-pod-namespace")
+			_ = os.Setenv("POD_NAMESPACE", "test-pod-namespace")
 
-			namespace, err := getOperatorNamespace()
-			Expect(err).NotTo(HaveOccurred())
+			namespace := getOperatorNamespace()
 			Expect(namespace).To(Equal("test-pod-namespace"))
 		})
 
 		It("should return default namespace when no environment variables set", func() {
-			namespace, err := getOperatorNamespace()
-			Expect(err).NotTo(HaveOccurred())
+			namespace := getOperatorNamespace()
 			Expect(namespace).To(Equal("kibaship-system"))
 		})
 
 		It("should prioritize OPERATOR_NAMESPACE over POD_NAMESPACE", func() {
-			os.Setenv("OPERATOR_NAMESPACE", "operator-ns")
-			os.Setenv("POD_NAMESPACE", "pod-ns")
+			_ = os.Setenv("OPERATOR_NAMESPACE", "operator-ns")
+			_ = os.Setenv("POD_NAMESPACE", "pod-ns")
 
-			namespace, err := getOperatorNamespace()
-			Expect(err).NotTo(HaveOccurred())
+			namespace := getOperatorNamespace()
 			Expect(namespace).To(Equal("operator-ns"))
 		})
 	})
 
 	Describe("checkValkeyClusterExists", func() {
 		It("should return false when cluster does not exist", func() {
-			exists, err := provisioner.checkValkeyClusterExists(testContext, "non-existent-cluster", "default")
-			Expect(err).NotTo(HaveOccurred())
+			exists, _ := provisioner.checkValkeyClusterExists(testContext, "non-existent-cluster", "default")
 			Expect(exists).To(BeFalse())
 		})
 
@@ -223,26 +214,25 @@ var _ = Describe("ValkeyProvisioner", func() {
 			testCluster.SetName("test-existing-cluster")
 			testCluster.SetNamespace("default")
 
-			err := k8sClient.Create(testContext, testCluster)
-			Expect(err).NotTo(HaveOccurred())
+			Expect(k8sClient.Create(testContext, testCluster)).To(Succeed())
 
-			exists, err := provisioner.checkValkeyClusterExists(testContext, "test-existing-cluster", "default")
-			Expect(err).NotTo(HaveOccurred())
+			exists, _ := provisioner.checkValkeyClusterExists(testContext, "test-existing-cluster", "default")
 			Expect(exists).To(BeTrue())
 
 			// Clean up
-			err = k8sClient.Delete(testContext, testCluster)
-			Expect(err).NotTo(HaveOccurred())
+			_ = k8sClient.Delete(testContext, testCluster)
 		})
 	})
 
 	Describe("createValkeyCluster", func() {
 		It("should successfully create a Valkey cluster", func() {
-			clusterName := "test-create-cluster"
-			namespace := "default"
+			const (
+				testClusterName = "test-create-cluster"
+			)
+			clusterName := testClusterName
+			namespace := defaultNS
 
-			err := provisioner.createValkeyCluster(testContext, clusterName, namespace)
-			Expect(err).NotTo(HaveOccurred())
+			Expect(provisioner.createValkeyCluster(testContext, clusterName, namespace)).To(Succeed())
 
 			// Verify the cluster was created
 			valkey := &unstructured.Unstructured{}
@@ -252,17 +242,15 @@ var _ = Describe("ValkeyProvisioner", func() {
 				Kind:    "Valkey",
 			})
 
-			err = k8sClient.Get(testContext, types.NamespacedName{
+			Expect(k8sClient.Get(testContext, types.NamespacedName{
 				Name:      clusterName,
 				Namespace: namespace,
-			}, valkey)
-			Expect(err).NotTo(HaveOccurred())
+			}, valkey)).To(Succeed())
 			Expect(valkey.GetName()).To(Equal(clusterName))
 			Expect(valkey.GetNamespace()).To(Equal(namespace))
 
 			// Clean up
-			err = k8sClient.Delete(testContext, valkey)
-			Expect(err).NotTo(HaveOccurred())
+			_ = k8sClient.Delete(testContext, valkey)
 		})
 	})
 
@@ -270,12 +258,12 @@ var _ = Describe("ValkeyProvisioner", func() {
 		var testNamespace string
 
 		BeforeEach(func() {
-			testNamespace = "default"
-			os.Setenv("OPERATOR_NAMESPACE", testNamespace)
+			testNamespace = defaultNS
+			_ = os.Setenv("OPERATOR_NAMESPACE", testNamespace)
 		})
 
 		AfterEach(func() {
-			os.Unsetenv("OPERATOR_NAMESPACE")
+			_ = os.Unsetenv("OPERATOR_NAMESPACE")
 
 			// Clean up any created Valkey clusters
 			clusterName := generateSystemValkeyClusterName()
@@ -291,13 +279,12 @@ var _ = Describe("ValkeyProvisioner", func() {
 				Namespace: testNamespace,
 			}, valkey)
 			if err == nil {
-				k8sClient.Delete(testContext, valkey)
+				_ = k8sClient.Delete(testContext, valkey)
 			}
 		})
 
 		It("should successfully provision a new Valkey cluster when none exists", func() {
-			err := provisioner.ProvisionSystemValkeyCluster(testContext)
-			Expect(err).NotTo(HaveOccurred())
+			Expect(provisioner.ProvisionSystemValkeyCluster(testContext)).To(Succeed())
 
 			// Verify the cluster was created
 			clusterName := generateSystemValkeyClusterName()
@@ -308,23 +295,20 @@ var _ = Describe("ValkeyProvisioner", func() {
 				Kind:    "Valkey",
 			})
 
-			err = k8sClient.Get(testContext, types.NamespacedName{
+			_ = k8sClient.Get(testContext, types.NamespacedName{
 				Name:      clusterName,
 				Namespace: testNamespace,
 			}, valkey)
-			Expect(err).NotTo(HaveOccurred())
 			Expect(valkey.GetName()).To(Equal(clusterName))
 			Expect(valkey.GetNamespace()).To(Equal(testNamespace))
 		})
 
 		It("should skip provisioning when cluster already exists", func() {
 			// First provision
-			err := provisioner.ProvisionSystemValkeyCluster(testContext)
-			Expect(err).NotTo(HaveOccurred())
+			Expect(provisioner.ProvisionSystemValkeyCluster(testContext)).To(Succeed())
 
 			// Second provision should not error and should skip
-			err = provisioner.ProvisionSystemValkeyCluster(testContext)
-			Expect(err).NotTo(HaveOccurred())
+			Expect(provisioner.ProvisionSystemValkeyCluster(testContext)).To(Succeed())
 
 			// Verify only one cluster exists
 			clusterName := generateSystemValkeyClusterName()
@@ -335,11 +319,10 @@ var _ = Describe("ValkeyProvisioner", func() {
 				Kind:    "Valkey",
 			})
 
-			err = k8sClient.Get(testContext, types.NamespacedName{
+			_ = k8sClient.Get(testContext, types.NamespacedName{
 				Name:      clusterName,
 				Namespace: testNamespace,
 			}, valkey)
-			Expect(err).NotTo(HaveOccurred())
 		})
 
 		It("should handle namespace determination errors gracefully", func() {
@@ -347,8 +330,8 @@ var _ = Describe("ValkeyProvisioner", func() {
 			originalOpNs := os.Getenv("OPERATOR_NAMESPACE")
 			originalPodNs := os.Getenv("POD_NAMESPACE")
 
-			os.Unsetenv("OPERATOR_NAMESPACE")
-			os.Unsetenv("POD_NAMESPACE")
+			_ = os.Unsetenv("OPERATOR_NAMESPACE")
+			_ = os.Unsetenv("POD_NAMESPACE")
 
 			// This should fall back to "kibaship-system" but that namespace doesn't exist in test env
 			// So we expect this to fail with "namespace not found"
@@ -358,10 +341,10 @@ var _ = Describe("ValkeyProvisioner", func() {
 
 			// Restore original env vars
 			if originalOpNs != "" {
-				os.Setenv("OPERATOR_NAMESPACE", originalOpNs)
+				_ = os.Setenv("OPERATOR_NAMESPACE", originalOpNs)
 			}
 			if originalPodNs != "" {
-				os.Setenv("POD_NAMESPACE", originalPodNs)
+				_ = os.Setenv("POD_NAMESPACE", originalPodNs)
 			}
 		})
 	})

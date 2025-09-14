@@ -1,0 +1,1754 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: kibaship-operator
+    control-plane: controller-manager
+  name: kibaship-operator-system
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  name: applicationdomains.platform.operator.kibaship.com
+spec:
+  group: platform.operator.kibaship.com
+  names:
+    kind: ApplicationDomain
+    listKind: ApplicationDomainList
+    plural: applicationdomains
+    singular: applicationdomain
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.domain
+      name: Domain
+      type: string
+    - jsonPath: .spec.port
+      name: Port
+      type: integer
+    - jsonPath: .spec.type
+      name: Type
+      type: string
+    - jsonPath: .spec.default
+      name: Default
+      type: boolean
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.certificateReady
+      name: Certificate Ready
+      type: boolean
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: ApplicationDomain is the Schema for the applicationdomains API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: ApplicationDomainSpec defines the desired state of ApplicationDomain
+            properties:
+              applicationRef:
+                description: ApplicationRef references the parent application
+                properties:
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+              default:
+                default: false
+                description: |-
+                  Default indicates if this is the default domain for the application
+                  Only one domain per application can be marked as default
+                type: boolean
+              domain:
+                description: Domain is the full domain name (e.g., "my-app-abc123.myapps.kibaship.com"
+                  or "custom.example.com")
+                pattern: ^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$
+                type: string
+              port:
+                default: 3000
+                description: Port is the application port for ingress routing
+                format: int32
+                maximum: 65535
+                minimum: 1
+                type: integer
+              tlsEnabled:
+                default: true
+                description: TLSEnabled indicates if TLS/SSL should be enabled for
+                  this domain
+                type: boolean
+              type:
+                allOf:
+                - enum:
+                  - default
+                  - custom
+                - enum:
+                  - default
+                  - custom
+                default: default
+                description: Type indicates if this is a default generated domain
+                  or custom domain
+                type: string
+            required:
+            - applicationRef
+            - domain
+            - port
+            type: object
+          status:
+            description: ApplicationDomainStatus defines the observed state of ApplicationDomain
+            properties:
+              certificateReady:
+                description: CertificateReady indicates if the TLS certificate is
+                  ready
+                type: boolean
+              conditions:
+                description: Conditions represent the latest available observations
+                  of the domain state
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              dnsConfigured:
+                description: DNSConfigured indicates if DNS is properly configured
+                  (for custom domains)
+                type: boolean
+              ingressReady:
+                description: IngressReady indicates if the ingress is configured and
+                  ready
+                type: boolean
+              lastReconcileTime:
+                description: LastReconcileTime is the last time the domain was reconciled
+                format: date-time
+                type: string
+              message:
+                description: Message provides human-readable status information
+                type: string
+              phase:
+                allOf:
+                - enum:
+                  - Pending
+                  - Ready
+                  - Failed
+                - enum:
+                  - Pending
+                  - Ready
+                  - Failed
+                description: Phase indicates the current phase of the domain
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  name: applications.platform.operator.kibaship.com
+spec:
+  group: platform.operator.kibaship.com
+  names:
+    kind: Application
+    listKind: ApplicationList
+    plural: applications
+    singular: application
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.type
+      name: Type
+      type: string
+    - jsonPath: .spec.projectRef.name
+      name: Project
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: Application is the Schema for the applications API.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: ApplicationSpec defines the desired state of Application.
+            properties:
+              dockerImage:
+                description: DockerImage contains configuration for DockerImage applications
+                properties:
+                  image:
+                    description: Image is the Docker image reference (e.g., nginx:latest,
+                      registry.com/org/image:tag)
+                    type: string
+                  imagePullSecretRef:
+                    description: ImagePullSecretRef references the secret containing
+                      image pull credentials
+                    properties:
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                    type: object
+                    x-kubernetes-map-type: atomic
+                  tag:
+                    description: Tag is the image tag (optional if already specified
+                      in Image)
+                    type: string
+                required:
+                - image
+                type: object
+              gitRepository:
+                description: GitRepository contains configuration for GitRepository
+                  applications
+                properties:
+                  branch:
+                    description: Branch is the git branch to use (optional, defaults
+                      to main/master)
+                    type: string
+                  buildCommand:
+                    description: BuildCommand is the command to build the application
+                      (optional)
+                    type: string
+                  env:
+                    description: Env is a reference to a secret containing environment
+                      variables for this application (optional)
+                    properties:
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                    type: object
+                    x-kubernetes-map-type: atomic
+                  path:
+                    description: Path is the path within the repository (optional,
+                      defaults to root)
+                    type: string
+                  provider:
+                    description: Provider is the Git provider (github.com, gitlab.com,
+                      bitbucket.com)
+                    enum:
+                    - github.com
+                    - gitlab.com
+                    - bitbucket.com
+                    type: string
+                  publicAccess:
+                    default: false
+                    description: |-
+                      PublicAccess indicates if the repository is publicly accessible
+                      If true, SecretRef is optional. If false, SecretRef is required and must exist in project namespace
+                    type: boolean
+                  repository:
+                    description: Repository is the repository name in the format <org-name>/<repo-name>
+                    pattern: ^[a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+$
+                    type: string
+                  rootDirectory:
+                    default: ./
+                    description: RootDirectory is the root directory for the application
+                      (optional, defaults to ./)
+                    type: string
+                  secretRef:
+                    description: |-
+                      SecretRef references the secret containing the git access token
+                      Required when PublicAccess is false, optional when PublicAccess is true
+                    properties:
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                    type: object
+                    x-kubernetes-map-type: atomic
+                  spaOutputDirectory:
+                    description: SpaOutputDirectory is the output directory for SPA
+                      builds (optional)
+                    type: string
+                  startCommand:
+                    description: StartCommand is the command to start the application
+                      (optional)
+                    type: string
+                required:
+                - provider
+                - repository
+                type: object
+              mysql:
+                description: MySQL contains configuration for MySQL applications
+                properties:
+                  database:
+                    description: Database is the initial database name to create
+                    type: string
+                  secretRef:
+                    description: SecretRef references the secret containing MySQL
+                      credentials
+                    properties:
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                    type: object
+                    x-kubernetes-map-type: atomic
+                  version:
+                    description: Version is the MySQL version to deploy
+                    type: string
+                type: object
+              mysqlCluster:
+                description: MySQLCluster contains configuration for MySQLCluster
+                  applications
+                properties:
+                  database:
+                    description: Database is the initial database name to create
+                    type: string
+                  replicas:
+                    default: 3
+                    description: Replicas is the number of MySQL instances in the
+                      cluster
+                    format: int32
+                    minimum: 1
+                    type: integer
+                  secretRef:
+                    description: SecretRef references the secret containing MySQL
+                      credentials
+                    properties:
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                    type: object
+                    x-kubernetes-map-type: atomic
+                  version:
+                    description: Version is the MySQL version to deploy
+                    type: string
+                type: object
+              postgres:
+                description: Postgres contains configuration for Postgres applications
+                properties:
+                  database:
+                    description: Database is the initial database name to create
+                    type: string
+                  secretRef:
+                    description: SecretRef references the secret containing PostgreSQL
+                      credentials
+                    properties:
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                    type: object
+                    x-kubernetes-map-type: atomic
+                  version:
+                    description: Version is the PostgreSQL version to deploy
+                    type: string
+                type: object
+              postgresCluster:
+                description: PostgresCluster contains configuration for PostgresCluster
+                  applications
+                properties:
+                  database:
+                    description: Database is the initial database name to create
+                    type: string
+                  replicas:
+                    default: 3
+                    description: Replicas is the number of PostgreSQL instances in
+                      the cluster
+                    format: int32
+                    minimum: 1
+                    type: integer
+                  secretRef:
+                    description: SecretRef references the secret containing PostgreSQL
+                      credentials
+                    properties:
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                    type: object
+                    x-kubernetes-map-type: atomic
+                  version:
+                    description: Version is the PostgreSQL version to deploy
+                    type: string
+                type: object
+              projectRef:
+                description: ProjectRef references the Project this application belongs
+                  to
+                properties:
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+              type:
+                description: Type defines the type of application
+                enum:
+                - MySQL
+                - MySQLCluster
+                - Postgres
+                - PostgresCluster
+                - DockerImage
+                - GitRepository
+                type: string
+            required:
+            - projectRef
+            - type
+            type: object
+          status:
+            description: ApplicationStatus defines the observed state of Application.
+            properties:
+              conditions:
+                description: Conditions represent the latest available observations
+                  of the application's state
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              message:
+                description: Message provides additional information about the current
+                  status
+                type: string
+              observedGeneration:
+                description: ObservedGeneration reflects the generation of the most
+                  recently observed Application
+                format: int64
+                type: integer
+              phase:
+                description: Phase represents the current phase of the application
+                  lifecycle
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  name: deployments.platform.operator.kibaship.com
+spec:
+  group: platform.operator.kibaship.com
+  names:
+    kind: Deployment
+    listKind: DeploymentList
+    plural: deployments
+    singular: deployment
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.applicationRef.name
+      name: Application
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.currentPipelineRun.name
+      name: Current Run
+      type: string
+    - jsonPath: .status.lastSuccessfulRun.name
+      name: Last Success
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: Deployment is the Schema for the deployments API.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: DeploymentSpec defines the desired state of Deployment.
+            properties:
+              applicationRef:
+                description: ApplicationRef references the Application this deployment
+                  belongs to
+                properties:
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+              gitRepository:
+                description: |-
+                  GitRepository contains configuration for GitRepository deployments
+                  Required when ApplicationRef points to a GitRepository application
+                properties:
+                  branch:
+                    description: Branch is the git branch to use (optional, defaults
+                      to application branch)
+                    type: string
+                  commitSHA:
+                    description: CommitSHA is the specific commit hash to deploy
+                    type: string
+                required:
+                - commitSHA
+                type: object
+            required:
+            - applicationRef
+            type: object
+          status:
+            description: DeploymentStatus defines the observed state of Deployment.
+            properties:
+              builtImage:
+                description: Built image information from the last successful run
+                properties:
+                  builtAt:
+                    description: Build timestamp
+                    format: date-time
+                    type: string
+                  commitSha:
+                    description: Git commit SHA used for this image
+                    type: string
+                  digest:
+                    description: Image digest
+                    type: string
+                  reference:
+                    description: Full image reference with digest
+                    type: string
+                  tag:
+                    description: Image tag
+                    type: string
+                required:
+                - builtAt
+                - commitSha
+                - digest
+                - reference
+                - tag
+                type: object
+              conditions:
+                description: Conditions represent the latest available observations
+                  of the deployment's state
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              currentPipelineRun:
+                description: Current pipeline run information
+                properties:
+                  commitSha:
+                    description: Git commit SHA that triggered this run
+                    type: string
+                  completionTime:
+                    description: Completion time
+                    format: date-time
+                    type: string
+                  image:
+                    description: Built image from this run
+                    type: string
+                  message:
+                    description: Message provides additional information about the
+                      pipeline run
+                    type: string
+                  name:
+                    description: Name of the pipeline run
+                    type: string
+                  namespace:
+                    description: Namespace of the pipeline run
+                    type: string
+                  phase:
+                    description: Phase of the pipeline run
+                    type: string
+                  startTime:
+                    description: Start time
+                    format: date-time
+                    type: string
+                required:
+                - name
+                - namespace
+                - phase
+                type: object
+              lastSuccessfulRun:
+                description: Last successful pipeline run
+                properties:
+                  commitSha:
+                    description: Git commit SHA that triggered this run
+                    type: string
+                  completionTime:
+                    description: Completion time
+                    format: date-time
+                    type: string
+                  image:
+                    description: Built image from this run
+                    type: string
+                  message:
+                    description: Message provides additional information about the
+                      pipeline run
+                    type: string
+                  name:
+                    description: Name of the pipeline run
+                    type: string
+                  namespace:
+                    description: Namespace of the pipeline run
+                    type: string
+                  phase:
+                    description: Phase of the pipeline run
+                    type: string
+                  startTime:
+                    description: Start time
+                    format: date-time
+                    type: string
+                required:
+                - name
+                - namespace
+                - phase
+                type: object
+              message:
+                description: Message provides additional information about the current
+                  status
+                type: string
+              observedGeneration:
+                description: ObservedGeneration reflects the generation of the most
+                  recently observed Deployment
+                format: int64
+                type: integer
+              phase:
+                description: Current phase of the deployment
+                type: string
+              runHistory:
+                description: Pipeline run history (last 5 runs)
+                items:
+                  description: PipelineRunStatus tracks pipeline run information
+                  properties:
+                    commitSha:
+                      description: Git commit SHA that triggered this run
+                      type: string
+                    completionTime:
+                      description: Completion time
+                      format: date-time
+                      type: string
+                    image:
+                      description: Built image from this run
+                      type: string
+                    message:
+                      description: Message provides additional information about the
+                        pipeline run
+                      type: string
+                    name:
+                      description: Name of the pipeline run
+                      type: string
+                    namespace:
+                      description: Namespace of the pipeline run
+                      type: string
+                    phase:
+                      description: Phase of the pipeline run
+                      type: string
+                    startTime:
+                      description: Start time
+                      format: date-time
+                      type: string
+                  required:
+                  - name
+                  - namespace
+                  - phase
+                  type: object
+                type: array
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  name: projects.platform.operator.kibaship.com
+spec:
+  group: platform.operator.kibaship.com
+  names:
+    kind: Project
+    listKind: ProjectList
+    plural: projects
+    singular: project
+  scope: Cluster
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: Project is the Schema for the projects API.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: ProjectSpec defines the desired state of Project.
+            properties:
+              applicationTypes:
+                description: |-
+                  Application type configurations defining resource limits and policies
+                  for different types of applications that can be deployed in this project
+                properties:
+                  dockerImage:
+                    description: Docker image application configuration
+                    properties:
+                      defaultLimits:
+                        description: Default resource limits for applications of this
+                          type
+                        properties:
+                          cpu:
+                            description: CPU limit in cores (e.g., "2", "0.5")
+                            pattern: ^[0-9]+(\.[0-9]+)?$
+                            type: string
+                          memory:
+                            description: Memory limit (e.g., "4Gi", "512Mi")
+                            pattern: ^[0-9]+(\.[0-9]+)?(Mi|Gi|Ti)$
+                            type: string
+                          storage:
+                            description: Storage limit (e.g., "20Gi", "100Mi")
+                            pattern: ^[0-9]+(\.[0-9]+)?(Mi|Gi|Ti)$
+                            type: string
+                        type: object
+                      enabled:
+                        default: true
+                        description: Whether this application type is enabled in the
+                          project
+                        type: boolean
+                      resourceBounds:
+                        description: Resource bounds (min/max) for applications of
+                          this type
+                        properties:
+                          max:
+                            description: Maximum resource limits
+                            properties:
+                              cpu:
+                                description: CPU limit in cores (e.g., "2", "0.5")
+                                pattern: ^[0-9]+(\.[0-9]+)?$
+                                type: string
+                              memory:
+                                description: Memory limit (e.g., "4Gi", "512Mi")
+                                pattern: ^[0-9]+(\.[0-9]+)?(Mi|Gi|Ti)$
+                                type: string
+                              storage:
+                                description: Storage limit (e.g., "20Gi", "100Mi")
+                                pattern: ^[0-9]+(\.[0-9]+)?(Mi|Gi|Ti)$
+                                type: string
+                            type: object
+                          min:
+                            description: Minimum resource limits
+                            properties:
+                              cpu:
+                                description: CPU limit in cores (e.g., "2", "0.5")
+                                pattern: ^[0-9]+(\.[0-9]+)?$
+                                type: string
+                              memory:
+                                description: Memory limit (e.g., "4Gi", "512Mi")
+                                pattern: ^[0-9]+(\.[0-9]+)?(Mi|Gi|Ti)$
+                                type: string
+                              storage:
+                                description: Storage limit (e.g., "20Gi", "100Mi")
+                                pattern: ^[0-9]+(\.[0-9]+)?(Mi|Gi|Ti)$
+                                type: string
+                            type: object
+                        type: object
+                    required:
+                    - enabled
+                    type: object
+                  gitRepository:
+                    description: Git repository application configuration
+                    properties:
+                      defaultLimits:
+                        description: Default resource limits for applications of this
+                          type
+                        properties:
+                          cpu:
+                            description: CPU limit in cores (e.g., "2", "0.5")
+                            pattern: ^[0-9]+(\.[0-9]+)?$
+                            type: string
+                          memory:
+                            description: Memory limit (e.g., "4Gi", "512Mi")
+                            pattern: ^[0-9]+(\.[0-9]+)?(Mi|Gi|Ti)$
+                            type: string
+                          storage:
+                            description: Storage limit (e.g., "20Gi", "100Mi")
+                            pattern: ^[0-9]+(\.[0-9]+)?(Mi|Gi|Ti)$
+                            type: string
+                        type: object
+                      enabled:
+                        default: true
+                        description: Whether this application type is enabled in the
+                          project
+                        type: boolean
+                      resourceBounds:
+                        description: Resource bounds (min/max) for applications of
+                          this type
+                        properties:
+                          max:
+                            description: Maximum resource limits
+                            properties:
+                              cpu:
+                                description: CPU limit in cores (e.g., "2", "0.5")
+                                pattern: ^[0-9]+(\.[0-9]+)?$
+                                type: string
+                              memory:
+                                description: Memory limit (e.g., "4Gi", "512Mi")
+                                pattern: ^[0-9]+(\.[0-9]+)?(Mi|Gi|Ti)$
+                                type: string
+                              storage:
+                                description: Storage limit (e.g., "20Gi", "100Mi")
+                                pattern: ^[0-9]+(\.[0-9]+)?(Mi|Gi|Ti)$
+                                type: string
+                            type: object
+                          min:
+                            description: Minimum resource limits
+                            properties:
+                              cpu:
+                                description: CPU limit in cores (e.g., "2", "0.5")
+                                pattern: ^[0-9]+(\.[0-9]+)?$
+                                type: string
+                              memory:
+                                description: Memory limit (e.g., "4Gi", "512Mi")
+                                pattern: ^[0-9]+(\.[0-9]+)?(Mi|Gi|Ti)$
+                                type: string
+                              storage:
+                                description: Storage limit (e.g., "20Gi", "100Mi")
+                                pattern: ^[0-9]+(\.[0-9]+)?(Mi|Gi|Ti)$
+                                type: string
+                            type: object
+                        type: object
+                    required:
+                    - enabled
+                    type: object
+                  mysql:
+                    description: MySQL single-instance database configuration
+                    properties:
+                      defaultLimits:
+                        description: Default resource limits for applications of this
+                          type
+                        properties:
+                          cpu:
+                            description: CPU limit in cores (e.g., "2", "0.5")
+                            pattern: ^[0-9]+(\.[0-9]+)?$
+                            type: string
+                          memory:
+                            description: Memory limit (e.g., "4Gi", "512Mi")
+                            pattern: ^[0-9]+(\.[0-9]+)?(Mi|Gi|Ti)$
+                            type: string
+                          storage:
+                            description: Storage limit (e.g., "20Gi", "100Mi")
+                            pattern: ^[0-9]+(\.[0-9]+)?(Mi|Gi|Ti)$
+                            type: string
+                        type: object
+                      enabled:
+                        default: true
+                        description: Whether this application type is enabled in the
+                          project
+                        type: boolean
+                      resourceBounds:
+                        description: Resource bounds (min/max) for applications of
+                          this type
+                        properties:
+                          max:
+                            description: Maximum resource limits
+                            properties:
+                              cpu:
+                                description: CPU limit in cores (e.g., "2", "0.5")
+                                pattern: ^[0-9]+(\.[0-9]+)?$
+                                type: string
+                              memory:
+                                description: Memory limit (e.g., "4Gi", "512Mi")
+                                pattern: ^[0-9]+(\.[0-9]+)?(Mi|Gi|Ti)$
+                                type: string
+                              storage:
+                                description: Storage limit (e.g., "20Gi", "100Mi")
+                                pattern: ^[0-9]+(\.[0-9]+)?(Mi|Gi|Ti)$
+                                type: string
+                            type: object
+                          min:
+                            description: Minimum resource limits
+                            properties:
+                              cpu:
+                                description: CPU limit in cores (e.g., "2", "0.5")
+                                pattern: ^[0-9]+(\.[0-9]+)?$
+                                type: string
+                              memory:
+                                description: Memory limit (e.g., "4Gi", "512Mi")
+                                pattern: ^[0-9]+(\.[0-9]+)?(Mi|Gi|Ti)$
+                                type: string
+                              storage:
+                                description: Storage limit (e.g., "20Gi", "100Mi")
+                                pattern: ^[0-9]+(\.[0-9]+)?(Mi|Gi|Ti)$
+                                type: string
+                            type: object
+                        type: object
+                    required:
+                    - enabled
+                    type: object
+                  mysqlCluster:
+                    description: MySQL cluster configuration (disabled by default)
+                    properties:
+                      defaultLimits:
+                        description: Default resource limits for cluster applications
+                          of this type
+                        properties:
+                          cpu:
+                            description: CPU limit per node in cores (e.g., "2", "0.5")
+                            pattern: ^[0-9]+(\.[0-9]+)?$
+                            type: string
+                          memory:
+                            description: Memory limit per node (e.g., "4Gi", "512Mi")
+                            pattern: ^[0-9]+(\.[0-9]+)?(Mi|Gi|Ti)$
+                            type: string
+                          nodes:
+                            description: Default number of nodes in the cluster
+                            format: int32
+                            minimum: 1
+                            type: integer
+                          storage:
+                            description: Storage limit per node (e.g., "20Gi", "100Mi")
+                            pattern: ^[0-9]+(\.[0-9]+)?(Mi|Gi|Ti)$
+                            type: string
+                        type: object
+                      enabled:
+                        default: false
+                        description: Whether this application type is enabled in the
+                          project
+                        type: boolean
+                      resourceBounds:
+                        description: Resource bounds (min/max) for cluster applications
+                          of this type
+                        properties:
+                          max:
+                            description: Maximum resource limits per node
+                            properties:
+                              cpu:
+                                description: CPU limit per node in cores (e.g., "2",
+                                  "0.5")
+                                pattern: ^[0-9]+(\.[0-9]+)?$
+                                type: string
+                              memory:
+                                description: Memory limit per node (e.g., "4Gi", "512Mi")
+                                pattern: ^[0-9]+(\.[0-9]+)?(Mi|Gi|Ti)$
+                                type: string
+                              nodes:
+                                description: Default number of nodes in the cluster
+                                format: int32
+                                minimum: 1
+                                type: integer
+                              storage:
+                                description: Storage limit per node (e.g., "20Gi",
+                                  "100Mi")
+                                pattern: ^[0-9]+(\.[0-9]+)?(Mi|Gi|Ti)$
+                                type: string
+                            type: object
+                          min:
+                            description: Minimum resource limits per node
+                            properties:
+                              cpu:
+                                description: CPU limit per node in cores (e.g., "2",
+                                  "0.5")
+                                pattern: ^[0-9]+(\.[0-9]+)?$
+                                type: string
+                              memory:
+                                description: Memory limit per node (e.g., "4Gi", "512Mi")
+                                pattern: ^[0-9]+(\.[0-9]+)?(Mi|Gi|Ti)$
+                                type: string
+                              nodes:
+                                description: Default number of nodes in the cluster
+                                format: int32
+                                minimum: 1
+                                type: integer
+                              storage:
+                                description: Storage limit per node (e.g., "20Gi",
+                                  "100Mi")
+                                pattern: ^[0-9]+(\.[0-9]+)?(Mi|Gi|Ti)$
+                                type: string
+                            type: object
+                        type: object
+                    required:
+                    - enabled
+                    type: object
+                  postgres:
+                    description: PostgreSQL single-instance database configuration
+                    properties:
+                      defaultLimits:
+                        description: Default resource limits for applications of this
+                          type
+                        properties:
+                          cpu:
+                            description: CPU limit in cores (e.g., "2", "0.5")
+                            pattern: ^[0-9]+(\.[0-9]+)?$
+                            type: string
+                          memory:
+                            description: Memory limit (e.g., "4Gi", "512Mi")
+                            pattern: ^[0-9]+(\.[0-9]+)?(Mi|Gi|Ti)$
+                            type: string
+                          storage:
+                            description: Storage limit (e.g., "20Gi", "100Mi")
+                            pattern: ^[0-9]+(\.[0-9]+)?(Mi|Gi|Ti)$
+                            type: string
+                        type: object
+                      enabled:
+                        default: true
+                        description: Whether this application type is enabled in the
+                          project
+                        type: boolean
+                      resourceBounds:
+                        description: Resource bounds (min/max) for applications of
+                          this type
+                        properties:
+                          max:
+                            description: Maximum resource limits
+                            properties:
+                              cpu:
+                                description: CPU limit in cores (e.g., "2", "0.5")
+                                pattern: ^[0-9]+(\.[0-9]+)?$
+                                type: string
+                              memory:
+                                description: Memory limit (e.g., "4Gi", "512Mi")
+                                pattern: ^[0-9]+(\.[0-9]+)?(Mi|Gi|Ti)$
+                                type: string
+                              storage:
+                                description: Storage limit (e.g., "20Gi", "100Mi")
+                                pattern: ^[0-9]+(\.[0-9]+)?(Mi|Gi|Ti)$
+                                type: string
+                            type: object
+                          min:
+                            description: Minimum resource limits
+                            properties:
+                              cpu:
+                                description: CPU limit in cores (e.g., "2", "0.5")
+                                pattern: ^[0-9]+(\.[0-9]+)?$
+                                type: string
+                              memory:
+                                description: Memory limit (e.g., "4Gi", "512Mi")
+                                pattern: ^[0-9]+(\.[0-9]+)?(Mi|Gi|Ti)$
+                                type: string
+                              storage:
+                                description: Storage limit (e.g., "20Gi", "100Mi")
+                                pattern: ^[0-9]+(\.[0-9]+)?(Mi|Gi|Ti)$
+                                type: string
+                            type: object
+                        type: object
+                    required:
+                    - enabled
+                    type: object
+                  postgresCluster:
+                    description: PostgreSQL cluster configuration (disabled by default)
+                    properties:
+                      defaultLimits:
+                        description: Default resource limits for cluster applications
+                          of this type
+                        properties:
+                          cpu:
+                            description: CPU limit per node in cores (e.g., "2", "0.5")
+                            pattern: ^[0-9]+(\.[0-9]+)?$
+                            type: string
+                          memory:
+                            description: Memory limit per node (e.g., "4Gi", "512Mi")
+                            pattern: ^[0-9]+(\.[0-9]+)?(Mi|Gi|Ti)$
+                            type: string
+                          nodes:
+                            description: Default number of nodes in the cluster
+                            format: int32
+                            minimum: 1
+                            type: integer
+                          storage:
+                            description: Storage limit per node (e.g., "20Gi", "100Mi")
+                            pattern: ^[0-9]+(\.[0-9]+)?(Mi|Gi|Ti)$
+                            type: string
+                        type: object
+                      enabled:
+                        default: false
+                        description: Whether this application type is enabled in the
+                          project
+                        type: boolean
+                      resourceBounds:
+                        description: Resource bounds (min/max) for cluster applications
+                          of this type
+                        properties:
+                          max:
+                            description: Maximum resource limits per node
+                            properties:
+                              cpu:
+                                description: CPU limit per node in cores (e.g., "2",
+                                  "0.5")
+                                pattern: ^[0-9]+(\.[0-9]+)?$
+                                type: string
+                              memory:
+                                description: Memory limit per node (e.g., "4Gi", "512Mi")
+                                pattern: ^[0-9]+(\.[0-9]+)?(Mi|Gi|Ti)$
+                                type: string
+                              nodes:
+                                description: Default number of nodes in the cluster
+                                format: int32
+                                minimum: 1
+                                type: integer
+                              storage:
+                                description: Storage limit per node (e.g., "20Gi",
+                                  "100Mi")
+                                pattern: ^[0-9]+(\.[0-9]+)?(Mi|Gi|Ti)$
+                                type: string
+                            type: object
+                          min:
+                            description: Minimum resource limits per node
+                            properties:
+                              cpu:
+                                description: CPU limit per node in cores (e.g., "2",
+                                  "0.5")
+                                pattern: ^[0-9]+(\.[0-9]+)?$
+                                type: string
+                              memory:
+                                description: Memory limit per node (e.g., "4Gi", "512Mi")
+                                pattern: ^[0-9]+(\.[0-9]+)?(Mi|Gi|Ti)$
+                                type: string
+                              nodes:
+                                description: Default number of nodes in the cluster
+                                format: int32
+                                minimum: 1
+                                type: integer
+                              storage:
+                                description: Storage limit per node (e.g., "20Gi",
+                                  "100Mi")
+                                pattern: ^[0-9]+(\.[0-9]+)?(Mi|Gi|Ti)$
+                                type: string
+                            type: object
+                        type: object
+                    required:
+                    - enabled
+                    type: object
+                type: object
+              volumes:
+                description: Volume configuration for the project
+                properties:
+                  maxStorageSize:
+                    description: Maximum storage size for volumes (e.g., "100Gi",
+                      "1Ti")
+                    pattern: ^[0-9]+(\.[0-9]+)?(Mi|Gi|Ti)$
+                    type: string
+                type: object
+            type: object
+          status:
+            description: ProjectStatus defines the observed state of Project.
+            properties:
+              lastReconcileTime:
+                description: LastReconcileTime is the timestamp of the last successful
+                  reconciliation
+                format: date-time
+                type: string
+              message:
+                description: Message provides additional information about the current
+                  status
+                type: string
+              namespaceName:
+                description: NamespaceName is the name of the namespace created for
+                  this project
+                type: string
+              phase:
+                description: Phase represents the current phase of the project lifecycle
+                enum:
+                - Pending
+                - Ready
+                - Failed
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: kibaship-operator
+  name: kibaship-operator-controller-manager
+  namespace: kibaship-operator-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: kibaship-operator
+  name: kibaship-operator-leader-election-role
+  namespace: kibaship-operator-system
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kibaship-operator-manager-role
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - namespaces
+  - secrets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - '*'
+  resources:
+  - '*'
+  verbs:
+  - '*'
+- apiGroups:
+  - mysql.oracle.com
+  resources:
+  - innodbclusters
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - platform.operator.kibaship.com
+  resources:
+  - applicationdomains
+  - applications
+  - deployments
+  - projects
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - platform.operator.kibaship.com
+  resources:
+  - applicationdomains/finalizers
+  - applications/finalizers
+  - deployments/finalizers
+  - projects/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - platform.operator.kibaship.com
+  resources:
+  - applicationdomains/status
+  - applications/status
+  - deployments/status
+  - projects/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - tekton.dev
+  resources:
+  - pipelineruns
+  - pipelines
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: kibaship-operator
+  name: kibaship-operator-leader-election-rolebinding
+  namespace: kibaship-operator-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: kibaship-operator-leader-election-role
+subjects:
+- kind: ServiceAccount
+  name: kibaship-operator-controller-manager
+  namespace: kibaship-operator-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: kibaship-operator
+  name: kibaship-operator-manager-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kibaship-operator-manager-role
+subjects:
+- kind: ServiceAccount
+  name: kibaship-operator-controller-manager
+  namespace: kibaship-operator-system
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: kibaship-operator
+    control-plane: controller-manager
+  name: kibaship-operator-controller-manager
+  namespace: kibaship-operator-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kibaship-operator
+      control-plane: controller-manager
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: manager
+      labels:
+        app.kubernetes.io/name: kibaship-operator
+        control-plane: controller-manager
+    spec:
+      containers:
+      - args:
+        - --leader-elect
+        - --health-probe-bind-address=:8081
+        command:
+        - /manager
+        env:
+        - name: KIBASHIP_OPERATOR_DOMAIN
+          value: myapps.kibaship.com
+        - name: KIBASHIP_OPERATOR_DEFAULT_PORT
+          value: "3000"
+        image: ghcr.io/kibamail/kibaship-operator:v0.0.1
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8081
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        name: manager
+        ports: []
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          limits:
+            cpu: 500m
+            memory: 128Mi
+          requests:
+            cpu: 10m
+            memory: 64Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts: []
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      serviceAccountName: kibaship-operator-controller-manager
+      terminationGracePeriodSeconds: 10
+      volumes: []
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: kibaship-operator-validating-webhook-configuration
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-platform-operator-kibaship-com-v1alpha1-application
+  failurePolicy: Fail
+  name: vapplication.kb.io
+  rules:
+  - apiGroups:
+    - platform.operator.kibaship.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - applications
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-platform-operator-kibaship-com-v1alpha1-applicationdomain
+  failurePolicy: Fail
+  name: vapplicationdomain.kb.io
+  rules:
+  - apiGroups:
+    - platform.operator.kibaship.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - applicationdomains
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-platform-operator-kibaship-com-v1alpha1-deployment
+  failurePolicy: Fail
+  name: vdeployment.kb.io
+  rules:
+  - apiGroups:
+    - platform.operator.kibaship.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - deployments
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-platform-operator-kibaship-com-v1alpha1-project
+  failurePolicy: Fail
+  name: vproject.kb.io
+  rules:
+  - apiGroups:
+    - platform.operator.kibaship.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - projects
+  sideEffects: None

@@ -5,6 +5,7 @@ resources:
 - bases/platform.operator.kibaship.com_projects.yaml
 - bases/platform.operator.kibaship.com_applications.yaml
 - bases/platform.operator.kibaship.com_deployments.yaml
+- bases/platform.operator.kibaship.com_applicationdomains.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:
@@ -14,5 +15,5 @@ patches:
 
 # [WEBHOOK] To enable webhook, uncomment the following section
 # the following config is for teaching kustomize how to do kustomization for CRDs.
-#configurations:
-#- kustomizeconfig.yaml
+configurations:
+- kustomizeconfig.yaml

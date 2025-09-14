@@ -1,0 +1,66 @@
+# Demo: Automatic ApplicationDomain Creation for GitRepository Applications
+#
+# When you create a GitRepository application like the one below, the KibaShip operator
+# will automatically create a default ApplicationDomain for it.
+#
+# Prerequisites:
+# 1. Set KIBASHIP_OPERATOR_DOMAIN environment variable (e.g., "myapps.kibaship.com")
+# 2. Set KIBASHIP_OPERATOR_DEFAULT_PORT environment variable (e.g., "3000")
+#
+# Steps to demonstrate:
+# 1. Apply this Project and Application
+# 2. Watch as an ApplicationDomain is automatically created
+# 3. The domain will follow the pattern: <app-slug>-<random>.myapps.kibaship.com
+
+apiVersion: platform.operator.kibaship.com/v1alpha1
+kind: Project
+metadata:
+  name: demo-project
+  namespace: default
+  labels:
+    platform.kibaship.com/uuid: demo-project-uuid-12345
+spec:
+  applicationTypes:
+    gitRepository:
+      resources:
+        min:
+          cpu: "100m"
+          memory: "128Mi"
+        max:
+          cpu: "1000m"
+          memory: "1Gi"
+
+---
+apiVersion: platform.operator.kibaship.com/v1alpha1
+kind: Application
+metadata:
+  name: project-demo-project-app-frontend-kibaship-com
+  namespace: default
+  labels:
+    platform.kibaship.com/uuid: demo-frontend-uuid-67890
+    platform.kibaship.com/project-uuid: demo-project-uuid-12345
+spec:
+  # This is a GitRepository application, so it will get an automatic ApplicationDomain
+  type: GitRepository
+  projectRef:
+    name: demo-project
+  gitRepository:
+    repository: https://github.com/example/frontend-app
+    branch: main
+    buildPath: "/"
+    dockerfilePath: Dockerfile
+    env:
+      - name: NODE_ENV
+        value: production
+      - name: PORT
+        value: "3000"
+
+---
+# Expected Result: An ApplicationDomain will be automatically created with:
+# - metadata.name: project-demo-project-app-frontend-kibaship-com-default
+# - spec.domain: frontend-<random8chars>.myapps.kibaship.com (where myapps.kibaship.com is from KIBASHIP_OPERATOR_DOMAIN)
+# - spec.port: 3000 (from KIBASHIP_OPERATOR_DEFAULT_PORT)
+# - spec.type: default
+# - spec.default: true
+# - spec.tlsEnabled: true
+# - proper labels for application association and cleanup

@@ -79,7 +79,7 @@ var _ = Describe("Tekton Integration", func() {
 		if testNamespace != nil {
 			err := k8sClient.Delete(ctx, testNamespace)
 			if err != nil && !errors.IsNotFound(err) {
-				// Ignore cleanup errors in tests
+				GinkgoWriter.Printf("Failed to clean up namespace: %v\n", err)
 			}
 		}
 
@@ -87,22 +87,11 @@ var _ = Describe("Tekton Integration", func() {
 		if testProject != nil {
 			err := k8sClient.Delete(ctx, testProject)
 			if err != nil && !errors.IsNotFound(err) {
-				// Ignore cleanup errors in tests
+				GinkgoWriter.Printf("Failed to clean up project: %v\n", err)
 			}
 		}
 
-		// Clean up tekton namespace - but check if other tests need it
-		if tektonNamespace != nil {
-			roleBindingList := &rbacv1.RoleBindingList{}
-			listErr := k8sClient.List(ctx, roleBindingList, client.InNamespace(TektonNamespace))
-			if listErr == nil && len(roleBindingList.Items) == 0 {
-				// Only delete if no role bindings remain
-				err := k8sClient.Delete(ctx, tektonNamespace)
-				if err != nil && !errors.IsNotFound(err) {
-					// Ignore cleanup errors
-				}
-			}
-		}
+		// Don't delete tekton namespace - it's shared across tests and will be cleaned up by test env
 
 		// Wait for cleanup to complete
 		if testProject != nil {
@@ -172,8 +161,8 @@ var _ = Describe("Tekton Integration", func() {
 
 			By("Cleaning up second project resources")
 			namespaceManager.deleteServiceAccountResources(ctx, secondNamespace, secondProject)
-			k8sClient.Delete(ctx, secondNamespace)
-			k8sClient.Delete(ctx, secondProject)
+			_ = k8sClient.Delete(ctx, secondNamespace)
+			_ = k8sClient.Delete(ctx, secondProject)
 		})
 	})
 

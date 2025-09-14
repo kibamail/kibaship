@@ -1,0 +1,49 @@
+# KibaShip Operator Helm Chart Values
+# Only essential configuration options are exposed
+
+# Operator configuration (REQUIRED)
+operator:
+  # Domain configuration for automatic ApplicationDomain generation
+  # REQUIRED: Set this to your operator domain (e.g., "myapps.kibaship.com")
+  domain: "myapps.kibaship.com"
+
+  # Default port for applications
+  defaultPort: 3000
+
+# Controller manager configuration
+controllerManager:
+  # Number of replicas (1 for development, 2+ for production)
+  replicas: 1
+
+  # Image configuration
+  image:
+    repository: ghcr.io/kibamail/kibaship-operator
+    tag: "v0.0.1"
+    pullPolicy: IfNotPresent
+
+  # Resource limits and requests
+  resources:
+    limits:
+      cpu: 500m
+      memory: 128Mi
+    requests:
+      cpu: 10m
+      memory: 64Mi
+
+# Debug configuration (for development/troubleshooting)
+debug:
+  # Enable debug logging
+  enabled: false
+  # Log level (info, debug, error)
+  level: "info"
+
+#
+# All other settings are automatically configured:
+# - RBAC: Auto-enabled with proper permissions
+# - Webhooks: Auto-enabled for ApplicationDomain validation
+# - Security: Non-root containers with security contexts
+# - Service Account: Auto-created with proper annotations
+# - Namespace: Auto-created as kibaship-operator-system
+# - CRDs: Auto-installed (Project, Application, Deployment, ApplicationDomain)
+# - Health Checks: Auto-configured liveness/readiness probes
+#

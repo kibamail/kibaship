@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -47,6 +48,7 @@ type ApplicationReconciler struct {
 // +kubebuilder:rbac:groups=platform.operator.kibaship.com,resources=applications/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=platform.operator.kibaship.com,resources=applications/finalizers,verbs=update
 // +kubebuilder:rbac:groups=platform.operator.kibaship.com,resources=deployments,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=platform.operator.kibaship.com,resources=applicationdomains,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=platform.operator.kibaship.com,resources=projects,verbs=get;list;watch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
@@ -115,6 +117,12 @@ func (r *ApplicationReconciler) handleDeletion(ctx context.Context, app *platfor
 		return ctrl.Result{}, err
 	}
 
+	// Delete all ApplicationDomains associated with this Application
+	if err := r.deleteAssociatedDomains(ctx, app); err != nil {
+		log.Error(err, "Failed to delete associated ApplicationDomains")
+		return ctrl.Result{}, err
+	}
+
 	// Remove finalizer
 	controllerutil.RemoveFinalizer(app, ApplicationFinalizerName)
 	if err := r.Update(ctx, app); err != nil {
@@ -154,6 +162,12 @@ func (r *ApplicationReconciler) handleApplicationReconcile(ctx context.Context, 
 	log := logf.FromContext(ctx).WithValues("application", app.Name, "namespace", app.Namespace)
 
 	log.Info("Reconciling Application")
+
+	// Handle ApplicationDomain creation for GitRepository applications
+	if err := r.handleApplicationDomains(ctx, app); err != nil {
+		log.Error(err, "Failed to handle ApplicationDomains")
+		return ctrl.Result{}, err
+	}
 
 	// Update Application status
 	if err := r.updateApplicationStatus(ctx, app); err != nil {
@@ -249,6 +263,133 @@ func (r *ApplicationReconciler) updateApplicationStatus(ctx context.Context, app
 	// Update the status
 	if err := r.Status().Update(ctx, app); err != nil {
 		return fmt.Errorf("failed to update Application status: %w", err)
+	}
+
+	return nil
+}
+
+// handleApplicationDomains handles the creation and management of ApplicationDomains for GitRepository applications
+func (r *ApplicationReconciler) handleApplicationDomains(ctx context.Context, app *platformv1alpha1.Application) error {
+	log := logf.FromContext(ctx).WithValues("application", app.Name, "namespace", app.Namespace)
+
+	// Only handle domains for GitRepository applications
+	if app.Spec.Type != platformv1alpha1.ApplicationTypeGitRepository {
+		log.V(1).Info("Skipping domain creation for non-GitRepository application", "type", app.Spec.Type)
+		return nil
+	}
+
+	// Check if default domain already exists
+	var domains platformv1alpha1.ApplicationDomainList
+	if err := r.List(ctx, &domains,
+		client.InNamespace(app.Namespace),
+		client.MatchingLabels{ApplicationDomainLabelApplication: app.Name},
+	); err != nil {
+		return fmt.Errorf("failed to list existing domains: %v", err)
+	}
+
+	// Find existing default domain
+	var defaultDomain *platformv1alpha1.ApplicationDomain
+	for _, domain := range domains.Items {
+		if domain.Spec.Default {
+			defaultDomain = &domain
+			break
+		}
+	}
+
+	// Create default domain if it doesn't exist
+	if defaultDomain == nil {
+		log.Info("Creating default ApplicationDomain for GitRepository application")
+		return r.createDefaultDomain(ctx, app)
+	}
+
+	log.V(1).Info("Default ApplicationDomain already exists", "domain", defaultDomain.Spec.Domain)
+	return nil
+}
+
+// createDefaultDomain creates a default ApplicationDomain for a GitRepository application
+func (r *ApplicationReconciler) createDefaultDomain(ctx context.Context, app *platformv1alpha1.Application) error {
+	log := logf.FromContext(ctx).WithValues("application", app.Name, "namespace", app.Namespace)
+
+	// Get operator configuration
+	config, err := GetOperatorConfig()
+	if err != nil {
+		return fmt.Errorf("failed to get operator configuration: %v", err)
+	}
+
+	// Generate unique subdomain
+	subdomain, err := GenerateSubdomain(app.Name)
+	if err != nil {
+		return fmt.Errorf("failed to generate subdomain: %v", err)
+	}
+
+	// Generate full domain
+	fullDomain, err := GenerateFullDomain(subdomain)
+	if err != nil {
+		return fmt.Errorf("failed to generate full domain: %v", err)
+	}
+
+	// Create ApplicationDomain resource
+	domainName := GenerateApplicationDomainName(app.Name, "default")
+	domain := &platformv1alpha1.ApplicationDomain{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      domainName,
+			Namespace: app.Namespace,
+			Labels: map[string]string{
+				ApplicationDomainLabelApplication: app.Name,
+				ApplicationDomainLabelDomainType:  "default",
+				"platform.kibaship.com/uuid":      app.Labels["platform.kibaship.com/uuid"],
+			},
+		},
+		Spec: platformv1alpha1.ApplicationDomainSpec{
+			ApplicationRef: corev1.LocalObjectReference{Name: app.Name},
+			Domain:         fullDomain,
+			Port:           config.DefaultPort,
+			Type:           platformv1alpha1.ApplicationDomainTypeDefault,
+			Default:        true,
+			TLSEnabled:     true,
+		},
+	}
+
+	// Copy additional labels from application
+	if projectUUID, exists := app.Labels["platform.kibaship.com/project-uuid"]; exists {
+		domain.Labels["platform.kibaship.com/project-uuid"] = projectUUID
+	}
+	if workspaceUUID, exists := app.Labels["platform.kibaship.com/workspace-uuid"]; exists {
+		domain.Labels["platform.kibaship.com/workspace-uuid"] = workspaceUUID
+	}
+
+	// Set owner reference to ensure cleanup when application is deleted
+	if err := controllerutil.SetControllerReference(app, domain, r.Scheme); err != nil {
+		return fmt.Errorf("failed to set controller reference: %v", err)
+	}
+
+	// Create the ApplicationDomain
+	if err := r.Create(ctx, domain); err != nil {
+		return fmt.Errorf("failed to create ApplicationDomain: %v", err)
+	}
+
+	log.Info("Successfully created default ApplicationDomain", "domain", fullDomain, "port", config.DefaultPort)
+	return nil
+}
+
+// deleteAssociatedDomains deletes all ApplicationDomains associated with the Application
+func (r *ApplicationReconciler) deleteAssociatedDomains(ctx context.Context, app *platformv1alpha1.Application) error {
+	log := logf.FromContext(ctx).WithValues("application", app.Name, "namespace", app.Namespace)
+
+	// Use label selector to efficiently find only ApplicationDomains associated with this Application
+	var domainList platformv1alpha1.ApplicationDomainList
+	if err := r.List(ctx, &domainList,
+		client.InNamespace(app.Namespace),
+		client.MatchingLabels{ApplicationDomainLabelApplication: app.Name}); err != nil {
+		return fmt.Errorf("failed to list ApplicationDomains: %w", err)
+	}
+
+	// Delete all matching ApplicationDomains
+	for _, domain := range domainList.Items {
+		log.Info("Deleting associated ApplicationDomain", "domain", domain.Spec.Domain)
+		if err := r.Delete(ctx, &domain); err != nil && !errors.IsNotFound(err) {
+			return fmt.Errorf("failed to delete ApplicationDomain %s: %w", domain.Name, err)
+		}
 	}
 
 	return nil

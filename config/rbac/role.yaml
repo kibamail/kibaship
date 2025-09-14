@@ -38,6 +38,7 @@ rules:
 - apiGroups:
   - platform.operator.kibaship.com
   resources:
+  - applicationdomains
   - applications
   - deployments
   - projects
@@ -52,6 +53,7 @@ rules:
 - apiGroups:
   - platform.operator.kibaship.com
   resources:
+  - applicationdomains/finalizers
   - applications/finalizers
   - deployments/finalizers
   - projects/finalizers
@@ -60,6 +62,7 @@ rules:
 - apiGroups:
   - platform.operator.kibaship.com
   resources:
+  - applicationdomains/status
   - applications/status
   - deployments/status
   - projects/status

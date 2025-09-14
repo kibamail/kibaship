@@ -37,10 +37,10 @@ type ProjectValidator struct {
 }
 
 // NewProjectValidator creates a new ProjectValidator
-func NewProjectValidator(client client.Client) *ProjectValidator {
+func NewProjectValidator(k8sClient client.Client) *ProjectValidator {
 	return &ProjectValidator{
-		Client:           client,
-		NamespaceManager: NewNamespaceManager(client),
+		Client:           k8sClient,
+		NamespaceManager: NewNamespaceManager(k8sClient),
 	}
 }
 
