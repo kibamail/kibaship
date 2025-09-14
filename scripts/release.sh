@@ -166,7 +166,7 @@ log_success "Build successful"
 log_info "Updating version references..."
 
 # Update Makefile
-sed -i.bak "s/VERSION ?= .*/VERSION ?= $NEW_VERSION/" Makefile
+sed -i.bak "s/^VERSION ?= .*/VERSION ?= $NEW_VERSION/" Makefile
 log_success "Updated Makefile"
 
 # Update Helm Chart appVersion to match operator version
