@@ -30,6 +30,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	platformv1alpha1 "github.com/kibamail/kibaship-operator/api/v1alpha1"
+	"github.com/kibamail/kibaship-operator/pkg/validation"
 )
 
 var _ = Describe("NamespaceManager", func() {
@@ -49,8 +50,8 @@ var _ = Describe("NamespaceManager", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				Name: fmt.Sprintf("test-namespace-project-%d", uniqueID),
 				Labels: map[string]string{
-					ProjectUUIDLabel:   "550e8400-e29b-41d4-a716-446655440010",
-					WorkspaceUUIDLabel: "6ba7b810-9dad-11d1-80b4-00c04fd430d0",
+					validation.LabelResourceUUID:  "550e8400-e29b-41d4-a716-446655440010",
+					validation.LabelWorkspaceUUID: "6ba7b810-9dad-11d1-80b4-00c04fd430d0",
 				},
 			},
 			Spec: platformv1alpha1.ProjectSpec{},
@@ -109,8 +110,8 @@ var _ = Describe("NamespaceManager", func() {
 			By("Verifying namespace labels")
 			Expect(namespace.Labels[ManagedByLabel]).To(Equal(ManagedByValue))
 			Expect(namespace.Labels[ProjectNameLabel]).To(Equal(testProject.Name))
-			Expect(namespace.Labels[ProjectUUIDLabel]).To(Equal("550e8400-e29b-41d4-a716-446655440010"))
-			Expect(namespace.Labels[WorkspaceUUIDLabel]).To(Equal("6ba7b810-9dad-11d1-80b4-00c04fd430d0"))
+			Expect(namespace.Labels[validation.LabelResourceUUID]).To(Equal("550e8400-e29b-41d4-a716-446655440010"))
+			Expect(namespace.Labels[validation.LabelWorkspaceUUID]).To(Equal("6ba7b810-9dad-11d1-80b4-00c04fd430d0"))
 
 			By("Verifying namespace annotations")
 			Expect(namespace.Annotations["platform.kibaship.com/created-by"]).To(Equal("kibaship-operator"))
@@ -143,9 +144,9 @@ var _ = Describe("NamespaceManager", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name: conflictingNamespaceName,
 					Labels: map[string]string{
-						ManagedByLabel:   ManagedByValue,
-						ProjectNameLabel: "conflict-test",
-						ProjectUUIDLabel: "different-uuid-1234-5678-9abc-def012345678",
+						ManagedByLabel:               ManagedByValue,
+						ProjectNameLabel:             "conflict-test",
+						validation.LabelResourceUUID: "different-uuid-1234-5678-9abc-def012345678",
 					},
 				},
 			}
@@ -156,7 +157,7 @@ var _ = Describe("NamespaceManager", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "conflict-test",
 					Labels: map[string]string{
-						ProjectUUIDLabel: "550e8400-e29b-41d4-a716-446655440099",
+						validation.LabelResourceUUID: "550e8400-e29b-41d4-a716-446655440099",
 					},
 				},
 				Spec: platformv1alpha1.ProjectSpec{},
@@ -191,7 +192,7 @@ var _ = Describe("NamespaceManager", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "non-existent-project-12345",
 					Labels: map[string]string{
-						ProjectUUIDLabel: "550e8400-e29b-41d4-a716-446655440999",
+						validation.LabelResourceUUID: "550e8400-e29b-41d4-a716-446655440999",
 					},
 				},
 				Spec: platformv1alpha1.ProjectSpec{},
@@ -216,9 +217,9 @@ var _ = Describe("NamespaceManager", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name: namespaceManager.GenerateNamespaceName("existing-project"),
 					Labels: map[string]string{
-						ManagedByLabel:   ManagedByValue,
-						ProjectNameLabel: "existing-project",
-						ProjectUUIDLabel: "different-uuid-1234-5678-9abc-def012345678",
+						ManagedByLabel:               ManagedByValue,
+						ProjectNameLabel:             "existing-project",
+						validation.LabelResourceUUID: "different-uuid-1234-5678-9abc-def012345678",
 					},
 				},
 			}
@@ -252,7 +253,7 @@ var _ = Describe("NamespaceManager", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "list-test-project-1",
 					Labels: map[string]string{
-						ProjectUUIDLabel: "550e8400-e29b-41d4-a716-446655440011",
+						validation.LabelResourceUUID: "550e8400-e29b-41d4-a716-446655440011",
 					},
 				},
 				Spec: platformv1alpha1.ProjectSpec{},
@@ -263,7 +264,7 @@ var _ = Describe("NamespaceManager", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "list-test-project-2",
 					Labels: map[string]string{
-						ProjectUUIDLabel: "550e8400-e29b-41d4-a716-446655440012",
+						validation.LabelResourceUUID: "550e8400-e29b-41d4-a716-446655440012",
 					},
 				},
 				Spec: platformv1alpha1.ProjectSpec{},
@@ -333,8 +334,8 @@ var _ = Describe("NamespaceManager", func() {
 			By("Verifying service account has correct labels")
 			Expect(serviceAccount.Labels[ManagedByLabel]).To(Equal(ManagedByValue))
 			Expect(serviceAccount.Labels[ProjectNameLabel]).To(Equal(testProject.Name))
-			Expect(serviceAccount.Labels[ProjectUUIDLabel]).To(Equal("550e8400-e29b-41d4-a716-446655440010"))
-			Expect(serviceAccount.Labels[WorkspaceUUIDLabel]).To(Equal("6ba7b810-9dad-11d1-80b4-00c04fd430d0"))
+			Expect(serviceAccount.Labels[validation.LabelResourceUUID]).To(Equal("550e8400-e29b-41d4-a716-446655440010"))
+			Expect(serviceAccount.Labels[validation.LabelWorkspaceUUID]).To(Equal("6ba7b810-9dad-11d1-80b4-00c04fd430d0"))
 
 			By("Verifying service account has correct annotations")
 			Expect(serviceAccount.Annotations["platform.kibaship.com/created-by"]).To(Equal("kibaship-operator"))
@@ -360,8 +361,8 @@ var _ = Describe("NamespaceManager", func() {
 			By("Verifying role has correct labels")
 			Expect(role.Labels[ManagedByLabel]).To(Equal(ManagedByValue))
 			Expect(role.Labels[ProjectNameLabel]).To(Equal(testProject.Name))
-			Expect(role.Labels[ProjectUUIDLabel]).To(Equal("550e8400-e29b-41d4-a716-446655440010"))
-			Expect(role.Labels[WorkspaceUUIDLabel]).To(Equal("6ba7b810-9dad-11d1-80b4-00c04fd430d0"))
+			Expect(role.Labels[validation.LabelResourceUUID]).To(Equal("550e8400-e29b-41d4-a716-446655440010"))
+			Expect(role.Labels[validation.LabelWorkspaceUUID]).To(Equal("6ba7b810-9dad-11d1-80b4-00c04fd430d0"))
 		})
 
 		It("should create role binding connecting service account to role", func() {
@@ -388,8 +389,8 @@ var _ = Describe("NamespaceManager", func() {
 			By("Verifying role binding has correct labels")
 			Expect(roleBinding.Labels[ManagedByLabel]).To(Equal(ManagedByValue))
 			Expect(roleBinding.Labels[ProjectNameLabel]).To(Equal(testProject.Name))
-			Expect(roleBinding.Labels[ProjectUUIDLabel]).To(Equal("550e8400-e29b-41d4-a716-446655440010"))
-			Expect(roleBinding.Labels[WorkspaceUUIDLabel]).To(Equal("6ba7b810-9dad-11d1-80b4-00c04fd430d0"))
+			Expect(roleBinding.Labels[validation.LabelResourceUUID]).To(Equal("550e8400-e29b-41d4-a716-446655440010"))
+			Expect(roleBinding.Labels[validation.LabelWorkspaceUUID]).To(Equal("6ba7b810-9dad-11d1-80b4-00c04fd430d0"))
 		})
 
 	})

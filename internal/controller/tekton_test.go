@@ -29,6 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	platformv1alpha1 "github.com/kibamail/kibaship-operator/api/v1alpha1"
+	"github.com/kibamail/kibaship-operator/pkg/validation"
 )
 
 var _ = Describe("Tekton Integration", func() {
@@ -60,8 +61,8 @@ var _ = Describe("Tekton Integration", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "tekton-test-project",
 				Labels: map[string]string{
-					ProjectUUIDLabel:   "550e8400-e29b-41d4-a716-446655440030",
-					WorkspaceUUIDLabel: "6ba7b810-9dad-11d1-80b4-00c04fd430d0",
+					validation.LabelResourceUUID:  "550e8400-e29b-41d4-a716-446655440030",
+					validation.LabelWorkspaceUUID: "6ba7b810-9dad-11d1-80b4-00c04fd430d0",
 				},
 			},
 			Spec: platformv1alpha1.ProjectSpec{},
@@ -131,8 +132,8 @@ var _ = Describe("Tekton Integration", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "tekton-test-second-project",
 					Labels: map[string]string{
-						ProjectUUIDLabel:   "550e8400-e29b-41d4-a716-446655440031",
-						WorkspaceUUIDLabel: "6ba7b810-9dad-11d1-80b4-00c04fd430d0",
+						validation.LabelResourceUUID:  "550e8400-e29b-41d4-a716-446655440031",
+						validation.LabelWorkspaceUUID: "6ba7b810-9dad-11d1-80b4-00c04fd430d0",
 					},
 				},
 				Spec: platformv1alpha1.ProjectSpec{},

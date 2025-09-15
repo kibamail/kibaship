@@ -29,6 +29,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	platformv1alpha1 "github.com/kibamail/kibaship-operator/api/v1alpha1"
+	"github.com/kibamail/kibaship-operator/pkg/validation"
 )
 
 const (
@@ -37,12 +38,6 @@ const (
 
 	// NamespaceSuffix is the suffix used for project namespaces
 	NamespaceSuffix = "-kibaship-com"
-
-	// ProjectUUIDLabel is the label key for project UUID
-	ProjectUUIDLabel = "platform.kibaship.com/uuid"
-
-	// WorkspaceUUIDLabel is the label key for workspace UUID
-	WorkspaceUUIDLabel = "platform.kibaship.com/workspace-uuid"
 
 	// ProjectNameLabel is the label key for project name
 	ProjectNameLabel = "platform.kibaship.com/project-name"
@@ -103,7 +98,7 @@ func (nm *NamespaceManager) CreateProjectNamespace(ctx context.Context, project 
 	err := nm.Get(ctx, types.NamespacedName{Name: namespaceName}, existingNamespace)
 	if err == nil {
 		// Namespace already exists, verify it belongs to this project
-		if existingNamespace.Labels[ProjectUUIDLabel] == project.Labels[ProjectUUIDLabel] {
+		if existingNamespace.Labels[validation.LabelResourceUUID] == project.Labels[validation.LabelResourceUUID] {
 			log.Info("Namespace already exists for project", "namespace", namespaceName)
 			return existingNamespace, nil
 		}
@@ -224,12 +219,12 @@ func (nm *NamespaceManager) generateNamespaceLabels(project *platformv1alpha1.Pr
 	}
 
 	// Copy project UUID labels if they exist
-	if projectUUID, exists := project.Labels[ProjectUUIDLabel]; exists {
-		labels[ProjectUUIDLabel] = projectUUID
+	if projectUUID, exists := project.Labels[validation.LabelResourceUUID]; exists {
+		labels[validation.LabelResourceUUID] = projectUUID
 	}
 
-	if workspaceUUID, exists := project.Labels[WorkspaceUUIDLabel]; exists {
-		labels[WorkspaceUUIDLabel] = workspaceUUID
+	if workspaceUUID, exists := project.Labels[validation.LabelWorkspaceUUID]; exists {
+		labels[validation.LabelWorkspaceUUID] = workspaceUUID
 	}
 
 	return labels
@@ -251,7 +246,7 @@ func (nm *NamespaceManager) IsProjectNamespaceUnique(ctx context.Context, projec
 
 	// If we're updating an existing project, check if the namespace belongs to the same project
 	if excludeProject != nil {
-		if namespace.Labels[ProjectUUIDLabel] == excludeProject.Labels[ProjectUUIDLabel] {
+		if namespace.Labels[validation.LabelResourceUUID] == excludeProject.Labels[validation.LabelResourceUUID] {
 			return true, nil // Same project, so it's fine
 		}
 	}
@@ -307,11 +302,11 @@ func (nm *NamespaceManager) createServiceAccount(ctx context.Context, namespace 
 	}
 
 	// Copy project UUID labels if they exist
-	if projectUUID, exists := project.Labels[ProjectUUIDLabel]; exists {
-		serviceAccount.Labels[ProjectUUIDLabel] = projectUUID
+	if projectUUID, exists := project.Labels[validation.LabelResourceUUID]; exists {
+		serviceAccount.Labels[validation.LabelResourceUUID] = projectUUID
 	}
-	if workspaceUUID, exists := project.Labels[WorkspaceUUIDLabel]; exists {
-		serviceAccount.Labels[WorkspaceUUIDLabel] = workspaceUUID
+	if workspaceUUID, exists := project.Labels[validation.LabelWorkspaceUUID]; exists {
+		serviceAccount.Labels[validation.LabelWorkspaceUUID] = workspaceUUID
 	}
 
 	if err := nm.Create(ctx, serviceAccount); err != nil && !errors.IsAlreadyExists(err) {
@@ -346,11 +341,11 @@ func (nm *NamespaceManager) createAdminRole(ctx context.Context, namespace *core
 	}
 
 	// Copy project UUID labels if they exist
-	if projectUUID, exists := project.Labels[ProjectUUIDLabel]; exists {
-		role.Labels[ProjectUUIDLabel] = projectUUID
+	if projectUUID, exists := project.Labels[validation.LabelResourceUUID]; exists {
+		role.Labels[validation.LabelResourceUUID] = projectUUID
 	}
-	if workspaceUUID, exists := project.Labels[WorkspaceUUIDLabel]; exists {
-		role.Labels[WorkspaceUUIDLabel] = workspaceUUID
+	if workspaceUUID, exists := project.Labels[validation.LabelWorkspaceUUID]; exists {
+		role.Labels[validation.LabelWorkspaceUUID] = workspaceUUID
 	}
 
 	if err := nm.Create(ctx, role); err != nil && !errors.IsAlreadyExists(err) {
@@ -390,11 +385,11 @@ func (nm *NamespaceManager) createRoleBinding(ctx context.Context, namespace *co
 	}
 
 	// Copy project UUID labels if they exist
-	if projectUUID, exists := project.Labels[ProjectUUIDLabel]; exists {
-		roleBinding.Labels[ProjectUUIDLabel] = projectUUID
+	if projectUUID, exists := project.Labels[validation.LabelResourceUUID]; exists {
+		roleBinding.Labels[validation.LabelResourceUUID] = projectUUID
 	}
-	if workspaceUUID, exists := project.Labels[WorkspaceUUIDLabel]; exists {
-		roleBinding.Labels[WorkspaceUUIDLabel] = workspaceUUID
+	if workspaceUUID, exists := project.Labels[validation.LabelWorkspaceUUID]; exists {
+		roleBinding.Labels[validation.LabelWorkspaceUUID] = workspaceUUID
 	}
 
 	if err := nm.Create(ctx, roleBinding); err != nil && !errors.IsAlreadyExists(err) {
@@ -573,11 +568,11 @@ func (nm *NamespaceManager) createTektonRoleBinding(ctx context.Context, namespa
 	}
 
 	// Copy project UUID labels if they exist
-	if projectUUID, exists := project.Labels[ProjectUUIDLabel]; exists {
-		roleBinding.Labels[ProjectUUIDLabel] = projectUUID
+	if projectUUID, exists := project.Labels[validation.LabelResourceUUID]; exists {
+		roleBinding.Labels[validation.LabelResourceUUID] = projectUUID
 	}
-	if workspaceUUID, exists := project.Labels[WorkspaceUUIDLabel]; exists {
-		roleBinding.Labels[WorkspaceUUIDLabel] = workspaceUUID
+	if workspaceUUID, exists := project.Labels[validation.LabelWorkspaceUUID]; exists {
+		roleBinding.Labels[validation.LabelWorkspaceUUID] = workspaceUUID
 	}
 
 	if err := nm.Create(ctx, roleBinding); err != nil && !errors.IsAlreadyExists(err) {

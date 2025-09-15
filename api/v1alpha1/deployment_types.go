@@ -29,6 +29,8 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
+
+	"github.com/kibamail/kibaship-operator/pkg/validation"
 )
 
 // DeploymentPhase represents the current phase of the deployment
@@ -193,7 +195,7 @@ func (r *Deployment) ValidateCreate(ctx context.Context, obj runtime.Object) (ad
 	deploymentlog := logf.Log.WithName("deployment-resource")
 	deploymentlog.Info("validate create", "name", r.Name)
 
-	return nil, r.validateDeployment()
+	return nil, r.validateDeployment(ctx)
 }
 
 // ValidateUpdate implements webhook.CustomValidator so a webhook will be registered for the type
@@ -201,7 +203,7 @@ func (r *Deployment) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.
 	deploymentlog := logf.Log.WithName("deployment-resource")
 	deploymentlog.Info("validate update", "name", r.Name)
 
-	return nil, r.validateDeployment()
+	return nil, r.validateDeployment(ctx)
 }
 
 // ValidateDelete implements webhook.CustomValidator so a webhook will be registered for the type
@@ -213,8 +215,45 @@ func (r *Deployment) ValidateDelete(ctx context.Context, obj runtime.Object) (ad
 }
 
 // validateDeployment validates the Deployment resource
-func (r *Deployment) validateDeployment() error {
+func (r *Deployment) validateDeployment(ctx context.Context) error {
+	_ = ctx // context is not used in current validation but required for webhook interface
 	var errors []string
+
+	// Use the centralized labeling validation
+	// Note: In webhook context, we don't have access to the client for uniqueness checks
+	// Uniqueness will be validated in the controller reconcile loop
+	labels := r.GetLabels()
+	if labels == nil {
+		errors = append(errors, "deployment must have labels")
+	} else {
+		// Validate UUID
+		if resourceUUID, exists := labels[validation.LabelResourceUUID]; !exists {
+			errors = append(errors, fmt.Sprintf("deployment must have label %s", validation.LabelResourceUUID))
+		} else if !validation.ValidateUUID(resourceUUID) {
+			errors = append(errors, fmt.Sprintf("deployment UUID must be valid: %s", resourceUUID))
+		}
+
+		// Validate Slug
+		if resourceSlug, exists := labels[validation.LabelResourceSlug]; !exists {
+			errors = append(errors, fmt.Sprintf("deployment must have label %s", validation.LabelResourceSlug))
+		} else if !validation.ValidateSlug(resourceSlug) {
+			errors = append(errors, fmt.Sprintf("deployment slug must be valid: %s", resourceSlug))
+		}
+
+		// Validate Project UUID
+		if projectUUID, exists := labels[validation.LabelProjectUUID]; !exists {
+			errors = append(errors, fmt.Sprintf("deployment must have label %s", validation.LabelProjectUUID))
+		} else if !validation.ValidateUUID(projectUUID) {
+			errors = append(errors, fmt.Sprintf("project UUID must be valid: %s", projectUUID))
+		}
+
+		// Validate Application UUID
+		if applicationUUID, exists := labels[validation.LabelApplicationUUID]; !exists {
+			errors = append(errors, fmt.Sprintf("deployment must have label %s", validation.LabelApplicationUUID))
+		} else if !validation.ValidateUUID(applicationUUID) {
+			errors = append(errors, fmt.Sprintf("application UUID must be valid: %s", applicationUUID))
+		}
+	}
 
 	// Validate deployment name format: project-<project-slug>-app-<app-slug>-deployment-<deployment-slug>-kibaship-com
 	if !r.isValidDeploymentName() {

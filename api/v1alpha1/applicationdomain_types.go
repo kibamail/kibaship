@@ -17,8 +17,18 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"context"
+	"fmt"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	ctrl "sigs.k8s.io/controller-runtime"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
+
+	"github.com/kibamail/kibaship-operator/pkg/validation"
 )
 
 // ApplicationDomainType defines the type of domain
@@ -114,6 +124,7 @@ type ApplicationDomainStatus struct {
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
 // +kubebuilder:printcolumn:name="Certificate Ready",type=boolean,JSONPath=`.status.certificateReady`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
+// +kubebuilder:webhook:path=/validate-platform-operator-kibaship-com-v1alpha1-applicationdomain,mutating=false,failurePolicy=fail,sideEffects=None,groups=platform.operator.kibaship.com,resources=applicationdomains,verbs=create;update,versions=v1alpha1,name=vapplicationdomain.kb.io,admissionReviewVersions=v1
 type ApplicationDomain struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -132,4 +143,93 @@ type ApplicationDomainList struct {
 
 func init() {
 	SchemeBuilder.Register(&ApplicationDomain{}, &ApplicationDomainList{})
+}
+
+var _ webhook.CustomValidator = &ApplicationDomain{}
+
+// ValidateCreate implements webhook.CustomValidator so a webhook will be registered for the type
+func (r *ApplicationDomain) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+	domainlog := logf.Log.WithName("applicationdomain-resource")
+	domainlog.Info("validate create", "name", r.Name)
+
+	return nil, r.validateApplicationDomain(ctx)
+}
+
+// ValidateUpdate implements webhook.CustomValidator so a webhook will be registered for the type
+func (r *ApplicationDomain) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
+	domainlog := logf.Log.WithName("applicationdomain-resource")
+	domainlog.Info("validate update", "name", r.Name)
+
+	return nil, r.validateApplicationDomain(ctx)
+}
+
+// ValidateDelete implements webhook.CustomValidator so a webhook will be registered for the type
+func (r *ApplicationDomain) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+	domainlog := logf.Log.WithName("applicationdomain-resource")
+	domainlog.Info("validate delete", "name", r.Name)
+
+	return nil, nil
+}
+
+// validateApplicationDomain validates the ApplicationDomain resource
+func (r *ApplicationDomain) validateApplicationDomain(ctx context.Context) error {
+	_ = ctx // context is not used in current validation but required for webhook interface
+	var errors []string
+
+	// Use the centralized labeling validation
+	// Note: In webhook context, we don't have access to the client for uniqueness checks
+	// Uniqueness will be validated in the controller reconcile loop
+	labels := r.GetLabels()
+	if labels == nil {
+		errors = append(errors, "application domain must have labels")
+	} else {
+		// Validate UUID
+		if resourceUUID, exists := labels[validation.LabelResourceUUID]; !exists {
+			errors = append(errors, fmt.Sprintf("application domain must have label %s", validation.LabelResourceUUID))
+		} else if !validation.ValidateUUID(resourceUUID) {
+			errors = append(errors, fmt.Sprintf("application domain UUID must be valid: %s", resourceUUID))
+		}
+
+		// Validate Slug
+		if resourceSlug, exists := labels[validation.LabelResourceSlug]; !exists {
+			errors = append(errors, fmt.Sprintf("application domain must have label %s", validation.LabelResourceSlug))
+		} else if !validation.ValidateSlug(resourceSlug) {
+			errors = append(errors, fmt.Sprintf("application domain slug must be valid: %s", resourceSlug))
+		}
+
+		// Validate Project UUID
+		if projectUUID, exists := labels[validation.LabelProjectUUID]; !exists {
+			errors = append(errors, fmt.Sprintf("application domain must have label %s", validation.LabelProjectUUID))
+		} else if !validation.ValidateUUID(projectUUID) {
+			errors = append(errors, fmt.Sprintf("project UUID must be valid: %s", projectUUID))
+		}
+
+		// Validate Application UUID
+		if applicationUUID, exists := labels[validation.LabelApplicationUUID]; !exists {
+			errors = append(errors, fmt.Sprintf("application domain must have label %s", validation.LabelApplicationUUID))
+		} else if !validation.ValidateUUID(applicationUUID) {
+			errors = append(errors, fmt.Sprintf("application UUID must be valid: %s", applicationUUID))
+		}
+
+		// Deployment UUID is optional for ApplicationDomain
+		if deploymentUUID, exists := labels[validation.LabelDeploymentUUID]; exists {
+			if !validation.ValidateUUID(deploymentUUID) {
+				errors = append(errors, fmt.Sprintf("deployment UUID must be valid: %s", deploymentUUID))
+			}
+		}
+	}
+
+	if len(errors) > 0 {
+		return fmt.Errorf("validation failed: %v", errors)
+	}
+
+	return nil
+}
+
+// SetupWebhookWithManager will setup the manager to manage the webhooks
+func (r *ApplicationDomain) SetupWebhookWithManager(mgr ctrl.Manager) error {
+	return ctrl.NewWebhookManagedBy(mgr).
+		For(r).
+		WithValidator(r).
+		Complete()
 }

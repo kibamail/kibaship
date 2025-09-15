@@ -29,6 +29,8 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
+
+	"github.com/kibamail/kibaship-operator/pkg/validation"
 )
 
 // ApplicationType defines the type of application
@@ -291,7 +293,7 @@ func (r *Application) ValidateCreate(ctx context.Context, obj runtime.Object) (a
 	applicationlog := logf.Log.WithName("application-resource")
 	applicationlog.Info("validate create", "name", r.Name)
 
-	return nil, r.validateApplication()
+	return nil, r.validateApplication(ctx)
 }
 
 // ValidateUpdate implements webhook.CustomValidator so a webhook will be registered for the type
@@ -299,7 +301,7 @@ func (r *Application) ValidateUpdate(ctx context.Context, oldObj, newObj runtime
 	applicationlog := logf.Log.WithName("application-resource")
 	applicationlog.Info("validate update", "name", r.Name)
 
-	return nil, r.validateApplication()
+	return nil, r.validateApplication(ctx)
 }
 
 // ValidateDelete implements webhook.CustomValidator so a webhook will be registered for the type
@@ -311,8 +313,38 @@ func (r *Application) ValidateDelete(ctx context.Context, obj runtime.Object) (a
 }
 
 // validateApplication validates the Application resource
-func (r *Application) validateApplication() error {
+func (r *Application) validateApplication(ctx context.Context) error {
+	_ = ctx // context is not used in current validation but required for webhook interface
 	var errors []string
+
+	// Use the centralized labeling validation
+	// Note: In webhook context, we don't have access to the client for uniqueness checks
+	// Uniqueness will be validated in the controller reconcile loop
+	labels := r.GetLabels()
+	if labels == nil {
+		errors = append(errors, "application must have labels")
+	} else {
+		// Validate UUID
+		if resourceUUID, exists := labels[validation.LabelResourceUUID]; !exists {
+			errors = append(errors, fmt.Sprintf("application must have label %s", validation.LabelResourceUUID))
+		} else if !validation.ValidateUUID(resourceUUID) {
+			errors = append(errors, fmt.Sprintf("application UUID must be valid: %s", resourceUUID))
+		}
+
+		// Validate Slug
+		if resourceSlug, exists := labels[validation.LabelResourceSlug]; !exists {
+			errors = append(errors, fmt.Sprintf("application must have label %s", validation.LabelResourceSlug))
+		} else if !validation.ValidateSlug(resourceSlug) {
+			errors = append(errors, fmt.Sprintf("application slug must be valid: %s", resourceSlug))
+		}
+
+		// Validate Project UUID
+		if projectUUID, exists := labels[validation.LabelProjectUUID]; !exists {
+			errors = append(errors, fmt.Sprintf("application must have label %s", validation.LabelProjectUUID))
+		} else if !validation.ValidateUUID(projectUUID) {
+			errors = append(errors, fmt.Sprintf("project UUID must be valid: %s", projectUUID))
+		}
+	}
 
 	// Validate application name format: project-<project-slug>-app-<app-slug>-kibaship-com
 	if !r.isValidApplicationName() {

@@ -30,26 +30,6 @@ webhooks:
     service:
       name: webhook-service
       namespace: system
-      path: /validate-platform-operator-kibaship-com-v1alpha1-applicationdomain
-  failurePolicy: Fail
-  name: vapplicationdomain.kb.io
-  rules:
-  - apiGroups:
-    - platform.operator.kibaship.com
-    apiVersions:
-    - v1alpha1
-    operations:
-    - CREATE
-    - UPDATE
-    resources:
-    - applicationdomains
-  sideEffects: None
-- admissionReviewVersions:
-  - v1
-  clientConfig:
-    service:
-      name: webhook-service
-      namespace: system
       path: /validate-platform-operator-kibaship-com-v1alpha1-deployment
   failurePolicy: Fail
   name: vdeployment.kb.io

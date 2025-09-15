@@ -31,11 +31,15 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	platformv1alpha1 "github.com/kibamail/kibaship-operator/api/v1alpha1"
+	"github.com/kibamail/kibaship-operator/pkg/validation"
 )
 
 const (
 	// ApplicationFinalizerName is the finalizer name for Application resources
 	ApplicationFinalizerName = "platform.operator.kibaship.com/application-finalizer"
+
+	// DefaultDomainType is the default domain type for ApplicationDomains
+	DefaultDomainType = "default"
 )
 
 // ApplicationReconciler reconciles a Application object
@@ -179,9 +183,15 @@ func (r *ApplicationReconciler) handleApplicationReconcile(ctx context.Context, 
 	return ctrl.Result{}, nil
 }
 
-// ensureUUIDLabels ensures that the Application has the correct UUID labels
+// ensureUUIDLabels ensures that the Application has the correct UUID and slug labels
 func (r *ApplicationReconciler) ensureUUIDLabels(ctx context.Context, app *platformv1alpha1.Application) (bool, error) {
 	log := logf.FromContext(ctx).WithValues("application", app.Name, "namespace", app.Namespace)
+
+	// First validate the labels using the centralized labeling system
+	resourceLabeler := NewResourceLabeler(r.Client)
+	if err := resourceLabeler.ValidateApplicationLabeling(ctx, app); err != nil {
+		return false, fmt.Errorf("application label validation failed: %w", err)
+	}
 
 	if app.Labels == nil {
 		app.Labels = make(map[string]string)
@@ -190,19 +200,22 @@ func (r *ApplicationReconciler) ensureUUIDLabels(ctx context.Context, app *platf
 	labelsUpdated := false
 
 	// Validate that Application has its own UUID label (should be set by PaaS)
-	uuidLabel := "platform.kibaship.com/uuid"
-	if _, exists := app.Labels[uuidLabel]; !exists {
-		return false, fmt.Errorf("application must have label 'platform.kibaship.com/uuid' set by PaaS system")
+	if _, exists := app.Labels[validation.LabelResourceUUID]; !exists {
+		return false, fmt.Errorf("application must have label '%s' set by PaaS system", validation.LabelResourceUUID)
 	}
 
-	// Get project UUID and set project UUID label
-	projectUUIDLabel := "platform.kibaship.com/project-uuid"
-	if _, exists := app.Labels[projectUUIDLabel]; !exists {
+	// Validate that Application has its own slug label (should be set by PaaS)
+	if _, exists := app.Labels[validation.LabelResourceSlug]; !exists {
+		return false, fmt.Errorf("application must have label '%s' set by PaaS system", validation.LabelResourceSlug)
+	}
+
+	// Get project UUID and set project UUID label if not present
+	if _, exists := app.Labels[validation.LabelProjectUUID]; !exists {
 		projectUUID, err := r.getProjectUUID(ctx, app)
 		if err != nil {
 			return false, fmt.Errorf("failed to get project UUID: %w", err)
 		}
-		app.Labels[projectUUIDLabel] = projectUUID
+		app.Labels[validation.LabelProjectUUID] = projectUUID
 		labelsUpdated = true
 		log.Info("Set project UUID label", "projectUUID", projectUUID)
 	}
@@ -224,7 +237,7 @@ func (r *ApplicationReconciler) getProjectUUID(ctx context.Context, app *platfor
 	}
 
 	// Extract UUID from project labels
-	projectUUID, exists := project.Labels["platform.kibaship.com/uuid"]
+	projectUUID, exists := project.Labels[validation.LabelResourceUUID]
 	if !exists {
 		return "", fmt.Errorf("referenced project %s does not have required UUID label", project.Name)
 	}
@@ -328,17 +341,25 @@ func (r *ApplicationReconciler) createDefaultDomain(ctx context.Context, app *pl
 		return fmt.Errorf("failed to generate full domain: %v", err)
 	}
 
-	// Create ApplicationDomain resource
-	domainName := GenerateApplicationDomainName(app.Name, "default")
+	// Create ApplicationDomain resource with proper labeling
+	domainName := GenerateApplicationDomainName(app.Name, DefaultDomainType)
+
+	// Generate UUID and slug for the domain
+	domainUUID := validation.GenerateUUID()
+	domainSlug := DefaultDomainType
+
+	// Prepare parent labels to inherit from application
+	parentLabels := map[string]string{
+		validation.LabelProjectUUID:       app.Labels[validation.LabelProjectUUID],
+		validation.LabelApplicationUUID:   app.Labels[validation.LabelResourceUUID],
+		ApplicationDomainLabelApplication: app.Name,
+		ApplicationDomainLabelDomainType:  DefaultDomainType,
+	}
+
 	domain := &platformv1alpha1.ApplicationDomain{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      domainName,
 			Namespace: app.Namespace,
-			Labels: map[string]string{
-				ApplicationDomainLabelApplication: app.Name,
-				ApplicationDomainLabelDomainType:  "default",
-				"platform.kibaship.com/uuid":      app.Labels["platform.kibaship.com/uuid"],
-			},
 		},
 		Spec: platformv1alpha1.ApplicationDomainSpec{
 			ApplicationRef: corev1.LocalObjectReference{Name: app.Name},
@@ -350,13 +371,8 @@ func (r *ApplicationReconciler) createDefaultDomain(ctx context.Context, app *pl
 		},
 	}
 
-	// Copy additional labels from application
-	if projectUUID, exists := app.Labels["platform.kibaship.com/project-uuid"]; exists {
-		domain.Labels["platform.kibaship.com/project-uuid"] = projectUUID
-	}
-	if workspaceUUID, exists := app.Labels["platform.kibaship.com/workspace-uuid"]; exists {
-		domain.Labels["platform.kibaship.com/workspace-uuid"] = workspaceUUID
-	}
+	// Apply comprehensive labeling using the centralized system
+	ApplyLabelsToResource(domain, domainUUID, domainSlug, parentLabels)
 
 	// Set owner reference to ensure cleanup when application is deleted
 	if err := controllerutil.SetControllerReference(app, domain, r.Scheme); err != nil {

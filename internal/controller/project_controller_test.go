@@ -29,6 +29,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	platformv1alpha1 "github.com/kibamail/kibaship-operator/api/v1alpha1"
+	"github.com/kibamail/kibaship-operator/pkg/validation"
 )
 
 var _ = Describe("Project Controller", func() {
@@ -50,8 +51,9 @@ var _ = Describe("Project Controller", func() {
 					ObjectMeta: metav1.ObjectMeta{
 						Name: resourceName,
 						Labels: map[string]string{
-							"platform.kibaship.com/uuid":           "550e8400-e29b-41d4-a716-446655440000",
-							"platform.kibaship.com/workspace-uuid": "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+							validation.LabelResourceUUID:  "550e8400-e29b-41d4-a716-446655440000",
+							validation.LabelResourceSlug:  "test-resource",
+							validation.LabelWorkspaceUUID: "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
 						},
 					},
 					Spec: platformv1alpha1.ProjectSpec{},
@@ -101,8 +103,8 @@ var _ = Describe("Project Controller", func() {
 			By("Verifying namespace has correct labels")
 			Expect(namespace.Labels[ManagedByLabel]).To(Equal(ManagedByValue))
 			Expect(namespace.Labels[ProjectNameLabel]).To(Equal(resourceName))
-			Expect(namespace.Labels[ProjectUUIDLabel]).To(Equal("550e8400-e29b-41d4-a716-446655440000"))
-			Expect(namespace.Labels[WorkspaceUUIDLabel]).To(Equal("6ba7b810-9dad-11d1-80b4-00c04fd430c8"))
+			Expect(namespace.Labels[validation.LabelResourceUUID]).To(Equal("550e8400-e29b-41d4-a716-446655440000"))
+			Expect(namespace.Labels[validation.LabelWorkspaceUUID]).To(Equal("6ba7b810-9dad-11d1-80b4-00c04fd430c8"))
 
 			By("Verifying namespace has correct annotations")
 			Expect(namespace.Annotations["platform.kibaship.com/created-by"]).To(Equal("kibaship-operator"))
@@ -118,7 +120,8 @@ var _ = Describe("Project Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "invalid-resource",
 					Labels: map[string]string{
-						"platform.kibaship.com/workspace-uuid": "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+						// Missing UUID and slug labels to test validation failure
+						validation.LabelWorkspaceUUID: "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
 					},
 				},
 				Spec: platformv1alpha1.ProjectSpec{},
@@ -154,8 +157,9 @@ var _ = Describe("Project Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "invalid-uuid-resource",
 					Labels: map[string]string{
-						"platform.kibaship.com/uuid":           "invalid-uuid",
-						"platform.kibaship.com/workspace-uuid": "also-invalid",
+						validation.LabelResourceUUID:  "invalid-uuid",
+						validation.LabelResourceSlug:  "invalid-slug",
+						validation.LabelWorkspaceUUID: "also-invalid",
 					},
 				},
 				Spec: platformv1alpha1.ProjectSpec{},
@@ -191,9 +195,9 @@ var _ = Describe("Project Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name: NamespacePrefix + "conflicting-project" + NamespaceSuffix,
 					Labels: map[string]string{
-						ManagedByLabel:   ManagedByValue,
-						ProjectNameLabel: "conflicting-project",
-						ProjectUUIDLabel: "different-uuid-1234-5678-9abc-def012345678",
+						ManagedByLabel:               ManagedByValue,
+						ProjectNameLabel:             "conflicting-project",
+						validation.LabelResourceUUID: "different-uuid-1234-5678-9abc-def012345678",
 					},
 				},
 			}
@@ -204,8 +208,9 @@ var _ = Describe("Project Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "conflicting-project",
 					Labels: map[string]string{
-						ProjectUUIDLabel:   "550e8400-e29b-41d4-a716-446655440001",
-						WorkspaceUUIDLabel: "6ba7b810-9dad-11d1-80b4-00c04fd430c9",
+						validation.LabelResourceUUID:  "550e8400-e29b-41d4-a716-446655440001",
+						validation.LabelResourceSlug:  "conflicting-project",
+						validation.LabelWorkspaceUUID: "6ba7b810-9dad-11d1-80b4-00c04fd430c9",
 					},
 				},
 				Spec: platformv1alpha1.ProjectSpec{},
@@ -242,8 +247,9 @@ var _ = Describe("Project Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "owner-ref-project",
 					Labels: map[string]string{
-						ProjectUUIDLabel:   "550e8400-e29b-41d4-a716-446655440002",
-						WorkspaceUUIDLabel: "6ba7b810-9dad-11d1-80b4-00c04fd430ca",
+						validation.LabelResourceUUID:  "550e8400-e29b-41d4-a716-446655440002",
+						validation.LabelResourceSlug:  "owner-ref-project",
+						validation.LabelWorkspaceUUID: "6ba7b810-9dad-11d1-80b4-00c04fd430ca",
 					},
 				},
 				Spec: platformv1alpha1.ProjectSpec{},

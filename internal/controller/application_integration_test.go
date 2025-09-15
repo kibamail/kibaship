@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	platformv1alpha1 "github.com/kibamail/kibaship-operator/api/v1alpha1"
+	"github.com/kibamail/kibaship-operator/pkg/validation"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -43,7 +44,8 @@ func TestApplicationDomainCreation(t *testing.T) {
 			Name:      "test-project",
 			Namespace: "test-namespace",
 			Labels: map[string]string{
-				"platform.kibaship.com/uuid": "test-project-uuid-123",
+				validation.LabelResourceUUID: "550e8400-e29b-41d4-a716-446655440000",
+				validation.LabelResourceSlug: "test-project",
 			},
 		},
 		Spec: platformv1alpha1.ProjectSpec{},
@@ -55,7 +57,9 @@ func TestApplicationDomainCreation(t *testing.T) {
 			Name:      "project-test-project-app-frontend-kibaship-com",
 			Namespace: "test-namespace",
 			Labels: map[string]string{
-				"platform.kibaship.com/uuid": "test-app-uuid-123",
+				validation.LabelResourceUUID: "550e8400-e29b-41d4-a716-446655440001",
+				validation.LabelResourceSlug: "frontend",
+				validation.LabelProjectUUID:  "550e8400-e29b-41d4-a716-446655440000",
 			},
 		},
 		Spec: platformv1alpha1.ApplicationSpec{
@@ -131,13 +135,23 @@ func TestApplicationDomainCreation(t *testing.T) {
 	expectedLabels := map[string]string{
 		ApplicationDomainLabelApplication: testApp.Name,
 		ApplicationDomainLabelDomainType:  "default",
-		"platform.kibaship.com/uuid":      testApp.Labels["platform.kibaship.com/uuid"],
+		validation.LabelApplicationUUID:   testApp.Labels[validation.LabelResourceUUID],
+		validation.LabelProjectUUID:       testApp.Labels[validation.LabelProjectUUID],
 	}
 
 	for key, expectedValue := range expectedLabels {
 		if actualValue, exists := domain.Labels[key]; !exists || actualValue != expectedValue {
 			t.Errorf("Expected label %s to be %s, got %s", key, expectedValue, actualValue)
 		}
+	}
+
+	// Verify the domain has its own unique UUID (different from application)
+	domainUUID := domain.Labels[validation.LabelResourceUUID]
+	if domainUUID == "" {
+		t.Error("Expected ApplicationDomain to have its own UUID")
+	}
+	if domainUUID == testApp.Labels[validation.LabelResourceUUID] {
+		t.Error("ApplicationDomain should have its own UUID, not the same as Application")
 	}
 
 	// Test that running it again doesn't create a duplicate

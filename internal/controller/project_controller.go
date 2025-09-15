@@ -28,6 +28,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	platformv1alpha1 "github.com/kibamail/kibaship-operator/api/v1alpha1"
+	"github.com/kibamail/kibaship-operator/pkg/validation"
 )
 
 const (
@@ -144,7 +145,7 @@ func (r *ProjectReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		"name", project.Name,
 		"namespace", namespace.Name,
 		"phase", project.Status.Phase,
-		"uuid", project.Labels[ProjectUUIDLabel])
+		"uuid", project.Labels[validation.LabelResourceUUID])
 	return ctrl.Result{}, nil
 }
 

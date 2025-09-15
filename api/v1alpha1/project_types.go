@@ -19,7 +19,6 @@ package v1alpha1
 import (
 	"context"
 	"fmt"
-	"regexp"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -27,6 +26,8 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
+
+	"github.com/kibamail/kibaship-operator/pkg/validation"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -202,7 +203,7 @@ func (r *Project) ValidateCreate(ctx context.Context, obj runtime.Object) (admis
 
 	projectlog.Info("validate create", "name", r.Name)
 
-	return nil, r.validateProject()
+	return nil, r.validateProject(ctx)
 }
 
 // ValidateUpdate implements webhook.CustomValidator so a webhook will be registered for the type
@@ -211,7 +212,7 @@ func (r *Project) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Obj
 
 	projectlog.Info("validate update", "name", r.Name)
 
-	return nil, r.validateProject()
+	return nil, r.validateProject(ctx)
 }
 
 // ValidateDelete implements webhook.CustomValidator so a webhook will be registered for the type
@@ -225,34 +226,42 @@ func (r *Project) ValidateDelete(ctx context.Context, obj runtime.Object) (admis
 }
 
 // validateProject validates the Project resource
-func (r *Project) validateProject() error {
-	var errors []string
-
-	// Validate required UUID label
-	if uuid, exists := r.Labels["platform.kibaship.com/uuid"]; !exists {
-		errors = append(errors, "required label 'platform.kibaship.com/uuid' is missing")
-	} else if !isValidUUID(uuid) {
-		errors = append(errors, fmt.Sprintf("label 'platform.kibaship.com/uuid' must be a valid UUID, got: %s", uuid))
+func (r *Project) validateProject(ctx context.Context) error {
+	_ = ctx // context is not used in current validation but required for webhook interface
+	// Use the centralized labeling validation
+	// Note: In webhook context, we don't have access to the client for uniqueness checks
+	// Uniqueness will be validated in the controller reconcile loop
+	labels := r.GetLabels()
+	if labels == nil {
+		return fmt.Errorf("project must have labels")
 	}
 
-	// Validate workspace UUID label if present
-	if workspaceUUID, exists := r.Labels["platform.kibaship.com/workspace-uuid"]; exists {
-		if !isValidUUID(workspaceUUID) {
-			errors = append(errors, fmt.Sprintf("label 'platform.kibaship.com/workspace-uuid' must be a valid UUID, got: %s", workspaceUUID))
+	// Validate UUID
+	resourceUUID, exists := labels[validation.LabelResourceUUID]
+	if !exists {
+		return fmt.Errorf("project must have label %s", validation.LabelResourceUUID)
+	}
+	if !validation.ValidateUUID(resourceUUID) {
+		return fmt.Errorf("project UUID must be valid: %s", resourceUUID)
+	}
+
+	// Validate Slug
+	resourceSlug, exists := labels[validation.LabelResourceSlug]
+	if !exists {
+		return fmt.Errorf("project must have label %s", validation.LabelResourceSlug)
+	}
+	if !validation.ValidateSlug(resourceSlug) {
+		return fmt.Errorf("project slug must be valid: %s", resourceSlug)
+	}
+
+	// Validate Workspace UUID if present
+	if workspaceUUID, exists := labels[validation.LabelWorkspaceUUID]; exists {
+		if !validation.ValidateUUID(workspaceUUID) {
+			return fmt.Errorf("workspace UUID must be valid: %s", workspaceUUID)
 		}
 	}
 
-	if len(errors) > 0 {
-		return fmt.Errorf("validation failed: %v", errors)
-	}
-
 	return nil
-}
-
-// isValidUUID validates if a string is a valid UUID format
-func isValidUUID(uuid string) bool {
-	uuidRegex := regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
-	return uuidRegex.MatchString(uuid)
 }
 
 // SetupWebhookWithManager will setup the manager to manage the webhooks

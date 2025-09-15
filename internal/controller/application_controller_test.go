@@ -29,6 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	platformv1alpha1 "github.com/kibamail/kibaship-operator/api/v1alpha1"
+	"github.com/kibamail/kibaship-operator/pkg/validation"
 )
 
 var _ = Describe("Application Controller", func() {
@@ -50,7 +51,8 @@ var _ = Describe("Application Controller", func() {
 					Name:      "test-project",
 					Namespace: "default",
 					Labels: map[string]string{
-						"platform.kibaship.com/uuid": "550e8400-e29b-41d4-a716-446655440000",
+						validation.LabelResourceUUID: "550e8400-e29b-41d4-a716-446655440000",
+						validation.LabelResourceSlug: "test-project",
 					},
 				},
 				Spec: platformv1alpha1.ProjectSpec{
@@ -71,7 +73,9 @@ var _ = Describe("Application Controller", func() {
 						Name:      resourceName,
 						Namespace: "default",
 						Labels: map[string]string{
-							"platform.kibaship.com/uuid": "550e8400-e29b-41d4-a716-446655440001",
+							validation.LabelResourceUUID: "550e8400-e29b-41d4-a716-446655440001",
+							validation.LabelResourceSlug: "myapp",
+							validation.LabelProjectUUID:  "550e8400-e29b-41d4-a716-446655440000",
 						},
 					},
 					Spec: platformv1alpha1.ApplicationSpec{
@@ -147,7 +151,9 @@ var _ = Describe("Application Controller", func() {
 					Name:      "project-myproject-app-gitapp-kibaship-com",
 					Namespace: "default",
 					Labels: map[string]string{
-						"platform.kibaship.com/uuid": "550e8400-e29b-41d4-a716-446655440010",
+						validation.LabelResourceUUID: "550e8400-e29b-41d4-a716-446655440010",
+						validation.LabelResourceSlug: "gitapp",
+						validation.LabelProjectUUID:  "550e8400-e29b-41d4-a716-446655440000",
 					},
 				},
 				Spec: platformv1alpha1.ApplicationSpec{
@@ -188,7 +194,7 @@ var _ = Describe("Application Controller", func() {
 					Name:      "project-myproject-app-mysqlapp-kibaship-com",
 					Namespace: "default",
 					Labels: map[string]string{
-						"platform.kibaship.com/uuid": "550e8400-e29b-41d4-a716-446655440011",
+						validation.LabelResourceUUID: "550e8400-e29b-41d4-a716-446655440011",
 					},
 				},
 				Spec: platformv1alpha1.ApplicationSpec{
@@ -220,7 +226,7 @@ var _ = Describe("Application Controller", func() {
 					Name:      "project-myproject-app-invalidgitapp-kibaship-com",
 					Namespace: "default",
 					Labels: map[string]string{
-						"platform.kibaship.com/uuid": "550e8400-e29b-41d4-a716-446655440012",
+						validation.LabelResourceUUID: "550e8400-e29b-41d4-a716-446655440012",
 					},
 				},
 				Spec: platformv1alpha1.ApplicationSpec{
@@ -248,7 +254,7 @@ var _ = Describe("Application Controller", func() {
 					Name:      "project-myproject-app-validapp-kibaship-com",
 					Namespace: "default",
 					Labels: map[string]string{
-						"platform.kibaship.com/uuid": "550e8400-e29b-41d4-a716-446655440013",
+						validation.LabelResourceUUID: "550e8400-e29b-41d4-a716-446655440013",
 					},
 				},
 				Spec: platformv1alpha1.ApplicationSpec{
@@ -277,7 +283,7 @@ var _ = Describe("Application Controller", func() {
 					Name:      "project-myproject-app-minimalgitapp-kibaship-com",
 					Namespace: "default",
 					Labels: map[string]string{
-						"platform.kibaship.com/uuid": "550e8400-e29b-41d4-a716-446655440014",
+						validation.LabelResourceUUID: "550e8400-e29b-41d4-a716-446655440014",
 					},
 				},
 				Spec: platformv1alpha1.ApplicationSpec{
@@ -312,7 +318,7 @@ var _ = Describe("Application Controller", func() {
 					Name:      "project-myproject-app-spagitapp-kibaship-com",
 					Namespace: "default",
 					Labels: map[string]string{
-						"platform.kibaship.com/uuid": "550e8400-e29b-41d4-a716-446655440015",
+						validation.LabelResourceUUID: "550e8400-e29b-41d4-a716-446655440015",
 					},
 				},
 				Spec: platformv1alpha1.ApplicationSpec{
@@ -348,7 +354,9 @@ var _ = Describe("Application Controller", func() {
 					Name:      "project-myproject-app-uuidtest-kibaship-com",
 					Namespace: "default",
 					Labels: map[string]string{
-						"platform.kibaship.com/uuid": "550e8400-e29b-41d4-a716-446655440100",
+						validation.LabelResourceUUID: "550e8400-e29b-41d4-a716-446655440100",
+						validation.LabelResourceSlug: "uuidtest",
+						validation.LabelProjectUUID:  "550e8400-e29b-41d4-a716-446655440000",
 					},
 				},
 				Spec: platformv1alpha1.ApplicationSpec{
@@ -385,8 +393,8 @@ var _ = Describe("Application Controller", func() {
 				Namespace: testApp.Namespace,
 			}, &updatedApp)).To(Succeed())
 
-			Expect(updatedApp.Labels).To(HaveKeyWithValue("platform.kibaship.com/uuid", "550e8400-e29b-41d4-a716-446655440100"))
-			Expect(updatedApp.Labels).To(HaveKeyWithValue("platform.kibaship.com/project-uuid", "550e8400-e29b-41d4-a716-446655440000"))
+			Expect(updatedApp.Labels).To(HaveKeyWithValue(validation.LabelResourceUUID, "550e8400-e29b-41d4-a716-446655440100"))
+			Expect(updatedApp.Labels).To(HaveKeyWithValue(validation.LabelProjectUUID, "550e8400-e29b-41d4-a716-446655440000"))
 
 			// Cleanup
 			defer func() {
@@ -427,7 +435,7 @@ var _ = Describe("Application Controller", func() {
 				},
 			})
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("application must have label 'platform.kibaship.com/uuid' set by PaaS system"))
+			Expect(err.Error()).To(ContainSubstring("application must have labels"))
 
 			// Cleanup
 			defer func() {
@@ -442,7 +450,7 @@ var _ = Describe("Application Controller", func() {
 					Name:      "project-myproject-app-publicgitapp-kibaship-com",
 					Namespace: "default",
 					Labels: map[string]string{
-						"platform.kibaship.com/uuid": "550e8400-e29b-41d4-a716-446655440020",
+						validation.LabelResourceUUID: "550e8400-e29b-41d4-a716-446655440020",
 					},
 				},
 				Spec: platformv1alpha1.ApplicationSpec{
@@ -474,7 +482,7 @@ var _ = Describe("Application Controller", func() {
 					Name:      "project-myproject-app-publicwithsecret-kibaship-com",
 					Namespace: "default",
 					Labels: map[string]string{
-						"platform.kibaship.com/uuid": "550e8400-e29b-41d4-a716-446655440021",
+						validation.LabelResourceUUID: "550e8400-e29b-41d4-a716-446655440021",
 					},
 				},
 				Spec: platformv1alpha1.ApplicationSpec{
@@ -508,7 +516,7 @@ var _ = Describe("Application Controller", func() {
 					Name:      "project-myproject-app-privategitapp-kibaship-com",
 					Namespace: "default",
 					Labels: map[string]string{
-						"platform.kibaship.com/uuid": "550e8400-e29b-41d4-a716-446655440022",
+						validation.LabelResourceUUID: "550e8400-e29b-41d4-a716-446655440022",
 					},
 				},
 				Spec: platformv1alpha1.ApplicationSpec{
@@ -542,7 +550,7 @@ var _ = Describe("Application Controller", func() {
 					Name:      "project-myproject-app-invalidprivate-kibaship-com",
 					Namespace: "default",
 					Labels: map[string]string{
-						"platform.kibaship.com/uuid": "550e8400-e29b-41d4-a716-446655440023",
+						validation.LabelResourceUUID: "550e8400-e29b-41d4-a716-446655440023",
 					},
 				},
 				Spec: platformv1alpha1.ApplicationSpec{
@@ -572,7 +580,7 @@ var _ = Describe("Application Controller", func() {
 					Name:      "project-myproject-app-defaultaccess-kibaship-com",
 					Namespace: "default",
 					Labels: map[string]string{
-						"platform.kibaship.com/uuid": "550e8400-e29b-41d4-a716-446655440024",
+						validation.LabelResourceUUID: "550e8400-e29b-41d4-a716-446655440024",
 					},
 				},
 				Spec: platformv1alpha1.ApplicationSpec{

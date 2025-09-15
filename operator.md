@@ -8,21 +8,24 @@ The KibaShip Operator is a comprehensive Kubernetes controller that provides pla
 
 ### Custom Resource Definitions (CRDs)
 
-The operator manages three primary custom resources with comprehensive lifecycle management:
+The operator manages four primary custom resources with comprehensive lifecycle management:
 
 1. **Project** - Top-level tenant isolation unit with resource quotas and configuration
 2. **Application** - Application definitions within projects supporting multiple types
-3. **Deployment** - Complete CI/CD pipeline management and application deployment
+3. **ApplicationDomain** - Domain management for application routing and TLS configuration
+4. **Deployment** - Complete CI/CD pipeline management and application deployment
 
 ### Controller Components
 
 - **ProjectReconciler** - Complete project lifecycle and namespace provisioning (206 lines)
-- **ApplicationReconciler** - Application resource management with UUID propagation (264 lines)
+- **ApplicationReconciler** - Application resource management with UUID propagation and domain creation (396 lines)
+- **ApplicationDomainReconciler** - Domain management, validation, and TLS configuration (287 lines)
 - **DeploymentReconciler** - Full deployment pipeline orchestration with GitRepository and MySQL support (637 lines)
 - **NamespaceManager** - Core component for namespace and cross-namespace RBAC management (700+ lines)
 - **ValkeyProvisioner** - Automatic system-wide cache cluster provisioning (200 lines)
-- **MySQL Utilities** - Database credential management and cluster provisioning
-- **Validation Logic** - Server-side validation with webhook integration
+- **MySQL Utilities** - Enhanced database credential management and cluster provisioning
+- **Domain Utilities** - Cryptographically secure domain generation and validation (227 lines)
+- **Validation Logic** - Comprehensive server-side validation with webhook integration
 
 ### System Infrastructure
 
@@ -198,17 +201,118 @@ Based on `spec.type`, different configuration validation occurs:
 
 #### 2.3 Application Status Update
 
-**Step 5: Comprehensive Status Update**
+**Step 5: Automatic Domain Creation (GitRepository Applications)**
+```
+ApplicationReconciler.createDefaultDomain() called
+```
+
+For GitRepository applications, the controller automatically creates an ApplicationDomain:
+- **Domain Generation**: Uses cryptographically secure subdomain generation
+- **Naming Pattern**: `project-<project-slug>-app-<app-slug>-domain-default-kibaship-com`
+- **DNS Configuration**: Uses operator's configured base domain (`KIBASHIP_OPERATOR_DOMAIN`)
+- **Default Port**: Configurable via `KIBASHIP_DEFAULT_PORT` (default: 3000)
+- **TLS Support**: Automatic TLS configuration for secure connections
+
+**Step 6: Comprehensive Status Update**
 - Updates application status to "Ready"
 - Sets detailed conditions for application readiness
 - Includes validation results and configuration summary
-- No automatic resource creation occurs (explicit deployment required)
+- Records created domain information for GitRepository applications
+- No explicit deployment required - resources created automatically
 
-### 3. Complete Deployment Management
+### 3. ApplicationDomain Management Workflow
+
+The ApplicationDomain CRD provides comprehensive domain management for application routing and TLS configuration:
+
+#### 3.1 ApplicationDomain Creation and Validation
+
+**Automatic Domain Creation (GitRepository Applications):**
+```
+Application Creation → ApplicationReconciler.createDefaultDomain() → ApplicationDomain Created
+```
+
+**Manual Domain Creation:**
+```
+ApplicationDomain Creation Event → ApplicationDomainReconciler.Reconcile()
+```
+
+**Step 1: Enhanced Domain Validation**
+- **Domain Format Validation**: RFC 1123 compliant DNS names with regex validation
+- **Domain Label Limits**: Each label max 63 characters, total domain max 253 characters
+- **Subdomain Generation**: Cryptographically secure 8-character subdomain generation
+- **Base Domain Integration**: Validates against operator's configured `KIBASHIP_OPERATOR_DOMAIN`
+
+**Step 2: Uniqueness Constraints**
+- **Global Domain Uniqueness**: Ensures no duplicate domains across entire cluster
+- **Default Domain Constraint**: Only one domain per application can be marked as `isDefault: true`
+- **Application Reference Validation**: Ensures referenced application exists and is accessible
+
+**Step 3: Port Configuration Validation**
+- **Port Range Validation**: Supports ports 80, 443, 1024-65535
+- **System Port Warnings**: Validates against reserved system ports (1-1023)
+- **Default Port Assignment**: Uses `KIBASHIP_DEFAULT_PORT` (default: 3000) if not specified
+
+#### 3.2 Domain Configuration Options
+
+**Domain Types:**
+```yaml
+# Generated subdomain (automatic for GitRepository apps)
+spec:
+  domain: "abc12def.yourdomain.com"
+  isDefault: true
+  port: 3000
+
+# Custom domain
+spec:
+  domain: "myapp.customdomain.com"
+  isDefault: false
+  port: 8080
+  tls:
+    enabled: true
+    certificateIssuer: "letsencrypt-prod"
+```
+
+**TLS Configuration:**
+- **Automatic TLS**: Default TLS configuration for generated domains
+- **Custom Certificates**: Support for custom certificate issuers
+- **Certificate Management**: Integration with cert-manager for automated certificate lifecycle
+
+#### 3.3 ApplicationDomain Status Management
+
+**Domain Phases:**
+- `Pending` - Domain validation in progress
+- `Ready` - Domain configured and accessible
+- `Failed` - Domain configuration failed validation
+- `Conflict` - Domain conflicts with existing resources
+
+**Status Information:**
+- **Validation Results**: Detailed validation status and error messages
+- **Domain Availability**: DNS resolution and accessibility checks
+- **TLS Status**: Certificate provisioning and renewal status
+- **Application Binding**: Confirmation of application reference and accessibility
+
+#### 3.4 Domain Deletion and Cleanup
+
+**ApplicationDomain Deletion:**
+```
+ApplicationDomain Deletion Event → ApplicationDomainReconciler.handleDeletion()
+```
+
+**Step 1: Dependency Validation**
+- **Application Impact Assessment**: Ensures application routing continues with other domains
+- **Default Domain Handling**: Prevents deletion of last default domain if deployments exist
+- **TLS Certificate Cleanup**: Removes associated certificates and TLS resources
+
+**Step 2: Finalizer Management**
+- **Finalizer**: `platform.operator.kibaship.com/applicationdomain-finalizer`
+- **Graceful Cleanup**: Ensures all dependent resources are properly cleaned up
+- **Status Updates**: Provides detailed cleanup progress information
+
+### 4. Complete Deployment Management
 
 The Deployment controller is now fully implemented with comprehensive pipeline orchestration:
 
-#### 3.1 Deployment Creation and Pipeline Generation
+#### 4.1 Deployment Creation and Pipeline Generation
 
 **GitRepository Deployments:**
 ```
@@ -238,7 +342,7 @@ DeploymentReconciler.handleMySQLDeployment() called
 3. **InnoDBCluster Creation**: Provisions MySQL cluster using Oracle MySQL Operator
 4. **Status Monitoring**: Tracks cluster health and connection information
 
-#### 3.2 Enhanced Deployment Status Management
+#### 4.2 Enhanced Deployment Status Management
 
 **Deployment Phases:**
 - `Initializing` - Setting up resources and validating configuration
@@ -254,11 +358,11 @@ DeploymentReconciler.handleMySQLDeployment() called
 - Database connection details for MySQL deployments
 - Comprehensive error messages and troubleshooting information
 
-### 4. Project Deletion Workflow
+### 5. Project Deletion Workflow
 
 When a `Project` resource is deleted:
 
-#### 4.1 Enhanced Deletion Detection
+#### 5.1 Enhanced Deletion Detection
 ```
 Project Deletion Event → ProjectReconciler.handleProjectDeletion()
 ```
@@ -267,7 +371,7 @@ Project Deletion Event → ProjectReconciler.handleProjectDeletion()
 - Only proceeds if finalizer `platform.kibaship.com/project-finalizer` is present
 - Prevents accidental cleanup of non-operator managed resources
 
-#### 4.2 Comprehensive Resource Cleanup Sequence
+#### 5.2 Comprehensive Resource Cleanup Sequence
 
 **Step 2: Service Account Resource Cleanup**
 ```
@@ -299,11 +403,11 @@ NamespaceManager.deleteServiceAccountResources() called
 - Allows Kubernetes to complete resource deletion
 - Project resource is permanently removed from cluster
 
-### 5. Application Deletion Workflow
+### 6. Application Deletion Workflow
 
 When an `Application` resource is deleted:
 
-#### 5.1 Enhanced Cascade Deletion
+#### 6.1 Enhanced Cascade Deletion
 ```
 Application Deletion Event → ApplicationReconciler.handleDeletion()
 ```
@@ -317,6 +421,74 @@ Application Deletion Event → ApplicationReconciler.handleDeletion()
 **Step 2: Finalizer Removal**
 - Removes finalizer `platform.operator.kibaship.com/application-finalizer`
 - Completes Application deletion
+
+## Operator Configuration
+
+### Required Environment Variables
+
+The KibaShip Operator requires specific environment variables for proper operation:
+
+**Required Variables:**
+```yaml
+env:
+- name: KIBASHIP_OPERATOR_DOMAIN
+  value: "yourdomain.com"
+  # Base domain for all generated application subdomains
+  # Example: Applications will get domains like "abc12def.yourdomain.com"
+  # Must be a valid DNS domain name (RFC 1123 compliant)
+```
+
+**Optional Variables:**
+```yaml
+env:
+- name: KIBASHIP_DEFAULT_PORT
+  value: "3000"
+  # Default port for application domains (default: 3000)
+  # Used when ApplicationDomain doesn't specify a port
+  # Must be within valid port range (80, 443, 1024-65535)
+```
+
+### Configuration Validation
+
+**Startup Validation:**
+- **Domain Format**: Validates `KIBASHIP_OPERATOR_DOMAIN` against RFC 1123 DNS standards
+- **Port Range**: Validates `KIBASHIP_DEFAULT_PORT` is within acceptable ranges
+- **DNS Resolution**: Optionally validates base domain accessibility
+- **Missing Configuration**: Operator fails to start if required variables are missing
+
+**Runtime Configuration:**
+- **Domain Generation**: Uses base domain for all automatic subdomain creation
+- **ApplicationDomain Validation**: Validates custom domains against base domain configuration
+- **Port Assignment**: Uses default port for ApplicationDomain resources without explicit port
+
+### Configuration Examples
+
+**Production Configuration:**
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: controller-manager
+spec:
+  template:
+    spec:
+      containers:
+      - name: manager
+        env:
+        - name: KIBASHIP_OPERATOR_DOMAIN
+          value: "apps.mycompany.com"
+        - name: KIBASHIP_DEFAULT_PORT
+          value: "8080"
+```
+
+**Development Configuration:**
+```yaml
+env:
+- name: KIBASHIP_OPERATOR_DOMAIN
+  value: "dev.localhost"
+- name: KIBASHIP_DEFAULT_PORT
+  value: "3000"
+```
 
 ## Security Model
 
@@ -424,7 +596,18 @@ spec:
     - When `PublicAccess: true`, `SecretRef` validation is skipped
     - Repository format validation: `^[a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+$`
     - Provider validation (GitHub, GitLab, Bitbucket)
+- **ApplicationDomain validation webhook**: Comprehensive domain and routing validation
+  - **Domain Format**: RFC 1123 DNS compliance with label length limits (63 chars per label, 253 total)
+  - **Port Validation**: Supports ports 80, 443, 1024-65535 with system port warnings
+  - **Application Reference**: Validates referenced application exists and is accessible
+  - **Domain Uniqueness**: Ensures global domain uniqueness across cluster
+  - **Default Domain Constraint**: Only one default domain per application
+  - **TLS Configuration**: Validates certificate issuer references and TLS settings
 - **Deployment validation webhook**: Naming patterns, application references, and configuration validation
+- **Certificate Management**: Automatic webhook TLS certificate provisioning via cert-manager
+  - Self-signed issuer for development environments
+  - Production certificate integration with Let's Encrypt or custom CA
+  - Automatic certificate renewal and validation
 - All webhooks use fail-closed policy for security
 - Comprehensive error messages for validation failures
 
@@ -504,6 +687,31 @@ All managed resources include:
 3. **Repository format validation** - Repository must follow `<org-name>/<repo-name>` pattern
 4. **Resource limits** - Check project application type configurations and bounds
 
+**ApplicationDomain Configuration Issues:**
+1. **Domain format validation failures**:
+   - Ensure domain follows RFC 1123 standards (lowercase, alphanumeric, hyphens only)
+   - Check domain label length limits (max 63 chars per label, 253 total)
+   - Verify domain contains valid TLD and structure
+2. **Domain uniqueness conflicts**:
+   - Check for existing ApplicationDomain resources with same domain
+   - Use `kubectl get applicationdomains -A -o jsonpath='{.items[*].spec.domain}'` to list all domains
+   - Ensure domain is not in use by external services
+3. **Port configuration issues**:
+   - Verify port is within allowed ranges (80, 443, 1024-65535)
+   - Check for system port warnings (ports 1-1023)
+   - Ensure port doesn't conflict with other services
+4. **Default domain constraints**:
+   - Only one domain per application can have `isDefault: true`
+   - Check existing domains: `kubectl get applicationdomains -l platform.operator.kibaship.com/application=<app-name>`
+5. **Application reference validation**:
+   - Ensure referenced application exists: `kubectl get application <app-name>`
+   - Verify application is in "Ready" phase
+   - Check application is in same namespace as domain
+6. **TLS certificate issues**:
+   - Verify certificate issuer exists and is functional
+   - Check cert-manager integration and certificate status
+   - Review TLS configuration and certificate renewal
+
 **Deployment Pipeline Issues:**
 1. **Pipeline creation failures** - Verify Tekton installation and RBAC permissions
 2. **Git clone failures** - Check token validity and repository access permissions
@@ -538,6 +746,19 @@ kubectl get innodbclusters -A
 
 # Verify pipeline runs
 kubectl get pipelineruns -n project-<name>-kibaship-com
+
+# Check ApplicationDomain resources
+kubectl get applicationdomains -A
+kubectl describe applicationdomain <domain-name>
+
+# List all domains in use
+kubectl get applicationdomains -A -o jsonpath='{.items[*].spec.domain}'
+
+# Check domain status and validation
+kubectl get applicationdomains -o yaml
+
+# Verify domain TLS certificates
+kubectl get certificates -A | grep <domain-name>
 ```
 
 **Status Conditions Analysis:**
@@ -545,11 +766,12 @@ Each resource includes detailed conditions explaining current state and any issu
 
 ## Testing and Quality Assurance
 
-### Comprehensive Test Suite (3,782+ lines)
+### Comprehensive Test Suite (4,000+ lines)
 
 **Controller Tests:**
 - **Project Controller** (292 lines) - Lifecycle, validation, status management, cleanup
-- **Application Controller** (612 lines) - UUID propagation, validation, deletion cascade
+- **Application Controller** (612 lines) - UUID propagation, validation, deletion cascade, domain creation
+- **ApplicationDomain Controller** (218+ lines) - Domain validation, uniqueness, TLS configuration, constraint enforcement
 - **Deployment Controller** (1,294 lines) - Pipeline creation, MySQL provisioning, status tracking
 - **Namespace Management** (450 lines) - RBAC setup, Tekton integration, resource cleanup
 
@@ -560,13 +782,16 @@ Each resource includes detailed conditions explaining current state and any issu
 - **End-to-End Scenarios** (245 lines) - Complete workflow validation
 
 **Test Coverage Highlights:**
-- Complete controller reconciliation testing with 82 test cases
-- Server-side webhook validation testing
+- Complete controller reconciliation testing with 95+ test cases
+- Server-side webhook validation testing for all four CRDs
+- ApplicationDomain validation, uniqueness, and constraint testing
 - RBAC and security model validation
 - Tekton pipeline creation and execution
 - MySQL database provisioning scenarios
+- Domain management and TLS configuration testing
 - Comprehensive error handling and edge cases
 - Resource cleanup and finalizer management
+- Cross-resource dependency and cascade deletion testing
 
 ## Production Deployment
 
@@ -593,9 +818,10 @@ Each resource includes detailed conditions explaining current state and any issu
 ### Infrastructure Requirements
 
 **Required Components:**
-1. **Tekton Pipelines** - v0.44+ for CI/CD functionality
-2. **Oracle MySQL Operator** - v9.4+ for database provisioning
-3. **Valkey Operator** - v0.0.59+ for system cache (auto-installed)
+1. **cert-manager** - v1.16.3+ for webhook TLS certificate management and ApplicationDomain TLS
+2. **Tekton Pipelines** - v0.44+ for CI/CD functionality
+3. **Oracle MySQL Operator** - v9.4+ for database provisioning
+4. **Valkey Operator** - v0.0.59+ for system cache (auto-installed)
 
 **Optional Components:**
 - Prometheus for metrics collection
@@ -647,6 +873,56 @@ Each resource includes detailed conditions explaining current state and any issu
 - `startCommand` (optional): Application start command
 - `env` (optional): Environment variables secret reference
 - `spaOutputDirectory` (optional): SPA build output directory
+
+### ApplicationDomain Resource
+
+**Naming Requirements:**
+- **Format**: `project-<project-slug>-app-<app-slug>-domain-<domain-slug>-kibaship-com`
+- **Example**: `project-mystore-app-frontend-domain-default-kibaship-com`
+- **Validation**: Enforced via server-side webhooks
+- **Uniqueness**: Domain values must be globally unique across cluster
+
+**Required Fields:**
+- `spec.applicationRef.name`: Reference to parent application
+- `spec.domain`: Full domain name (RFC 1123 compliant)
+
+**Optional Fields:**
+- `spec.isDefault` (default: false): Mark as default domain for application
+- `spec.port` (default: from `KIBASHIP_DEFAULT_PORT`): Application port number
+- `spec.tls.enabled` (default: true): Enable TLS/SSL
+- `spec.tls.certificateIssuer`: Custom certificate issuer reference
+
+**Domain Configuration:**
+```yaml
+apiVersion: platform.operator.kibaship.com/v1alpha1
+kind: ApplicationDomain
+metadata:
+  name: project-mystore-app-frontend-domain-prod-kibaship-com
+spec:
+  applicationRef:
+    name: project-mystore-app-frontend-kibaship-com
+  domain: "frontend-prod.mycompany.com"
+  isDefault: false
+  port: 3000
+  tls:
+    enabled: true
+    certificateIssuer: "letsencrypt-prod"
+```
+
+**Status Fields:**
+- `status.phase`: "Pending" | "Ready" | "Failed" | "Conflict"
+- `status.domainValidation`: Domain format and uniqueness validation results
+- `status.tlsStatus`: TLS certificate provisioning and renewal status
+- `status.applicationBinding`: Application reference validation and accessibility
+- `status.conditions`: Detailed status conditions with timestamps and messages
+
+**Validation Rules:**
+- **Domain Format**: Must follow RFC 1123 DNS standards
+- **Domain Labels**: Each label max 63 characters, total domain max 253 characters
+- **Port Range**: 80, 443, or 1024-65535 (system port warnings for 1-1023)
+- **Default Constraint**: Only one domain per application can have `isDefault: true`
+- **Application Reference**: Referenced application must exist and be accessible
+- **Domain Uniqueness**: Domain field must be unique across entire cluster
 
 ### Deployment Resource
 

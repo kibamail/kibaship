@@ -28,6 +28,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	platformv1alpha1 "github.com/kibamail/kibaship-operator/api/v1alpha1"
+	"github.com/kibamail/kibaship-operator/pkg/validation"
 )
 
 // ProjectValidator handles validation for Project resources
@@ -50,8 +51,9 @@ func (pv *ProjectValidator) ValidateProjectCreate(ctx context.Context, project *
 
 	log.Info("Validating project creation", "project", project.Name)
 
-	// Validate required labels
-	if err := pv.ValidateRequiredLabels(project); err != nil {
+	// Validate required labels and uniqueness
+	resourceLabeler := NewResourceLabeler(pv.Client)
+	if err := resourceLabeler.ValidateProjectLabeling(ctx, project); err != nil {
 		return fmt.Errorf("label validation failed: %w", err)
 	}
 
@@ -79,8 +81,9 @@ func (pv *ProjectValidator) ValidateProjectUpdate(ctx context.Context, oldProjec
 
 	log.Info("Validating project update", "project", newProject.Name)
 
-	// Validate required labels
-	if err := pv.ValidateRequiredLabels(newProject); err != nil {
+	// Validate required labels and uniqueness
+	resourceLabeler := NewResourceLabeler(pv.Client)
+	if err := resourceLabeler.ValidateProjectLabeling(ctx, newProject); err != nil {
 		return fmt.Errorf("label validation failed: %w", err)
 	}
 
@@ -90,28 +93,41 @@ func (pv *ProjectValidator) ValidateProjectUpdate(ctx context.Context, oldProjec
 	}
 
 	// Validate UUID labels haven't changed (not allowed after creation)
-	if oldProject.Labels[ProjectUUIDLabel] != newProject.Labels[ProjectUUIDLabel] {
+	if oldProject.Labels[validation.LabelResourceUUID] != newProject.Labels[validation.LabelResourceUUID] {
 		return fmt.Errorf("project UUID label cannot be changed after creation")
+	}
+
+	// Validate slug labels haven't changed (not allowed after creation)
+	if oldProject.Labels[validation.LabelResourceSlug] != newProject.Labels[validation.LabelResourceSlug] {
+		return fmt.Errorf("project slug label cannot be changed after creation")
 	}
 
 	log.Info("Project update validation passed", "project", newProject.Name)
 	return nil
 }
 
-// ValidateRequiredLabels validates that the project has required UUID labels
+// ValidateRequiredLabels validates that the project has required UUID and slug labels
+// This is a legacy method - use ResourceLabeler.ValidateProjectLabeling instead
 func (pv *ProjectValidator) ValidateRequiredLabels(project *platformv1alpha1.Project) error {
 	var validationErrors []string
 
 	// Validate required UUID label
-	if uuid, exists := project.Labels[ProjectUUIDLabel]; !exists {
+	if uuid, exists := project.Labels[validation.LabelResourceUUID]; !exists {
 		validationErrors = append(validationErrors, "required label 'platform.kibaship.com/uuid' is missing")
-	} else if !isValidUUID(uuid) {
+	} else if !validation.ValidateUUID(uuid) {
 		validationErrors = append(validationErrors, fmt.Sprintf("label 'platform.kibaship.com/uuid' must be a valid UUID, got: %s", uuid))
 	}
 
+	// Validate required slug label
+	if slug, exists := project.Labels[validation.LabelResourceSlug]; !exists {
+		validationErrors = append(validationErrors, "required label 'platform.kibaship.com/slug' is missing")
+	} else if !validation.ValidateSlug(slug) {
+		validationErrors = append(validationErrors, fmt.Sprintf("label 'platform.kibaship.com/slug' must be a valid slug, got: %s", slug))
+	}
+
 	// Validate workspace UUID label if present
-	if workspaceUUID, exists := project.Labels[WorkspaceUUIDLabel]; exists {
-		if !isValidUUID(workspaceUUID) {
+	if workspaceUUID, exists := project.Labels[validation.LabelWorkspaceUUID]; exists {
+		if !validation.ValidateUUID(workspaceUUID) {
 			validationErrors = append(validationErrors, fmt.Sprintf("label 'platform.kibaship.com/workspace-uuid' must be a valid UUID, got: %s", workspaceUUID))
 		}
 	}
@@ -183,12 +199,6 @@ func (pv *ProjectValidator) CheckProjectNameUniqueness(ctx context.Context, proj
 
 	log.Info("Project name uniqueness validated", "project", projectName)
 	return nil
-}
-
-// isValidUUID validates if a string is a valid UUID format
-func isValidUUID(uuid string) bool {
-	uuidRegex := regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
-	return uuidRegex.MatchString(uuid)
 }
 
 // GetProjectByNamespace finds a project that owns the given namespace
