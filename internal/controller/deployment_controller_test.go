@@ -57,6 +57,7 @@ var _ = Describe("Deployment Controller", func() {
 			Client:           k8sClient,
 			Scheme:           k8sClient.Scheme(),
 			NamespaceManager: NewNamespaceManager(k8sClient),
+			StreamPublisher:  nil,
 		}
 
 		// Create test namespace with unique name
