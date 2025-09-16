@@ -32,8 +32,8 @@ spec:
   # Service names to generate certificates for
   # These will be transformed by kustomize namePrefix and namespace
   dnsNames:
-  - webhook-service.system.svc
-  - webhook-service.system.svc.cluster.local
+  - kibaship-operator.system.svc
+  - kibaship-operator.system.svc.cluster.local
   issuerRef:
     kind: Issuer
     name: selfsigned-issuer
