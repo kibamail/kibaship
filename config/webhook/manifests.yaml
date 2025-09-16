@@ -8,7 +8,7 @@ webhooks:
   - v1
   clientConfig:
     service:
-      name: webhook-service
+      name: kibaship-operator-webhook-service
       namespace: system
       path: /validate-platform-operator-kibaship-com-v1alpha1-application
   failurePolicy: Fail
@@ -28,7 +28,7 @@ webhooks:
   - v1
   clientConfig:
     service:
-      name: webhook-service
+      name: kibaship-operator-webhook-service
       namespace: system
       path: /validate-platform-operator-kibaship-com-v1alpha1-deployment
   failurePolicy: Fail
@@ -48,7 +48,7 @@ webhooks:
   - v1
   clientConfig:
     service:
-      name: webhook-service
+      name: kibaship-operator-webhook-service
       namespace: system
       path: /validate-platform-operator-kibaship-com-v1alpha1-project
   failurePolicy: Fail
