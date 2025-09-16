@@ -430,7 +430,9 @@ var _ = Describe("Streaming Integration E2E Tests", Ordered, func() {
 						Name: testProject.Name,
 					},
 					GitRepository: &platformv1alpha1.GitRepositoryConfig{
-						Repository: "https://github.com/test/streaming-app",
+						Provider:     "github.com",
+						Repository:   "test/streaming-app",
+						PublicAccess: true,
 					},
 				},
 			}

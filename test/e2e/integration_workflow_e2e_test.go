@@ -136,10 +136,10 @@ var _ = Describe("Integration Workflow E2E Tests", Ordered, func() {
 				repo string
 				uuid string
 			}{
-				{"project-test-microservices-project-app-frontend-kibaship-com", "frontend", "https://github.com/test/frontend", "550e8400-e29b-41d4-a716-446655440001"},
-				{"project-test-microservices-project-app-api-gateway-kibaship-com", "api-gateway", "https://github.com/test/api-gateway", "550e8400-e29b-41d4-a716-446655440002"},
-				{"project-test-microservices-project-app-user-service-kibaship-com", "user-service", "https://github.com/test/user-service", "550e8400-e29b-41d4-a716-446655440003"},
-				{"project-test-microservices-project-app-payment-service-kibaship-com", "payment-service", "https://github.com/test/payment-service", "550e8400-e29b-41d4-a716-446655440004"},
+				{"project-test-microservices-project-app-frontend-kibaship-com", "frontend", "test/frontend", "550e8400-e29b-41d4-a716-446655440001"},
+				{"project-test-microservices-project-app-api-gateway-kibaship-com", "api-gateway", "test/api-gateway", "550e8400-e29b-41d4-a716-446655440002"},
+				{"project-test-microservices-project-app-user-service-kibaship-com", "user-service", "test/user-service", "550e8400-e29b-41d4-a716-446655440003"},
+				{"project-test-microservices-project-app-payment-service-kibaship-com", "payment-service", "test/payment-service", "550e8400-e29b-41d4-a716-446655440004"},
 			}
 
 			testApplications = make([]*platformv1alpha1.Application, len(applicationConfigs))
@@ -161,8 +161,10 @@ var _ = Describe("Integration Workflow E2E Tests", Ordered, func() {
 							Name: testProject.Name,
 						},
 						GitRepository: &platformv1alpha1.GitRepositoryConfig{
-							Repository: config.repo,
-							Branch:     "main",
+							Provider:     "github.com",
+							Repository:   config.repo,
+							Branch:       "main",
+							PublicAccess: true,
 						},
 					},
 				}
@@ -303,8 +305,10 @@ var _ = Describe("Integration Workflow E2E Tests", Ordered, func() {
 						Name: testProject.Name,
 					},
 					GitRepository: &platformv1alpha1.GitRepositoryConfig{
-						Repository: "https://github.com/test/webapp",
-						Branch:     "main",
+						Provider:     "github.com",
+						Repository:   "test/webapp",
+						Branch:       "main",
+						PublicAccess: true,
 					},
 				},
 			}
@@ -520,8 +524,10 @@ var _ = Describe("Integration Workflow E2E Tests", Ordered, func() {
 						Name: testProject.Name,
 					},
 					GitRepository: &platformv1alpha1.GitRepositoryConfig{
-						Repository: "https://github.com/test/streaming-app",
-						Branch:     "main",
+						Provider:     "github.com",
+						Repository:   "test/streaming-app",
+						Branch:       "main",
+						PublicAccess: true,
 					},
 				},
 			}
@@ -644,8 +650,10 @@ var _ = Describe("Integration Workflow E2E Tests", Ordered, func() {
 						Name: testProject.Name,
 					},
 					GitRepository: &platformv1alpha1.GitRepositoryConfig{
-						Repository: "https://github.com/test/cleanup-app",
-						Branch:     "main",
+						Provider:     "github.com",
+						Repository:   "test/cleanup-app",
+						Branch:       "main",
+						PublicAccess: true,
 					},
 				},
 			}

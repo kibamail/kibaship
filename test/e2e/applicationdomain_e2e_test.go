@@ -126,7 +126,9 @@ var _ = Describe("ApplicationDomain E2E Tests", Ordered, func() {
 						Name: testProject.Name,
 					},
 					GitRepository: &platformv1alpha1.GitRepositoryConfig{
-						Repository: "https://github.com/test/frontend",
+						Provider:     "github.com",
+						Repository:   "test/frontend",
+						PublicAccess: true,
 					},
 				},
 			}
@@ -227,7 +229,7 @@ var _ = Describe("ApplicationDomain E2E Tests", Ordered, func() {
 					Type:       platformv1alpha1.ApplicationDomainTypeCustom,
 					Domain:     "custom.frontend.test.kibaship.com",
 					Default:    false,
-					Port:       8080,
+					Port:       3000,
 					TLSEnabled: true,
 				},
 			}
@@ -278,7 +280,7 @@ var _ = Describe("ApplicationDomain E2E Tests", Ordered, func() {
 					Type:       platformv1alpha1.ApplicationDomainTypeCustom,
 					Domain:     "invalid..domain.com", // Invalid double dots
 					Default:    false,
-					Port:       8080,
+					Port:       3000,
 					TLSEnabled: true,
 				},
 			}
@@ -299,7 +301,7 @@ var _ = Describe("ApplicationDomain E2E Tests", Ordered, func() {
 					Type:       platformv1alpha1.ApplicationDomainTypeCustom,
 					Domain:     "test.domain.com",
 					Default:    false,
-					Port:       8080,
+					Port:       3000,
 					TLSEnabled: true,
 				},
 			}
@@ -373,7 +375,9 @@ var _ = Describe("ApplicationDomain E2E Tests", Ordered, func() {
 							Name: "non-existent-project", // This will cause creation but domain creation should still work
 						},
 						GitRepository: &platformv1alpha1.GitRepositoryConfig{
-							Repository: fmt.Sprintf("https://github.com/test/app-%d", i),
+							Provider:     "github.com",
+							Repository:   fmt.Sprintf("test/app-%d", i),
+							PublicAccess: true,
 						},
 					},
 				}

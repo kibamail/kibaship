@@ -193,23 +193,41 @@ var _ webhook.CustomValidator = &Deployment{}
 // ValidateCreate implements webhook.CustomValidator so a webhook will be registered for the type
 func (r *Deployment) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
 	deploymentlog := logf.Log.WithName("deployment-resource")
-	deploymentlog.Info("validate create", "name", r.Name)
 
-	return nil, r.validateDeployment(ctx)
+	dep, ok := obj.(*Deployment)
+	if !ok {
+		return nil, fmt.Errorf("expected a Deployment object, but got %T", obj)
+	}
+
+	deploymentlog.Info("validate create", "name", dep.Name)
+
+	return nil, dep.validateDeployment(ctx)
 }
 
 // ValidateUpdate implements webhook.CustomValidator so a webhook will be registered for the type
 func (r *Deployment) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
 	deploymentlog := logf.Log.WithName("deployment-resource")
-	deploymentlog.Info("validate update", "name", r.Name)
 
-	return nil, r.validateDeployment(ctx)
+	dep, ok := newObj.(*Deployment)
+	if !ok {
+		return nil, fmt.Errorf("expected a Deployment object, but got %T", newObj)
+	}
+
+	deploymentlog.Info("validate update", "name", dep.Name)
+
+	return nil, dep.validateDeployment(ctx)
 }
 
 // ValidateDelete implements webhook.CustomValidator so a webhook will be registered for the type
 func (r *Deployment) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
 	deploymentlog := logf.Log.WithName("deployment-resource")
-	deploymentlog.Info("validate delete", "name", r.Name)
+
+	dep, ok := obj.(*Deployment)
+	if !ok {
+		return nil, fmt.Errorf("expected a Deployment object, but got %T", obj)
+	}
+
+	deploymentlog.Info("validate delete", "name", dep.Name)
 
 	return nil, nil
 }

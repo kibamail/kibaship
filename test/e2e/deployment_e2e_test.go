@@ -121,8 +121,10 @@ var _ = Describe("Deployment E2E Tests", Ordered, func() {
 						Name: testProject.Name,
 					},
 					GitRepository: &platformv1alpha1.GitRepositoryConfig{
-						Repository: "https://github.com/test/backend",
-						Branch:     "main",
+						Provider:     "github.com",
+						Repository:   "test/backend",
+						Branch:       "main",
+						PublicAccess: true,
 					},
 				},
 			}
@@ -303,7 +305,7 @@ var _ = Describe("Deployment E2E Tests", Ordered, func() {
 			for _, param := range deploymentPipelineRun.Spec.Params {
 				paramMap[param.Name] = param.Value.StringVal
 			}
-			Expect(paramMap["repository"]).To(Equal("https://github.com/test/backend"))
+			Expect(paramMap["repository"]).To(Equal("test/backend"))
 			Expect(paramMap["commit-sha"]).To(Equal("def789012345"))
 			Expect(paramMap["branch"]).To(Equal("staging"))
 		})
@@ -326,7 +328,8 @@ var _ = Describe("Deployment E2E Tests", Ordered, func() {
 						Name: testProject.Name,
 					},
 					GitRepository: &platformv1alpha1.GitRepositoryConfig{
-						Repository: "https://github.com/test/api",
+						Provider:   "github.com",
+						Repository: "test/api",
 						Branch:     "main",
 					},
 				},
@@ -496,7 +499,8 @@ var _ = Describe("Deployment E2E Tests", Ordered, func() {
 						Name: testProject.Name,
 					},
 					GitRepository: &platformv1alpha1.GitRepositoryConfig{
-						Repository: "https://github.com/test/web",
+						Provider:   "github.com",
+						Repository: "test/web",
 						Branch:     "main",
 					},
 				},
