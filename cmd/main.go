@@ -179,6 +179,16 @@ func main() {
 		setupLog.Error(err, "unable to create webhook", "webhook", "Project")
 		os.Exit(1)
 	}
+	// Register Application webhook
+	if err := (&platformv1alpha1.Application{}).SetupWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "Application")
+		os.Exit(1)
+	}
+	// Register Deployment webhook
+	if err := (&platformv1alpha1.Deployment{}).SetupWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "Deployment")
+		os.Exit(1)
+	}
 	if err := (&controller.ApplicationReconciler{
 		Client:          mgr.GetClient(),
 		Scheme:          mgr.GetScheme(),

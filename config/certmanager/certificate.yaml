@@ -29,11 +29,10 @@ metadata:
   name: serving-cert
   namespace: system
 spec:
-  # Service names to generate certificates for
-  # These will be transformed by kustomize namePrefix and namespace
+  # Service DNS names that the API server will connect to
   dnsNames:
-  - kibaship-operator.system.svc
-  - kibaship-operator.system.svc.cluster.local
+  - kibaship-operator-webhook-service.kibaship-operator.svc
+  - kibaship-operator-webhook-service.kibaship-operator.svc.cluster.local
   issuerRef:
     kind: Issuer
     name: selfsigned-issuer
