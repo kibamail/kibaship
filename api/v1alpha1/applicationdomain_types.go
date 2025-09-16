@@ -113,18 +113,16 @@ type ApplicationDomainStatus struct {
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
-// ApplicationDomain is the Schema for the applicationdomains API
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:path=applicationdomains,scope=Namespaced
-// +kubebuilder:printcolumn:name="Domain",type=string,JSONPath=`.spec.domain`
-// +kubebuilder:printcolumn:name="Port",type=integer,JSONPath=`.spec.port`
-// +kubebuilder:printcolumn:name="Type",type=string,JSONPath=`.spec.type`
-// +kubebuilder:printcolumn:name="Default",type=boolean,JSONPath=`.spec.default`
-// +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
-// +kubebuilder:printcolumn:name="Certificate Ready",type=boolean,JSONPath=`.status.certificateReady`
-// +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 // +kubebuilder:webhook:path=/validate-platform-operator-kibaship-com-v1alpha1-applicationdomain,mutating=false,failurePolicy=fail,sideEffects=None,groups=platform.operator.kibaship.com,resources=applicationdomains,verbs=create;update,versions=v1alpha1,name=vapplicationdomain.kb.io,admissionReviewVersions=v1
+// +kubebuilder:printcolumn:name="Domain",type=string,JSONPath=".spec.domain"
+// +kubebuilder:printcolumn:name="Port",type=integer,JSONPath=".spec.port"
+// +kubebuilder:printcolumn:name="Type",type=string,JSONPath=".spec.type"
+// +kubebuilder:printcolumn:name="Default",type=boolean,JSONPath=".spec.default"
+// +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=".status.phase"
+// +kubebuilder:printcolumn:name="Certificate Ready",type=boolean,JSONPath=".status.certificateReady"
+// +kubebuilder:printcolumn:name="Age",type=date,JSONPath=".metadata.creationTimestamp"
 type ApplicationDomain struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
