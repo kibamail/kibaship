@@ -148,23 +148,41 @@ var _ webhook.CustomValidator = &ApplicationDomain{}
 // ValidateCreate implements webhook.CustomValidator so a webhook will be registered for the type
 func (r *ApplicationDomain) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
 	domainlog := logf.Log.WithName("applicationdomain-resource")
-	domainlog.Info("validate create", "name", r.Name)
 
-	return nil, r.validateApplicationDomain(ctx)
+	domain, ok := obj.(*ApplicationDomain)
+	if !ok {
+		return nil, fmt.Errorf("expected an ApplicationDomain object, but got %T", obj)
+	}
+
+	domainlog.Info("validate create", "name", domain.Name)
+
+	return nil, domain.validateApplicationDomain(ctx)
 }
 
 // ValidateUpdate implements webhook.CustomValidator so a webhook will be registered for the type
 func (r *ApplicationDomain) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
 	domainlog := logf.Log.WithName("applicationdomain-resource")
-	domainlog.Info("validate update", "name", r.Name)
 
-	return nil, r.validateApplicationDomain(ctx)
+	domain, ok := newObj.(*ApplicationDomain)
+	if !ok {
+		return nil, fmt.Errorf("expected an ApplicationDomain object, but got %T", newObj)
+	}
+
+	domainlog.Info("validate update", "name", domain.Name)
+
+	return nil, domain.validateApplicationDomain(ctx)
 }
 
 // ValidateDelete implements webhook.CustomValidator so a webhook will be registered for the type
 func (r *ApplicationDomain) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
 	domainlog := logf.Log.WithName("applicationdomain-resource")
-	domainlog.Info("validate delete", "name", r.Name)
+
+	domain, ok := obj.(*ApplicationDomain)
+	if !ok {
+		return nil, fmt.Errorf("expected an ApplicationDomain object, but got %T", obj)
+	}
+
+	domainlog.Info("validate delete", "name", domain.Name)
 
 	return nil, nil
 }

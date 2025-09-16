@@ -358,7 +358,9 @@ var _ = Describe("Project Lifecycle E2E Tests", Ordered, func() {
 						Name: testProject.Name,
 					},
 					GitRepository: &platformv1alpha1.GitRepositoryConfig{
-						Repository: "https://github.com/test/app",
+						Provider:     "github.com",
+						Repository:   "test/app",
+						PublicAccess: true,
 					},
 				},
 			}
@@ -463,7 +465,9 @@ var _ = Describe("Project Lifecycle E2E Tests", Ordered, func() {
 							Name: testProject.Name,
 						},
 						GitRepository: &platformv1alpha1.GitRepositoryConfig{
-							Repository: fmt.Sprintf("https://github.com/test/app-%d", i),
+							Provider:     "github.com",
+							Repository:   fmt.Sprintf("test/app-%d", i),
+							PublicAccess: true,
 						},
 					},
 				}

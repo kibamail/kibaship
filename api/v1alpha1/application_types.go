@@ -291,23 +291,41 @@ var _ webhook.CustomValidator = &Application{}
 // ValidateCreate implements webhook.CustomValidator so a webhook will be registered for the type
 func (r *Application) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
 	applicationlog := logf.Log.WithName("application-resource")
-	applicationlog.Info("validate create", "name", r.Name)
 
-	return nil, r.validateApplication(ctx)
+	app, ok := obj.(*Application)
+	if !ok {
+		return nil, fmt.Errorf("expected an Application object, but got %T", obj)
+	}
+
+	applicationlog.Info("validate create", "name", app.Name)
+
+	return nil, app.validateApplication(ctx)
 }
 
 // ValidateUpdate implements webhook.CustomValidator so a webhook will be registered for the type
 func (r *Application) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
 	applicationlog := logf.Log.WithName("application-resource")
-	applicationlog.Info("validate update", "name", r.Name)
 
-	return nil, r.validateApplication(ctx)
+	app, ok := newObj.(*Application)
+	if !ok {
+		return nil, fmt.Errorf("expected an Application object, but got %T", newObj)
+	}
+
+	applicationlog.Info("validate update", "name", app.Name)
+
+	return nil, app.validateApplication(ctx)
 }
 
 // ValidateDelete implements webhook.CustomValidator so a webhook will be registered for the type
 func (r *Application) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
 	applicationlog := logf.Log.WithName("application-resource")
-	applicationlog.Info("validate delete", "name", r.Name)
+
+	app, ok := obj.(*Application)
+	if !ok {
+		return nil, fmt.Errorf("expected an Application object, but got %T", obj)
+	}
+
+	applicationlog.Info("validate delete", "name", app.Name)
 
 	return nil, nil
 }

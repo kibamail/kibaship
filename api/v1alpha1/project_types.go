@@ -201,25 +201,40 @@ var _ webhook.CustomValidator = &Project{}
 func (r *Project) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
 	projectlog := logf.Log.WithName("project-resource")
 
-	projectlog.Info("validate create", "name", r.Name)
+	project, ok := obj.(*Project)
+	if !ok {
+		return nil, fmt.Errorf("expected a Project object, but got %T", obj)
+	}
 
-	return nil, r.validateProject(ctx)
+	projectlog.Info("validate create", "name", project.Name)
+
+	return nil, project.validateProject(ctx)
 }
 
 // ValidateUpdate implements webhook.CustomValidator so a webhook will be registered for the type
 func (r *Project) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
 	projectlog := logf.Log.WithName("project-resource")
 
-	projectlog.Info("validate update", "name", r.Name)
+	project, ok := newObj.(*Project)
+	if !ok {
+		return nil, fmt.Errorf("expected a Project object, but got %T", newObj)
+	}
 
-	return nil, r.validateProject(ctx)
+	projectlog.Info("validate update", "name", project.Name)
+
+	return nil, project.validateProject(ctx)
 }
 
 // ValidateDelete implements webhook.CustomValidator so a webhook will be registered for the type
 func (r *Project) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
 	projectlog := logf.Log.WithName("project-resource")
 
-	projectlog.Info("validate delete", "name", r.Name)
+	project, ok := obj.(*Project)
+	if !ok {
+		return nil, fmt.Errorf("expected a Project object, but got %T", obj)
+	}
+
+	projectlog.Info("validate delete", "name", project.Name)
 
 	// TODO(user): fill in your validation logic upon object deletion.
 	return nil, nil

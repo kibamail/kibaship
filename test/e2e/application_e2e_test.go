@@ -131,8 +131,10 @@ var _ = Describe("Application E2E Tests", Ordered, func() {
 						Name: testProject.Name,
 					},
 					GitRepository: &platformv1alpha1.GitRepositoryConfig{
-						Repository: "https://github.com/test/frontend",
-						Branch:     "main",
+						Provider:     "github.com",
+						Repository:   "test/frontend",
+						Branch:       "main",
+						PublicAccess: true,
 					},
 				},
 			}
@@ -183,8 +185,10 @@ var _ = Describe("Application E2E Tests", Ordered, func() {
 						Name: testProject.Name,
 					},
 					GitRepository: &platformv1alpha1.GitRepositoryConfig{
-						Repository: "https://github.com/test/backend",
-						Branch:     "develop",
+						Provider:     "github.com",
+						Repository:   "test/backend",
+						Branch:       "develop",
+						PublicAccess: true,
 					},
 				},
 			}
@@ -255,8 +259,10 @@ var _ = Describe("Application E2E Tests", Ordered, func() {
 						Name: "non-existent-project",
 					},
 					GitRepository: &platformv1alpha1.GitRepositoryConfig{
-						Repository: "https://github.com/test/invalid",
-						Branch:     "main",
+						Provider:     "github.com",
+						Repository:   "test/invalid",
+						Branch:       "main",
+						PublicAccess: true,
 					},
 				},
 			}
@@ -293,8 +299,10 @@ var _ = Describe("Application E2E Tests", Ordered, func() {
 						Name: testProject.Name,
 					},
 					GitRepository: &platformv1alpha1.GitRepositoryConfig{
-						Repository: "https://github.com/test/api",
-						Branch:     "main",
+						Provider:     "github.com",
+						Repository:   "test/api",
+						Branch:       "main",
+						PublicAccess: true,
 					},
 				},
 			}
@@ -350,8 +358,10 @@ var _ = Describe("Application E2E Tests", Ordered, func() {
 						Name: testProject.Name,
 					},
 					GitRepository: &platformv1alpha1.GitRepositoryConfig{
-						Repository: "https://github.com/test/temp",
-						Branch:     "main",
+						Provider:     "github.com",
+						Repository:   "test/temp",
+						Branch:       "main",
+						PublicAccess: true,
 					},
 				},
 			}
@@ -472,8 +482,10 @@ var _ = Describe("Application E2E Tests", Ordered, func() {
 						Name: testProject.Name,
 					},
 					GitRepository: &platformv1alpha1.GitRepositoryConfig{
-						Repository: "https://github.com/test/invalid",
-						Branch:     "main",
+						Provider:     "github.com",
+						Repository:   "test/invalid",
+						Branch:       "main",
+						PublicAccess: true,
 					},
 				},
 			}
@@ -503,8 +515,10 @@ var _ = Describe("Application E2E Tests", Ordered, func() {
 							Name: testProject.Name,
 						},
 						GitRepository: &platformv1alpha1.GitRepositoryConfig{
-							Repository: fmt.Sprintf("https://github.com/test/concurrent-%d", i),
-							Branch:     "main",
+							Provider:     "github.com",
+							Repository:   fmt.Sprintf("test/concurrent-%d", i),
+							Branch:       "main",
+							PublicAccess: true,
 						},
 					},
 				}
@@ -572,8 +586,10 @@ var _ = Describe("Application E2E Tests", Ordered, func() {
 						Name: testProject.Name,
 					},
 					GitRepository: &platformv1alpha1.GitRepositoryConfig{
-						Repository: "https://github.com/test/updatable",
-						Branch:     "main",
+						Provider:     "github.com",
+						Repository:   "test/updatable",
+						Branch:       "main",
+						PublicAccess: true,
 					},
 				},
 			}
@@ -595,7 +611,7 @@ var _ = Describe("Application E2E Tests", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			app.Spec.GitRepository.Branch = "develop"
-			app.Spec.GitRepository.Repository = "https://github.com/test/updatable-v2"
+			app.Spec.GitRepository.Repository = "test/updatable-v2"
 
 			Expect(k8sClient.Update(ctx, &app)).To(Succeed())
 
