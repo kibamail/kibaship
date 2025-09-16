@@ -31,15 +31,23 @@ import (
 var (
 	// Optional Environment Variables:
 	// - CERT_MANAGER_INSTALL_SKIP=true: Skips CertManager installation during test setup.
+	// - PROMETHEUS_OPERATOR_INSTALL_SKIP=true: Skips Prometheus Operator installation during test setup.
 	// - TEKTON_PIPELINES_INSTALL_SKIP=true: Skips Tekton Pipelines installation during test setup.
+	// - VALKEY_OPERATOR_INSTALL_SKIP=true: Skips Valkey Operator installation during test setup.
 	// These variables are useful if these components are already installed, avoiding
 	// re-installation and conflicts.
-	skipCertManagerInstall     = os.Getenv("CERT_MANAGER_INSTALL_SKIP") == "true"
-	skipTektonPipelinesInstall = os.Getenv("TEKTON_PIPELINES_INSTALL_SKIP") == "true"
+	skipCertManagerInstall        = os.Getenv("CERT_MANAGER_INSTALL_SKIP") == "true"
+	skipPrometheusOperatorInstall = os.Getenv("PROMETHEUS_OPERATOR_INSTALL_SKIP") == "true"
+	skipTektonPipelinesInstall    = os.Getenv("TEKTON_PIPELINES_INSTALL_SKIP") == "true"
+	skipValkeyOperatorInstall     = os.Getenv("VALKEY_OPERATOR_INSTALL_SKIP") == "true"
 	// isCertManagerAlreadyInstalled will be set true when CertManager CRDs be found on the cluster
 	isCertManagerAlreadyInstalled = false
+	// isPrometheusOperatorAlreadyInstalled will be set true when Prometheus Operator CRDs be found on the cluster
+	isPrometheusOperatorAlreadyInstalled = false
 	// isTektonPipelinesAlreadyInstalled will be set true when Tekton Pipelines CRDs be found on the cluster
 	isTektonPipelinesAlreadyInstalled = false
+	// isValkeyOperatorAlreadyInstalled will be set true when Valkey Operator CRDs be found on the cluster
+	isValkeyOperatorAlreadyInstalled = false
 
 	// projectImage is the name of the image which will be build and loaded
 	// with the code source changes to be tested.
@@ -83,6 +91,19 @@ var _ = BeforeSuite(func() {
 		}
 	}
 
+	// Setup Prometheus Operator before the suite if not skipped and if not already installed
+	// This is required for Valkey Operator (provides ServiceMonitor CRDs)
+	if !skipPrometheusOperatorInstall {
+		By("checking if Prometheus Operator is installed already")
+		isPrometheusOperatorAlreadyInstalled = utils.IsPrometheusCRDsInstalled()
+		if !isPrometheusOperatorAlreadyInstalled {
+			_, _ = fmt.Fprintf(GinkgoWriter, "Installing Prometheus Operator (required for Valkey Operator)...\n")
+			Expect(utils.InstallPrometheusOperator()).To(Succeed(), "Failed to install Prometheus Operator")
+		} else {
+			_, _ = fmt.Fprintf(GinkgoWriter, "WARNING: Prometheus Operator is already installed. Skipping installation...\n")
+		}
+	}
+
 	// Setup Tekton Pipelines before the suite if not skipped and if not already installed
 	if !skipTektonPipelinesInstall {
 		By("checking if Tekton Pipelines is installed already")
@@ -94,13 +115,53 @@ var _ = BeforeSuite(func() {
 			_, _ = fmt.Fprintf(GinkgoWriter, "WARNING: Tekton Pipelines is already installed. Skipping installation...\n")
 		}
 	}
+
+	// Setup Valkey Operator before the suite if not skipped and if not already installed
+	if !skipValkeyOperatorInstall {
+		By("checking if Valkey Operator is installed already")
+		isValkeyOperatorAlreadyInstalled = utils.IsValkeyOperatorCRDsInstalled()
+		if !isValkeyOperatorAlreadyInstalled {
+			_, _ = fmt.Fprintf(GinkgoWriter, "Installing Valkey Operator...\n")
+			Expect(utils.InstallValkeyOperator()).To(Succeed(), "Failed to install Valkey Operator")
+		} else {
+			_, _ = fmt.Fprintf(GinkgoWriter, "WARNING: Valkey Operator is already installed. Skipping installation...\n")
+		}
+	}
+
+	// Create required storage class for test environment
+	By("creating storage-replica-1 storage class for test environment")
+	Expect(utils.CreateStorageReplicaStorageClass()).To(Succeed(), "Failed to create storage-replica-1 storage class")
+
+	// Deploy the operator itself
+	By("deploying kibaship-operator")
+	Expect(utils.DeployKibashipOperator()).To(Succeed(), "Failed to deploy kibaship-operator")
 })
 
 var _ = AfterSuite(func() {
+	// Undeploy kibaship-operator
+	_, _ = fmt.Fprintf(GinkgoWriter, "Undeploying kibaship-operator...\n")
+	utils.UndeployKibashipOperator()
+
+	// Clean up storage class
+	_, _ = fmt.Fprintf(GinkgoWriter, "Cleaning up storage-replica-1 storage class...\n")
+	utils.CleanupStorageReplicaStorageClass()
+
+	// Teardown Valkey Operator after the suite if not skipped and if it was not already installed
+	if !skipValkeyOperatorInstall && !isValkeyOperatorAlreadyInstalled {
+		_, _ = fmt.Fprintf(GinkgoWriter, "Uninstalling Valkey Operator...\n")
+		utils.UninstallValkeyOperator()
+	}
+
 	// Teardown Tekton Pipelines after the suite if not skipped and if it was not already installed
 	if !skipTektonPipelinesInstall && !isTektonPipelinesAlreadyInstalled {
 		_, _ = fmt.Fprintf(GinkgoWriter, "Uninstalling Tekton Pipelines...\n")
 		utils.UninstallTektonPipelines()
+	}
+
+	// Teardown Prometheus Operator after the suite if not skipped and if it was not already installed
+	if !skipPrometheusOperatorInstall && !isPrometheusOperatorAlreadyInstalled {
+		_, _ = fmt.Fprintf(GinkgoWriter, "Uninstalling Prometheus Operator...\n")
+		utils.UninstallPrometheusOperator()
 	}
 
 	// Teardown CertManager after the suite if not skipped and if it was not already installed

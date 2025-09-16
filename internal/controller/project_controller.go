@@ -28,6 +28,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	platformv1alpha1 "github.com/kibamail/kibaship-operator/api/v1alpha1"
+	"github.com/kibamail/kibaship-operator/pkg/streaming"
 	"github.com/kibamail/kibaship-operator/pkg/validation"
 )
 
@@ -42,6 +43,7 @@ type ProjectReconciler struct {
 	Scheme           *runtime.Scheme
 	NamespaceManager *NamespaceManager
 	Validator        *ProjectValidator
+	StreamPublisher  streaming.ProjectStreamPublisher
 }
 
 // +kubebuilder:rbac:groups=platform.operator.kibaship.com,resources=projects,verbs=get;list;watch;create;update;patch;delete
@@ -109,6 +111,8 @@ func (r *ProjectReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 				log.Error(err, "Failed to update project status to Pending")
 				return ctrl.Result{}, err
 			}
+			// Publish Create event for new project
+			r.publishProjectEvent(ctx, &project, streaming.OperationCreate)
 		}
 
 		// Validate uniqueness for new projects (exclude this project)
@@ -139,6 +143,8 @@ func (r *ProjectReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			log.Error(err, "Failed to update project status to Ready")
 			return ctrl.Result{}, err
 		}
+		// Publish Ready event when project becomes ready
+		r.publishProjectEvent(ctx, &project, streaming.OperationReady)
 	}
 
 	log.Info("Successfully reconciled Project",
@@ -154,6 +160,9 @@ func (r *ProjectReconciler) handleProjectDeletion(ctx context.Context, project *
 	log := logf.FromContext(ctx)
 
 	log.Info("Handling project deletion", "project", project.Name)
+
+	// Publish Delete event before actual deletion
+	r.publishProjectEvent(ctx, project, streaming.OperationDelete)
 
 	// Delete the project namespace (ignore NotFound errors for idempotency)
 	if err := r.NamespaceManager.DeleteProjectNamespace(ctx, project); err != nil {
@@ -186,15 +195,65 @@ func (r *ProjectReconciler) updateStatusWithError(ctx context.Context, project *
 		log := logf.FromContext(ctx)
 		log.Error(err, "Failed to update project status with error")
 	}
+
+	// Publish Failed event to stream
+	r.publishProjectEvent(ctx, project, streaming.OperationFailed)
+}
+
+// publishProjectEvent publishes a project event to the Redis stream
+func (r *ProjectReconciler) publishProjectEvent(ctx context.Context, project *platformv1alpha1.Project, operation streaming.OperationType) {
+	log := logf.FromContext(ctx)
+
+	// Skip publishing if StreamPublisher is not available
+	if r.StreamPublisher == nil {
+		return
+	}
+
+	// Extract required UUIDs from labels
+	projectUUID := project.Labels[validation.LabelResourceUUID]
+	workspaceUUID := project.Labels[validation.LabelWorkspaceUUID]
+
+	if projectUUID == "" || workspaceUUID == "" {
+		log.Info("Skipping stream publish - missing required UUIDs",
+			"projectUUID", projectUUID,
+			"workspaceUUID", workspaceUUID)
+		return
+	}
+
+	// Create event with full Kubernetes resource
+	event, err := streaming.NewResourceEventFromK8sResource(
+		projectUUID,
+		workspaceUUID,
+		streaming.ResourceTypeProject,
+		projectUUID,
+		project.Name,
+		project.Namespace,
+		operation,
+		project,
+	)
+	if err != nil {
+		log.Error(err, "Failed to create resource event for project")
+		return
+	}
+
+	// Publish event
+	if err := r.StreamPublisher.PublishEvent(ctx, event); err != nil {
+		log.Error(err, "Failed to publish project event to stream")
+	} else {
+		log.Info("Successfully published project event",
+			"operation", operation,
+			"projectUUID", projectUUID)
+	}
 }
 
 // NewProjectReconciler creates a new ProjectReconciler with required dependencies
-func NewProjectReconciler(k8sClient client.Client, scheme *runtime.Scheme) *ProjectReconciler {
+func NewProjectReconciler(k8sClient client.Client, scheme *runtime.Scheme, streamPublisher streaming.ProjectStreamPublisher) *ProjectReconciler {
 	return &ProjectReconciler{
 		Client:           k8sClient,
 		Scheme:           scheme,
 		NamespaceManager: NewNamespaceManager(k8sClient),
 		Validator:        NewProjectValidator(k8sClient),
+		StreamPublisher:  streamPublisher,
 	}
 }
 

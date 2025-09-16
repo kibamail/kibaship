@@ -23,6 +23,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2" // nolint:revive,staticcheck
 )
@@ -32,7 +33,7 @@ const (
 	prometheusOperatorURL     = "https://github.com/prometheus-operator/prometheus-operator/" +
 		"releases/download/%s/bundle.yaml"
 
-	certmanagerVersion = "v1.16.3"
+	certmanagerVersion = "v1.18.2"
 	certmanagerURLTmpl = "https://github.com/cert-manager/cert-manager/releases/download/%s/cert-manager.yaml"
 )
 
@@ -52,18 +53,23 @@ func Run(cmd *exec.Cmd) (string, error) {
 	cmd.Env = append(os.Environ(), "GO111MODULE=on")
 	command := strings.Join(cmd.Args, " ")
 	_, _ = fmt.Fprintf(GinkgoWriter, "running: %q\n", command)
-	output, err := cmd.CombinedOutput()
+
+	// Stream output in real-time to GinkgoWriter
+	cmd.Stdout = GinkgoWriter
+	cmd.Stderr = GinkgoWriter
+
+	err := cmd.Run()
 	if err != nil {
-		return string(output), fmt.Errorf("%q failed with error %q: %w", command, string(output), err)
+		return "", fmt.Errorf("%q failed with error: %w", command, err)
 	}
 
-	return string(output), nil
+	return "", nil
 }
 
 // InstallPrometheusOperator installs the prometheus Operator to be used to export the enabled metrics.
 func InstallPrometheusOperator() error {
 	url := fmt.Sprintf(prometheusOperatorURL, prometheusOperatorVersion)
-	cmd := exec.Command("kubectl", "create", "-f", url)
+	cmd := exec.Command("kubectl", "apply", "--server-side", "-f", url)
 	_, err := Run(cmd)
 	return err
 }
@@ -139,15 +145,15 @@ func InstallCertManager() error {
 		}
 	}
 
-	// Disable cert-manager webhook validation in test environment
-	// This prevents cert-manager validation webhook from interfering with test deployment
-	cmd = exec.Command("kubectl", "delete",
-		"validatingwebhookconfigurations.admissionregistration.k8s.io",
-		"cert-manager-webhook")
-	if _, err := Run(cmd); err != nil {
-		// Ignore errors if webhook doesn't exist
-		warnError(err)
-	}
+	// // Disable cert-manager webhook validation in test environment
+	// // This prevents cert-manager validation webhook from interfering with test deployment
+	// cmd = exec.Command("kubectl", "delete",
+	// 	"validatingwebhookconfigurations.admissionregistration.k8s.io",
+	// 	"cert-manager-webhook")
+	// if _, err := Run(cmd); err != nil {
+	// 	// Ignore errors if webhook doesn't exist
+	// 	warnError(err)
+	// }
 
 	return nil
 }
@@ -273,62 +279,38 @@ func UncommentCode(filename, target, prefix string) error {
 	return nil
 }
 
-// InstallTektonPipelines installs Tekton Pipelines CRDs only to support Task resources
-// For e2e tests, we only need the CRDs to allow the operator to deploy Task resources
+// InstallTektonPipelines installs the full Tekton Pipelines operator
 func InstallTektonPipelines() error {
-	// Create a minimal Tekton Task CRD installation for testing
-	taskCRD := `
-apiVersion: apiextensions.k8s.io/v1
-kind: CustomResourceDefinition
-metadata:
-  name: tasks.tekton.dev
-  labels:
-    app.kubernetes.io/instance: default
-    app.kubernetes.io/part-of: tekton-pipelines
-spec:
-  group: tekton.dev
-  versions:
-  - name: v1
-    served: true
-    storage: true
-    schema:
-      openAPIV3Schema:
-        type: object
-        x-kubernetes-preserve-unknown-fields: true
-  scope: Namespaced
-  names:
-    plural: tasks
-    singular: task
-    kind: Task
-    shortNames:
-    - t
----
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: tekton-pipelines
-  labels:
-    app.kubernetes.io/instance: default
-    app.kubernetes.io/part-of: tekton-pipelines
-`
-
-	// Apply the minimal CRD configuration
-	cmd := exec.Command("kubectl", "apply", "-f", "-")
-	cmd.Stdin = strings.NewReader(taskCRD)
-	_, err := Run(cmd)
-	return err
-}
-
-// UninstallTektonPipelines uninstalls Tekton CRDs and namespace
-func UninstallTektonPipelines() {
-	// Delete Task CRD
-	cmd := exec.Command("kubectl", "delete", "crd", "tasks.tekton.dev")
+	url := "https://storage.googleapis.com/tekton-releases/pipeline/previous/v1.4.0/release.yaml"
+	cmd := exec.Command("kubectl", "apply", "-f", url)
 	if _, err := Run(cmd); err != nil {
-		warnError(err)
+		return err
 	}
 
-	// Delete tekton-pipelines namespace
-	cmd = exec.Command("kubectl", "delete", "namespace", "tekton-pipelines")
+	// Wait for Tekton Pipelines components to be ready
+	components := []string{
+		"tekton-pipelines-controller",
+		"tekton-pipelines-webhook",
+	}
+
+	for _, component := range components {
+		cmd = exec.Command("kubectl", "wait", "deployment.apps/"+component,
+			"--for", "condition=Available",
+			"--namespace", "tekton-pipelines",
+			"--timeout", "10m",
+		)
+		if _, err := Run(cmd); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// UninstallTektonPipelines uninstalls the full Tekton Pipelines operator
+func UninstallTektonPipelines() {
+	url := "https://storage.googleapis.com/tekton-releases/pipeline/previous/v1.4.0/release.yaml"
+	cmd := exec.Command("kubectl", "delete", "-f", url)
 	if _, err := Run(cmd); err != nil {
 		warnError(err)
 	}
@@ -359,4 +341,348 @@ func IsTektonPipelinesCRDsInstalled() bool {
 	}
 
 	return false
+}
+
+// InstallValkeyOperator installs the full Valkey operator
+func InstallValkeyOperator() error {
+	url := "https://github.com/hyperspike/valkey-operator/releases/download/v0.0.59/install.yaml"
+	cmd := exec.Command("kubectl", "apply", "-f", url)
+	if _, err := Run(cmd); err != nil {
+		return err
+	}
+
+	// Wait for Valkey operator components to be ready
+	cmd = exec.Command("kubectl", "wait", "deployment.apps/valkey-operator-controller-manager",
+		"--for", "condition=Available",
+		"--namespace", "valkey-operator-system",
+		"--timeout", "1m",
+	)
+	if _, err := Run(cmd); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// UninstallValkeyOperator uninstalls the full Valkey operator
+func UninstallValkeyOperator() {
+	url := "https://github.com/hyperspike/valkey-operator/releases/download/v0.0.59/install.yaml"
+	cmd := exec.Command("kubectl", "delete", "-f", url)
+	if _, err := Run(cmd); err != nil {
+		warnError(err)
+	}
+}
+
+// IsValkeyOperatorCRDsInstalled checks if any Valkey operator CRDs are installed
+func IsValkeyOperatorCRDsInstalled() bool {
+	valkeyCRDs := []string{
+		"valkeys.hyperspike.io",
+	}
+
+	cmd := exec.Command("kubectl", "get", "crds")
+	output, err := Run(cmd)
+	if err != nil {
+		return false
+	}
+
+	crdList := GetNonEmptyLines(output)
+	for _, crd := range valkeyCRDs {
+		for _, line := range crdList {
+			if strings.Contains(line, crd) {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+// CreateStorageReplicaStorageClass creates the storage-replica-1 storage class
+// that duplicates the default 'standard' storage class for test environments
+func CreateStorageReplicaStorageClass() error {
+	storageClassYAML := `apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: storage-replica-1
+  annotations:
+    description: "Test environment storage class that mirrors standard storage class"
+provisioner: rancher.io/local-path
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: false`
+
+	cmd := exec.Command("kubectl", "apply", "-f", "-")
+	cmd.Stdin = strings.NewReader(storageClassYAML)
+	_, err := Run(cmd)
+	return err
+}
+
+// CleanupStorageReplicaStorageClass removes the storage-replica-1 storage class
+func CleanupStorageReplicaStorageClass() {
+	cmd := exec.Command("kubectl", "delete", "storageclass", "storage-replica-1", "--ignore-not-found")
+	if _, err := Run(cmd); err != nil {
+		warnError(err)
+	}
+}
+
+// DeployKibashipOperator deploys the kibaship-operator using make deploy
+func DeployKibashipOperator() error {
+	// First install the CRDs
+	cmd := exec.Command("make", "install")
+	if _, err := Run(cmd); err != nil {
+		return err
+	}
+
+	// Wait for CRDs to be available and established
+	crdNames := []string{
+		"projects.platform.operator.kibaship.com",
+		"applications.platform.operator.kibaship.com",
+		"deployments.platform.operator.kibaship.com",
+		"applicationdomains.platform.operator.kibaship.com",
+	}
+
+	for _, crdName := range crdNames {
+		cmd = exec.Command("kubectl", "wait", "--for", "condition=Established", "crd", crdName, "--timeout=300s")
+		if _, err := Run(cmd); err != nil {
+			return err
+		}
+	}
+
+	// Then deploy the operator
+	cmd = exec.Command("make", "deploy", "IMG=kibaship.com/kibaship-operator:v0.0.1")
+	if _, err := Run(cmd); err != nil {
+		return err
+	}
+
+	// Use enhanced monitoring with longer timeout to account for Valkey initialization
+	maxWaitTime := 8 * time.Minute // Increased from 4 minutes to accommodate Valkey startup
+	return MonitorOperatorStartup("kibaship-operator", maxWaitTime)
+}
+
+// UndeployKibashipOperator removes the kibaship-operator deployment
+func UndeployKibashipOperator() {
+	cmd := exec.Command("make", "undeploy")
+	if _, err := Run(cmd); err != nil {
+		warnError(err)
+	}
+}
+
+// CheckOperatorHealthStatus provides detailed operator health check diagnostics
+func CheckOperatorHealthStatus(namespace string) {
+	_, _ = fmt.Fprintf(GinkgoWriter, "\n=== Detailed Operator Health Check ===\n")
+
+	// Get pod logs with specific focus on health probe failures
+	cmd := exec.Command("kubectl", "get", "pods", "-n", namespace, "-o", "name")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		_, _ = fmt.Fprintf(GinkgoWriter, "Error getting pods: %v\n", err)
+		return
+	}
+
+	podNames := GetNonEmptyLines(string(output))
+	for _, podName := range podNames {
+		if strings.Contains(podName, "controller-manager") {
+			_, _ = fmt.Fprintf(GinkgoWriter, "\n--- Pod Logs for %s ---\n", podName)
+
+			// Get recent logs with timestamps
+			cmd = exec.Command("kubectl", "logs", podName, "-n", namespace, "--timestamps", "--tail=50")
+			if _, err := Run(cmd); err != nil {
+				_, _ = fmt.Fprintf(GinkgoWriter, "Error getting logs for %s: %v\n", podName, err)
+			}
+
+			// Check health endpoints directly
+			_, _ = fmt.Fprintf(GinkgoWriter, "\n--- Health Endpoint Status ---\n")
+			CheckOperatorHealthEndpoints(namespace, strings.TrimPrefix(podName, "pod/"))
+
+			// Check Valkey dependency status
+			_, _ = fmt.Fprintf(GinkgoWriter, "\n--- Valkey Dependency Status ---\n")
+			CheckValkeyStatus(namespace)
+		}
+	}
+}
+
+// CheckOperatorHealthEndpoints tests the health endpoints directly
+func CheckOperatorHealthEndpoints(namespace, podName string) {
+	healthEndpoints := []string{"/healthz", "/readyz"}
+
+	for _, endpoint := range healthEndpoints {
+		_, _ = fmt.Fprintf(GinkgoWriter, "Testing %s endpoint on pod %s:\n", endpoint, podName)
+
+		// Use kubectl exec to curl the health endpoint from within the pod
+		cmd := exec.Command("kubectl", "exec", podName, "-n", namespace, "--",
+			"wget", "-qO-", "--timeout=5", fmt.Sprintf("http://localhost:8081%s", endpoint))
+		output, err := cmd.CombinedOutput()
+
+		if err != nil {
+			_, _ = fmt.Fprintf(GinkgoWriter, "  ❌ %s failed: %v\n", endpoint, err)
+			_, _ = fmt.Fprintf(GinkgoWriter, "  Output: %s\n", string(output))
+		} else {
+			_, _ = fmt.Fprintf(GinkgoWriter, "  ✅ %s success: %s\n", endpoint, strings.TrimSpace(string(output)))
+		}
+	}
+}
+
+// CheckValkeyStatus checks if Valkey cluster is ready and accessible
+func CheckValkeyStatus(operatorNamespace string) {
+	// First, show ALL pods in the operator namespace for full context
+	_, _ = fmt.Fprintf(GinkgoWriter, "\n=== ALL PODS IN NAMESPACE %s ===\n", operatorNamespace)
+	cmd := exec.Command("kubectl", "get", "pods", "-n", operatorNamespace, "-o", "wide", "--show-labels")
+	if _, err := Run(cmd); err != nil {
+		_, _ = fmt.Fprintf(GinkgoWriter, "  Error listing pods in namespace %s: %v\n", operatorNamespace, err)
+	}
+
+	// Also show pod status details
+	_, _ = fmt.Fprintf(GinkgoWriter, "\n--- Pod Status Details ---\n")
+	cmd = exec.Command("kubectl", "describe", "pods", "-n", operatorNamespace)
+	if _, err := Run(cmd); err != nil {
+		_, _ = fmt.Fprintf(GinkgoWriter, "  Error describing pods: %v\n", err)
+	}
+
+	// Show all services (including Valkey services)
+	_, _ = fmt.Fprintf(GinkgoWriter, "\n--- Services in Namespace ---\n")
+	cmd = exec.Command("kubectl", "get", "svc", "-n", operatorNamespace, "-o", "wide")
+	if _, err := Run(cmd); err != nil {
+		_, _ = fmt.Fprintf(GinkgoWriter, "  Error listing services: %v\n", err)
+	}
+
+	// Check if Valkey CRD exists
+	_, _ = fmt.Fprintf(GinkgoWriter, "\n=== VALKEY CLUSTER STATUS ===\n")
+	_, _ = fmt.Fprintf(GinkgoWriter, "Checking Valkey CRDs:\n")
+	cmd = exec.Command("kubectl", "get", "crd", "valkeys.hyperspike.io")
+	if _, err := Run(cmd); err != nil {
+		_, _ = fmt.Fprintf(GinkgoWriter, "  ❌ Valkey CRD not found: %v\n", err)
+		return
+	}
+	_, _ = fmt.Fprintf(GinkgoWriter, "  ✅ Valkey CRD exists\n")
+
+	// List ALL Valkey resources in the namespace first
+	_, _ = fmt.Fprintf(GinkgoWriter, "\nAll Valkey resources in namespace %s:\n", operatorNamespace)
+	cmd = exec.Command("kubectl", "get", "valkey", "-n", operatorNamespace, "-o", "wide")
+	if _, err := Run(cmd); err != nil {
+		_, _ = fmt.Fprintf(GinkgoWriter, "  No Valkey resources found or error: %v\n", err)
+	}
+
+	// Check if expected Valkey cluster resource exists
+	expectedValkeyName := "kibaship-valkey-cluster-kibaship-com"
+	_, _ = fmt.Fprintf(GinkgoWriter, "\nChecking expected Valkey cluster resource '%s':\n", expectedValkeyName)
+	cmd = exec.Command("kubectl", "get", "valkey", expectedValkeyName, "-n", operatorNamespace, "-o", "yaml")
+	if _, err := Run(cmd); err != nil {
+		_, _ = fmt.Fprintf(GinkgoWriter, "  ❌ Expected Valkey cluster resource not found: %v\n", err)
+	} else {
+		_, _ = fmt.Fprintf(GinkgoWriter, "  ✅ Valkey cluster resource exists (YAML above shows full status)\n")
+	}
+
+	// Show recent events related to Valkey
+	_, _ = fmt.Fprintf(GinkgoWriter, "\n--- Recent Events (may show Valkey cluster status) ---\n")
+	cmd = exec.Command("kubectl", "get", "events", "-n", operatorNamespace, "--sort-by=.metadata.creationTimestamp", "--field-selector=involvedObject.kind=Valkey")
+	if _, err := Run(cmd); err != nil {
+		_, _ = fmt.Fprintf(GinkgoWriter, "  No Valkey-specific events or error: %v\n", err)
+	}
+
+	// Check all secrets (including Valkey secret)
+	_, _ = fmt.Fprintf(GinkgoWriter, "\n--- All Secrets in Namespace ---\n")
+	cmd = exec.Command("kubectl", "get", "secrets", "-n", operatorNamespace, "-o", "wide")
+	if _, err := Run(cmd); err != nil {
+		_, _ = fmt.Fprintf(GinkgoWriter, "    Error listing secrets: %v\n", err)
+	}
+
+	// Check expected Valkey secret specifically
+	expectedSecretName := "kibaship-valkey-cluster-kibaship-com"
+	_, _ = fmt.Fprintf(GinkgoWriter, "\nChecking expected Valkey authentication secret '%s':\n", expectedSecretName)
+	cmd = exec.Command("kubectl", "describe", "secret", expectedSecretName, "-n", operatorNamespace)
+	if _, err := Run(cmd); err != nil {
+		_, _ = fmt.Fprintf(GinkgoWriter, "  ❌ Expected Valkey secret not found: %v\n", err)
+	} else {
+		_, _ = fmt.Fprintf(GinkgoWriter, "  ✅ Valkey secret exists (details above)\n")
+	}
+}
+
+// MonitorOperatorStartup monitors operator startup with enhanced logging
+func MonitorOperatorStartup(namespace string, timeout time.Duration) error {
+	_, _ = fmt.Fprintf(GinkgoWriter, "\n=== Enhanced Operator Startup Monitoring ===\n")
+	_, _ = fmt.Fprintf(GinkgoWriter, "Monitoring namespace: %s\n", namespace)
+	_, _ = fmt.Fprintf(GinkgoWriter, "Timeout: %v\n", timeout)
+
+	startTime := time.Now()
+	checkInterval := 10 * time.Second
+
+	for time.Since(startTime) < timeout {
+		elapsed := time.Since(startTime)
+		_, _ = fmt.Fprintf(GinkgoWriter, "\n--- Status Check (%.0fs elapsed) ---\n", elapsed.Seconds())
+
+		// Check deployment readiness
+		cmd := exec.Command("kubectl", "get", "deployment", "kibaship-operator-controller-manager",
+			"-n", namespace, "-o", "jsonpath={.status.readyReplicas}")
+		output, err := cmd.CombinedOutput()
+		readyReplicas := strings.TrimSpace(string(output))
+
+		if err == nil && readyReplicas == "1" {
+			_, _ = fmt.Fprintf(GinkgoWriter, "✅ Operator is ready!\n")
+			return nil
+		}
+
+		_, _ = fmt.Fprintf(GinkgoWriter, "Current ready replicas: %s\n", readyReplicas)
+
+		// Show all pods in namespace every 30 seconds to track Valkey startup progress
+		if int(elapsed.Seconds())%30 == 0 || elapsed > 30*time.Second {
+			_, _ = fmt.Fprintf(GinkgoWriter, "\n--- Namespace Pod Status (%.0fs elapsed) ---\n", elapsed.Seconds())
+			cmd = exec.Command("kubectl", "get", "pods", "-n", namespace, "-o", "wide")
+			if _, err := Run(cmd); err != nil {
+				_, _ = fmt.Fprintf(GinkgoWriter, "Error getting namespace pods: %v\n", err)
+			}
+
+			// Show Valkey resources specifically every 30 seconds
+			_, _ = fmt.Fprintf(GinkgoWriter, "\n--- Valkey Resources Status ---\n")
+			cmd = exec.Command("kubectl", "get", "valkey", "-n", namespace, "-o", "wide")
+			if _, err := Run(cmd); err != nil {
+				_, _ = fmt.Fprintf(GinkgoWriter, "No Valkey resources or error: %v\n", err)
+			}
+		}
+
+		// Detailed health check every 60 seconds or if not ready after 1 minute
+		if int(elapsed.Seconds())%60 == 0 || elapsed > time.Minute {
+			CheckOperatorHealthStatus(namespace)
+		}
+
+		_, _ = fmt.Fprintf(GinkgoWriter, "⏳ Waiting %v before next check...\n", checkInterval)
+		time.Sleep(checkInterval)
+	}
+
+	_, _ = fmt.Fprintf(GinkgoWriter, "\n❌ Timeout reached - performing final diagnostic check\n")
+	CheckOperatorHealthStatus(namespace)
+
+	return fmt.Errorf("timeout waiting for operator to become ready after %v", timeout)
+}
+
+// DiagnoseKibashipOperator provides a complete diagnostic check for the kibaship operator
+// This function can be called from any test to get detailed operator status
+func DiagnoseKibashipOperator() {
+	_, _ = fmt.Fprintf(GinkgoWriter, "\n🔍 KIBASHIP OPERATOR DIAGNOSTIC REPORT\n")
+	_, _ = fmt.Fprintf(GinkgoWriter, "=====================================\n")
+
+	// Check general operator status
+	CheckOperatorHealthStatus("kibaship-operator")
+
+	// Additional context: Check dependencies
+	_, _ = fmt.Fprintf(GinkgoWriter, "\n=== DEPENDENCY STATUS ===\n")
+
+	// Check all operators that kibaship depends on
+	operators := []struct {
+		name      string
+		namespace string
+	}{
+		{"cert-manager", "cert-manager"},
+		{"tekton-pipelines", "tekton-pipelines"},
+		{"valkey-operator", "valkey-operator-system"},
+	}
+
+	for _, op := range operators {
+		_, _ = fmt.Fprintf(GinkgoWriter, "\n--- %s Status ---\n", op.name)
+		cmd := exec.Command("kubectl", "get", "deployment", "-n", op.namespace)
+		if _, err := Run(cmd); err != nil {
+			_, _ = fmt.Fprintf(GinkgoWriter, "❌ Error getting %s deployments: %v\n", op.name, err)
+		}
+	}
+
+	_, _ = fmt.Fprintf(GinkgoWriter, "\n🏁 DIAGNOSTIC REPORT COMPLETE\n")
 }

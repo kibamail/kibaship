@@ -29,11 +29,13 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	platformv1alpha1 "github.com/kibamail/kibaship-operator/api/v1alpha1"
 	"github.com/kibamail/kibaship-operator/internal/controller"
+	"github.com/kibamail/kibaship-operator/pkg/streaming"
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	// +kubebuilder:scaffold:imports
 )
@@ -89,43 +91,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := controller.NewProjectReconciler(
-		mgr.GetClient(),
-		mgr.GetScheme(),
-	).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Project")
-		os.Exit(1)
-	}
-	if err := (&platformv1alpha1.Project{}).SetupWebhookWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create webhook", "webhook", "Project")
-		os.Exit(1)
-	}
-	if err := (&controller.ApplicationReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Application")
-		os.Exit(1)
-	}
-	if err := (&controller.DeploymentReconciler{
-		Client:           mgr.GetClient(),
-		Scheme:           mgr.GetScheme(),
-		NamespaceManager: controller.NewNamespaceManager(mgr.GetClient()),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Deployment")
-		os.Exit(1)
-	}
-	if err := (&controller.ApplicationDomainReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "ApplicationDomain")
-		os.Exit(1)
-	}
-	if err := (&platformv1alpha1.ApplicationDomain{}).SetupWebhookWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create webhook", "webhook", "ApplicationDomain")
-		os.Exit(1)
-	}
 	// +kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
@@ -144,8 +109,119 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Get the operator namespace (assume same namespace as manager)
+	operatorNamespace := os.Getenv("NAMESPACE")
+	if operatorNamespace == "" {
+		// Fallback to reading from service account if NAMESPACE env var not set
+		operatorNamespace = "kibaship-operator" // Default namespace
+	}
+
+	// Create streaming configuration
+	streamingConfig := streaming.DefaultConfig(operatorNamespace)
+
+	// Create uncached Kubernetes client for startup initialization
+	// This is needed because mgr.GetClient() requires the manager cache to be started
+	uncachedClient, err := client.New(mgr.GetConfig(), client.Options{Scheme: mgr.GetScheme()})
+	if err != nil {
+		setupLog.Error(err, "Failed to create uncached client for streaming initialization")
+		os.Exit(1)
+	}
+	k8sClient := streaming.NewKubernetesClientAdapter(uncachedClient)
+
+	// BLOCKING STEP: Wait for Valkey cluster to become ready using simple polling
+	setupLog.Info("Waiting for Valkey cluster to become ready - this will block until ready or timeout",
+		"timeout", "5m", "checkInterval", "20s", "resource", streamingConfig.ValkeyServiceName)
+
+	valkeyGate := streaming.NewValkeyReadyGate(k8sClient, streamingConfig)
+	if err := valkeyGate.WaitForReady(context.Background()); err != nil {
+		setupLog.Error(err, "Valkey cluster failed to become ready within timeout - crashing pod")
+		os.Exit(1)
+	}
+
+	setupLog.Info("✅ Valkey cluster is ready - proceeding with streaming initialization")
+
+	// Initialize streaming components now that Valkey is ready
+	timeProvider := streaming.NewRealTimeProvider()
+	secretManager := streaming.NewSecretManager(k8sClient, streamingConfig)
+	connectionManager := streaming.NewConnectionManager(streamingConfig)
+
+	// Initialize streaming connection (should be fast now since Valkey is ready)
+	setupLog.Info("Establishing connection to Valkey cluster")
+	password, err := secretManager.GetValkeyPassword(context.Background())
+	if err != nil {
+		setupLog.Error(err, "Failed to get Valkey password")
+		os.Exit(1)
+	}
+	if err := connectionManager.Connect(context.Background(), password); err != nil {
+		setupLog.Error(err, "Failed to connect to Valkey cluster")
+		os.Exit(1)
+	}
+
+	setupLog.Info("✅ Valkey streaming initialized successfully")
+
+	// Create streaming publisher for controllers
+	streamPublisher := streaming.NewProjectStreamPublisher(
+		connectionManager,
+		timeProvider,
+		streamingConfig,
+	)
+
+	// Now set up controllers with streaming publisher
+	if err := controller.NewProjectReconciler(
+		mgr.GetClient(),
+		mgr.GetScheme(),
+		streamPublisher,
+	).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Project")
+		os.Exit(1)
+	}
+	if err := (&platformv1alpha1.Project{}).SetupWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "Project")
+		os.Exit(1)
+	}
+	if err := (&controller.ApplicationReconciler{
+		Client:          mgr.GetClient(),
+		Scheme:          mgr.GetScheme(),
+		StreamPublisher: streamPublisher,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Application")
+		os.Exit(1)
+	}
+	if err := (&controller.DeploymentReconciler{
+		Client:           mgr.GetClient(),
+		Scheme:           mgr.GetScheme(),
+		NamespaceManager: controller.NewNamespaceManager(mgr.GetClient()),
+		StreamPublisher:  streamPublisher,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Deployment")
+		os.Exit(1)
+	}
+	if err := (&controller.ApplicationDomainReconciler{
+		Client:          mgr.GetClient(),
+		Scheme:          mgr.GetScheme(),
+		StreamPublisher: streamPublisher,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "ApplicationDomain")
+		os.Exit(1)
+	}
+	if err := (&platformv1alpha1.ApplicationDomain{}).SetupWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "ApplicationDomain")
+		os.Exit(1)
+	}
+
+	setupLog.Info("All controllers initialized with streaming publisher")
+
+	// Set up graceful shutdown for streaming components
+	ctx := ctrl.SetupSignalHandler()
+	defer func() {
+		setupLog.Info("Shutting down Valkey streaming components")
+		if err := connectionManager.Close(); err != nil {
+			setupLog.Error(err, "Error during streaming shutdown")
+		}
+	}()
+
 	setupLog.Info("starting manager")
-	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+	if err := mgr.Start(ctx); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
