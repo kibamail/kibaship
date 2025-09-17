@@ -20,7 +20,6 @@ import (
 	"context"
 	"fmt"
 	"regexp"
-	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -297,108 +296,28 @@ func (r *Deployment) isValidDeploymentName() bool {
 	return pattern.MatchString(r.Name)
 }
 
-// GetProjectSlugFromName extracts the project slug from deployment name
-func (r *Deployment) GetProjectSlugFromName() string {
-	// Extract project slug from name format
-	if !r.isValidDeploymentName() {
+// GetSlug returns the deployment slug from labels
+func (r *Deployment) GetSlug() string {
+	if r.Labels == nil {
 		return ""
 	}
-
-	parts := strings.Split(r.Name, "-")
-	if len(parts) < 7 {
-		return ""
-	}
-
-	// Find the "app" delimiter and extract everything between "project" and "app"
-	const appDelimiter = "app"
-	projectStart := 1 // after "project-"
-	appIndex := -1
-	for i, part := range parts {
-		if part == appDelimiter {
-			appIndex = i
-			break
-		}
-	}
-
-	if appIndex == -1 || appIndex <= projectStart {
-		return ""
-	}
-
-	return strings.Join(parts[projectStart:appIndex], "-")
+	return r.Labels[validation.LabelResourceSlug]
 }
 
-// GetAppSlugFromName extracts the app slug from deployment name
-func (r *Deployment) GetAppSlugFromName() string {
-	// Extract app slug from name format
-	if !r.isValidDeploymentName() {
+// GetProjectUUID returns the project UUID from labels
+func (r *Deployment) GetProjectUUID() string {
+	if r.Labels == nil {
 		return ""
 	}
-
-	parts := strings.Split(r.Name, "-")
-	if len(parts) < 7 {
-		return ""
-	}
-
-	// Find "app" and "deployment" delimiters
-	appIndex := -1
-	deploymentIndex := -1
-	for i, part := range parts {
-		if part == "app" {
-			appIndex = i
-		} else if part == "deployment" && appIndex != -1 {
-			deploymentIndex = i
-			break
-		}
-	}
-
-	if appIndex == -1 || deploymentIndex == -1 || deploymentIndex <= appIndex+1 {
-		return ""
-	}
-
-	return strings.Join(parts[appIndex+1:deploymentIndex], "-")
+	return r.Labels[validation.LabelProjectUUID]
 }
 
-// GetDeploymentSlugFromName extracts the deployment slug from deployment name
-func (r *Deployment) GetDeploymentSlugFromName() string {
-	// Extract deployment slug from name format
-	if !r.isValidDeploymentName() {
+// GetApplicationUUID returns the application UUID from labels
+func (r *Deployment) GetApplicationUUID() string {
+	if r.Labels == nil {
 		return ""
 	}
-
-	parts := strings.Split(r.Name, "-")
-	if len(parts) < 7 {
-		return ""
-	}
-
-	// Find "deployment" and "kibaship" delimiters
-	deploymentIndex := -1
-	kibashipIndex := -1
-	for i, part := range parts {
-		if part == "deployment" {
-			deploymentIndex = i
-		} else if part == "kibaship" {
-			kibashipIndex = i
-			break
-		}
-	}
-
-	if deploymentIndex == -1 || kibashipIndex == -1 || kibashipIndex <= deploymentIndex+1 {
-		return ""
-	}
-
-	return strings.Join(parts[deploymentIndex+1:kibashipIndex], "-")
-}
-
-// GenerateExpectedApplicationName generates the expected application name for this deployment
-func (r *Deployment) GenerateExpectedApplicationName() string {
-	projectSlug := r.GetProjectSlugFromName()
-	appSlug := r.GetAppSlugFromName()
-
-	if projectSlug == "" || appSlug == "" {
-		return ""
-	}
-
-	return fmt.Sprintf("project-%s-app-%s-kibaship-com", projectSlug, appSlug)
+	return r.Labels[validation.LabelApplicationUUID]
 }
 
 // SetupWebhookWithManager will setup the manager to manage the webhooks

@@ -168,11 +168,14 @@ func (r *DeploymentReconciler) handleGitRepositoryDeployment(ctx context.Context
 	}
 
 	// Generate the pipeline name
-	pipelineName := r.generateGitRepositoryPipelineName(deployment, app)
+	pipelineName, err := r.generateGitRepositoryPipelineName(ctx, deployment, app)
+	if err != nil {
+		return fmt.Errorf("failed to generate pipeline name: %w", err)
+	}
 
 	// Check if pipeline already exists
 	existingPipeline := &tektonv1.Pipeline{}
-	err := r.Get(ctx, types.NamespacedName{
+	err = r.Get(ctx, types.NamespacedName{
 		Name:      pipelineName,
 		Namespace: deployment.Namespace,
 	}, existingPipeline)
@@ -209,10 +212,14 @@ func (r *DeploymentReconciler) handleMySQLDeployment(ctx context.Context, deploy
 		return fmt.Errorf("invalid MySQL configuration: %w", err)
 	}
 
-	// Extract project and app slugs from deployment name
-	projectSlug, appSlug, err := extractProjectAndAppSlugs(deployment.Name)
+	// Get project and app slugs from labels
+	projectSlug, err := r.getProjectSlug(ctx, deployment.GetProjectUUID())
 	if err != nil {
-		return fmt.Errorf("failed to extract slugs from deployment name: %w", err)
+		return fmt.Errorf("failed to get project slug: %w", err)
+	}
+	appSlug, err := r.getApplicationSlug(ctx, deployment.GetApplicationUUID(), deployment.Namespace)
+	if err != nil {
+		return fmt.Errorf("failed to get application slug: %w", err)
 	}
 
 	// Check for existing deployments of this application
@@ -305,21 +312,22 @@ func (r *DeploymentReconciler) handleMySQLDeployment(ctx context.Context, deploy
 }
 
 // generateGitRepositoryPipelineName generates the pipeline name for GitRepository applications
-func (r *DeploymentReconciler) generateGitRepositoryPipelineName(deployment *platformv1alpha1.Deployment, _ *platformv1alpha1.Application) string {
-	projectSlug := deployment.GetProjectSlugFromName()
-	appSlug := deployment.GetAppSlugFromName()
-	deploymentSlug := deployment.GetDeploymentSlugFromName()
-
-	return fmt.Sprintf("project-%s-app-%s-deployment-%s-%s", projectSlug, appSlug, deploymentSlug, GitRepositoryPipelineSuffix)
+func (r *DeploymentReconciler) generateGitRepositoryPipelineName(ctx context.Context, deployment *platformv1alpha1.Deployment, _ *platformv1alpha1.Application) (string, error) {
+	deploymentSlug := deployment.GetSlug()
+	return fmt.Sprintf("pipeline-%s-kibaship-com", deploymentSlug), nil
 }
 
 // createGitRepositoryPipeline creates a Tekton Pipeline for GitRepository applications
 func (r *DeploymentReconciler) createGitRepositoryPipeline(ctx context.Context, deployment *platformv1alpha1.Deployment, app *platformv1alpha1.Application, pipelineName string) error {
 	log := logf.FromContext(ctx)
 
-	projectSlug := deployment.GetProjectSlugFromName()
-	appSlug := deployment.GetAppSlugFromName()
-	deploymentSlug := deployment.GetDeploymentSlugFromName()
+	deploymentSlug := deployment.GetSlug()
+
+	// Get project slug for labels
+	projectSlug, err := r.getProjectSlug(ctx, deployment.GetProjectUUID())
+	if err != nil {
+		return fmt.Errorf("failed to get project slug: %w", err)
+	}
 
 	// Get git configuration from application
 	gitConfig := app.Spec.GitRepository
@@ -343,7 +351,7 @@ func (r *DeploymentReconciler) createGitRepositoryPipeline(ctx context.Context, 
 	}
 
 	// Generate workspace name based on deployment
-	workspaceName := fmt.Sprintf("deployment-%s-application-%s-kibaship-com", deploymentSlug, appSlug)
+	workspaceName := fmt.Sprintf("workspace-%s-kibaship-com", deploymentSlug)
 
 	pipeline := &tektonv1.Pipeline{
 		ObjectMeta: metav1.ObjectMeta{
@@ -353,13 +361,13 @@ func (r *DeploymentReconciler) createGitRepositoryPipeline(ctx context.Context, 
 				"app.kubernetes.io/name":       fmt.Sprintf("project-%s", projectSlug),
 				"app.kubernetes.io/managed-by": "kibaship",
 				"app.kubernetes.io/component":  "ci-cd-pipeline",
-				"project.kibaship.com/slug":    projectSlug,
 				"tekton.dev/pipeline":          "git-repository-clone",
+				"project.kibaship.com/slug":    projectSlug,
 			},
 			Annotations: map[string]string{
-				"description":                fmt.Sprintf("CI/CD pipeline for project %s that clones source code from git repository", projectSlug),
+				"description":                fmt.Sprintf("CI/CD pipeline for deployment %s that clones source code from git repository", deploymentSlug),
 				"project.kibaship.com/usage": "Clones repository code for build and deployment processes",
-				"tekton.dev/displayName":     fmt.Sprintf("Project %s GitRepository Pipeline", projectSlug),
+				"tekton.dev/displayName":     fmt.Sprintf("Deployment %s GitRepository Pipeline", deploymentSlug),
 			},
 		},
 		Spec: tektonv1.PipelineSpec{
@@ -463,16 +471,18 @@ func (r *DeploymentReconciler) createGitRepositoryPipeline(ctx context.Context, 
 func (r *DeploymentReconciler) createPipelineRun(ctx context.Context, deployment *platformv1alpha1.Deployment, app *platformv1alpha1.Application, pipelineName string) error {
 	log := logf.FromContext(ctx)
 
-	projectSlug := deployment.GetProjectSlugFromName()
-	appSlug := deployment.GetAppSlugFromName()
-	deploymentSlug := deployment.GetDeploymentSlugFromName()
+	projectSlug, err := r.getProjectSlug(ctx, deployment.GetProjectUUID())
+	if err != nil {
+		return fmt.Errorf("failed to get project slug: %w", err)
+	}
+	deploymentSlug := deployment.GetSlug()
 
-	// Generate PipelineRun name with timestamp for uniqueness
-	pipelineRunName := fmt.Sprintf("project-%s-app-%s-deployment-%s-run-%d", projectSlug, appSlug, deploymentSlug, deployment.Generation)
+	// Generate PipelineRun name with generation for uniqueness
+	pipelineRunName := fmt.Sprintf("pipeline-run-%s-%d-kibaship-com", deploymentSlug, deployment.Generation)
 
 	// Check if PipelineRun already exists for this generation
 	existingPipelineRun := &tektonv1.PipelineRun{}
-	err := r.Get(ctx, types.NamespacedName{
+	err = r.Get(ctx, types.NamespacedName{
 		Name:      pipelineRunName,
 		Namespace: deployment.Namespace,
 	}, existingPipelineRun)
@@ -502,27 +512,26 @@ func (r *DeploymentReconciler) createPipelineRun(ctx context.Context, deployment
 	}
 
 	// Generate workspace name based on deployment
-	workspaceName := fmt.Sprintf("deployment-%s-application-%s-kibaship-com", deploymentSlug, appSlug)
+	workspaceName := fmt.Sprintf("workspace-%s-kibaship-com", deploymentSlug)
 
 	// Generate service account name
-	serviceAccountName := fmt.Sprintf("project-%s-kibaship-com", projectSlug)
+	serviceAccountName := fmt.Sprintf("service-account-%s-kibaship-com", projectSlug)
 
 	pipelineRun := &tektonv1.PipelineRun{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      pipelineRunName,
 			Namespace: deployment.Namespace,
 			Labels: map[string]string{
-				"app.kubernetes.io/name":       truncateLabel(fmt.Sprintf("project-%s", projectSlug)),
+				"app.kubernetes.io/name":       truncateLabel(fmt.Sprintf("pipeline-run-%s", deploymentSlug)),
 				"app.kubernetes.io/managed-by": "kibaship",
 				"app.kubernetes.io/component":  "ci-cd-pipeline-run",
-				"project.kibaship.com/slug":    truncateLabel(projectSlug),
 				"tekton.dev/pipeline":          truncateLabel(pipelineName),
 				"deployment.kibaship.com/name": truncateLabel(deployment.Name),
 			},
 			Annotations: map[string]string{
-				"description":                fmt.Sprintf("CI/CD pipeline run for project %s deployment %s", projectSlug, deploymentSlug),
+				"description":                fmt.Sprintf("CI/CD pipeline run for deployment %s", deploymentSlug),
 				"project.kibaship.com/usage": fmt.Sprintf("Executes pipeline for commit %s", deployment.Spec.GitRepository.CommitSHA),
-				"tekton.dev/displayName":     fmt.Sprintf("Project %s Deployment %s Pipeline Run", projectSlug, deploymentSlug),
+				"tekton.dev/displayName":     fmt.Sprintf("Deployment %s Pipeline Run", deploymentSlug),
 			},
 		},
 		Spec: tektonv1.PipelineRunSpec{
@@ -548,9 +557,8 @@ func (r *DeploymentReconciler) createPipelineRun(ctx context.Context, deployment
 					VolumeClaimTemplate: &corev1.PersistentVolumeClaim{
 						ObjectMeta: metav1.ObjectMeta{
 							Labels: map[string]string{
-								"app.kubernetes.io/name":       fmt.Sprintf("project-%s", projectSlug),
+								"app.kubernetes.io/name":       fmt.Sprintf("workspace-%s", deploymentSlug),
 								"app.kubernetes.io/managed-by": "kibaship",
-								"project.kibaship.com/slug":    projectSlug,
 							},
 						},
 						Spec: corev1.PersistentVolumeClaimSpec{
@@ -687,6 +695,34 @@ func truncateLabel(label string) string {
 	// Truncate to 54 chars (63 - 9 for hash suffix)
 	truncated := label[:54]
 	return truncated + hashSuffix
+}
+
+// getProjectSlug retrieves the project slug by UUID
+func (r *DeploymentReconciler) getProjectSlug(ctx context.Context, projectUUID string) (string, error) {
+	var projects platformv1alpha1.ProjectList
+	if err := r.List(ctx, &projects, client.MatchingLabels{
+		"platform.kibaship.com/uuid": projectUUID,
+	}); err != nil {
+		return "", fmt.Errorf("failed to list projects: %w", err)
+	}
+	if len(projects.Items) == 0 {
+		return "", fmt.Errorf("project with UUID %s not found", projectUUID)
+	}
+	return projects.Items[0].GetSlug(), nil
+}
+
+// getApplicationSlug retrieves the application slug by UUID within a namespace
+func (r *DeploymentReconciler) getApplicationSlug(ctx context.Context, appUUID, namespace string) (string, error) {
+	var apps platformv1alpha1.ApplicationList
+	if err := r.List(ctx, &apps, client.InNamespace(namespace), client.MatchingLabels{
+		"platform.kibaship.com/uuid": appUUID,
+	}); err != nil {
+		return "", fmt.Errorf("failed to list applications: %w", err)
+	}
+	if len(apps.Items) == 0 {
+		return "", fmt.Errorf("application with UUID %s not found in namespace %s", appUUID, namespace)
+	}
+	return apps.Items[0].GetSlug(), nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

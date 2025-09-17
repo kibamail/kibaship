@@ -279,6 +279,14 @@ func (r *Project) validateProject(ctx context.Context) error {
 	return nil
 }
 
+// GetSlug returns the project slug from labels
+func (r *Project) GetSlug() string {
+	if r.Labels == nil {
+		return ""
+	}
+	return r.Labels[validation.LabelResourceSlug]
+}
+
 // SetupWebhookWithManager will setup the manager to manage the webhooks
 func (r *Project) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewWebhookManagedBy(mgr).

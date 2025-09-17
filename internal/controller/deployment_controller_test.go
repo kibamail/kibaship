@@ -38,7 +38,7 @@ import (
 )
 
 const (
-	expectedPipelineName = "project-test123-app-myapp-deployment-web-git-repository-pipeline-kibaship-com"
+	expectedPipelineName = "pipeline-web-kibaship-com"
 )
 
 var _ = Describe("Deployment Controller", func() {
@@ -75,6 +75,7 @@ var _ = Describe("Deployment Controller", func() {
 				Name: "project-test123-kibaship-com",
 				Labels: map[string]string{
 					"platform.kibaship.com/uuid":           "550e8400-e29b-41d4-a716-446655440000",
+					"platform.kibaship.com/slug":           "test123",
 					"platform.kibaship.com/workspace-uuid": "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
 				},
 			},
@@ -109,6 +110,7 @@ var _ = Describe("Deployment Controller", func() {
 						Namespace: testNamespace.Name,
 						Labels: map[string]string{
 							"platform.kibaship.com/uuid":         "app-uuid-123",
+							"platform.kibaship.com/slug":         "myapp",
 							"platform.kibaship.com/project-uuid": "550e8400-e29b-41d4-a716-446655440000",
 						},
 					},
@@ -129,6 +131,12 @@ var _ = Describe("Deployment Controller", func() {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "project-test123-app-myapp-deployment-web-kibaship-com",
 						Namespace: testNamespace.Name,
+						Labels: map[string]string{
+							"platform.kibaship.com/uuid":             "deployment-uuid-123",
+							"platform.kibaship.com/slug":             "web",
+							"platform.kibaship.com/project-uuid":     "550e8400-e29b-41d4-a716-446655440000",
+							"platform.kibaship.com/application-uuid": "app-uuid-123",
+						},
 					},
 					Spec: platformv1alpha1.DeploymentSpec{
 						ApplicationRef: corev1.LocalObjectReference{Name: testApplication.Name},
@@ -237,7 +245,7 @@ var _ = Describe("Deployment Controller", func() {
 				Expect(err).NotTo(HaveOccurred())
 
 				By("Verifying pipeline exists")
-				expectedPipelineName := "project-test123-app-myapp-deployment-web-git-repository-pipeline-kibaship-com"
+				expectedPipelineName := "pipeline-web-kibaship-com"
 				pipeline := &tektonv1.Pipeline{}
 				Eventually(func() error {
 					return k8sClient.Get(ctx, types.NamespacedName{
@@ -272,7 +280,7 @@ var _ = Describe("Deployment Controller", func() {
 				Expect(err).NotTo(HaveOccurred())
 
 				By("Verifying pipeline uses empty token secret for public repos")
-				expectedPipelineName := "project-test123-app-myapp-deployment-web-git-repository-pipeline-kibaship-com"
+				expectedPipelineName := "pipeline-web-kibaship-com"
 				pipeline := &tektonv1.Pipeline{}
 				Eventually(func() error {
 					return k8sClient.Get(ctx, types.NamespacedName{
@@ -297,6 +305,7 @@ var _ = Describe("Deployment Controller", func() {
 						Namespace: testNamespace.Name,
 						Labels: map[string]string{
 							"platform.kibaship.com/uuid":         "app-uuid-456",
+							"platform.kibaship.com/slug":         "dockerapp",
 							"platform.kibaship.com/project-uuid": "550e8400-e29b-41d4-a716-446655440000",
 						},
 					},
@@ -314,6 +323,12 @@ var _ = Describe("Deployment Controller", func() {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "project-test123-app-dockerapp-deployment-web-kibaship-com",
 						Namespace: testNamespace.Name,
+						Labels: map[string]string{
+							"platform.kibaship.com/uuid":             "deployment-uuid-456",
+							"platform.kibaship.com/slug":             "web",
+							"platform.kibaship.com/project-uuid":     "550e8400-e29b-41d4-a716-446655440000",
+							"platform.kibaship.com/application-uuid": "app-uuid-456",
+						},
 					},
 					Spec: platformv1alpha1.DeploymentSpec{
 						ApplicationRef: corev1.LocalObjectReference{Name: testApplication.Name},
@@ -328,7 +343,7 @@ var _ = Describe("Deployment Controller", func() {
 				Expect(err).NotTo(HaveOccurred())
 
 				By("Verifying no pipeline was created")
-				expectedPipelineName := "project-test123-app-dockerapp-deployment-web-git-repository-pipeline-kibaship-com"
+				expectedPipelineName := "pipeline-web-kibaship-com"
 				pipeline := &tektonv1.Pipeline{}
 				err = k8sClient.Get(ctx, types.NamespacedName{
 					Name:      expectedPipelineName,
@@ -344,6 +359,11 @@ var _ = Describe("Deployment Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "project-testproj-app-testapp-kibaship-com",
 					Namespace: testNamespace.Name,
+					Labels: map[string]string{
+						"platform.kibaship.com/uuid":         "app-uuid-testproj-testapp",
+						"platform.kibaship.com/slug":         "testapp",
+						"platform.kibaship.com/project-uuid": "550e8400-e29b-41d4-a716-446655440000",
+					},
 				},
 				Spec: platformv1alpha1.ApplicationSpec{
 					ProjectRef: corev1.LocalObjectReference{Name: testProject.Name},
@@ -363,6 +383,12 @@ var _ = Describe("Deployment Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "project-testproj-app-testapp-deployment-testdeploy-kibaship-com",
 					Namespace: testNamespace.Name,
+					Labels: map[string]string{
+						"platform.kibaship.com/uuid":             "deployment-uuid-testproj-testdeploy",
+						"platform.kibaship.com/slug":             "testdeploy",
+						"platform.kibaship.com/project-uuid":     "550e8400-e29b-41d4-a716-446655440000",
+						"platform.kibaship.com/application-uuid": "app-uuid-testproj-testapp",
+					},
 				},
 				Spec: platformv1alpha1.DeploymentSpec{
 					ApplicationRef: corev1.LocalObjectReference{Name: app.Name},
@@ -380,7 +406,7 @@ var _ = Describe("Deployment Controller", func() {
 
 			// Verify Pipeline was created
 			pipeline := &tektonv1.Pipeline{}
-			expectedPipelineName := "project-testproj-app-testapp-deployment-testdeploy-git-repository-pipeline-kibaship-com"
+			expectedPipelineName := "pipeline-testdeploy-kibaship-com"
 			pipelineKey := types.NamespacedName{Name: expectedPipelineName, Namespace: testNamespace.Name}
 			Eventually(func() error {
 				return k8sClient.Get(ctx, pipelineKey, pipeline)
@@ -393,7 +419,7 @@ var _ = Describe("Deployment Controller", func() {
 
 			// Verify PipelineRun was created
 			pipelineRun := &tektonv1.PipelineRun{}
-			expectedPipelineRunName := fmt.Sprintf("project-testproj-app-testapp-deployment-testdeploy-run-%d", deployment.Generation)
+			expectedPipelineRunName := fmt.Sprintf("pipeline-run-testdeploy-%d-kibaship-com", deployment.Generation)
 			pipelineRunKey := types.NamespacedName{Name: expectedPipelineRunName, Namespace: testNamespace.Name}
 			Eventually(func() error {
 				return k8sClient.Get(ctx, pipelineRunKey, pipelineRun)
@@ -408,11 +434,11 @@ var _ = Describe("Deployment Controller", func() {
 			Expect(pipelineRun.Spec.Params[1].Value.StringVal).To(Equal("feature-branch"))
 
 			// Verify service account name
-			Expect(pipelineRun.Spec.TaskRunTemplate.ServiceAccountName).To(Equal("project-testproj-kibaship-com"))
+			Expect(pipelineRun.Spec.TaskRunTemplate.ServiceAccountName).To(Equal("service-account-test123-kibaship-com"))
 
 			// Verify workspace configuration
 			Expect(pipelineRun.Spec.Workspaces).To(HaveLen(1))
-			Expect(pipelineRun.Spec.Workspaces[0].Name).To(Equal("deployment-testdeploy-application-testapp-kibaship-com"))
+			Expect(pipelineRun.Spec.Workspaces[0].Name).To(Equal("workspace-testdeploy-kibaship-com"))
 			Expect(pipelineRun.Spec.Workspaces[0].VolumeClaimTemplate).NotTo(BeNil())
 
 			// Verify PVC storage allocation is 24GB
@@ -431,6 +457,11 @@ var _ = Describe("Deployment Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "project-teststorage-app-testapp-kibaship-com",
 					Namespace: testNamespace.Name,
+					Labels: map[string]string{
+						"platform.kibaship.com/uuid":         "app-uuid-teststorage-testapp",
+						"platform.kibaship.com/slug":         "testapp",
+						"platform.kibaship.com/project-uuid": "550e8400-e29b-41d4-a716-446655440000",
+					},
 				},
 				Spec: platformv1alpha1.ApplicationSpec{
 					ProjectRef: corev1.LocalObjectReference{Name: testProject.Name},
@@ -450,6 +481,12 @@ var _ = Describe("Deployment Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "project-teststorage-app-testapp-deployment-storage-kibaship-com",
 					Namespace: testNamespace.Name,
+					Labels: map[string]string{
+						"platform.kibaship.com/uuid":             "deployment-uuid-teststorage-storage",
+						"platform.kibaship.com/slug":             "storage",
+						"platform.kibaship.com/project-uuid":     "550e8400-e29b-41d4-a716-446655440000",
+						"platform.kibaship.com/application-uuid": "app-uuid-teststorage-testapp",
+					},
 				},
 				Spec: platformv1alpha1.DeploymentSpec{
 					ApplicationRef: corev1.LocalObjectReference{Name: app.Name},
@@ -466,7 +503,7 @@ var _ = Describe("Deployment Controller", func() {
 
 			// Verify PipelineRun was created
 			pipelineRun := &tektonv1.PipelineRun{}
-			expectedPipelineRunName := fmt.Sprintf("project-teststorage-app-testapp-deployment-storage-run-%d", deployment.Generation)
+			expectedPipelineRunName := fmt.Sprintf("pipeline-run-storage-%d-kibaship-com", deployment.Generation)
 			pipelineRunKey := types.NamespacedName{Name: expectedPipelineRunName, Namespace: testNamespace.Name}
 			Eventually(func() error {
 				return k8sClient.Get(ctx, pipelineRunKey, pipelineRun)
@@ -495,6 +532,11 @@ var _ = Describe("Deployment Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "project-teststorageclass-app-testapp-kibaship-com",
 					Namespace: testNamespace.Name,
+					Labels: map[string]string{
+						"platform.kibaship.com/uuid":         "app-uuid-teststorageclass-testapp",
+						"platform.kibaship.com/slug":         "testapp",
+						"platform.kibaship.com/project-uuid": "550e8400-e29b-41d4-a716-446655440000",
+					},
 				},
 				Spec: platformv1alpha1.ApplicationSpec{
 					ProjectRef: corev1.LocalObjectReference{Name: testProject.Name},
@@ -514,6 +556,12 @@ var _ = Describe("Deployment Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "project-teststorageclass-app-testapp-deployment-storageclass-kibaship-com",
 					Namespace: testNamespace.Name,
+					Labels: map[string]string{
+						"platform.kibaship.com/uuid":             "deployment-uuid-teststorageclass-storageclass",
+						"platform.kibaship.com/slug":             "storageclass",
+						"platform.kibaship.com/project-uuid":     "550e8400-e29b-41d4-a716-446655440000",
+						"platform.kibaship.com/application-uuid": "app-uuid-teststorageclass-testapp",
+					},
 				},
 				Spec: platformv1alpha1.DeploymentSpec{
 					ApplicationRef: corev1.LocalObjectReference{Name: app.Name},
@@ -530,7 +578,7 @@ var _ = Describe("Deployment Controller", func() {
 
 			// Verify PipelineRun was created
 			pipelineRun := &tektonv1.PipelineRun{}
-			expectedPipelineRunName := fmt.Sprintf("project-teststorageclass-app-testapp-deployment-storageclass-run-%d", deployment.Generation)
+			expectedPipelineRunName := fmt.Sprintf("pipeline-run-storageclass-%d-kibaship-com", deployment.Generation)
 			pipelineRunKey := types.NamespacedName{Name: expectedPipelineRunName, Namespace: testNamespace.Name}
 			Eventually(func() error {
 				return k8sClient.Get(ctx, pipelineRunKey, pipelineRun)
@@ -554,6 +602,11 @@ var _ = Describe("Deployment Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "project-testbranch-app-testapp-kibaship-com",
 					Namespace: testNamespace.Name,
+					Labels: map[string]string{
+						"platform.kibaship.com/uuid":         "app-uuid-testbranch-testapp",
+						"platform.kibaship.com/slug":         "testapp",
+						"platform.kibaship.com/project-uuid": "550e8400-e29b-41d4-a716-446655440000",
+					},
 				},
 				Spec: platformv1alpha1.ApplicationSpec{
 					ProjectRef: corev1.LocalObjectReference{Name: testProject.Name},
@@ -573,6 +626,12 @@ var _ = Describe("Deployment Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "project-testbranch-app-testapp-deployment-testbranch-kibaship-com",
 					Namespace: testNamespace.Name,
+					Labels: map[string]string{
+						"platform.kibaship.com/uuid":             "deployment-uuid-testbranch-testbranch",
+						"platform.kibaship.com/slug":             "testbranch",
+						"platform.kibaship.com/project-uuid":     "550e8400-e29b-41d4-a716-446655440000",
+						"platform.kibaship.com/application-uuid": "app-uuid-testbranch-testapp",
+					},
 				},
 				Spec: platformv1alpha1.DeploymentSpec{
 					ApplicationRef: corev1.LocalObjectReference{Name: app.Name},
@@ -590,7 +649,7 @@ var _ = Describe("Deployment Controller", func() {
 
 			// Verify PipelineRun uses application's branch
 			pipelineRun := &tektonv1.PipelineRun{}
-			expectedPipelineRunName := fmt.Sprintf("project-testbranch-app-testapp-deployment-testbranch-run-%d", deployment.Generation)
+			expectedPipelineRunName := fmt.Sprintf("pipeline-run-testbranch-%d-kibaship-com", deployment.Generation)
 			pipelineRunKey := types.NamespacedName{Name: expectedPipelineRunName, Namespace: testNamespace.Name}
 			Eventually(func() error {
 				return k8sClient.Get(ctx, pipelineRunKey, pipelineRun)
@@ -614,6 +673,11 @@ var _ = Describe("Deployment Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "project-testdup-app-testapp-kibaship-com",
 					Namespace: testNamespace.Name,
+					Labels: map[string]string{
+						"platform.kibaship.com/uuid":         "app-uuid-testdup-testapp",
+						"platform.kibaship.com/slug":         "testapp",
+						"platform.kibaship.com/project-uuid": "550e8400-e29b-41d4-a716-446655440000",
+					},
 				},
 				Spec: platformv1alpha1.ApplicationSpec{
 					ProjectRef: corev1.LocalObjectReference{Name: testProject.Name},
@@ -633,6 +697,12 @@ var _ = Describe("Deployment Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "project-testdup-app-testapp-deployment-testdup-kibaship-com",
 					Namespace: testNamespace.Name,
+					Labels: map[string]string{
+						"platform.kibaship.com/uuid":             "deployment-uuid-testdup-testdup",
+						"platform.kibaship.com/slug":             "testdup",
+						"platform.kibaship.com/project-uuid":     "550e8400-e29b-41d4-a716-446655440000",
+						"platform.kibaship.com/application-uuid": "app-uuid-testdup-testapp",
+					},
 				},
 				Spec: platformv1alpha1.DeploymentSpec{
 					ApplicationRef: corev1.LocalObjectReference{Name: app.Name},
@@ -648,7 +718,7 @@ var _ = Describe("Deployment Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Verify first PipelineRun was created
-			expectedPipelineRunName := fmt.Sprintf("project-testdup-app-testapp-deployment-testdup-run-%d", deployment.Generation)
+			expectedPipelineRunName := fmt.Sprintf("pipeline-run-testdup-%d-kibaship-com", deployment.Generation)
 			pipelineRunKey := types.NamespacedName{Name: expectedPipelineRunName, Namespace: testNamespace.Name}
 			pipelineRun := &tektonv1.PipelineRun{}
 			Eventually(func() error {
@@ -678,6 +748,11 @@ var _ = Describe("Deployment Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "project-testrequired-app-testapp-kibaship-com",
 					Namespace: testNamespace.Name,
+					Labels: map[string]string{
+						"platform.kibaship.com/uuid":         "app-uuid-testrequired-testapp",
+						"platform.kibaship.com/slug":         "testapp",
+						"platform.kibaship.com/project-uuid": "550e8400-e29b-41d4-a716-446655440000",
+					},
 				},
 				Spec: platformv1alpha1.ApplicationSpec{
 					ProjectRef: corev1.LocalObjectReference{Name: testProject.Name},
@@ -697,6 +772,12 @@ var _ = Describe("Deployment Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "project-testrequired-app-testapp-deployment-testrequired-kibaship-com",
 					Namespace: testNamespace.Name,
+					Labels: map[string]string{
+						"platform.kibaship.com/uuid":             "deployment-uuid-testrequired-testrequired",
+						"platform.kibaship.com/slug":             "testrequired",
+						"platform.kibaship.com/project-uuid":     "550e8400-e29b-41d4-a716-446655440000",
+						"platform.kibaship.com/application-uuid": "app-uuid-testrequired-testapp",
+					},
 				},
 				Spec: platformv1alpha1.DeploymentSpec{
 					ApplicationRef: corev1.LocalObjectReference{Name: app.Name},
@@ -745,6 +826,11 @@ var _ = Describe("Deployment Controller", func() {
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      fmt.Sprintf("project-test123-app-provider%d-kibaship-com", i),
 							Namespace: testNamespace.Name,
+							Labels: map[string]string{
+								"platform.kibaship.com/uuid":         fmt.Sprintf("app-uuid-provider%d", i),
+								"platform.kibaship.com/slug":         fmt.Sprintf("provider%d", i),
+								"platform.kibaship.com/project-uuid": "550e8400-e29b-41d4-a716-446655440000",
+							},
 						},
 						Spec: platformv1alpha1.ApplicationSpec{
 							ProjectRef: corev1.LocalObjectReference{Name: testProject.Name},
@@ -760,8 +846,14 @@ var _ = Describe("Deployment Controller", func() {
 
 					deployment := &platformv1alpha1.Deployment{
 						ObjectMeta: metav1.ObjectMeta{
-							Name:      fmt.Sprintf("project-test123-app-provider%d-deployment-web-kibaship-com", i),
+							Name:      fmt.Sprintf("project-test123-app-provider%d-deployment-web%d-kibaship-com", i, i),
 							Namespace: testNamespace.Name,
+							Labels: map[string]string{
+								"platform.kibaship.com/uuid":             fmt.Sprintf("deployment-uuid-provider%d", i),
+								"platform.kibaship.com/slug":             fmt.Sprintf("web%d", i),
+								"platform.kibaship.com/project-uuid":     "550e8400-e29b-41d4-a716-446655440000",
+								"platform.kibaship.com/application-uuid": fmt.Sprintf("app-uuid-provider%d", i),
+							},
 						},
 						Spec: platformv1alpha1.DeploymentSpec{
 							ApplicationRef: corev1.LocalObjectReference{Name: app.Name},
@@ -777,7 +869,7 @@ var _ = Describe("Deployment Controller", func() {
 					Expect(err).NotTo(HaveOccurred())
 
 					// Verify pipeline was created with correct URL
-					expectedPipelineName := fmt.Sprintf("project-test123-app-provider%d-deployment-web-git-repository-pipeline-kibaship-com", i)
+					expectedPipelineName := fmt.Sprintf("pipeline-web%d-kibaship-com", i)
 					pipeline := &tektonv1.Pipeline{}
 					Eventually(func() error {
 						return k8sClient.Get(ctx, types.NamespacedName{
@@ -809,6 +901,11 @@ var _ = Describe("Deployment Controller", func() {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "project-test123-app-mysqlapp-kibaship-com",
 						Namespace: testNamespace.Name,
+						Labels: map[string]string{
+							"platform.kibaship.com/uuid":         "app-uuid-mysql-mysqlapp",
+							"platform.kibaship.com/slug":         "mysqlapp",
+							"platform.kibaship.com/project-uuid": "550e8400-e29b-41d4-a716-446655440000",
+						},
 					},
 					Spec: platformv1alpha1.ApplicationSpec{
 						ProjectRef: corev1.LocalObjectReference{Name: testProject.Name},
@@ -833,6 +930,12 @@ var _ = Describe("Deployment Controller", func() {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "project-test123-app-mysqlapp-deployment-deploy1-kibaship-com",
 						Namespace: testNamespace.Name,
+						Labels: map[string]string{
+							"platform.kibaship.com/uuid":             "deployment-uuid-mysql-deploy1",
+							"platform.kibaship.com/slug":             "deploy1",
+							"platform.kibaship.com/project-uuid":     "550e8400-e29b-41d4-a716-446655440000",
+							"platform.kibaship.com/application-uuid": "app-uuid-mysql-mysqlapp",
+						},
 					},
 					Spec: platformv1alpha1.DeploymentSpec{
 						ApplicationRef: corev1.LocalObjectReference{Name: testMySQLApp.Name},
@@ -846,7 +949,7 @@ var _ = Describe("Deployment Controller", func() {
 
 				// Verify MySQL credentials secret was created
 				secret := &corev1.Secret{}
-				expectedSecretName := "project-test123-app-mysqlapp-mysql-credentials-kibaship-com"
+				expectedSecretName := "mysql-secret-deploy1-kibaship-com"
 				secretKey := types.NamespacedName{Name: expectedSecretName, Namespace: testNamespace.Name}
 				Eventually(func() error {
 					return k8sClient.Get(ctx, secretKey, secret)
@@ -871,7 +974,7 @@ var _ = Describe("Deployment Controller", func() {
 					Version: "v2",
 					Kind:    "InnoDBCluster",
 				})
-				expectedClusterName := "test123-mysqlapp-mysql"
+				expectedClusterName := "mysql-deploy1"
 				clusterKey := types.NamespacedName{Name: expectedClusterName, Namespace: testNamespace.Name}
 				Eventually(func() error {
 					return k8sClient.Get(ctx, clusterKey, cluster)
@@ -917,6 +1020,12 @@ var _ = Describe("Deployment Controller", func() {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "project-test123-app-mysqlapp-deployment-deploy1-kibaship-com",
 						Namespace: testNamespace.Name,
+						Labels: map[string]string{
+							"platform.kibaship.com/uuid":             "deployment-uuid-mysql-first-deploy1",
+							"platform.kibaship.com/slug":             "deploy1",
+							"platform.kibaship.com/project-uuid":     "550e8400-e29b-41d4-a716-446655440000",
+							"platform.kibaship.com/application-uuid": "app-uuid-mysql-mysqlapp",
+						},
 					},
 					Spec: platformv1alpha1.DeploymentSpec{
 						ApplicationRef: corev1.LocalObjectReference{Name: testMySQLApp.Name},
@@ -930,7 +1039,7 @@ var _ = Describe("Deployment Controller", func() {
 
 				// Verify resources were created for first deployment
 				secret := &corev1.Secret{}
-				expectedSecretName := "project-test123-app-mysqlapp-mysql-credentials-kibaship-com"
+				expectedSecretName := "mysql-secret-deploy1-kibaship-com"
 				secretKey := types.NamespacedName{Name: expectedSecretName, Namespace: testNamespace.Name}
 				Eventually(func() error {
 					return k8sClient.Get(ctx, secretKey, secret)
@@ -942,7 +1051,7 @@ var _ = Describe("Deployment Controller", func() {
 					Version: "v2",
 					Kind:    "InnoDBCluster",
 				})
-				expectedClusterName := "test123-mysqlapp-mysql"
+				expectedClusterName := "mysql-deploy1"
 				clusterKey := types.NamespacedName{Name: expectedClusterName, Namespace: testNamespace.Name}
 				Eventually(func() error {
 					return k8sClient.Get(ctx, clusterKey, cluster)
@@ -953,6 +1062,12 @@ var _ = Describe("Deployment Controller", func() {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "project-test123-app-mysqlapp-deployment-deploy2-kibaship-com",
 						Namespace: testNamespace.Name,
+						Labels: map[string]string{
+							"platform.kibaship.com/uuid":             "deployment-uuid-mysql-deploy2",
+							"platform.kibaship.com/slug":             "deploy2",
+							"platform.kibaship.com/project-uuid":     "550e8400-e29b-41d4-a716-446655440000",
+							"platform.kibaship.com/application-uuid": "app-uuid-mysql-mysqlapp",
+						},
 					},
 					Spec: platformv1alpha1.DeploymentSpec{
 						ApplicationRef: corev1.LocalObjectReference{Name: testMySQLApp.Name},
@@ -995,6 +1110,11 @@ var _ = Describe("Deployment Controller", func() {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "project-test123-app-mysql-no-version-kibaship-com",
 						Namespace: testNamespace.Name,
+						Labels: map[string]string{
+							"platform.kibaship.com/uuid":         "app-uuid-mysql-no-version",
+							"platform.kibaship.com/slug":         "mysql-no-version",
+							"platform.kibaship.com/project-uuid": "550e8400-e29b-41d4-a716-446655440000",
+						},
 					},
 					Spec: platformv1alpha1.ApplicationSpec{
 						ProjectRef: corev1.LocalObjectReference{Name: testProject.Name},
@@ -1010,6 +1130,12 @@ var _ = Describe("Deployment Controller", func() {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "project-test123-app-mysql-no-version-deployment-deploy1-kibaship-com",
 						Namespace: testNamespace.Name,
+						Labels: map[string]string{
+							"platform.kibaship.com/uuid":             "deployment-uuid-mysql-no-version-deploy1",
+							"platform.kibaship.com/slug":             "deploy1",
+							"platform.kibaship.com/project-uuid":     "550e8400-e29b-41d4-a716-446655440000",
+							"platform.kibaship.com/application-uuid": "app-uuid-mysql-no-version",
+						},
 					},
 					Spec: platformv1alpha1.DeploymentSpec{
 						ApplicationRef: corev1.LocalObjectReference{Name: appWithoutVersion.Name},
@@ -1028,7 +1154,7 @@ var _ = Describe("Deployment Controller", func() {
 					Version: "v2",
 					Kind:    "InnoDBCluster",
 				})
-				expectedClusterName := "test123-mysql-no-version-mysql"
+				expectedClusterName := "mysql-deploy1"
 				clusterKey := types.NamespacedName{Name: expectedClusterName, Namespace: testNamespace.Name}
 				Eventually(func() error {
 					return k8sClient.Get(ctx, clusterKey, cluster)
@@ -1047,6 +1173,11 @@ var _ = Describe("Deployment Controller", func() {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "project-test123-app-mysql-no-config-kibaship-com",
 						Namespace: testNamespace.Name,
+						Labels: map[string]string{
+							"platform.kibaship.com/uuid":         "app-uuid-mysql-no-config",
+							"platform.kibaship.com/slug":         "mysql-no-config",
+							"platform.kibaship.com/project-uuid": "550e8400-e29b-41d4-a716-446655440000",
+						},
 					},
 					Spec: platformv1alpha1.ApplicationSpec{
 						ProjectRef: corev1.LocalObjectReference{Name: testProject.Name},
@@ -1062,6 +1193,12 @@ var _ = Describe("Deployment Controller", func() {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "project-test123-app-mysql-no-config-deployment-deploy1-kibaship-com",
 						Namespace: testNamespace.Name,
+						Labels: map[string]string{
+							"platform.kibaship.com/uuid":             "deployment-uuid-mysql-no-config-deploy1",
+							"platform.kibaship.com/slug":             "deploy1",
+							"platform.kibaship.com/project-uuid":     "550e8400-e29b-41d4-a716-446655440000",
+							"platform.kibaship.com/application-uuid": "app-uuid-mysql-no-config",
+						},
 					},
 					Spec: platformv1alpha1.DeploymentSpec{
 						ApplicationRef: corev1.LocalObjectReference{Name: appWithoutConfig.Name},
@@ -1075,7 +1212,7 @@ var _ = Describe("Deployment Controller", func() {
 
 				// Verify resources were still created successfully
 				secret := &corev1.Secret{}
-				expectedSecretName := "project-test123-app-mysql-no-config-mysql-credentials-kibaship-com"
+				expectedSecretName := "mysql-secret-deploy1-kibaship-com"
 				secretKey := types.NamespacedName{Name: expectedSecretName, Namespace: testNamespace.Name}
 				Eventually(func() error {
 					return k8sClient.Get(ctx, secretKey, secret)
@@ -1087,7 +1224,7 @@ var _ = Describe("Deployment Controller", func() {
 					Version: "v2",
 					Kind:    "InnoDBCluster",
 				})
-				expectedClusterName := "test123-mysql-no-config-mysql"
+				expectedClusterName := "mysql-deploy1"
 				clusterKey := types.NamespacedName{Name: expectedClusterName, Namespace: testNamespace.Name}
 				Eventually(func() error {
 					return k8sClient.Get(ctx, clusterKey, cluster)
@@ -1096,12 +1233,17 @@ var _ = Describe("Deployment Controller", func() {
 		})
 
 		Context("Error Handling", func() {
-			It("should handle invalid deployment name format", func() {
+			It("should handle deployment with non-standard name format using labels", func() {
 				// Create MySQL application
 				testMySQLApp := &platformv1alpha1.Application{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "project-test123-app-mysqlapp-kibaship-com",
 						Namespace: testNamespace.Name,
+						Labels: map[string]string{
+							"platform.kibaship.com/uuid":         "app-uuid-mysql-error-handling",
+							"platform.kibaship.com/slug":         "mysqlapp",
+							"platform.kibaship.com/project-uuid": "550e8400-e29b-41d4-a716-446655440000",
+						},
 					},
 					Spec: platformv1alpha1.ApplicationSpec{
 						ProjectRef: corev1.LocalObjectReference{Name: testProject.Name},
@@ -1111,11 +1253,17 @@ var _ = Describe("Deployment Controller", func() {
 				Expect(k8sClient.Create(ctx, testMySQLApp)).To(Succeed())
 				defer func() { _ = k8sClient.Delete(ctx, testMySQLApp) }()
 
-				// Create deployment with invalid name format
+				// Create deployment with non-standard name format but proper labels
 				testDeployment = &platformv1alpha1.Deployment{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "invalid-deployment-name",
 						Namespace: testNamespace.Name,
+						Labels: map[string]string{
+							"platform.kibaship.com/uuid":             "deployment-uuid-invalid-name",
+							"platform.kibaship.com/slug":             "invalid",
+							"platform.kibaship.com/project-uuid":     "550e8400-e29b-41d4-a716-446655440000",
+							"platform.kibaship.com/application-uuid": "app-uuid-mysql-error-handling",
+						},
 					},
 					Spec: platformv1alpha1.DeploymentSpec{
 						ApplicationRef: corev1.LocalObjectReference{Name: testMySQLApp.Name},
@@ -1123,26 +1271,17 @@ var _ = Describe("Deployment Controller", func() {
 				}
 				Expect(k8sClient.Create(ctx, testDeployment)).To(Succeed())
 
-				// Reconcile deployment - should fail gracefully
-				_, err := deploymentReconciler.Reconcile(ctx, reconcile.Request{
-					NamespacedName: types.NamespacedName{
-						Name:      testDeployment.Name,
-						Namespace: testDeployment.Namespace,
-					},
-				})
-
-				// First reconcile adds finalizer and succeeds
+				// Reconcile deployment - should succeed using label-based approach
+				err := reconcileDeploymentTwice(ctx, deploymentReconciler, testDeployment)
 				Expect(err).NotTo(HaveOccurred())
 
-				// Second reconcile should fail due to invalid name format
-				_, err = deploymentReconciler.Reconcile(ctx, reconcile.Request{
-					NamespacedName: types.NamespacedName{
-						Name:      testDeployment.Name,
-						Namespace: testDeployment.Namespace,
-					},
-				})
-				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("failed to extract slugs from deployment name"))
+				// Verify MySQL resources were created successfully
+				secret := &corev1.Secret{}
+				expectedSecretName := "mysql-secret-invalid-kibaship-com"
+				secretKey := types.NamespacedName{Name: expectedSecretName, Namespace: testNamespace.Name}
+				Eventually(func() error {
+					return k8sClient.Get(ctx, secretKey, secret)
+				}, time.Second*10, time.Millisecond*250).Should(Succeed())
 			})
 		})
 	})
@@ -1167,38 +1306,19 @@ var _ = Describe("Deployment Controller", func() {
 			})
 		})
 
-		Context("Name extraction", func() {
-			It("should correctly extract project and app slugs from deployment name", func() {
-				deploymentName := "project-test123-app-myapp-deployment-deploy1-kibaship-com"
-				projectSlug, appSlug, err := extractProjectAndAppSlugs(deploymentName)
-
-				Expect(err).NotTo(HaveOccurred())
-				Expect(projectSlug).To(Equal("test123"))
-				Expect(appSlug).To(Equal("myapp"))
-			})
-
-			It("should handle complex multi-part slugs", func() {
-				deploymentName := "project-test-123-prod-app-my-app-name-deployment-deploy-1-kibaship-com"
-				projectSlug, appSlug, err := extractProjectAndAppSlugs(deploymentName)
-
-				Expect(err).NotTo(HaveOccurred())
-				Expect(projectSlug).To(Equal("test-123-prod"))
-				Expect(appSlug).To(Equal("my-app-name"))
-			})
-
-			It("should return error for invalid deployment name", func() {
-				_, _, err := extractProjectAndAppSlugs("invalid-name-format")
-				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("invalid deployment name format"))
-			})
-		})
-
 		Context("Resource name generation", func() {
 			It("should generate correct MySQL resource names", func() {
-				secretName, clusterName := generateMySQLResourceNames(nil, "testproject", "myapp")
+				testDeployment := &platformv1alpha1.Deployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Labels: map[string]string{
+							"platform.kibaship.com/slug": "testdeploy",
+						},
+					},
+				}
+				secretName, clusterName := generateMySQLResourceNames(testDeployment, "testproject", "myapp")
 
-				Expect(secretName).To(Equal("project-testproject-app-myapp-mysql-credentials-kibaship-com"))
-				Expect(clusterName).To(Equal("testproject-myapp-mysql"))
+				Expect(secretName).To(Equal("mysql-secret-testdeploy-kibaship-com"))
+				Expect(clusterName).To(Equal("mysql-testdeploy"))
 			})
 		})
 

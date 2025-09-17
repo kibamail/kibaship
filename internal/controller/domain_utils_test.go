@@ -21,44 +21,6 @@ import (
 	"testing"
 )
 
-func TestExtractAppSlugFromName(t *testing.T) {
-	tests := []struct {
-		name     string
-		appName  string
-		expected string
-	}{
-		{
-			name:     "simple frontend app",
-			appName:  "project-myproject-app-frontend-kibaship-com",
-			expected: "frontend",
-		},
-		{
-			name:     "multi-part app name",
-			appName:  "project-myproject-app-api-gateway-kibaship-com",
-			expected: "api-gateway",
-		},
-		{
-			name:     "single word project",
-			appName:  "project-test-app-backend-kibaship-com",
-			expected: "backend",
-		},
-		{
-			name:     "no app pattern found",
-			appName:  "project-test-something-kibaship-com",
-			expected: "app",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := extractAppSlugFromName(tt.appName)
-			if result != tt.expected {
-				t.Errorf("extractAppSlugFromName(%s) = %s; expected %s", tt.appName, result, tt.expected)
-			}
-		})
-	}
-}
-
 func TestValidateDomainFormat(t *testing.T) {
 	tests := []struct {
 		name      string
