@@ -118,6 +118,19 @@ test: manifests generate fmt vet setup-envtest ## Run tests.
 # - CERT_MANAGER_INSTALL_SKIP=true
 KIND_CLUSTER ?= kibaship-operator-test-e2e
 
+.PHONY: kind-create
+kind-create: ## Create a Kind cluster for e2e tests
+	@command -v $(KIND) >/dev/null 2>&1 || { \
+		echo "Kind is not installed. Please install Kind manually."; \
+		exit 1; \
+	}
+	@echo "Creating Kind cluster '$(KIND_CLUSTER)'..."
+	@$(KIND) create cluster --name $(KIND_CLUSTER)
+
+.PHONY: kind-delete
+kind-delete: ## Delete the Kind cluster used for e2e tests
+	@$(KIND) delete cluster --name $(KIND_CLUSTER) 2>/dev/null || true
+
 .PHONY: setup-test-e2e
 setup-test-e2e: ## Set up a Kind cluster for e2e tests if it does not exist
 	@command -v $(KIND) >/dev/null 2>&1 || { \
@@ -133,9 +146,8 @@ setup-test-e2e: ## Set up a Kind cluster for e2e tests if it does not exist
 	esac
 
 .PHONY: test-e2e
-test-e2e: setup-test-e2e manifests generate fmt vet ## Run the e2e tests. Expected an isolated environment using Kind.
+test-e2e: manifests generate fmt vet ## Run the e2e tests. Test suite handles cluster lifecycle internally.
 	KIND_CLUSTER=$(KIND_CLUSTER) go test ./test/e2e/ -v -ginkgo.v
-	$(MAKE) cleanup-test-e2e
 
 .PHONY: cleanup-test-e2e
 cleanup-test-e2e: ## Tear down the Kind cluster used for e2e tests

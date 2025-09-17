@@ -73,13 +73,19 @@ func (s *startupSequenceController) Initialize(ctx context.Context) error {
 	}
 	log.Info("✓ Valkey authentication secret retrieved")
 
-	// Step 3: Establish connection to Valkey cluster
-	log.Info("Step 3: Establishing connection to Valkey cluster")
-	err = s.connectionManager.Connect(ctx, password)
+	// Step 3: Initialize cluster connection with auto-discovery
+	log.Info("Step 3: Initializing Valkey cluster connection with auto-discovery")
+
+	// Build seed address for cluster discovery
+	seedAddress := fmt.Sprintf("%s.%s.svc.cluster.local",
+		s.config.ValkeyServiceName,
+		s.config.Namespace)
+
+	err = s.connectionManager.InitializeCluster(ctx, seedAddress, password)
 	if err != nil {
-		return fmt.Errorf("failed to establish connection to Valkey cluster: %w", err)
+		return fmt.Errorf("failed to initialize Valkey cluster connection: %w", err)
 	}
-	log.Info("✓ Connection to Valkey cluster established")
+	log.Info("✓ Valkey cluster connection initialized")
 
 	// Mark as ready
 	s.mutex.Lock()

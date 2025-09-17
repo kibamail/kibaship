@@ -19,6 +19,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"os"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
@@ -145,15 +146,21 @@ func main() {
 	secretManager := streaming.NewSecretManager(k8sClient, streamingConfig)
 	connectionManager := streaming.NewConnectionManager(streamingConfig)
 
-	// Initialize streaming connection (should be fast now since Valkey is ready)
-	setupLog.Info("Establishing connection to Valkey cluster")
+	// Initialize cluster connection with auto-discovery
+	setupLog.Info("Establishing cluster connection to Valkey with auto-discovery")
 	password, err := secretManager.GetValkeyPassword(context.Background())
 	if err != nil {
 		setupLog.Error(err, "Failed to get Valkey password")
 		os.Exit(1)
 	}
-	if err := connectionManager.Connect(context.Background(), password); err != nil {
-		setupLog.Error(err, "Failed to connect to Valkey cluster")
+
+	// Build seed address for cluster discovery
+	seedAddress := fmt.Sprintf("%s.%s.svc.cluster.local",
+		streamingConfig.ValkeyServiceName,
+		streamingConfig.Namespace)
+
+	if err := connectionManager.InitializeCluster(context.Background(), seedAddress, password); err != nil {
+		setupLog.Error(err, "Failed to initialize Valkey cluster connection")
 		os.Exit(1)
 	}
 

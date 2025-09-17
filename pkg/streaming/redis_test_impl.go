@@ -21,25 +21,25 @@ import (
 	"fmt"
 )
 
-// testRedisClient implements RedisClient interface for testing without real Redis
-type testRedisClient struct {
+// testValkeyClient implements ValkeyClient interface for testing without real Valkey
+type testValkeyClient struct {
 	address  string
 	password string
 	closed   bool
 }
 
-// NewTestRedisClient creates a test Redis client that doesn't require a real Redis instance
-func NewTestRedisClient(address, password string) RedisClient {
-	return &testRedisClient{
-		address:  address,
+// NewTestValkeyClient creates a test Valkey client that doesn't require a real Valkey instance
+func NewTestValkeyClient(seedAddress, password string, config *Config) (ValkeyClient, error) {
+	return &testValkeyClient{
+		address:  seedAddress,
 		password: password,
-	}
+	}, nil
 }
 
-// XAdd adds an entry to a Redis stream (test implementation)
-func (r *testRedisClient) XAdd(ctx context.Context, stream string, values map[string]interface{}) (string, error) {
+// XAdd adds an entry to a Valkey stream (test implementation)
+func (r *testValkeyClient) XAdd(ctx context.Context, stream string, values map[string]interface{}) (string, error) {
 	if r.closed {
-		return "", fmt.Errorf("redis: client is closed")
+		return "", fmt.Errorf("valkey: client is closed")
 	}
 	if stream == "" {
 		return "", fmt.Errorf("stream name cannot be empty")
@@ -53,23 +53,30 @@ func (r *testRedisClient) XAdd(ctx context.Context, stream string, values map[st
 }
 
 // Ping tests the connection (test implementation)
-func (r *testRedisClient) Ping(ctx context.Context) error {
+func (r *testValkeyClient) Ping(ctx context.Context) error {
 	if r.closed {
-		return fmt.Errorf("redis: client is closed")
+		return fmt.Errorf("valkey: client is closed")
 	}
 	if r.address == "" {
-		return fmt.Errorf("Redis address is not configured")
-	}
-	if r.password == "" {
-		return fmt.Errorf("Redis password is not configured")
+		return fmt.Errorf("Valkey address is not configured")
 	}
 
 	// Mock successful ping
 	return nil
 }
 
+// ClusterNodes returns cluster node information (test implementation)
+func (r *testValkeyClient) ClusterNodes(ctx context.Context) (string, error) {
+	if r.closed {
+		return "", fmt.Errorf("valkey: client is closed")
+	}
+
+	// Mock cluster nodes response
+	return "node1:6379@16379 master - 0 1703123456789 0 connected 0-5460\nnode2:6379@16379 master - 0 1703123456789 0 connected 5461-10922\nnode3:6379@16379 master - 0 1703123456789 0 connected 10923-16383\n", nil
+}
+
 // Close closes the client (test implementation)
-func (r *testRedisClient) Close() error {
+func (r *testValkeyClient) Close() error {
 	r.closed = true
 	return nil
 }

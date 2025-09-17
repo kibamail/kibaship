@@ -66,22 +66,27 @@ func (m *mockTimeProvider) After(duration time.Duration) <-chan time.Time {
 	return args.Get(0).(<-chan time.Time)
 }
 
-// mockRedisClient implements RedisClient for testing
-type mockRedisClient struct {
+// mockValkeyClient implements ValkeyClient for testing
+type mockValkeyClient struct {
 	mock.Mock
 }
 
-func (m *mockRedisClient) XAdd(ctx context.Context, stream string, values map[string]interface{}) (string, error) {
+func (m *mockValkeyClient) XAdd(ctx context.Context, stream string, values map[string]interface{}) (string, error) {
 	args := m.Called(ctx, stream, values)
 	return args.String(0), args.Error(1)
 }
 
-func (m *mockRedisClient) Ping(ctx context.Context) error {
+func (m *mockValkeyClient) Ping(ctx context.Context) error {
 	args := m.Called(ctx)
 	return args.Error(0)
 }
 
-func (m *mockRedisClient) Close() error {
+func (m *mockValkeyClient) ClusterNodes(ctx context.Context) (string, error) {
+	args := m.Called(ctx)
+	return args.String(0), args.Error(1)
+}
+
+func (m *mockValkeyClient) Close() error {
 	args := m.Called()
 	return args.Error(0)
 }
@@ -91,8 +96,8 @@ type mockConnectionManager struct {
 	mock.Mock
 }
 
-func (m *mockConnectionManager) Connect(ctx context.Context, password string) error {
-	args := m.Called(ctx, password)
+func (m *mockConnectionManager) InitializeCluster(ctx context.Context, seedAddress, password string) error {
+	args := m.Called(ctx, seedAddress, password)
 	return args.Error(0)
 }
 
@@ -101,12 +106,17 @@ func (m *mockConnectionManager) IsConnected() bool {
 	return args.Bool(0)
 }
 
-func (m *mockConnectionManager) GetClient() RedisClient {
+func (m *mockConnectionManager) GetClient() ValkeyClient {
 	args := m.Called()
 	if args.Get(0) == nil {
 		return nil
 	}
-	return args.Get(0).(RedisClient)
+	return args.Get(0).(ValkeyClient)
+}
+
+func (m *mockConnectionManager) IsClusterHealthy() bool {
+	args := m.Called()
+	return args.Bool(0)
 }
 
 func (m *mockConnectionManager) Close() error {

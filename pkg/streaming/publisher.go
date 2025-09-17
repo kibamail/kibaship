@@ -159,9 +159,47 @@ func (p *projectStreamPublisher) enrichEvent(event *ResourceEvent) {
 	event.Metadata.SequenceNumber = p.sequenceNumbers[event.ProjectUUID]
 }
 
-// generateStreamName generates the stream name for a project
+// generateStreamName generates the stream name for a project with sharding support
 func (p *projectStreamPublisher) generateStreamName(projectUUID string) string {
-	return fmt.Sprintf("project:%s:events", projectUUID)
+	if !p.config.StreamShardingEnabled {
+		// Use hash tag to ensure all streams for a project go to same slot
+		return fmt.Sprintf("{project:%s}:events", projectUUID)
+	}
+
+	// Check if this is a high-traffic project that needs sharding
+	if p.isHighTrafficProject(projectUUID) {
+		// Distribute across multiple shards for high-traffic projects
+		shardIndex := p.getShardIndex(projectUUID)
+		return fmt.Sprintf("{project:%s}:events:%d", projectUUID, shardIndex)
+	}
+
+	// Regular projects use single stream with hash tag
+	return fmt.Sprintf("{project:%s}:events", projectUUID)
+}
+
+// isHighTrafficProject determines if a project should use stream sharding
+func (p *projectStreamPublisher) isHighTrafficProject(projectUUID string) bool {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+
+	// Check sequence number to determine traffic level
+	sequenceNumber, exists := p.sequenceNumbers[projectUUID]
+	if !exists {
+		return false
+	}
+
+	// If sequence number exceeds threshold, consider it high traffic
+	return sequenceNumber > p.config.HighTrafficThreshold
+}
+
+// getShardIndex returns a consistent shard index for a project
+func (p *projectStreamPublisher) getShardIndex(projectUUID string) int {
+	// Use simple hash to determine shard
+	hash := 0
+	for _, char := range projectUUID {
+		hash = hash*31 + int(char)
+	}
+	return (hash % p.config.StreamShardsPerProject) + 1
 }
 
 // eventToStreamValues converts a ResourceEvent to Redis stream values
