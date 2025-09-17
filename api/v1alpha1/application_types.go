@@ -363,9 +363,9 @@ func (r *Application) validateApplication(ctx context.Context) error {
 		}
 	}
 
-	// Validate application name format: project-<project-slug>-app-<app-slug>-kibaship-com
+	// Validate application name format: application-<slug>-kibaship-com
 	if !r.isValidApplicationName() {
-		errors = append(errors, fmt.Sprintf("application name '%s' must follow format 'project-<project-slug>-app-<app-slug>-kibaship-com'", r.Name))
+		errors = append(errors, fmt.Sprintf("application name '%s' must follow format 'application-<slug>-kibaship-com'", r.Name))
 	}
 
 	// Validate GitRepository configuration
@@ -403,9 +403,9 @@ func (r *Application) validateGitRepository() error {
 
 // isValidApplicationName validates if the application name follows the required format
 func (r *Application) isValidApplicationName() bool {
-	// Pattern: project-<project-slug>-app-<app-slug>-kibaship-com
-	// project-slug and app-slug should be valid DNS labels (lowercase alphanumeric with hyphens)
-	pattern := regexp.MustCompile(`^project-[a-z0-9]([a-z0-9-]*[a-z0-9])?-app-[a-z0-9]([a-z0-9-]*[a-z0-9])?-kibaship-com$`)
+	// Pattern: application-<slug>-kibaship-com
+	// slug should be valid DNS label (lowercase alphanumeric with hyphens)
+	pattern := regexp.MustCompile(`^application-[a-z0-9]([a-z0-9-]*[a-z0-9])?-kibaship-com$`)
 	return pattern.MatchString(r.Name)
 }
 
