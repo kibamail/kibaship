@@ -594,14 +594,14 @@ var _ = Describe("Deployment Reconciliation", func() {
 			deploymentNamespace := "project-test-project-e2e-kibaship-com"
 			deploymentName := "deployment-test-deploy-kibaship-com"
 			Eventually(func() bool {
-				cmd := exec.Command("kubectl", "get", "deployment", deploymentName, "-n", deploymentNamespace)
+				cmd := exec.Command("kubectl", "get", "deployments.platform.operator.kibaship.com", deploymentName, "-n", deploymentNamespace)
 				_, err := utils.Run(cmd)
 				return err == nil
 			}, "30s", "2s").Should(BeTrue(), "Deployment should be created successfully")
 
 			By("Verifying Deployment has finalizer added")
 			Eventually(func() bool {
-				cmd := exec.Command("kubectl", "get", "deployment", deploymentName, "-n", deploymentNamespace, "-o", "jsonpath={.metadata.finalizers[0]}")
+				cmd := exec.Command("kubectl", "get", "deployments.platform.operator.kibaship.com", deploymentName, "-n", deploymentNamespace, "-o", "jsonpath={.metadata.finalizers[0]}")
 				output, err := cmd.CombinedOutput()
 				if err != nil {
 					return false
@@ -611,7 +611,7 @@ var _ = Describe("Deployment Reconciliation", func() {
 
 			By("Verifying Deployment status becomes Initializing")
 			Eventually(func() bool {
-				cmd := exec.Command("kubectl", "get", "deployment", deploymentName, "-n", deploymentNamespace, "-o", "jsonpath={.status.phase}")
+				cmd := exec.Command("kubectl", "get", "deployments.platform.operator.kibaship.com", deploymentName, "-n", deploymentNamespace, "-o", "jsonpath={.status.phase}")
 				output, err := cmd.CombinedOutput()
 				if err != nil {
 					return false
@@ -622,7 +622,7 @@ var _ = Describe("Deployment Reconciliation", func() {
 
 			By("Verifying Deployment has required labels")
 			Eventually(func() bool {
-				cmd := exec.Command("kubectl", "get", "deployment", deploymentName, "-n", deploymentNamespace, "-o", "jsonpath={.metadata.labels}")
+				cmd := exec.Command("kubectl", "get", "deployments.platform.operator.kibaship.com", deploymentName, "-n", deploymentNamespace, "-o", "jsonpath={.metadata.labels}")
 				output, err := cmd.CombinedOutput()
 				if err != nil {
 					return false
@@ -640,7 +640,7 @@ var _ = Describe("Deployment Reconciliation", func() {
 
 			By("Verifying Deployment applicationRef points to the correct application")
 			Eventually(func() bool {
-				cmd := exec.Command("kubectl", "get", "deployment", deploymentName, "-n", deploymentNamespace, "-o", "jsonpath={.spec.applicationRef.name}")
+				cmd := exec.Command("kubectl", "get", "deployments.platform.operator.kibaship.com", deploymentName, "-n", deploymentNamespace, "-o", "jsonpath={.spec.applicationRef.name}")
 				output, err := cmd.CombinedOutput()
 				if err != nil {
 					return false
@@ -650,7 +650,7 @@ var _ = Describe("Deployment Reconciliation", func() {
 
 			By("Verifying Deployment GitRepository configuration is valid")
 			Eventually(func() bool {
-				cmd := exec.Command("kubectl", "get", "deployment", deploymentName, "-n", deploymentNamespace, "-o", "jsonpath={.spec.gitRepository.commitSHA}")
+				cmd := exec.Command("kubectl", "get", "deployments.platform.operator.kibaship.com", deploymentName, "-n", deploymentNamespace, "-o", "jsonpath={.spec.gitRepository.commitSHA}")
 				output, err := cmd.CombinedOutput()
 				if err != nil {
 					return false
@@ -659,7 +659,7 @@ var _ = Describe("Deployment Reconciliation", func() {
 			}, "30s", "2s").Should(BeTrue(), "Deployment should have valid GitRepository commitSHA")
 
 			Eventually(func() bool {
-				cmd := exec.Command("kubectl", "get", "deployment", deploymentName, "-n", deploymentNamespace, "-o", "jsonpath={.spec.gitRepository.branch}")
+				cmd := exec.Command("kubectl", "get", "deployments.platform.operator.kibaship.com", deploymentName, "-n", deploymentNamespace, "-o", "jsonpath={.spec.gitRepository.branch}")
 				output, err := cmd.CombinedOutput()
 				if err != nil {
 					return false
@@ -678,7 +678,7 @@ var _ = Describe("Deployment Reconciliation", func() {
 			By("Verifying Deployment controller adds correct UUID labels")
 			// The controller should ensure UUID labels are set correctly through the ResourceLabeler
 			Eventually(func() bool {
-				cmd := exec.Command("kubectl", "get", "deployment", deploymentName, "-n", deploymentNamespace, "-o", "jsonpath={.metadata.labels.platform\\.kibaship\\.com/uuid}")
+				cmd := exec.Command("kubectl", "get", "deployments.platform.operator.kibaship.com", deploymentName, "-n", deploymentNamespace, "-o", "jsonpath={.metadata.labels.platform\\.kibaship\\.com/uuid}")
 				output, err := cmd.CombinedOutput()
 				if err != nil {
 					return false
@@ -706,7 +706,7 @@ var _ = Describe("Deployment Reconciliation", func() {
 
 			By("Verifying Deployment status includes pipeline run information")
 			Eventually(func() bool {
-				cmd := exec.Command("kubectl", "get", "deployment", deploymentName, "-n", deploymentNamespace, "-o", "jsonpath={.status.currentPipelineRun}")
+				cmd := exec.Command("kubectl", "get", "deployments.platform.operator.kibaship.com", deploymentName, "-n", deploymentNamespace, "-o", "jsonpath={.status.currentPipelineRun}")
 				output, err := cmd.CombinedOutput()
 				if err != nil {
 					return false

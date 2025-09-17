@@ -272,9 +272,9 @@ func (r *Deployment) validateDeployment(ctx context.Context) error {
 		}
 	}
 
-	// Validate deployment name format: project-<project-slug>-app-<app-slug>-deployment-<deployment-slug>-kibaship-com
+	// Validate deployment name format: deployment-<slug>-kibaship-com
 	if !r.isValidDeploymentName() {
-		errors = append(errors, fmt.Sprintf("deployment name '%s' must follow format 'project-<project-slug>-app-<app-slug>-deployment-<deployment-slug>-kibaship-com'", r.Name))
+		errors = append(errors, fmt.Sprintf("deployment name '%s' must follow format 'deployment-<slug>-kibaship-com'", r.Name))
 	}
 
 	// TODO: Add validation for GitRepository config when application type is GitRepository
@@ -290,9 +290,9 @@ func (r *Deployment) validateDeployment(ctx context.Context) error {
 
 // isValidDeploymentName validates if the deployment name follows the required format
 func (r *Deployment) isValidDeploymentName() bool {
-	// Pattern: project-<project-slug>-app-<app-slug>-deployment-<deployment-slug>-kibaship-com
-	// All slugs should be valid DNS labels (lowercase alphanumeric with hyphens)
-	pattern := regexp.MustCompile(`^project-[a-z0-9]([a-z0-9-]*[a-z0-9])?-app-[a-z0-9]([a-z0-9-]*[a-z0-9])?-deployment-[a-z0-9]([a-z0-9-]*[a-z0-9])?-kibaship-com$`)
+	// Pattern: deployment-<slug>-kibaship-com
+	// slug should be valid DNS label (lowercase alphanumeric with hyphens)
+	pattern := regexp.MustCompile(`^deployment-[a-z0-9]([a-z0-9-]*[a-z0-9])?-kibaship-com$`)
 	return pattern.MatchString(r.Name)
 }
 
