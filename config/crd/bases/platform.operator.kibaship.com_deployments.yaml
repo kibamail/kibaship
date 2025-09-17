@@ -21,12 +21,6 @@ spec:
     - jsonPath: .status.phase
       name: Phase
       type: string
-    - jsonPath: .status.currentPipelineRun.name
-      name: Current Run
-      type: string
-    - jsonPath: .status.lastSuccessfulRun.name
-      name: Last Success
-      type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
@@ -91,32 +85,6 @@ spec:
           status:
             description: DeploymentStatus defines the observed state of Deployment.
             properties:
-              builtImage:
-                description: Built image information from the last successful run
-                properties:
-                  builtAt:
-                    description: Build timestamp
-                    format: date-time
-                    type: string
-                  commitSha:
-                    description: Git commit SHA used for this image
-                    type: string
-                  digest:
-                    description: Image digest
-                    type: string
-                  reference:
-                    description: Full image reference with digest
-                    type: string
-                  tag:
-                    description: Image tag
-                    type: string
-                required:
-                - builtAt
-                - commitSha
-                - digest
-                - reference
-                - tag
-                type: object
               conditions:
                 description: Conditions represent the latest available observations
                   of the deployment's state
@@ -175,80 +143,6 @@ spec:
                   - type
                   type: object
                 type: array
-              currentPipelineRun:
-                description: Current pipeline run information
-                properties:
-                  commitSha:
-                    description: Git commit SHA that triggered this run
-                    type: string
-                  completionTime:
-                    description: Completion time
-                    format: date-time
-                    type: string
-                  image:
-                    description: Built image from this run
-                    type: string
-                  message:
-                    description: Message provides additional information about the
-                      pipeline run
-                    type: string
-                  name:
-                    description: Name of the pipeline run
-                    type: string
-                  namespace:
-                    description: Namespace of the pipeline run
-                    type: string
-                  phase:
-                    description: Phase of the pipeline run
-                    type: string
-                  startTime:
-                    description: Start time
-                    format: date-time
-                    type: string
-                required:
-                - name
-                - namespace
-                - phase
-                type: object
-              lastSuccessfulRun:
-                description: Last successful pipeline run
-                properties:
-                  commitSha:
-                    description: Git commit SHA that triggered this run
-                    type: string
-                  completionTime:
-                    description: Completion time
-                    format: date-time
-                    type: string
-                  image:
-                    description: Built image from this run
-                    type: string
-                  message:
-                    description: Message provides additional information about the
-                      pipeline run
-                    type: string
-                  name:
-                    description: Name of the pipeline run
-                    type: string
-                  namespace:
-                    description: Namespace of the pipeline run
-                    type: string
-                  phase:
-                    description: Phase of the pipeline run
-                    type: string
-                  startTime:
-                    description: Start time
-                    format: date-time
-                    type: string
-                required:
-                - name
-                - namespace
-                - phase
-                type: object
-              message:
-                description: Message provides additional information about the current
-                  status
-                type: string
               observedGeneration:
                 description: ObservedGeneration reflects the generation of the most
                   recently observed Deployment
@@ -257,44 +151,6 @@ spec:
               phase:
                 description: Current phase of the deployment
                 type: string
-              runHistory:
-                description: Pipeline run history (last 5 runs)
-                items:
-                  description: PipelineRunStatus tracks pipeline run information
-                  properties:
-                    commitSha:
-                      description: Git commit SHA that triggered this run
-                      type: string
-                    completionTime:
-                      description: Completion time
-                      format: date-time
-                      type: string
-                    image:
-                      description: Built image from this run
-                      type: string
-                    message:
-                      description: Message provides additional information about the
-                        pipeline run
-                      type: string
-                    name:
-                      description: Name of the pipeline run
-                      type: string
-                    namespace:
-                      description: Namespace of the pipeline run
-                      type: string
-                    phase:
-                      description: Phase of the pipeline run
-                      type: string
-                    startTime:
-                      description: Start time
-                      format: date-time
-                      type: string
-                  required:
-                  - name
-                  - namespace
-                  - phase
-                  type: object
-                type: array
             type: object
         type: object
     served: true
