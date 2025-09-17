@@ -17,25 +17,13 @@ limitations under the License.
 package streaming
 
 import (
+	"testing"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("ValkeyReadinessMonitor", func() {
-	Describe("Constructor", func() {
-		It("should create a valid monitor instance", func() {
-			k8sClient := &mockKubernetesClient{}
-			timeProvider := &mockTimeProvider{}
-			config := &Config{
-				Namespace:         "test-namespace",
-				ValkeyServiceName: "test-valkey-service",
-			}
-
-			monitor := NewValkeyReadinessMonitor(k8sClient, timeProvider, config)
-			Expect(monitor).NotTo(BeNil())
-
-			// Verify it implements the interface
-			var _ ValkeyReadinessMonitor = monitor
-		})
-	})
-})
+func TestStreaming(t *testing.T) {
+	RegisterFailHandler(Fail)
+	RunSpecs(t, "Streaming Suite")
+}

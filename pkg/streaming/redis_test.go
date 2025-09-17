@@ -18,128 +18,125 @@ package streaming
 
 import (
 	"context"
-	"testing"
 
-	"github.com/stretchr/testify/assert"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 )
 
-func TestRedisClient_XAdd(t *testing.T) {
-	tests := []struct {
-		name          string
-		stream        string
-		values        map[string]interface{}
-		expectedError string
-	}{
-		{
-			name:   "successful add",
-			stream: "test-stream",
-			values: map[string]interface{}{
-				"key1": "value1",
-				"key2": "value2",
-			},
-		},
-		{
-			name:          "empty stream name",
-			stream:        "",
-			values:        map[string]interface{}{"key": "value"},
-			expectedError: "stream name cannot be empty",
-		},
-		{
-			name:          "empty values",
-			stream:        "test-stream",
-			values:        map[string]interface{}{},
-			expectedError: "values cannot be empty",
-		},
-		{
-			name:          "nil values",
-			stream:        "test-stream",
-			values:        nil,
-			expectedError: "values cannot be empty",
-		},
-	}
+var _ = Describe("RedisClient", func() {
+	var client RedisClient
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	BeforeEach(func() {
+		client = NewTestRedisClient("localhost:6379", "password")
+	})
+
+	Describe("XAdd", func() {
+		Context("when adding successfully", func() {
+			It("should add entry to stream", func() {
+				stream := "test-stream"
+				values := map[string]interface{}{
+					"key1": "value1",
+					"key2": "value2",
+				}
+
+				entryID, err := client.XAdd(context.Background(), stream, values)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(entryID).NotTo(BeEmpty())
+				// Test implementation returns a fixed entry ID
+				Expect(entryID).To(Equal("1703123456789-0"))
+			})
+		})
+
+		Context("with empty stream name", func() {
+			It("should return an error", func() {
+				stream := ""
+				values := map[string]interface{}{"key": "value"}
+
+				entryID, err := client.XAdd(context.Background(), stream, values)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("stream name cannot be empty"))
+				Expect(entryID).To(BeEmpty())
+			})
+		})
+
+		Context("with empty values", func() {
+			It("should return an error", func() {
+				stream := "test-stream"
+				values := map[string]interface{}{}
+
+				entryID, err := client.XAdd(context.Background(), stream, values)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("values cannot be empty"))
+				Expect(entryID).To(BeEmpty())
+			})
+		})
+
+		Context("with nil values", func() {
+			It("should return an error", func() {
+				stream := "test-stream"
+				var values map[string]interface{}
+
+				entryID, err := client.XAdd(context.Background(), stream, values)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("values cannot be empty"))
+				Expect(entryID).To(BeEmpty())
+			})
+		})
+	})
+
+	Describe("Ping", func() {
+		Context("when ping is successful", func() {
+			It("should ping without errors", func() {
+				client := NewTestRedisClient("localhost:6379", "password")
+				err := client.Ping(context.Background())
+				Expect(err).NotTo(HaveOccurred())
+			})
+		})
+
+		Context("with empty address", func() {
+			It("should return an error", func() {
+				client := NewTestRedisClient("", "password")
+				err := client.Ping(context.Background())
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("Redis address is not configured"))
+			})
+		})
+
+		Context("with empty password", func() {
+			It("should return an error", func() {
+				client := NewTestRedisClient("localhost:6379", "")
+				err := client.Ping(context.Background())
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("Redis password is not configured"))
+			})
+		})
+	})
+
+	Describe("Close", func() {
+		It("should close client and prevent further operations", func() {
 			client := NewTestRedisClient("localhost:6379", "password")
 
-			entryID, err := client.XAdd(context.Background(), tt.stream, tt.values)
+			err := client.Close()
+			Expect(err).NotTo(HaveOccurred())
 
-			if tt.expectedError != "" {
-				assert.Error(t, err)
-				assert.Contains(t, err.Error(), tt.expectedError)
-				assert.Empty(t, entryID)
-			} else {
-				assert.NoError(t, err)
-				assert.NotEmpty(t, entryID)
-				// Test implementation returns a fixed entry ID
-				assert.Equal(t, "1703123456789-0", entryID)
-			}
+			// After closing, should not be able to ping
+			err = client.Ping(context.Background())
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("redis: client is closed"))
 		})
-	}
-}
+	})
 
-func TestRedisClient_Ping(t *testing.T) {
-	tests := []struct {
-		name          string
-		address       string
-		password      string
-		expectedError string
-	}{
-		{
-			name:     "successful ping",
-			address:  "localhost:6379",
-			password: "password",
-		},
-		{
-			name:          "empty address",
-			address:       "",
-			password:      "password",
-			expectedError: "Redis address is not configured",
-		},
-		{
-			name:          "empty password",
-			address:       "localhost:6379",
-			password:      "",
-			expectedError: "Redis password is not configured",
-		},
-	}
+	Describe("NewRedisClient", func() {
+		It("should create a properly configured client", func() {
+			address := "localhost:6379"
+			password := "test-password"
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			client := NewTestRedisClient(tt.address, tt.password)
+			client := NewTestRedisClient(address, password)
+			Expect(client).NotTo(BeNil())
 
+			// Test that the client is properly configured
 			err := client.Ping(context.Background())
-
-			if tt.expectedError != "" {
-				assert.Error(t, err)
-				assert.Contains(t, err.Error(), tt.expectedError)
-			} else {
-				assert.NoError(t, err)
-			}
+			Expect(err).NotTo(HaveOccurred())
 		})
-	}
-}
-
-func TestRedisClient_Close(t *testing.T) {
-	client := NewTestRedisClient("localhost:6379", "password")
-
-	err := client.Close()
-	assert.NoError(t, err)
-
-	// After closing, should not be able to ping
-	err = client.Ping(context.Background())
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "redis: client is closed")
-}
-
-func TestNewRedisClient(t *testing.T) {
-	address := "localhost:6379"
-	password := "test-password"
-
-	client := NewTestRedisClient(address, password)
-	assert.NotNil(t, client)
-
-	// Test that the client is properly configured
-	err := client.Ping(context.Background())
-	assert.NoError(t, err)
-}
+	})
+})

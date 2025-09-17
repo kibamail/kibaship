@@ -19,196 +19,192 @@ package streaming
 import (
 	"context"
 	"errors"
-	"testing"
 
-	"github.com/stretchr/testify/assert"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"
 )
 
-func TestConnectionManager_Connect(t *testing.T) {
-	tests := []struct {
-		name          string
-		password      string
-		pingError     error
-		expectedError string
-	}{
-		{
-			name:     "successful connection",
-			password: "test-password",
-		},
-		{
-			name:          "ping fails",
-			password:      "test-password",
-			pingError:     errors.New("connection failed"),
-			expectedError: "failed to ping Valkey cluster",
-		},
-		{
-			name:     "empty password allowed",
-			password: "",
-		},
-	}
+var _ = Describe("ConnectionManager", func() {
+	var (
+		config     *Config
+		mockClient *mockRedisClient
+		manager    ConnectionManager
+	)
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			config := &Config{
-				Namespace:         "test-namespace",
-				ValkeyServiceName: "test-service",
-				ValkeyPort:        6379,
-			}
+	BeforeEach(func() {
+		config = &Config{
+			Namespace:         "test-namespace",
+			ValkeyServiceName: "test-service",
+			ValkeyPort:        6379,
+		}
+		mockClient = &mockRedisClient{}
+	})
 
-			mockClient := &mockRedisClient{}
+	Describe("Connect", func() {
+		Context("when connection is successful", func() {
+			It("should connect without errors", func() {
+				password := "test-password"
+				clientFactory := func(address, passwordParam string) RedisClient {
+					expectedAddress := "test-service.test-namespace.svc.cluster.local:6379"
+					Expect(address).To(Equal(expectedAddress))
+					Expect(passwordParam).To(Equal(password))
+					return mockClient
+				}
+
+				manager = NewConnectionManagerWithFactory(config, clientFactory).(*connectionManager)
+				mockClient.On("Ping", mock.Anything).Return(nil)
+
+				err := manager.Connect(context.Background(), password)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(manager.IsConnected()).To(BeTrue())
+				Expect(manager.GetClient()).NotTo(BeNil())
+
+				mockClient.AssertExpectations(GinkgoT())
+			})
+		})
+
+		Context("when ping fails", func() {
+			It("should return an error", func() {
+				password := "test-password"
+				clientFactory := func(address, passwordParam string) RedisClient {
+					expectedAddress := "test-service.test-namespace.svc.cluster.local:6379"
+					Expect(address).To(Equal(expectedAddress))
+					Expect(passwordParam).To(Equal(password))
+					return mockClient
+				}
+
+				manager = NewConnectionManagerWithFactory(config, clientFactory).(*connectionManager)
+				mockClient.On("Ping", mock.Anything).Return(errors.New("connection failed"))
+				mockClient.On("Close").Return(nil)
+
+				err := manager.Connect(context.Background(), password)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("failed to ping Valkey cluster"))
+				Expect(manager.IsConnected()).To(BeFalse())
+
+				mockClient.AssertExpectations(GinkgoT())
+			})
+		})
+
+		Context("with empty password", func() {
+			It("should allow empty password", func() {
+				password := ""
+				clientFactory := func(address, passwordParam string) RedisClient {
+					expectedAddress := "test-service.test-namespace.svc.cluster.local:6379"
+					Expect(address).To(Equal(expectedAddress))
+					Expect(passwordParam).To(Equal(""))
+					return mockClient
+				}
+
+				manager = NewConnectionManagerWithFactory(config, clientFactory).(*connectionManager)
+				mockClient.On("Ping", mock.Anything).Return(nil)
+
+				err := manager.Connect(context.Background(), password)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(manager.IsConnected()).To(BeTrue())
+				Expect(manager.GetClient()).NotTo(BeNil())
+
+				mockClient.AssertExpectations(GinkgoT())
+			})
+		})
+	})
+
+	Describe("IsConnected", func() {
+		It("should return false initially", func() {
+			manager := NewConnectionManager(config)
+			Expect(manager.IsConnected()).To(BeFalse())
+		})
+
+		It("should return true after successful connection", func() {
 			clientFactory := func(address, password string) RedisClient {
-				expectedAddress := "test-service.test-namespace.svc.cluster.local:6379"
-				assert.Equal(t, expectedAddress, address)
-				assert.Equal(t, tt.password, password)
 				return mockClient
 			}
 
-			manager := NewConnectionManagerWithFactory(config, clientFactory).(*connectionManager)
+			manager = NewConnectionManagerWithFactory(config, clientFactory).(*connectionManager)
+			mockClient.On("Ping", mock.Anything).Return(nil)
 
-			mockClient.On("Ping", mock.Anything).Return(tt.pingError)
-			if tt.pingError != nil {
-				mockClient.On("Close").Return(nil)
-			}
+			err := manager.Connect(context.Background(), "password")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(manager.IsConnected()).To(BeTrue())
 
-			err := manager.Connect(context.Background(), tt.password)
-
-			if tt.expectedError != "" {
-				assert.Error(t, err)
-				assert.Contains(t, err.Error(), tt.expectedError)
-				assert.False(t, manager.IsConnected())
-			} else {
-				assert.NoError(t, err)
-				assert.True(t, manager.IsConnected())
-				assert.NotNil(t, manager.GetClient())
-			}
-
-			mockClient.AssertExpectations(t)
+			mockClient.AssertExpectations(GinkgoT())
 		})
-	}
-}
+	})
 
-func TestConnectionManager_IsConnected(t *testing.T) {
-	config := &Config{
-		Namespace:         "test-namespace",
-		ValkeyServiceName: "test-service",
-		ValkeyPort:        6379,
-	}
+	Describe("GetClient", func() {
+		It("should return nil initially", func() {
+			manager := NewConnectionManager(config)
+			Expect(manager.GetClient()).To(BeNil())
+		})
 
-	manager := NewConnectionManager(config)
+		It("should return client after successful connection", func() {
+			clientFactory := func(address, password string) RedisClient {
+				return mockClient
+			}
 
-	// Initially not connected
-	assert.False(t, manager.IsConnected())
+			manager = NewConnectionManagerWithFactory(config, clientFactory).(*connectionManager)
+			mockClient.On("Ping", mock.Anything).Return(nil)
 
-	// Simulate connection
-	mockClient := &mockRedisClient{}
-	clientFactory := func(address, password string) RedisClient {
-		return mockClient
-	}
+			err := manager.Connect(context.Background(), "password")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(manager.GetClient()).To(Equal(mockClient))
 
-	manager = NewConnectionManagerWithFactory(config, clientFactory)
+			mockClient.AssertExpectations(GinkgoT())
+		})
+	})
 
-	mockClient.On("Ping", mock.Anything).Return(nil)
+	Describe("Close", func() {
+		It("should not error when not connected", func() {
+			manager := NewConnectionManager(config)
+			err := manager.Close()
+			Expect(err).NotTo(HaveOccurred())
+		})
 
-	err := manager.Connect(context.Background(), "password")
-	assert.NoError(t, err)
-	assert.True(t, manager.IsConnected())
+		It("should close connection and clean up state", func() {
+			clientFactory := func(address, password string) RedisClient {
+				return mockClient
+			}
 
-	mockClient.AssertExpectations(t)
-}
+			manager = NewConnectionManagerWithFactory(config, clientFactory).(*connectionManager)
+			mockClient.On("Ping", mock.Anything).Return(nil)
+			mockClient.On("Close").Return(nil)
 
-func TestConnectionManager_GetClient(t *testing.T) {
-	config := &Config{
-		Namespace:         "test-namespace",
-		ValkeyServiceName: "test-service",
-		ValkeyPort:        6379,
-	}
+			err := manager.Connect(context.Background(), "password")
+			Expect(err).NotTo(HaveOccurred())
 
-	manager := NewConnectionManager(config)
+			// Now close
+			err = manager.Close()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(manager.IsConnected()).To(BeFalse())
+			Expect(manager.GetClient()).To(BeNil())
 
-	// Initially no client
-	assert.Nil(t, manager.GetClient())
+			mockClient.AssertExpectations(GinkgoT())
+		})
+	})
 
-	// After connection, client should be available
-	mockClient := &mockRedisClient{}
-	clientFactory := func(address, password string) RedisClient {
-		return mockClient
-	}
+	Describe("when already connected", func() {
+		It("should not create new client on subsequent connections", func() {
+			callCount := 0
+			clientFactory := func(address, password string) RedisClient {
+				callCount++
+				return mockClient
+			}
 
-	manager = NewConnectionManagerWithFactory(config, clientFactory)
+			manager = NewConnectionManagerWithFactory(config, clientFactory).(*connectionManager)
+			mockClient.On("Ping", mock.Anything).Return(nil)
 
-	mockClient.On("Ping", mock.Anything).Return(nil)
+			// Connect first time
+			err := manager.Connect(context.Background(), "password")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(callCount).To(Equal(1))
 
-	err := manager.Connect(context.Background(), "password")
-	assert.NoError(t, err)
-	assert.Equal(t, mockClient, manager.GetClient())
+			// Connect second time - should not create new client
+			err = manager.Connect(context.Background(), "password")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(callCount).To(Equal(1)) // Should not increment
 
-	mockClient.AssertExpectations(t)
-}
-
-func TestConnectionManager_Close(t *testing.T) {
-	config := &Config{
-		Namespace:         "test-namespace",
-		ValkeyServiceName: "test-service",
-		ValkeyPort:        6379,
-	}
-
-	manager := NewConnectionManager(config)
-
-	// Close when not connected should not error
-	err := manager.Close()
-	assert.NoError(t, err)
-
-	// Connect first
-	mockClient := &mockRedisClient{}
-	clientFactory := func(address, password string) RedisClient {
-		return mockClient
-	}
-
-	manager = NewConnectionManagerWithFactory(config, clientFactory)
-
-	mockClient.On("Ping", mock.Anything).Return(nil)
-	mockClient.On("Close").Return(nil)
-
-	err = manager.Connect(context.Background(), "password")
-	assert.NoError(t, err)
-
-	// Now close
-	err = manager.Close()
-	assert.NoError(t, err)
-	assert.False(t, manager.IsConnected())
-	assert.Nil(t, manager.GetClient())
-
-	mockClient.AssertExpectations(t)
-}
-
-func TestConnectionManager_AlreadyConnected(t *testing.T) {
-	config := &Config{
-		Namespace:         "test-namespace",
-		ValkeyServiceName: "test-service",
-		ValkeyPort:        6379,
-	}
-
-	mockClient := &mockRedisClient{}
-	callCount := 0
-	clientFactory := func(address, password string) RedisClient {
-		callCount++
-		return mockClient
-	}
-
-	manager := NewConnectionManagerWithFactory(config, clientFactory)
-
-	mockClient.On("Ping", mock.Anything).Return(nil)
-
-	// Connect first time
-	err := manager.Connect(context.Background(), "password")
-	assert.NoError(t, err)
-	assert.Equal(t, 1, callCount)
-
-	// Connect second time - should not create new client
-	err = manager.Connect(context.Background(), "password")
-	assert.NoError(t, err)
-	assert.Equal(t, 1, callCount) // Should not increment
-
-	mockClient.AssertExpectations(t)
-}
+			mockClient.AssertExpectations(GinkgoT())
+		})
+	})
+})

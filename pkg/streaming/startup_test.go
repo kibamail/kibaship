@@ -19,269 +19,257 @@ package streaming
 import (
 	"context"
 	"errors"
-	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"
 )
 
-func TestStartupSequenceController_Initialize(t *testing.T) {
-	tests := []struct {
-		name          string
-		setupMocks    func(*mockValkeyReadinessMonitor, *mockSecretManager, *mockConnectionManager)
-		expectedError string
-	}{
-		{
-			name: "successful initialization",
-			setupMocks: func(readiness *mockValkeyReadinessMonitor, secret *mockSecretManager, conn *mockConnectionManager) {
+var _ = Describe("StartupSequenceController", func() {
+	var (
+		readiness  *mockValkeyReadinessMonitor
+		secret     *mockSecretManager
+		conn       *mockConnectionManager
+		config     *Config
+		controller StartupSequenceController
+	)
+
+	BeforeEach(func() {
+		readiness = &mockValkeyReadinessMonitor{}
+		secret = &mockSecretManager{}
+		conn = &mockConnectionManager{}
+		config = &Config{
+			StartupTimeout: 5 * time.Minute,
+		}
+		controller = NewStartupSequenceController(readiness, secret, conn, config)
+	})
+
+	Describe("Initialize", func() {
+		Context("when initialization is successful", func() {
+			It("should initialize without errors", func() {
 				readiness.On("WaitForReady", mock.Anything, 5*time.Minute).Return(nil)
 				secret.On("GetValkeyPassword", mock.Anything).Return("test-password", nil)
 				conn.On("Connect", mock.Anything, "test-password").Return(nil)
 				conn.On("IsConnected").Return(true)
-			},
-		},
-		{
-			name: "valkey readiness fails",
-			setupMocks: func(readiness *mockValkeyReadinessMonitor, secret *mockSecretManager, conn *mockConnectionManager) {
+
+				err := controller.Initialize(context.Background())
+				Expect(err).NotTo(HaveOccurred())
+				Expect(controller.IsReady()).To(BeTrue())
+
+				readiness.AssertExpectations(GinkgoT())
+				secret.AssertExpectations(GinkgoT())
+				conn.AssertExpectations(GinkgoT())
+			})
+		})
+
+		Context("when Valkey readiness fails", func() {
+			It("should return an error", func() {
 				readiness.On("WaitForReady", mock.Anything, 5*time.Minute).Return(errors.New("timeout"))
-			},
-			expectedError: "Valkey cluster failed to become ready",
-		},
-		{
-			name: "secret retrieval fails",
-			setupMocks: func(readiness *mockValkeyReadinessMonitor, secret *mockSecretManager, conn *mockConnectionManager) {
+
+				err := controller.Initialize(context.Background())
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("Valkey cluster failed to become ready"))
+
+				readiness.AssertExpectations(GinkgoT())
+			})
+		})
+
+		Context("when secret retrieval fails", func() {
+			It("should return an error", func() {
 				readiness.On("WaitForReady", mock.Anything, 5*time.Minute).Return(nil)
 				secret.On("GetValkeyPassword", mock.Anything).Return("", errors.New("secret not found"))
-			},
-			expectedError: "Valkey authentication secret not found",
-		},
-		{
-			name: "connection fails",
-			setupMocks: func(readiness *mockValkeyReadinessMonitor, secret *mockSecretManager, conn *mockConnectionManager) {
+
+				err := controller.Initialize(context.Background())
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("Valkey authentication secret not found"))
+
+				readiness.AssertExpectations(GinkgoT())
+				secret.AssertExpectations(GinkgoT())
+			})
+		})
+
+		Context("when connection fails", func() {
+			It("should return an error", func() {
 				readiness.On("WaitForReady", mock.Anything, 5*time.Minute).Return(nil)
 				secret.On("GetValkeyPassword", mock.Anything).Return("test-password", nil)
 				conn.On("Connect", mock.Anything, "test-password").Return(errors.New("connection failed"))
-			},
-			expectedError: "failed to establish connection to Valkey cluster",
-		},
-		{
-			name: "empty password retrieved from secret",
-			setupMocks: func(readiness *mockValkeyReadinessMonitor, secret *mockSecretManager, conn *mockConnectionManager) {
+
+				err := controller.Initialize(context.Background())
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("failed to establish connection to Valkey cluster"))
+
+				readiness.AssertExpectations(GinkgoT())
+				secret.AssertExpectations(GinkgoT())
+				conn.AssertExpectations(GinkgoT())
+			})
+		})
+
+		Context("when empty password is retrieved from secret", func() {
+			It("should return an error", func() {
 				readiness.On("WaitForReady", mock.Anything, 5*time.Minute).Return(nil)
 				secret.On("GetValkeyPassword", mock.Anything).Return("", nil)
-			},
-			expectedError: "Valkey authentication secret empty after cluster ready",
-		},
-	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			readiness := &mockValkeyReadinessMonitor{}
-			secret := &mockSecretManager{}
-			conn := &mockConnectionManager{}
-			config := &Config{
-				StartupTimeout: 5 * time.Minute,
-			}
+				err := controller.Initialize(context.Background())
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("Valkey authentication secret empty after cluster ready"))
 
-			tt.setupMocks(readiness, secret, conn)
-
-			controller := NewStartupSequenceController(readiness, secret, conn, config)
-
-			err := controller.Initialize(context.Background())
-
-			if tt.expectedError != "" {
-				assert.Error(t, err)
-				assert.Contains(t, err.Error(), tt.expectedError)
-			} else {
-				assert.NoError(t, err)
-				assert.True(t, controller.IsReady())
-			}
-
-			readiness.AssertExpectations(t)
-			secret.AssertExpectations(t)
-			conn.AssertExpectations(t)
+				readiness.AssertExpectations(GinkgoT())
+				secret.AssertExpectations(GinkgoT())
+			})
 		})
-	}
-}
+	})
 
-func TestStartupSequenceController_IsReady(t *testing.T) {
-	tests := []struct {
-		name        string
-		setupMocks  func(*mockConnectionManager)
-		initialized bool
-		expected    bool
-	}{
-		{
-			name: "ready when initialized and connected",
-			setupMocks: func(conn *mockConnectionManager) {
+	Describe("IsReady", func() {
+		Context("when initialized and connected", func() {
+			It("should return true", func() {
 				conn.On("IsConnected").Return(true)
-			},
-			initialized: true,
-			expected:    true,
-		},
-		{
-			name: "not ready when not initialized",
-			setupMocks: func(conn *mockConnectionManager) {
+
+				controller := NewStartupSequenceController(readiness, secret, conn, config).(*startupSequenceController)
+
+				// Set the ready state directly for testing
+				controller.mutex.Lock()
+				controller.ready = true
+				controller.mutex.Unlock()
+
+				result := controller.IsReady()
+				Expect(result).To(BeTrue())
+
+				conn.AssertExpectations(GinkgoT())
+			})
+		})
+
+		Context("when not initialized", func() {
+			It("should return false", func() {
+				controller := NewStartupSequenceController(readiness, secret, conn, config).(*startupSequenceController)
+
+				// Set the ready state directly for testing
+				controller.mutex.Lock()
+				controller.ready = false
+				controller.mutex.Unlock()
+
+				result := controller.IsReady()
+				Expect(result).To(BeFalse())
+
 				// No expectations - IsConnected should not be called when not initialized
-			},
-			initialized: false,
-			expected:    false,
-		},
-		{
-			name: "not ready when not connected",
-			setupMocks: func(conn *mockConnectionManager) {
+			})
+		})
+
+		Context("when initialized but not connected", func() {
+			It("should return false", func() {
 				conn.On("IsConnected").Return(false)
-			},
-			initialized: true,
-			expected:    false,
-		},
-	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			readiness := &mockValkeyReadinessMonitor{}
-			secret := &mockSecretManager{}
-			conn := &mockConnectionManager{}
-			config := &Config{}
+				controller := NewStartupSequenceController(readiness, secret, conn, config).(*startupSequenceController)
 
-			tt.setupMocks(conn)
+				// Set the ready state directly for testing
+				controller.mutex.Lock()
+				controller.ready = true
+				controller.mutex.Unlock()
 
-			controller := NewStartupSequenceController(readiness, secret, conn, config).(*startupSequenceController)
+				result := controller.IsReady()
+				Expect(result).To(BeFalse())
 
-			// Set the ready state directly for testing
-			controller.mutex.Lock()
-			controller.ready = tt.initialized
-			controller.mutex.Unlock()
-
-			result := controller.IsReady()
-			assert.Equal(t, tt.expected, result)
-
-			conn.AssertExpectations(t)
+				conn.AssertExpectations(GinkgoT())
+			})
 		})
-	}
-}
+	})
 
-func TestStartupSequenceController_Shutdown(t *testing.T) {
-	tests := []struct {
-		name          string
-		setupMocks    func(*mockConnectionManager)
-		expectedError string
-	}{
-		{
-			name: "successful shutdown",
-			setupMocks: func(conn *mockConnectionManager) {
+	Describe("Shutdown", func() {
+		Context("when shutdown is successful", func() {
+			It("should shutdown without errors", func() {
 				conn.On("Close").Return(nil)
-			},
-		},
-		{
-			name: "shutdown with connection error",
-			setupMocks: func(conn *mockConnectionManager) {
-				conn.On("Close").Return(errors.New("close failed"))
-			},
-			expectedError: "close failed",
-		},
-	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			readiness := &mockValkeyReadinessMonitor{}
-			secret := &mockSecretManager{}
-			conn := &mockConnectionManager{}
-			config := &Config{}
+				controller := NewStartupSequenceController(readiness, secret, conn, config).(*startupSequenceController)
 
-			tt.setupMocks(conn)
+				// Initialize as ready
+				controller.mutex.Lock()
+				controller.ready = true
+				controller.mutex.Unlock()
 
-			controller := NewStartupSequenceController(readiness, secret, conn, config).(*startupSequenceController)
+				err := controller.Shutdown(context.Background())
+				Expect(err).NotTo(HaveOccurred())
 
-			// Initialize as ready
-			controller.mutex.Lock()
-			controller.ready = true
-			controller.mutex.Unlock()
+				// Should be marked as not ready after shutdown
+				Expect(controller.IsReady()).To(BeFalse())
 
-			err := controller.Shutdown(context.Background())
-
-			if tt.expectedError != "" {
-				assert.Error(t, err)
-				assert.Contains(t, err.Error(), tt.expectedError)
-			} else {
-				assert.NoError(t, err)
-			}
-
-			// Should be marked as not ready after shutdown
-			assert.False(t, controller.IsReady())
-
-			conn.AssertExpectations(t)
+				conn.AssertExpectations(GinkgoT())
+			})
 		})
-	}
-}
 
-func TestStartupSequenceController_Integration(t *testing.T) {
-	// Full integration test with successful flow
-	readiness := &mockValkeyReadinessMonitor{}
-	secret := &mockSecretManager{}
-	conn := &mockConnectionManager{}
-	config := &Config{
-		StartupTimeout: 5 * time.Minute,
-	}
+		Context("when shutdown encounters connection error", func() {
+			It("should return an error", func() {
+				conn.On("Close").Return(errors.New("close failed"))
 
-	// Setup successful initialization flow
-	readiness.On("WaitForReady", mock.Anything, 5*time.Minute).Return(nil)
-	secret.On("GetValkeyPassword", mock.Anything).Return("test-password", nil)
-	conn.On("Connect", mock.Anything, "test-password").Return(nil)
-	conn.On("IsConnected").Return(true)
-	conn.On("Close").Return(nil)
+				controller := NewStartupSequenceController(readiness, secret, conn, config).(*startupSequenceController)
 
-	controller := NewStartupSequenceController(readiness, secret, conn, config)
+				// Initialize as ready
+				controller.mutex.Lock()
+				controller.ready = true
+				controller.mutex.Unlock()
 
-	// Initially not ready
-	assert.False(t, controller.IsReady())
+				err := controller.Shutdown(context.Background())
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("close failed"))
 
-	// Initialize
-	err := controller.Initialize(context.Background())
-	assert.NoError(t, err)
+				// Should be marked as not ready after shutdown
+				Expect(controller.IsReady()).To(BeFalse())
 
-	// Should be ready after initialization
-	assert.True(t, controller.IsReady())
+				conn.AssertExpectations(GinkgoT())
+			})
+		})
+	})
 
-	// Shutdown
-	err = controller.Shutdown(context.Background())
-	assert.NoError(t, err)
+	Describe("Integration", func() {
+		It("should handle full lifecycle successfully", func() {
+			// Setup successful initialization flow
+			readiness.On("WaitForReady", mock.Anything, 5*time.Minute).Return(nil)
+			secret.On("GetValkeyPassword", mock.Anything).Return("test-password", nil)
+			conn.On("Connect", mock.Anything, "test-password").Return(nil)
+			conn.On("IsConnected").Return(true)
+			conn.On("Close").Return(nil)
 
-	// Should not be ready after shutdown
-	assert.False(t, controller.IsReady())
+			// Initially not ready
+			Expect(controller.IsReady()).To(BeFalse())
 
-	readiness.AssertExpectations(t)
-	secret.AssertExpectations(t)
-	conn.AssertExpectations(t)
-}
+			// Initialize
+			err := controller.Initialize(context.Background())
+			Expect(err).NotTo(HaveOccurred())
 
-func TestStartupSequenceController_SimplifiedFlow(t *testing.T) {
-	// Test the simplified startup flow without secret watching
-	readiness := &mockValkeyReadinessMonitor{}
-	secret := &mockSecretManager{}
-	conn := &mockConnectionManager{}
-	config := &Config{
-		StartupTimeout: 5 * time.Minute,
-	}
+			// Should be ready after initialization
+			Expect(controller.IsReady()).To(BeTrue())
 
-	// Setup mocks for the complete simplified flow
-	readiness.On("WaitForReady", mock.Anything, 5*time.Minute).Return(nil)
-	secret.On("GetValkeyPassword", mock.Anything).Return("test-password", nil)
-	conn.On("Connect", mock.Anything, "test-password").Return(nil)
-	conn.On("IsConnected").Return(true)
+			// Shutdown
+			err = controller.Shutdown(context.Background())
+			Expect(err).NotTo(HaveOccurred())
 
-	controller := NewStartupSequenceController(readiness, secret, conn, config)
+			// Should not be ready after shutdown
+			Expect(controller.IsReady()).To(BeFalse())
 
-	// Initialize should succeed without secret watching
-	err := controller.Initialize(context.Background())
-	assert.NoError(t, err)
+			readiness.AssertExpectations(GinkgoT())
+			secret.AssertExpectations(GinkgoT())
+			conn.AssertExpectations(GinkgoT())
+		})
+	})
 
-	// Should be ready
-	assert.True(t, controller.IsReady())
+	Describe("SimplifiedFlow", func() {
+		It("should handle simplified startup flow without secret watching", func() {
+			// Setup mocks for the complete simplified flow
+			readiness.On("WaitForReady", mock.Anything, 5*time.Minute).Return(nil)
+			secret.On("GetValkeyPassword", mock.Anything).Return("test-password", nil)
+			conn.On("Connect", mock.Anything, "test-password").Return(nil)
+			conn.On("IsConnected").Return(true)
 
-	// Verify that no secret watching was attempted (all expectations met)
-	readiness.AssertExpectations(t)
-	secret.AssertExpectations(t) // Only GetValkeyPassword should have been called
-	conn.AssertExpectations(t)
-}
+			// Initialize should succeed without secret watching
+			err := controller.Initialize(context.Background())
+			Expect(err).NotTo(HaveOccurred())
+
+			// Should be ready
+			Expect(controller.IsReady()).To(BeTrue())
+
+			// Verify that no secret watching was attempted (all expectations met)
+			readiness.AssertExpectations(GinkgoT())
+			secret.AssertExpectations(GinkgoT()) // Only GetValkeyPassword should have been called
+			conn.AssertExpectations(GinkgoT())
+		})
+	})
+})
