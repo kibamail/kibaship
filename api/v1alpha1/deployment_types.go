@@ -48,56 +48,6 @@ const (
 	DeploymentPhaseWaiting DeploymentPhase = "Waiting"
 )
 
-// PipelineRunStatus tracks pipeline run information
-type PipelineRunStatus struct {
-	// Name of the pipeline run
-	Name string `json:"name"`
-
-	// Namespace of the pipeline run
-	Namespace string `json:"namespace"`
-
-	// Phase of the pipeline run
-	Phase string `json:"phase"`
-
-	// Start time
-	// +optional
-	StartTime *metav1.Time `json:"startTime,omitempty"`
-
-	// Completion time
-	// +optional
-	CompletionTime *metav1.Time `json:"completionTime,omitempty"`
-
-	// Git commit SHA that triggered this run
-	// +optional
-	CommitSha string `json:"commitSha,omitempty"`
-
-	// Built image from this run
-	// +optional
-	Image string `json:"image,omitempty"`
-
-	// Message provides additional information about the pipeline run
-	// +optional
-	Message string `json:"message,omitempty"`
-}
-
-// ImageInfo contains information about built images
-type ImageInfo struct {
-	// Full image reference with digest
-	Reference string `json:"reference"`
-
-	// Image digest
-	Digest string `json:"digest"`
-
-	// Image tag
-	Tag string `json:"tag"`
-
-	// Build timestamp
-	BuiltAt metav1.Time `json:"builtAt"`
-
-	// Git commit SHA used for this image
-	CommitSha string `json:"commitSha"`
-}
-
 // GitRepositoryDeploymentConfig defines the configuration for GitRepository deployments
 type GitRepositoryDeploymentConfig struct {
 	// CommitSHA is the specific commit hash to deploy
@@ -127,18 +77,6 @@ type DeploymentStatus struct {
 	// +optional
 	Phase DeploymentPhase `json:"phase,omitempty"`
 
-	// Current pipeline run information
-	// +optional
-	CurrentPipelineRun *PipelineRunStatus `json:"currentPipelineRun,omitempty"`
-
-	// Last successful pipeline run
-	// +optional
-	LastSuccessfulRun *PipelineRunStatus `json:"lastSuccessfulRun,omitempty"`
-
-	// Built image information from the last successful run
-	// +optional
-	BuiltImage *ImageInfo `json:"builtImage,omitempty"`
-
 	// Conditions represent the latest available observations of the deployment's state
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
@@ -146,22 +84,12 @@ type DeploymentStatus struct {
 	// ObservedGeneration reflects the generation of the most recently observed Deployment
 	// +optional
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
-
-	// Pipeline run history (last 5 runs)
-	// +optional
-	RunHistory []PipelineRunStatus `json:"runHistory,omitempty"`
-
-	// Message provides additional information about the current status
-	// +optional
-	Message string `json:"message,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Application",type="string",JSONPath=".spec.applicationRef.name"
 // +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase"
-// +kubebuilder:printcolumn:name="Current Run",type="string",JSONPath=".status.currentPipelineRun.name"
-// +kubebuilder:printcolumn:name="Last Success",type="string",JSONPath=".status.lastSuccessfulRun.name"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 // +kubebuilder:webhook:path=/validate-platform-operator-kibaship-com-v1alpha1-deployment,mutating=false,failurePolicy=fail,sideEffects=None,groups=platform.operator.kibaship.com,resources=deployments,verbs=create;update,versions=v1alpha1,name=vdeployment.kb.io,admissionReviewVersions=v1
 
