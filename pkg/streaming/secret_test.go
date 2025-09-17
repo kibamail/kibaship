@@ -19,23 +19,32 @@ package streaming
 import (
 	"context"
 	"errors"
-	"testing"
 
-	"github.com/stretchr/testify/assert"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"
 	corev1 "k8s.io/api/core/v1"
 )
 
-func TestSecretManager_GetValkeyPassword(t *testing.T) {
-	tests := []struct {
-		name          string
-		setupMocks    func(*mockKubernetesClient)
-		expectedPass  string
-		expectedError string
-	}{
-		{
-			name: "successful password retrieval",
-			setupMocks: func(k8sClient *mockKubernetesClient) {
+var _ = Describe("SecretManager", func() {
+	var (
+		k8sClient *mockKubernetesClient
+		config    *Config
+		manager   SecretManager
+	)
+
+	BeforeEach(func() {
+		k8sClient = &mockKubernetesClient{}
+		config = &Config{
+			Namespace:        "test-namespace",
+			ValkeySecretName: "test-secret",
+		}
+		manager = NewSecretManager(k8sClient, config)
+	})
+
+	Describe("GetValkeyPassword", func() {
+		Context("when password retrieval is successful", func() {
+			It("should return the password", func() {
 				secret := &corev1.Secret{
 					Data: map[string][]byte{
 						"password": []byte("test-password"),
@@ -45,19 +54,30 @@ func TestSecretManager_GetValkeyPassword(t *testing.T) {
 					obj := args.Get(2).(*corev1.Secret)
 					*obj = *secret
 				})
-			},
-			expectedPass: "test-password",
-		},
-		{
-			name: "secret not found",
-			setupMocks: func(k8sClient *mockKubernetesClient) {
+
+				password, err := manager.GetValkeyPassword(context.Background())
+				Expect(err).NotTo(HaveOccurred())
+				Expect(password).To(Equal("test-password"))
+
+				k8sClient.AssertExpectations(GinkgoT())
+			})
+		})
+
+		Context("when secret is not found", func() {
+			It("should return an error", func() {
 				k8sClient.On("Get", mock.Anything, mock.Anything, mock.Anything).Return(errors.New("secret not found"))
-			},
-			expectedError: "failed to get Valkey secret",
-		},
-		{
-			name: "multiple fields in secret",
-			setupMocks: func(k8sClient *mockKubernetesClient) {
+
+				password, err := manager.GetValkeyPassword(context.Background())
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("failed to get Valkey secret"))
+				Expect(password).To(BeEmpty())
+
+				k8sClient.AssertExpectations(GinkgoT())
+			})
+		})
+
+		Context("when secret has multiple fields", func() {
+			It("should return an error", func() {
 				secret := &corev1.Secret{
 					Data: map[string][]byte{
 						"field1": []byte("value1"),
@@ -68,12 +88,18 @@ func TestSecretManager_GetValkeyPassword(t *testing.T) {
 					obj := args.Get(2).(*corev1.Secret)
 					*obj = *secret
 				})
-			},
-			expectedError: "expected exactly one field in secret, got 2 fields",
-		},
-		{
-			name: "empty password",
-			setupMocks: func(k8sClient *mockKubernetesClient) {
+
+				password, err := manager.GetValkeyPassword(context.Background())
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("expected exactly one field in secret, got 2 fields"))
+				Expect(password).To(BeEmpty())
+
+				k8sClient.AssertExpectations(GinkgoT())
+			})
+		})
+
+		Context("when password is empty", func() {
+			It("should return an error", func() {
 				secret := &corev1.Secret{
 					Data: map[string][]byte{
 						"password": []byte(""),
@@ -83,35 +109,14 @@ func TestSecretManager_GetValkeyPassword(t *testing.T) {
 					obj := args.Get(2).(*corev1.Secret)
 					*obj = *secret
 				})
-			},
-			expectedError: "secret contains empty password",
-		},
-	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			k8sClient := &mockKubernetesClient{}
-			config := &Config{
-				Namespace:        "test-namespace",
-				ValkeySecretName: "test-secret",
-			}
+				password, err := manager.GetValkeyPassword(context.Background())
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("secret contains empty password"))
+				Expect(password).To(BeEmpty())
 
-			tt.setupMocks(k8sClient)
-
-			manager := NewSecretManager(k8sClient, config)
-
-			password, err := manager.GetValkeyPassword(context.Background())
-
-			if tt.expectedError != "" {
-				assert.Error(t, err)
-				assert.Contains(t, err.Error(), tt.expectedError)
-				assert.Empty(t, password)
-			} else {
-				assert.NoError(t, err)
-				assert.Equal(t, tt.expectedPass, password)
-			}
-
-			k8sClient.AssertExpectations(t)
+				k8sClient.AssertExpectations(GinkgoT())
+			})
 		})
-	}
-}
+	})
+})

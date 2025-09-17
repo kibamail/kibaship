@@ -287,7 +287,7 @@ func InstallTektonPipelines() error {
 		return err
 	}
 
-	// Wait for Tekton Pipelines components to be ready
+	// Wait for Tekton Pipelines components to be ready (increased timeout for CI environments)
 	components := []string{
 		"tekton-pipelines-controller",
 		"tekton-pipelines-webhook",
@@ -297,11 +297,21 @@ func InstallTektonPipelines() error {
 		cmd = exec.Command("kubectl", "wait", "deployment.apps/"+component,
 			"--for", "condition=Available",
 			"--namespace", "tekton-pipelines",
-			"--timeout", "10m",
+			"--timeout", "15m",
 		)
 		if _, err := Run(cmd); err != nil {
 			return err
 		}
+	}
+
+	// Also wait for remote resolvers to be ready
+	cmd = exec.Command("kubectl", "wait", "deployment.apps/tekton-pipelines-remote-resolvers",
+		"--for", "condition=Available",
+		"--namespace", "tekton-pipelines-resolvers",
+		"--timeout", "15m",
+	)
+	if _, err := Run(cmd); err != nil {
+		return err
 	}
 
 	return nil
@@ -351,11 +361,11 @@ func InstallValkeyOperator() error {
 		return err
 	}
 
-	// Wait for Valkey operator components to be ready
+	// Wait for Valkey operator components to be ready (increased timeout for CI environments)
 	cmd = exec.Command("kubectl", "wait", "deployment.apps/valkey-operator-controller-manager",
 		"--for", "condition=Available",
 		"--namespace", "valkey-operator-system",
-		"--timeout", "1m",
+		"--timeout", "5m",
 	)
 	if _, err := Run(cmd); err != nil {
 		return err

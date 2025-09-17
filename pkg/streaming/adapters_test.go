@@ -17,90 +17,99 @@ limitations under the License.
 package streaming
 
 import (
-	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-func TestRealTimeProvider(t *testing.T) {
-	provider := NewRealTimeProvider()
+var _ = Describe("Adapters", func() {
+	Describe("RealTimeProvider", func() {
+		var provider TimeProvider
 
-	// Test Now()
-	now1 := provider.Now()
-	time.Sleep(1 * time.Millisecond)
-	now2 := provider.Now()
-	assert.True(t, now2.After(now1))
+		BeforeEach(func() {
+			provider = NewRealTimeProvider()
+		})
 
-	// Test After()
-	start := time.Now()
-	ch := provider.After(10 * time.Millisecond)
+		It("should return current time with Now()", func() {
+			now1 := provider.Now()
+			time.Sleep(1 * time.Millisecond)
+			now2 := provider.Now()
+			Expect(now2).To(BeTemporally(">", now1))
+		})
 
-	select {
-	case receivedTime := <-ch:
-		elapsed := time.Since(start)
-		assert.True(t, elapsed >= 10*time.Millisecond)
-		assert.True(t, receivedTime.After(start))
-	case <-time.After(100 * time.Millisecond):
-		t.Fatal("After channel should have fired within 100ms")
-	}
+		It("should fire After() channel after specified duration", func() {
+			start := time.Now()
+			ch := provider.After(10 * time.Millisecond)
 
-	// Test Sleep() - we can't easily test this without making the test slow
-	// Just ensure it doesn't panic
-	assert.NotPanics(t, func() {
-		provider.Sleep(1 * time.Microsecond)
+			Eventually(ch, "100ms").Should(Receive(And(
+				BeTemporally(">=", start),
+				BeTemporally(">=", start.Add(10*time.Millisecond)),
+			)))
+		})
+
+		It("should not panic during Sleep()", func() {
+			Expect(func() {
+				provider.Sleep(1 * time.Microsecond)
+			}).NotTo(Panic())
+		})
 	})
-}
 
-func TestKubernetesClientAdapter(t *testing.T) {
-	// Create a fake client with a test scheme
-	scheme := runtime.NewScheme()
-	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+	Describe("KubernetesClientAdapter", func() {
+		var adapter KubernetesClient
 
-	adapter := NewKubernetesClientAdapter(fakeClient)
-	assert.NotNil(t, adapter)
+		BeforeEach(func() {
+			scheme := runtime.NewScheme()
+			fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+			adapter = NewKubernetesClientAdapter(fakeClient)
+		})
 
-	// Test that the adapter exists and implements the interface
-	assert.Implements(t, (*KubernetesClient)(nil), adapter)
+		It("should create a valid adapter", func() {
+			Expect(adapter).NotTo(BeNil())
+		})
 
-	// Test List - this would normally succeed with empty results
-	// but we can't test List easily with our mock structure without proper interfaces
-}
+		It("should implement KubernetesClient interface", func() {
+			var _ KubernetesClient = adapter
+		})
+	})
 
-func TestAdaptersIntegration(t *testing.T) {
-	// Test that the adapters can be used together in a realistic scenario
-	timeProvider := NewRealTimeProvider()
+	Describe("Adapters Integration", func() {
+		It("should work together concurrently", func() {
+			timeProvider := NewRealTimeProvider()
 
-	scheme := runtime.NewScheme()
-	k8sClient := fake.NewClientBuilder().WithScheme(scheme).Build()
-	clientAdapter := NewKubernetesClientAdapter(k8sClient)
+			scheme := runtime.NewScheme()
+			k8sClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+			clientAdapter := NewKubernetesClientAdapter(k8sClient)
 
-	// Verify types implement the expected interfaces
-	assert.Implements(t, (*TimeProvider)(nil), timeProvider)
-	assert.Implements(t, (*KubernetesClient)(nil), clientAdapter)
+			// Verify types implement the expected interfaces
+			var _ TimeProvider = timeProvider
+			var _ KubernetesClient = clientAdapter
 
-	// Test concurrent usage (common in Kubernetes controllers)
-	done := make(chan bool, 2)
+			// Test concurrent usage (common in Kubernetes controllers)
+			done := make(chan bool, 2)
 
-	go func() {
-		// Simulate time-based operations
-		for i := 0; i < 10; i++ {
-			_ = timeProvider.Now()
-			timeProvider.Sleep(1 * time.Microsecond)
-		}
-		done <- true
-	}()
+			go func() {
+				defer GinkgoRecover()
+				// Simulate time-based operations
+				for i := 0; i < 10; i++ {
+					_ = timeProvider.Now()
+					timeProvider.Sleep(1 * time.Microsecond)
+				}
+				done <- true
+			}()
 
-	go func() {
-		// Simulate Kubernetes operations - just test that the methods exist
-		// We can't easily test actual Get operations without proper setup
-		_ = clientAdapter
-		done <- true
-	}()
+			go func() {
+				defer GinkgoRecover()
+				// Simulate Kubernetes operations - just test that the methods exist
+				_ = clientAdapter
+				done <- true
+			}()
 
-	// Wait for both goroutines to complete
-	<-done
-	<-done
-}
+			// Wait for both goroutines to complete
+			Eventually(done).Should(Receive())
+			Eventually(done).Should(Receive())
+		})
+	})
+})

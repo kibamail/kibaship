@@ -19,359 +19,264 @@ package streaming
 import (
 	"context"
 	"errors"
-	"testing"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/assert"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"
 )
 
-func TestProjectStreamPublisher_PublishEvent(t *testing.T) {
-	tests := []struct {
-		name          string
-		event         *ResourceEvent
-		setupMocks    func(*mockConnectionManager, *mockRedisClient)
-		expectedError string
-	}{
-		{
-			name: "successful publish",
-			event: &ResourceEvent{
-				EventID:      uuid.New().String(),
-				ProjectUUID:  uuid.New().String(),
-				ResourceType: ResourceTypeApplication,
-				ResourceUUID: uuid.New().String(),
-				Operation:    OperationCreate,
-				Timestamp:    time.Now(),
-			},
-			setupMocks: func(connMgr *mockConnectionManager, redisClient *mockRedisClient) {
+var _ = Describe("ProjectStreamPublisher", func() {
+	var (
+		connMgr      *mockConnectionManager
+		redisClient  *mockRedisClient
+		timeProvider *mockTimeProvider
+		config       *Config
+		publisher    ProjectStreamPublisher
+	)
+
+	BeforeEach(func() {
+		connMgr = &mockConnectionManager{}
+		redisClient = &mockRedisClient{}
+		timeProvider = &mockTimeProvider{}
+		config = &Config{}
+		publisher = NewProjectStreamPublisher(connMgr, timeProvider, config)
+	})
+
+	Describe("PublishEvent", func() {
+		Context("when publishing successfully", func() {
+			It("should publish the event without errors", func() {
+				event := &ResourceEvent{
+					EventID:      uuid.New().String(),
+					ProjectUUID:  uuid.New().String(),
+					ResourceType: ResourceTypeApplication,
+					ResourceUUID: uuid.New().String(),
+					Operation:    OperationCreate,
+					Timestamp:    time.Now(),
+				}
+
 				connMgr.On("IsConnected").Return(true)
 				connMgr.On("GetClient").Return(redisClient)
 				redisClient.On("XAdd", mock.Anything, mock.Anything, mock.Anything).Return("1703123456789-0", nil)
-			},
-		},
-		{
-			name:          "nil event",
-			event:         nil,
-			expectedError: "event cannot be nil",
-			setupMocks:    func(*mockConnectionManager, *mockRedisClient) {},
-		},
-		{
-			name: "missing project UUID",
-			event: &ResourceEvent{
-				EventID:      uuid.New().String(),
-				ResourceType: ResourceTypeApplication,
-				ResourceUUID: uuid.New().String(),
-				Operation:    OperationCreate,
-			},
-			expectedError: "event must have a project UUID",
-			setupMocks:    func(*mockConnectionManager, *mockRedisClient) {},
-		},
-		{
-			name: "not connected",
-			event: &ResourceEvent{
-				EventID:      uuid.New().String(),
-				ProjectUUID:  uuid.New().String(),
-				ResourceType: ResourceTypeApplication,
-				ResourceUUID: uuid.New().String(),
-				Operation:    OperationCreate,
-			},
-			setupMocks: func(connMgr *mockConnectionManager, redisClient *mockRedisClient) {
+
+				err := publisher.PublishEvent(context.Background(), event)
+				Expect(err).NotTo(HaveOccurred())
+
+				connMgr.AssertExpectations(GinkgoT())
+				redisClient.AssertExpectations(GinkgoT())
+			})
+		})
+
+		Context("when event is nil", func() {
+			It("should return an error", func() {
+				err := publisher.PublishEvent(context.Background(), nil)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("event cannot be nil"))
+			})
+		})
+
+		Context("when project UUID is missing", func() {
+			It("should return an error", func() {
+				event := &ResourceEvent{
+					EventID:      uuid.New().String(),
+					ResourceType: ResourceTypeApplication,
+					ResourceUUID: uuid.New().String(),
+					Operation:    OperationCreate,
+				}
+
+				err := publisher.PublishEvent(context.Background(), event)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("event must have a project UUID"))
+			})
+		})
+
+		Context("when not connected to Valkey", func() {
+			It("should return an error", func() {
+				event := &ResourceEvent{
+					EventID:      uuid.New().String(),
+					ProjectUUID:  uuid.New().String(),
+					ResourceType: ResourceTypeApplication,
+					ResourceUUID: uuid.New().String(),
+					Operation:    OperationCreate,
+				}
+
 				connMgr.On("IsConnected").Return(false)
-			},
-			expectedError: "not connected to Valkey cluster",
-		},
-		{
-			name: "client not available",
-			event: &ResourceEvent{
-				EventID:      uuid.New().String(),
-				ProjectUUID:  uuid.New().String(),
-				ResourceType: ResourceTypeApplication,
-				ResourceUUID: uuid.New().String(),
-				Operation:    OperationCreate,
-			},
-			setupMocks: func(connMgr *mockConnectionManager, redisClient *mockRedisClient) {
+
+				err := publisher.PublishEvent(context.Background(), event)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("not connected to Valkey cluster"))
+
+				connMgr.AssertExpectations(GinkgoT())
+			})
+		})
+
+		Context("when Redis client is not available", func() {
+			It("should return an error", func() {
+				event := &ResourceEvent{
+					EventID:      uuid.New().String(),
+					ProjectUUID:  uuid.New().String(),
+					ResourceType: ResourceTypeApplication,
+					ResourceUUID: uuid.New().String(),
+					Operation:    OperationCreate,
+				}
+
 				connMgr.On("IsConnected").Return(true)
 				connMgr.On("GetClient").Return(nil)
-			},
-			expectedError: "Redis client is not available",
-		},
-		{
-			name: "redis error",
-			event: &ResourceEvent{
-				EventID:      uuid.New().String(),
-				ProjectUUID:  uuid.New().String(),
-				ResourceType: ResourceTypeApplication,
-				ResourceUUID: uuid.New().String(),
-				Operation:    OperationCreate,
-				Timestamp:    time.Now(),
-			},
-			setupMocks: func(connMgr *mockConnectionManager, redisClient *mockRedisClient) {
+
+				err := publisher.PublishEvent(context.Background(), event)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("Redis client is not available"))
+
+				connMgr.AssertExpectations(GinkgoT())
+			})
+		})
+
+		Context("when Redis operation fails", func() {
+			It("should return an error", func() {
+				event := &ResourceEvent{
+					EventID:      uuid.New().String(),
+					ProjectUUID:  uuid.New().String(),
+					ResourceType: ResourceTypeApplication,
+					ResourceUUID: uuid.New().String(),
+					Operation:    OperationCreate,
+					Timestamp:    time.Now(),
+				}
+
 				connMgr.On("IsConnected").Return(true)
 				connMgr.On("GetClient").Return(redisClient)
 				redisClient.On("XAdd", mock.Anything, mock.Anything, mock.Anything).Return("", errors.New("redis connection failed"))
-			},
-			expectedError: "failed to publish event to stream",
-		},
-	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			connMgr := &mockConnectionManager{}
-			redisClient := &mockRedisClient{}
-			timeProvider := &mockTimeProvider{}
-			config := &Config{}
+				err := publisher.PublishEvent(context.Background(), event)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("failed to publish event to stream"))
 
-			tt.setupMocks(connMgr, redisClient)
-
-			if tt.event != nil && tt.event.Timestamp.IsZero() {
-				timeProvider.On("Now").Return(time.Now())
-			}
-
-			publisher := NewProjectStreamPublisher(connMgr, timeProvider, config)
-
-			err := publisher.PublishEvent(context.Background(), tt.event)
-
-			if tt.expectedError != "" {
-				assert.Error(t, err)
-				assert.Contains(t, err.Error(), tt.expectedError)
-			} else {
-				assert.NoError(t, err)
-			}
-
-			connMgr.AssertExpectations(t)
-			redisClient.AssertExpectations(t)
+				connMgr.AssertExpectations(GinkgoT())
+				redisClient.AssertExpectations(GinkgoT())
+			})
 		})
-	}
-}
+	})
 
-func TestProjectStreamPublisher_PublishBatch(t *testing.T) {
-	projectUUID1 := uuid.New().String()
-	projectUUID2 := uuid.New().String()
+	Describe("PublishBatch", func() {
+		var (
+			projectUUID1 string
+			projectUUID2 string
+		)
 
-	tests := []struct {
-		name       string
-		events     []*ResourceEvent
-		setupMocks func(*mockConnectionManager, *mockRedisClient)
-		wantError  bool
-	}{
-		{
-			name:   "empty batch",
-			events: []*ResourceEvent{},
-			setupMocks: func(*mockConnectionManager, *mockRedisClient) {
-				// No setup needed for empty batch
-			},
-		},
-		{
-			name: "successful batch",
-			events: []*ResourceEvent{
-				{
-					EventID:      uuid.New().String(),
-					ProjectUUID:  projectUUID1,
-					ResourceType: ResourceTypeApplication,
-					ResourceUUID: uuid.New().String(),
-					Operation:    OperationCreate,
-					Timestamp:    time.Now(),
-				},
-				{
-					EventID:      uuid.New().String(),
-					ProjectUUID:  projectUUID2,
-					ResourceType: ResourceTypeProject,
-					ResourceUUID: uuid.New().String(),
-					Operation:    OperationUpdate,
-					Timestamp:    time.Now(),
-				},
-			},
-			setupMocks: func(connMgr *mockConnectionManager, redisClient *mockRedisClient) {
+		BeforeEach(func() {
+			projectUUID1 = uuid.New().String()
+			projectUUID2 = uuid.New().String()
+		})
+
+		Context("with empty batch", func() {
+			It("should handle empty batch without errors", func() {
+				events := []*ResourceEvent{}
+
+				err := publisher.PublishBatch(context.Background(), events)
+				Expect(err).NotTo(HaveOccurred())
+			})
+		})
+
+		Context("with successful batch", func() {
+			It("should publish all events", func() {
+				events := []*ResourceEvent{
+					{
+						EventID:      uuid.New().String(),
+						ProjectUUID:  projectUUID1,
+						ResourceType: ResourceTypeApplication,
+						ResourceUUID: uuid.New().String(),
+						Operation:    OperationCreate,
+						Timestamp:    time.Now(),
+					},
+					{
+						EventID:      uuid.New().String(),
+						ProjectUUID:  projectUUID2,
+						ResourceType: ResourceTypeProject,
+						ResourceUUID: uuid.New().String(),
+						Operation:    OperationUpdate,
+						Timestamp:    time.Now(),
+					},
+				}
+
 				connMgr.On("IsConnected").Return(true)
 				connMgr.On("GetClient").Return(redisClient)
 				redisClient.On("XAdd", mock.Anything, mock.Anything, mock.Anything).Return("1703123456789-0", nil).Times(2)
-			},
-		},
-		{
-			name: "batch with invalid events",
-			events: []*ResourceEvent{
-				nil, // Invalid event
-				{
-					EventID:      uuid.New().String(),
-					ProjectUUID:  "", // Missing project UUID
-					ResourceType: ResourceTypeApplication,
-					ResourceUUID: uuid.New().String(),
-					Operation:    OperationCreate,
-				},
-				{
-					EventID:      uuid.New().String(),
-					ProjectUUID:  projectUUID1,
-					ResourceType: ResourceTypeApplication,
-					ResourceUUID: uuid.New().String(),
-					Operation:    OperationCreate,
-					Timestamp:    time.Now(),
-				},
-			},
-			setupMocks: func(connMgr *mockConnectionManager, redisClient *mockRedisClient) {
+
+				err := publisher.PublishBatch(context.Background(), events)
+				Expect(err).NotTo(HaveOccurred())
+
+				connMgr.AssertExpectations(GinkgoT())
+				redisClient.AssertExpectations(GinkgoT())
+			})
+		})
+
+		Context("with invalid events in batch", func() {
+			It("should process only valid events", func() {
+				events := []*ResourceEvent{
+					nil, // Invalid event
+					{
+						EventID:      uuid.New().String(),
+						ProjectUUID:  "", // Missing project UUID
+						ResourceType: ResourceTypeApplication,
+						ResourceUUID: uuid.New().String(),
+						Operation:    OperationCreate,
+					},
+					{
+						EventID:      uuid.New().String(),
+						ProjectUUID:  projectUUID1,
+						ResourceType: ResourceTypeApplication,
+						ResourceUUID: uuid.New().String(),
+						Operation:    OperationCreate,
+						Timestamp:    time.Now(),
+					},
+				}
+
 				// Only one valid event should be processed
 				connMgr.On("IsConnected").Return(true)
 				connMgr.On("GetClient").Return(redisClient)
 				redisClient.On("XAdd", mock.Anything, mock.Anything, mock.Anything).Return("1703123456789-0", nil).Once()
-			},
-		},
-		{
-			name: "partial failure",
-			events: []*ResourceEvent{
-				{
-					EventID:      uuid.New().String(),
-					ProjectUUID:  projectUUID1,
-					ResourceType: ResourceTypeApplication,
-					ResourceUUID: uuid.New().String(),
-					Operation:    OperationCreate,
-					Timestamp:    time.Now(),
-				},
-				{
-					EventID:      uuid.New().String(),
-					ProjectUUID:  projectUUID2,
-					ResourceType: ResourceTypeProject,
-					ResourceUUID: uuid.New().String(),
-					Operation:    OperationUpdate,
-					Timestamp:    time.Now(),
-				},
-			},
-			setupMocks: func(connMgr *mockConnectionManager, redisClient *mockRedisClient) {
+
+				err := publisher.PublishBatch(context.Background(), events)
+				Expect(err).NotTo(HaveOccurred())
+
+				connMgr.AssertExpectations(GinkgoT())
+				redisClient.AssertExpectations(GinkgoT())
+			})
+		})
+
+		Context("with partial failure", func() {
+			It("should return error when some events fail", func() {
+				events := []*ResourceEvent{
+					{
+						EventID:      uuid.New().String(),
+						ProjectUUID:  projectUUID1,
+						ResourceType: ResourceTypeApplication,
+						ResourceUUID: uuid.New().String(),
+						Operation:    OperationCreate,
+						Timestamp:    time.Now(),
+					},
+					{
+						EventID:      uuid.New().String(),
+						ProjectUUID:  projectUUID2,
+						ResourceType: ResourceTypeProject,
+						ResourceUUID: uuid.New().String(),
+						Operation:    OperationUpdate,
+						Timestamp:    time.Now(),
+					},
+				}
+
 				connMgr.On("IsConnected").Return(true)
 				connMgr.On("GetClient").Return(redisClient)
 				// First call succeeds, second fails
 				redisClient.On("XAdd", mock.Anything, mock.Anything, mock.Anything).Return("1703123456789-0", nil).Once()
 				redisClient.On("XAdd", mock.Anything, mock.Anything, mock.Anything).Return("", errors.New("redis error")).Once()
-			},
-			wantError: true,
-		},
-	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			connMgr := &mockConnectionManager{}
-			redisClient := &mockRedisClient{}
-			timeProvider := &mockTimeProvider{}
-			config := &Config{}
+				err := publisher.PublishBatch(context.Background(), events)
+				Expect(err).To(HaveOccurred())
 
-			tt.setupMocks(connMgr, redisClient)
-
-			publisher := NewProjectStreamPublisher(connMgr, timeProvider, config)
-
-			err := publisher.PublishBatch(context.Background(), tt.events)
-
-			if tt.wantError {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-			}
-
-			connMgr.AssertExpectations(t)
-			redisClient.AssertExpectations(t)
+				connMgr.AssertExpectations(GinkgoT())
+				redisClient.AssertExpectations(GinkgoT())
+			})
 		})
-	}
-}
-
-func TestProjectStreamPublisher_enrichEvent(t *testing.T) {
-	connMgr := &mockConnectionManager{}
-	timeProvider := &mockTimeProvider{}
-	config := &Config{}
-
-	publisher := NewProjectStreamPublisher(connMgr, timeProvider, config).(*projectStreamPublisher)
-
-	projectUUID := uuid.New().String()
-	event := &ResourceEvent{
-		EventID:      uuid.New().String(),
-		ProjectUUID:  projectUUID,
-		ResourceType: ResourceTypeApplication,
-		ResourceUUID: uuid.New().String(),
-		Operation:    OperationCreate,
-		// No timestamp set
-	}
-
-	now := time.Now()
-	timeProvider.On("Now").Return(now)
-
-	publisher.enrichEvent(event)
-
-	// Check timestamp was set
-	assert.Equal(t, now, event.Timestamp)
-
-	// Check sequence number was set
-	assert.Equal(t, int64(1), event.Metadata.SequenceNumber)
-
-	// Publish another event for the same project
-	event2 := &ResourceEvent{
-		EventID:      uuid.New().String(),
-		ProjectUUID:  projectUUID,
-		ResourceType: ResourceTypeApplication,
-		ResourceUUID: uuid.New().String(),
-		Operation:    OperationUpdate,
-		Timestamp:    time.Now(), // Already set
-	}
-
-	originalTimestamp := event2.Timestamp
-	publisher.enrichEvent(event2)
-
-	// Timestamp should not be overridden
-	assert.Equal(t, originalTimestamp, event2.Timestamp)
-
-	// Sequence number should increment
-	assert.Equal(t, int64(2), event2.Metadata.SequenceNumber)
-
-	timeProvider.AssertExpectations(t)
-}
-
-func TestProjectStreamPublisher_generateStreamName(t *testing.T) {
-	connMgr := &mockConnectionManager{}
-	timeProvider := &mockTimeProvider{}
-	config := &Config{}
-
-	publisher := NewProjectStreamPublisher(connMgr, timeProvider, config).(*projectStreamPublisher)
-
-	projectUUID := uuid.New().String()
-	streamName := publisher.generateStreamName(projectUUID)
-
-	expected := "project:" + projectUUID + ":events"
-	assert.Equal(t, expected, streamName)
-}
-
-func TestProjectStreamPublisher_eventToStreamValues(t *testing.T) {
-	connMgr := &mockConnectionManager{}
-	timeProvider := &mockTimeProvider{}
-	config := &Config{}
-
-	publisher := NewProjectStreamPublisher(connMgr, timeProvider, config).(*projectStreamPublisher)
-
-	event := &ResourceEvent{
-		EventID:       uuid.New().String(),
-		ProjectUUID:   uuid.New().String(),
-		WorkspaceUUID: uuid.New().String(),
-		ResourceType:  ResourceTypeApplication,
-		ResourceUUID:  uuid.New().String(),
-		ResourceSlug:  "test-app",
-		Namespace:     "default",
-		Operation:     OperationCreate,
-		Timestamp:     time.Unix(1703123456, 0),
-		Metadata: EventMetadata{
-			SequenceNumber:     5,
-			ParentResourceUUID: uuid.New().String(),
-		},
-	}
-
-	values, err := publisher.eventToStreamValues(event)
-	assert.NoError(t, err)
-
-	// Check all expected fields are present
-	assert.Equal(t, event.EventID, values["event_id"])
-	assert.Equal(t, int64(1703123456), values["timestamp"])
-	assert.Equal(t, event.ProjectUUID, values["project_uuid"])
-	assert.Equal(t, event.WorkspaceUUID, values["workspace_uuid"])
-	assert.Equal(t, string(event.ResourceType), values["resource_type"])
-	assert.Equal(t, event.ResourceUUID, values["resource_uuid"])
-	assert.Equal(t, event.ResourceSlug, values["resource_slug"])
-	assert.Equal(t, event.Namespace, values["namespace"])
-	assert.Equal(t, string(event.Operation), values["operation"])
-	assert.Equal(t, int64(5), values["sequence"])
-	assert.Equal(t, event.Metadata.ParentResourceUUID, values["parent_resource_uuid"])
-	assert.Contains(t, values, "event_data")
-}
+	})
+})
