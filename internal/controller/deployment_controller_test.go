@@ -191,7 +191,7 @@ var _ = Describe("Deployment Controller", func() {
 
 				// Verify task parameters
 				taskParams := task.Params
-				Expect(taskParams).To(HaveLen(4))
+				Expect(taskParams).To(HaveLen(5))
 
 				urlParam := findTaskParam(taskParams, "url")
 				Expect(urlParam).NotTo(BeNil())
@@ -211,7 +211,7 @@ var _ = Describe("Deployment Controller", func() {
 
 				By("Verifying pipeline has correct labels and annotations")
 				Expect(pipeline.Labels["app.kubernetes.io/name"]).To(Equal("project-test123"))
-				Expect(pipeline.Labels["app.kubernetes.io/managed-by"]).To(Equal("kibaship"))
+				Expect(pipeline.Labels["app.kubernetes.io/managed-by"]).To(Equal("kibaship-operator"))
 				Expect(pipeline.Labels["project.kibaship.com/slug"]).To(Equal("test123"))
 				Expect(pipeline.Labels["tekton.dev/pipeline"]).To(Equal("git-repository-clone"))
 			})
@@ -434,7 +434,7 @@ var _ = Describe("Deployment Controller", func() {
 			Expect(pipelineRun.Spec.Params[1].Value.StringVal).To(Equal("feature-branch"))
 
 			// Verify service account name
-			Expect(pipelineRun.Spec.TaskRunTemplate.ServiceAccountName).To(Equal("service-account-test123-kibaship-com"))
+			Expect(pipelineRun.Spec.TaskRunTemplate.ServiceAccountName).To(Equal("project-test123-sa-kibaship-com"))
 
 			// Verify workspace configuration
 			Expect(pipelineRun.Spec.Workspaces).To(HaveLen(1))
