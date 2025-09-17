@@ -47,24 +47,28 @@ type SecretManager interface {
 	GetValkeyPassword(ctx context.Context) (string, error)
 }
 
-// ConnectionManager manages Valkey/Redis connections
+// ConnectionManager manages Valkey cluster connections
 type ConnectionManager interface {
-	// Connect establishes connection to Valkey cluster
-	Connect(ctx context.Context, password string) error
+	// InitializeCluster establishes connection to Valkey cluster with auto-discovery
+	InitializeCluster(ctx context.Context, seedAddress, password string) error
 	// IsConnected returns connection status
 	IsConnected() bool
-	// GetClient returns the Redis client for stream operations
-	GetClient() RedisClient
+	// GetClient returns the Valkey client for stream operations
+	GetClient() ValkeyClient
+	// IsClusterHealthy returns cluster health status
+	IsClusterHealthy() bool
 	// Close closes the connection
 	Close() error
 }
 
-// RedisClient abstracts Redis operations for testing
-type RedisClient interface {
-	// XAdd adds an entry to a Redis stream
+// ValkeyClient abstracts Valkey cluster operations for testing
+type ValkeyClient interface {
+	// XAdd adds an entry to a Valkey stream
 	XAdd(ctx context.Context, stream string, values map[string]interface{}) (string, error)
 	// Ping tests the connection
 	Ping(ctx context.Context) error
+	// ClusterNodes returns cluster node information
+	ClusterNodes(ctx context.Context) (string, error)
 	// Close closes the client
 	Close() error
 }
@@ -161,6 +165,15 @@ type Config struct {
 	BatchSize         int
 	BatchTimeout      time.Duration
 	RetryAttempts     int
+	// Cluster configuration
+	ClusterEnabled    bool
+	ConnectionTimeout time.Duration
+	RequestTimeout    time.Duration
+	// Stream sharding configuration
+	StreamShardingEnabled  bool
+	StreamShardsPerProject int
+	// High traffic project configuration
+	HighTrafficThreshold int64
 }
 
 // Validate validates the resource event
@@ -239,13 +252,19 @@ func NewResourceEventFromK8sResource(projectUUID, workspaceUUID string, resource
 // DefaultConfig returns default streaming configuration
 func DefaultConfig(namespace string) *Config {
 	return &Config{
-		ValkeyServiceName: "kibaship-valkey-cluster-kibaship-com",
-		ValkeySecretName:  "kibaship-valkey-cluster-kibaship-com",
-		ValkeyPort:        6379,
-		Namespace:         namespace,
-		StartupTimeout:    5 * time.Minute,
-		BatchSize:         100,
-		BatchTimeout:      5 * time.Second,
-		RetryAttempts:     3,
+		ValkeyServiceName:      "kibaship-valkey-cluster-kibaship-com",
+		ValkeySecretName:       "kibaship-valkey-cluster-kibaship-com",
+		ValkeyPort:             6379,
+		Namespace:              namespace,
+		StartupTimeout:         5 * time.Minute,
+		BatchSize:              100,
+		BatchTimeout:           5 * time.Second,
+		RetryAttempts:          3,
+		ClusterEnabled:         true,
+		ConnectionTimeout:      30 * time.Second,
+		RequestTimeout:         10 * time.Second,
+		StreamShardingEnabled:  true,
+		StreamShardsPerProject: 4,
+		HighTrafficThreshold:   1000,
 	}
 }

@@ -415,10 +415,18 @@ func (r *ApplicationReconciler) createDefaultDomain(ctx context.Context, app *pl
 	// Prepare parent labels to inherit from application
 	parentLabels := map[string]string{
 		validation.LabelProjectUUID:       app.Labels[validation.LabelProjectUUID],
-		validation.LabelApplicationUUID:   app.Labels[validation.LabelResourceUUID],
+		validation.LabelWorkspaceUUID:     app.Labels[validation.LabelWorkspaceUUID],
+		validation.LabelApplicationUUID:   app.Labels[validation.LabelResourceUUID], // Application's UUID becomes application-uuid for ApplicationDomain
 		ApplicationDomainLabelApplication: app.Name,
 		ApplicationDomainLabelDomainType:  DefaultDomainType,
 	}
+
+	// Debug logging to understand label propagation
+	log.Info("Creating ApplicationDomain with labels",
+		"applicationUUID", app.Labels[validation.LabelResourceUUID],
+		"projectUUID", app.Labels[validation.LabelProjectUUID],
+		"workspaceUUID", app.Labels[validation.LabelWorkspaceUUID],
+		"domainUUID", domainUUID)
 
 	domain := &platformv1alpha1.ApplicationDomain{
 		ObjectMeta: metav1.ObjectMeta{
@@ -436,7 +444,11 @@ func (r *ApplicationReconciler) createDefaultDomain(ctx context.Context, app *pl
 	}
 
 	// Apply comprehensive labeling using the centralized system
+	// Note: ApplyLabelsToResource will set validation.LabelResourceUUID to domainUUID
 	ApplyLabelsToResource(domain, domainUUID, domainSlug, parentLabels)
+
+	// Debug: Log the labels that were applied to the ApplicationDomain
+	log.Info("ApplicationDomain labels after ApplyLabelsToResource", "labels", domain.GetLabels())
 
 	// Set owner reference to ensure cleanup when application is deleted
 	if err := controllerutil.SetControllerReference(app, domain, r.Scheme); err != nil {

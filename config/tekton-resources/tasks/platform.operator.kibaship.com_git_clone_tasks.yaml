@@ -7,8 +7,8 @@ metadata:
     platform.kibaship.com/created-by: "kibaship-operator"
 spec:
   description: >-
-    A simplified git clone task that uses an access token from a secret
-    to clone a specific branch and commit from a repository.
+    A simplified git clone task that can clone from public repositories
+    or use an access token from a secret for private repositories.
   workspaces:
     - name: output
       description: The git repo will be cloned into this workspace.
@@ -23,8 +23,13 @@ spec:
       description: Specific commit hash to checkout (required).
       type: string
     - name: token-secret
-      description: Name of the secret containing the access token.
+      description: Name of the secret containing the access token (optional for public repos).
       type: string
+      default: ""
+    - name: public-access
+      description: Whether the repository is publicly accessible (true/false).
+      type: string
+      default: "false"
   results:
     - name: commit
       description: The commit SHA that was checked out.
@@ -40,24 +45,54 @@ spec:
           value: $(params.branch)
         - name: COMMIT_HASH
           value: $(params.commit)
-        - name: ACCESS_TOKEN
-          valueFrom:
-            secretKeyRef:
-              name: $(params.token-secret)
-              key: token
+        - name: PUBLIC_ACCESS
+          value: $(params.public-access)
+        - name: TOKEN_SECRET_NAME
+          value: $(params.token-secret)
         - name: WORKSPACE_PATH
           value: $(workspaces.output.path)
       script: |
         #!/bin/sh
         set -e
-        
+
         echo "Starting git clone..."
-        
-        # Create authenticated URL by injecting token
-        AUTH_URL=$(echo "$REPO_URL" | sed "s|https://|https://x-access-token:${ACCESS_TOKEN}@|")
-        
+        echo "Repository: $REPO_URL"
+        echo "Public Access: $PUBLIC_ACCESS"
+
+        # Determine the URL to use based on public access
+        if [ "$PUBLIC_ACCESS" = "true" ]; then
+          echo "Using public access (no authentication)"
+          CLONE_URL="$REPO_URL"
+        else
+          echo "Using private access with token"
+          if [ -z "$TOKEN_SECRET_NAME" ] || [ "$TOKEN_SECRET_NAME" = "" ]; then
+            echo "Error: Private repository requires token-secret parameter"
+            exit 1
+          fi
+
+          # For private repos, try to read ACCESS_TOKEN from secret file
+          # The Tekton task runner will mount secrets automatically
+          ACCESS_TOKEN=""
+
+          # Try to find the token in common Tekton secret mount locations
+          if [ -f "/tekton/creds/$TOKEN_SECRET_NAME/token" ]; then
+            ACCESS_TOKEN=$(cat "/tekton/creds/$TOKEN_SECRET_NAME/token")
+          elif [ -f "/workspace/git-credentials/token" ]; then
+            ACCESS_TOKEN=$(cat "/workspace/git-credentials/token")
+          else
+            echo "Error: Could not find access token for private repository"
+            echo "Expected locations:"
+            echo "  /tekton/creds/$TOKEN_SECRET_NAME/token"
+            echo "  /workspace/git-credentials/token"
+            exit 1
+          fi
+
+          # Create authenticated URL by injecting token
+          CLONE_URL=$(echo "$REPO_URL" | sed "s|https://|https://x-access-token:${ACCESS_TOKEN}@|")
+        fi
+
         # Clone the repository with the specific branch
-        git clone --branch "$BRANCH_NAME" --single-branch "$AUTH_URL" "$WORKSPACE_PATH/repo"
+        git clone --branch "$BRANCH_NAME" --single-branch "$CLONE_URL" "$WORKSPACE_PATH/repo"
         
         # Navigate to the cloned repository
         cd "$WORKSPACE_PATH/repo"

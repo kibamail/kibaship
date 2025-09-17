@@ -23,11 +23,11 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("RedisClient", func() {
-	var client RedisClient
+var _ = Describe("ValkeyClient", func() {
+	var client ValkeyClient
 
 	BeforeEach(func() {
-		client = NewTestRedisClient("localhost:6379", "password")
+		client, _ = NewTestValkeyClient("localhost:6379", "password", &Config{})
 	})
 
 	Describe("XAdd", func() {
@@ -87,7 +87,7 @@ var _ = Describe("RedisClient", func() {
 	Describe("Ping", func() {
 		Context("when ping is successful", func() {
 			It("should ping without errors", func() {
-				client := NewTestRedisClient("localhost:6379", "password")
+				client, _ := NewTestValkeyClient("localhost:6379", "password", &Config{})
 				err := client.Ping(context.Background())
 				Expect(err).NotTo(HaveOccurred())
 			})
@@ -95,26 +95,25 @@ var _ = Describe("RedisClient", func() {
 
 		Context("with empty address", func() {
 			It("should return an error", func() {
-				client := NewTestRedisClient("", "password")
+				client, _ := NewTestValkeyClient("", "password", &Config{})
 				err := client.Ping(context.Background())
 				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("Redis address is not configured"))
+				Expect(err.Error()).To(ContainSubstring("Valkey address is not configured"))
 			})
 		})
 
 		Context("with empty password", func() {
-			It("should return an error", func() {
-				client := NewTestRedisClient("localhost:6379", "")
+			It("should allow empty password", func() {
+				client, _ := NewTestValkeyClient("localhost:6379", "", &Config{})
 				err := client.Ping(context.Background())
-				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("Redis password is not configured"))
+				Expect(err).NotTo(HaveOccurred())
 			})
 		})
 	})
 
 	Describe("Close", func() {
 		It("should close client and prevent further operations", func() {
-			client := NewTestRedisClient("localhost:6379", "password")
+			client, _ := NewTestValkeyClient("localhost:6379", "password", &Config{})
 
 			err := client.Close()
 			Expect(err).NotTo(HaveOccurred())
@@ -122,16 +121,16 @@ var _ = Describe("RedisClient", func() {
 			// After closing, should not be able to ping
 			err = client.Ping(context.Background())
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("redis: client is closed"))
+			Expect(err.Error()).To(ContainSubstring("valkey: client is closed"))
 		})
 	})
 
-	Describe("NewRedisClient", func() {
+	Describe("NewValkeyClient", func() {
 		It("should create a properly configured client", func() {
 			address := "localhost:6379"
 			password := "test-password"
 
-			client := NewTestRedisClient(address, password)
+			client, _ := NewTestValkeyClient(address, password, &Config{})
 			Expect(client).NotTo(BeNil())
 
 			// Test that the client is properly configured

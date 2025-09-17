@@ -430,6 +430,10 @@ func (r *DeploymentReconciler) createGitRepositoryPipeline(ctx context.Context, 
 							Name:  "token-secret",
 							Value: tektonv1.ParamValue{Type: tektonv1.ParamTypeString, StringVal: tokenSecret},
 						},
+						{
+							Name:  "public-access",
+							Value: tektonv1.ParamValue{Type: tektonv1.ParamTypeString, StringVal: fmt.Sprintf("%t", gitConfig.PublicAccess)},
+						},
 					},
 					Workspaces: []tektonv1.WorkspacePipelineTaskBinding{
 						{
@@ -514,8 +518,8 @@ func (r *DeploymentReconciler) createPipelineRun(ctx context.Context, deployment
 	// Generate workspace name based on deployment
 	workspaceName := fmt.Sprintf("workspace-%s-kibaship-com", deploymentSlug)
 
-	// Generate service account name
-	serviceAccountName := fmt.Sprintf("service-account-%s-kibaship-com", projectSlug)
+	// Generate service account name - must match project controller naming
+	serviceAccountName := fmt.Sprintf("project-%s-sa-kibaship-com", projectSlug)
 
 	pipelineRun := &tektonv1.PipelineRun{
 		ObjectMeta: metav1.ObjectMeta{
@@ -597,7 +601,7 @@ func (r *DeploymentReconciler) updateDeploymentStatus(ctx context.Context, deplo
 	isNewDeployment := deployment.Status.Phase == ""
 
 	deployment.Status.ObservedGeneration = deployment.Generation
-	deployment.Status.Phase = platformv1alpha1.DeploymentPhaseWaiting
+	deployment.Status.Phase = platformv1alpha1.DeploymentPhaseInitializing
 
 	condition := metav1.Condition{
 		Type:               "Ready",

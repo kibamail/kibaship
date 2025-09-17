@@ -19,37 +19,55 @@ package streaming
 import (
 	"context"
 	"fmt"
-	"time"
+	"strings"
 
 	"github.com/redis/go-redis/v9"
 )
 
-// redisClient implements RedisClient interface using go-redis
-type redisClient struct {
-	client *redis.Client
+// valkeyClusterClient implements ValkeyClient interface using go-redis cluster client
+type valkeyClusterClient struct {
+	client *redis.ClusterClient
 }
 
-// NewRedisClient creates a new Redis client for Valkey/Redis
-func NewRedisClient(address, password string) RedisClient {
-	rdb := redis.NewClient(&redis.Options{
-		Addr:         address,
-		Password:     password,
-		DB:           0, // Default database
-		DialTimeout:  connectionTimeout,
-		ReadTimeout:  operationTimeout,
-		WriteTimeout: operationTimeout,
-		PoolSize:     poolSize,
-		MinIdleConns: minIdleConns,
-		MaxRetries:   maxRetries,
+// NewValkeyClusterClient creates a new Valkey cluster client with auto-discovery
+func NewValkeyClusterClient(seedAddress, password string, config *Config) (ValkeyClient, error) {
+	// Parse seed address to get host and port
+	var addresses []string
+	if strings.Contains(seedAddress, ":") {
+		addresses = []string{seedAddress}
+	} else {
+		addresses = []string{fmt.Sprintf("%s:%d", seedAddress, config.ValkeyPort)}
+	}
+
+	clusterClient := redis.NewClusterClient(&redis.ClusterOptions{
+		Addrs:          addresses,
+		Password:       password,
+		DialTimeout:    config.ConnectionTimeout,
+		ReadTimeout:    config.RequestTimeout,
+		WriteTimeout:   config.RequestTimeout,
+		PoolSize:       100,
+		MinIdleConns:   10,
+		MaxRetries:     config.RetryAttempts,
+		RouteRandomly:  true,
+		RouteByLatency: true,
+		ReadOnly:       false,
+		MaxRedirects:   8,
 	})
 
-	return &redisClient{
-		client: rdb,
+	// Test cluster connectivity
+	ctx := context.Background()
+	if err := clusterClient.Ping(ctx).Err(); err != nil {
+		clusterClient.Close()
+		return nil, fmt.Errorf("failed to connect to Valkey cluster: %w", err)
 	}
+
+	return &valkeyClusterClient{
+		client: clusterClient,
+	}, nil
 }
 
-// XAdd adds an entry to a Redis stream
-func (r *redisClient) XAdd(ctx context.Context, stream string, values map[string]interface{}) (string, error) {
+// XAdd adds an entry to a Valkey stream
+func (v *valkeyClusterClient) XAdd(ctx context.Context, stream string, values map[string]interface{}) (string, error) {
 	if stream == "" {
 		return "", fmt.Errorf("stream name cannot be empty")
 	}
@@ -57,7 +75,7 @@ func (r *redisClient) XAdd(ctx context.Context, stream string, values map[string
 		return "", fmt.Errorf("values cannot be empty")
 	}
 
-	result := r.client.XAdd(ctx, &redis.XAddArgs{
+	result := v.client.XAdd(ctx, &redis.XAddArgs{
 		Stream: stream,
 		Values: values,
 	})
@@ -65,21 +83,18 @@ func (r *redisClient) XAdd(ctx context.Context, stream string, values map[string
 	return result.Result()
 }
 
-// Ping tests the connection to Redis/Valkey
-func (r *redisClient) Ping(ctx context.Context) error {
-	return r.client.Ping(ctx).Err()
+// Ping tests the connection to Valkey cluster
+func (v *valkeyClusterClient) Ping(ctx context.Context) error {
+	return v.client.Ping(ctx).Err()
 }
 
-// Close closes the Redis client connection
-func (r *redisClient) Close() error {
-	return r.client.Close()
+// ClusterNodes returns cluster node information
+func (v *valkeyClusterClient) ClusterNodes(ctx context.Context) (string, error) {
+	result := v.client.ClusterNodes(ctx)
+	return result.Result()
 }
 
-// Redis client configuration constants
-const (
-	connectionTimeout = 30 * time.Second // Connection timeout
-	operationTimeout  = 10 * time.Second // Read/write timeout
-	poolSize          = 100              // Connection pool size
-	minIdleConns      = 10               // Minimum idle connections
-	maxRetries        = 3                // Maximum retry attempts
-)
+// Close closes the Valkey cluster client connection
+func (v *valkeyClusterClient) Close() error {
+	return v.client.Close()
+}

@@ -33,6 +33,7 @@ import (
 
 	platformv1alpha1 "github.com/kibamail/kibaship-operator/api/v1alpha1"
 	"github.com/kibamail/kibaship-operator/pkg/streaming"
+	"github.com/kibamail/kibaship-operator/pkg/validation"
 )
 
 const (
@@ -313,10 +314,10 @@ func (r *ApplicationDomainReconciler) publishApplicationDomainEvent(ctx context.
 		return
 	}
 
-	// Extract required UUIDs from labels
-	projectUUID := appDomain.Labels["platform.operator.kibaship.com/project-uuid"]
-	workspaceUUID := appDomain.Labels["platform.operator.kibaship.com/workspace-uuid"]
-	resourceUUID := appDomain.Labels["platform.operator.kibaship.com/resource-uuid"]
+	// Extract required UUIDs from labels using validation constants
+	projectUUID := appDomain.Labels[validation.LabelProjectUUID]
+	workspaceUUID := appDomain.Labels[validation.LabelWorkspaceUUID]
+	resourceUUID := appDomain.Labels[validation.LabelResourceUUID]
 
 	if projectUUID == "" || workspaceUUID == "" || resourceUUID == "" {
 		logger.Info("Skipping stream publish - missing required UUIDs",

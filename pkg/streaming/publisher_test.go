@@ -30,7 +30,7 @@ import (
 var _ = Describe("ProjectStreamPublisher", func() {
 	var (
 		connMgr      *mockConnectionManager
-		redisClient  *mockRedisClient
+		valkeyClient *mockValkeyClient
 		timeProvider *mockTimeProvider
 		config       *Config
 		publisher    ProjectStreamPublisher
@@ -38,9 +38,13 @@ var _ = Describe("ProjectStreamPublisher", func() {
 
 	BeforeEach(func() {
 		connMgr = &mockConnectionManager{}
-		redisClient = &mockRedisClient{}
+		valkeyClient = &mockValkeyClient{}
 		timeProvider = &mockTimeProvider{}
-		config = &Config{}
+		config = &Config{
+			StreamShardingEnabled:  true,
+			StreamShardsPerProject: 4,
+			HighTrafficThreshold:   1000,
+		}
 		publisher = NewProjectStreamPublisher(connMgr, timeProvider, config)
 	})
 
@@ -57,14 +61,14 @@ var _ = Describe("ProjectStreamPublisher", func() {
 				}
 
 				connMgr.On("IsConnected").Return(true)
-				connMgr.On("GetClient").Return(redisClient)
-				redisClient.On("XAdd", mock.Anything, mock.Anything, mock.Anything).Return("1703123456789-0", nil)
+				connMgr.On("GetClient").Return(valkeyClient)
+				valkeyClient.On("XAdd", mock.Anything, mock.Anything, mock.Anything).Return("1703123456789-0", nil)
 
 				err := publisher.PublishEvent(context.Background(), event)
 				Expect(err).NotTo(HaveOccurred())
 
 				connMgr.AssertExpectations(GinkgoT())
-				redisClient.AssertExpectations(GinkgoT())
+				valkeyClient.AssertExpectations(GinkgoT())
 			})
 		})
 
@@ -144,15 +148,15 @@ var _ = Describe("ProjectStreamPublisher", func() {
 				}
 
 				connMgr.On("IsConnected").Return(true)
-				connMgr.On("GetClient").Return(redisClient)
-				redisClient.On("XAdd", mock.Anything, mock.Anything, mock.Anything).Return("", errors.New("redis connection failed"))
+				connMgr.On("GetClient").Return(valkeyClient)
+				valkeyClient.On("XAdd", mock.Anything, mock.Anything, mock.Anything).Return("", errors.New("redis connection failed"))
 
 				err := publisher.PublishEvent(context.Background(), event)
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("failed to publish event to stream"))
 
 				connMgr.AssertExpectations(GinkgoT())
-				redisClient.AssertExpectations(GinkgoT())
+				valkeyClient.AssertExpectations(GinkgoT())
 			})
 		})
 	})
@@ -199,14 +203,14 @@ var _ = Describe("ProjectStreamPublisher", func() {
 				}
 
 				connMgr.On("IsConnected").Return(true)
-				connMgr.On("GetClient").Return(redisClient)
-				redisClient.On("XAdd", mock.Anything, mock.Anything, mock.Anything).Return("1703123456789-0", nil).Times(2)
+				connMgr.On("GetClient").Return(valkeyClient)
+				valkeyClient.On("XAdd", mock.Anything, mock.Anything, mock.Anything).Return("1703123456789-0", nil).Times(2)
 
 				err := publisher.PublishBatch(context.Background(), events)
 				Expect(err).NotTo(HaveOccurred())
 
 				connMgr.AssertExpectations(GinkgoT())
-				redisClient.AssertExpectations(GinkgoT())
+				valkeyClient.AssertExpectations(GinkgoT())
 			})
 		})
 
@@ -233,14 +237,14 @@ var _ = Describe("ProjectStreamPublisher", func() {
 
 				// Only one valid event should be processed
 				connMgr.On("IsConnected").Return(true)
-				connMgr.On("GetClient").Return(redisClient)
-				redisClient.On("XAdd", mock.Anything, mock.Anything, mock.Anything).Return("1703123456789-0", nil).Once()
+				connMgr.On("GetClient").Return(valkeyClient)
+				valkeyClient.On("XAdd", mock.Anything, mock.Anything, mock.Anything).Return("1703123456789-0", nil).Once()
 
 				err := publisher.PublishBatch(context.Background(), events)
 				Expect(err).NotTo(HaveOccurred())
 
 				connMgr.AssertExpectations(GinkgoT())
-				redisClient.AssertExpectations(GinkgoT())
+				valkeyClient.AssertExpectations(GinkgoT())
 			})
 		})
 
@@ -266,16 +270,16 @@ var _ = Describe("ProjectStreamPublisher", func() {
 				}
 
 				connMgr.On("IsConnected").Return(true)
-				connMgr.On("GetClient").Return(redisClient)
+				connMgr.On("GetClient").Return(valkeyClient)
 				// First call succeeds, second fails
-				redisClient.On("XAdd", mock.Anything, mock.Anything, mock.Anything).Return("1703123456789-0", nil).Once()
-				redisClient.On("XAdd", mock.Anything, mock.Anything, mock.Anything).Return("", errors.New("redis error")).Once()
+				valkeyClient.On("XAdd", mock.Anything, mock.Anything, mock.Anything).Return("1703123456789-0", nil).Once()
+				valkeyClient.On("XAdd", mock.Anything, mock.Anything, mock.Anything).Return("", errors.New("redis error")).Once()
 
 				err := publisher.PublishBatch(context.Background(), events)
 				Expect(err).To(HaveOccurred())
 
 				connMgr.AssertExpectations(GinkgoT())
-				redisClient.AssertExpectations(GinkgoT())
+				valkeyClient.AssertExpectations(GinkgoT())
 			})
 		})
 	})

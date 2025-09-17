@@ -40,7 +40,9 @@ var _ = Describe("StartupSequenceController", func() {
 		secret = &mockSecretManager{}
 		conn = &mockConnectionManager{}
 		config = &Config{
-			StartupTimeout: 5 * time.Minute,
+			StartupTimeout:    5 * time.Minute,
+			ValkeyServiceName: "test-service",
+			Namespace:         "test-namespace",
 		}
 		controller = NewStartupSequenceController(readiness, secret, conn, config)
 	})
@@ -50,7 +52,7 @@ var _ = Describe("StartupSequenceController", func() {
 			It("should initialize without errors", func() {
 				readiness.On("WaitForReady", mock.Anything, 5*time.Minute).Return(nil)
 				secret.On("GetValkeyPassword", mock.Anything).Return("test-password", nil)
-				conn.On("Connect", mock.Anything, "test-password").Return(nil)
+				conn.On("InitializeCluster", mock.Anything, mock.AnythingOfType("string"), "test-password").Return(nil)
 				conn.On("IsConnected").Return(true)
 
 				err := controller.Initialize(context.Background())
@@ -93,11 +95,11 @@ var _ = Describe("StartupSequenceController", func() {
 			It("should return an error", func() {
 				readiness.On("WaitForReady", mock.Anything, 5*time.Minute).Return(nil)
 				secret.On("GetValkeyPassword", mock.Anything).Return("test-password", nil)
-				conn.On("Connect", mock.Anything, "test-password").Return(errors.New("connection failed"))
+				conn.On("InitializeCluster", mock.Anything, mock.AnythingOfType("string"), "test-password").Return(errors.New("connection failed"))
 
 				err := controller.Initialize(context.Background())
 				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("failed to establish connection to Valkey cluster"))
+				Expect(err.Error()).To(ContainSubstring("failed to initialize Valkey cluster connection"))
 
 				readiness.AssertExpectations(GinkgoT())
 				secret.AssertExpectations(GinkgoT())
@@ -224,7 +226,7 @@ var _ = Describe("StartupSequenceController", func() {
 			// Setup successful initialization flow
 			readiness.On("WaitForReady", mock.Anything, 5*time.Minute).Return(nil)
 			secret.On("GetValkeyPassword", mock.Anything).Return("test-password", nil)
-			conn.On("Connect", mock.Anything, "test-password").Return(nil)
+			conn.On("InitializeCluster", mock.Anything, mock.AnythingOfType("string"), "test-password").Return(nil)
 			conn.On("IsConnected").Return(true)
 			conn.On("Close").Return(nil)
 
@@ -256,7 +258,7 @@ var _ = Describe("StartupSequenceController", func() {
 			// Setup mocks for the complete simplified flow
 			readiness.On("WaitForReady", mock.Anything, 5*time.Minute).Return(nil)
 			secret.On("GetValkeyPassword", mock.Anything).Return("test-password", nil)
-			conn.On("Connect", mock.Anything, "test-password").Return(nil)
+			conn.On("InitializeCluster", mock.Anything, mock.AnythingOfType("string"), "test-password").Return(nil)
 			conn.On("IsConnected").Return(true)
 
 			// Initialize should succeed without secret watching
