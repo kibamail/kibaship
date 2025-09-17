@@ -32,13 +32,10 @@ const (
 	MaxSubdomainAttempts = 10
 )
 
-// GenerateSubdomain creates a unique subdomain for an application based on its name
-// It extracts the app slug from the application name and adds a random suffix
-// Example: project-myproject-app-frontend-kibaship-com -> frontend-abc12345
-func GenerateSubdomain(appName string) (string, error) {
-	// Extract app slug from application name
-	appSlug := extractAppSlugFromName(appName)
-
+// GenerateSubdomain creates a unique subdomain for an application based on its slug
+// It takes the app slug directly and adds a random suffix
+// Example: frontend -> frontend-abc12345
+func GenerateSubdomain(appSlug string) (string, error) {
 	// Generate random suffix for uniqueness
 	randomSuffix, err := generateRandomString(SubdomainRandomSuffixLength)
 	if err != nil {
@@ -52,34 +49,6 @@ func GenerateSubdomain(appName string) (string, error) {
 	subdomain = sanitizeSubdomain(subdomain)
 
 	return subdomain, nil
-}
-
-// extractAppSlugFromName extracts the application slug from the full application name
-// Expected format: project-<project-name>-app-<app-slug>-kibaship-com
-func extractAppSlugFromName(appName string) string {
-	parts := strings.Split(appName, "-")
-
-	// Find the app slug (part after "app-")
-	const appDelimiter = "app"
-	for i, part := range parts {
-		if part == appDelimiter && i+1 < len(parts) {
-			// Take the next part as the app slug
-			appSlug := parts[i+1]
-
-			// If there are more parts before "kibaship", include them
-			// This handles cases like "api-gateway" in "project-name-app-api-gateway-kibaship-com"
-			j := i + 2
-			for j < len(parts) && parts[j] != "kibaship" {
-				appSlug += "-" + parts[j]
-				j++
-			}
-
-			return sanitizeAppSlug(appSlug)
-		}
-	}
-
-	// Fallback: if no "app-" pattern found, use "app"
-	return appDelimiter
 }
 
 // sanitizeAppSlug ensures the app slug is valid for DNS

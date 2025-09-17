@@ -21,7 +21,6 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"math/big"
-	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -44,7 +43,7 @@ func generateMySQLCredentialsSecret(deployment *platformv1alpha1.Deployment, pro
 		return nil, fmt.Errorf("failed to generate MySQL password: %w", err)
 	}
 
-	secretName := fmt.Sprintf("project-%s-app-%s-mysql-credentials-kibaship-com", projectSlug, appSlug)
+	secretName := fmt.Sprintf("mysql-secret-%s-kibaship-com", deployment.GetSlug())
 
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -75,21 +74,14 @@ func generateMySQLCredentialsSecret(deployment *platformv1alpha1.Deployment, pro
 
 // generateInnoDBCluster creates an InnoDBCluster resource for MySQL deployment
 func generateInnoDBCluster(deployment *platformv1alpha1.Deployment, app *platformv1alpha1.Application, projectSlug, appSlug string, secretName, namespace string) *unstructured.Unstructured {
-	// MySQL operator has a 40-character limit, so we need shorter names
-	clusterName := fmt.Sprintf("%s-%s-mysql", projectSlug, appSlug)
+	// MySQL operator has a 40-character limit, use simple naming
+	clusterName := fmt.Sprintf("mysql-%s", deployment.GetSlug())
 
 	// If name is still too long, truncate it
 	if len(clusterName) > 40 {
-		// Use first 8 characters of hash for uniqueness
-		hash := sha256.Sum256([]byte(fmt.Sprintf("%s-%s", projectSlug, appSlug)))
-		hashSuffix := fmt.Sprintf("-%x", hash)[:9] // 8 chars + dash
-		maxPrefix := 40 - len("-mysql") - len(hashSuffix)
-		if maxPrefix > 0 {
-			clusterName = fmt.Sprintf("%s%s-mysql", (projectSlug + "-" + appSlug)[:maxPrefix], hashSuffix)
-		} else {
-			// Fallback to just hash-mysql if still too long
-			clusterName = fmt.Sprintf("%x-mysql", hash)[:40]
-		}
+		// Use hash for uniqueness if still too long
+		hash := sha256.Sum256([]byte(deployment.GetSlug()))
+		clusterName = fmt.Sprintf("mysql-%x", hash)[:40]
 	}
 
 	cluster := &unstructured.Unstructured{
@@ -166,23 +158,18 @@ func generateSecurePassword() (string, error) {
 }
 
 // generateMySQLResourceNames generates resource names following naming conventions
-func generateMySQLResourceNames(_ *platformv1alpha1.Deployment, projectSlug, appSlug string) (secretName, clusterName string) {
-	// For secrets (no length limit in practice)
-	secretName = fmt.Sprintf("project-%s-app-%s-mysql-credentials-kibaship-com", projectSlug, appSlug)
+func generateMySQLResourceNames(deployment *platformv1alpha1.Deployment, projectSlug, appSlug string) (secretName, clusterName string) {
+	deploymentSlug := deployment.GetSlug()
+
+	// For secrets
+	secretName = fmt.Sprintf("mysql-secret-%s-kibaship-com", deploymentSlug)
 
 	// For InnoDBCluster (40 character limit)
-	clusterName = fmt.Sprintf("%s-%s-mysql", projectSlug, appSlug)
+	clusterName = fmt.Sprintf("mysql-%s", deploymentSlug)
 	if len(clusterName) > 40 {
 		// Use hash for uniqueness if too long
-		hash := sha256.Sum256([]byte(fmt.Sprintf("%s-%s", projectSlug, appSlug)))
-		hashSuffix := fmt.Sprintf("-%x", hash)[:9] // 8 chars + dash
-		maxPrefix := 40 - len("-mysql") - len(hashSuffix)
-		if maxPrefix > 0 {
-			clusterName = fmt.Sprintf("%s%s-mysql", (projectSlug + "-" + appSlug)[:maxPrefix], hashSuffix)
-		} else {
-			// Fallback to just hash-mysql if still too long
-			clusterName = fmt.Sprintf("%x-mysql", hash)[:40]
-		}
+		hash := sha256.Sum256([]byte(deploymentSlug))
+		clusterName = fmt.Sprintf("mysql-%x", hash)[:40]
 	}
 	return
 }
@@ -213,65 +200,4 @@ func checkForExistingMySQLDeployments(deployments []platformv1alpha1.Deployment,
 	}
 
 	return false
-}
-
-// extractProjectAndAppSlugs extracts project and application slugs from deployment name
-func extractProjectAndAppSlugs(deploymentName string) (projectSlug, appSlug string, err error) {
-	// Expected format: project-<project-slug>-app-<app-slug>-deployment-<deployment-slug>-kibaship-com
-	parts := strings.Split(deploymentName, "-")
-	if len(parts) < 7 {
-		return "", "", fmt.Errorf("invalid deployment name format: %s", deploymentName)
-	}
-
-	// Find indices of key parts - need to find the correct delimiters
-	projectIndex := -1
-	appIndex := -1
-	deploymentIndex := -1
-
-	// Find "project" - should be first
-	for i, part := range parts {
-		if part == "project" {
-			projectIndex = i
-			break
-		}
-	}
-
-	// Find "deployment" - should be towards the end
-	for i := len(parts) - 1; i >= 0; i-- {
-		if parts[i] == "deployment" {
-			deploymentIndex = i
-			break
-		}
-	}
-
-	// Find "app" - should be between project and deployment
-	for i := projectIndex + 1; i < deploymentIndex; i++ {
-		if parts[i] == "app" {
-			// Check if this could be a valid delimiter by ensuring there's content after it
-			if i+1 < deploymentIndex {
-				appIndex = i
-				break
-			}
-		}
-	}
-
-	if projectIndex == -1 || appIndex == -1 || deploymentIndex == -1 {
-		return "", "", fmt.Errorf("invalid deployment name format: missing required parts in %s", deploymentName)
-	}
-
-	if appIndex <= projectIndex+1 || deploymentIndex <= appIndex+1 {
-		return "", "", fmt.Errorf("invalid deployment name format: incorrect part ordering in %s", deploymentName)
-	}
-
-	// Extract project slug (between "project" and "app")
-	projectSlug = strings.Join(parts[projectIndex+1:appIndex], "-")
-
-	// Extract app slug (between "app" and "deployment")
-	appSlug = strings.Join(parts[appIndex+1:deploymentIndex], "-")
-
-	if projectSlug == "" || appSlug == "" {
-		return "", "", fmt.Errorf("invalid deployment name format: empty slugs in %s", deploymentName)
-	}
-
-	return projectSlug, appSlug, nil
 }

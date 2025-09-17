@@ -20,7 +20,6 @@ import (
 	"context"
 	"fmt"
 	"regexp"
-	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -410,65 +409,20 @@ func (r *Application) isValidApplicationName() bool {
 	return pattern.MatchString(r.Name)
 }
 
-// GetProjectSlugFromName extracts the project slug from application name
-func (r *Application) GetProjectSlugFromName() string {
-	// Extract project slug from name format: project-<project-slug>-app-<app-slug>-kibaship-com
-	if !r.isValidApplicationName() {
+// GetSlug returns the application slug from labels
+func (r *Application) GetSlug() string {
+	if r.Labels == nil {
 		return ""
 	}
-
-	parts := strings.Split(r.Name, "-")
-	if len(parts) < 5 {
-		return ""
-	}
-
-	// Find the "app" delimiter and extract everything between "project" and "app"
-	const appDelimiter = "app"
-	projectStart := 1 // after "project-"
-	appIndex := -1
-	for i, part := range parts {
-		if part == appDelimiter {
-			appIndex = i
-			break
-		}
-	}
-
-	if appIndex == -1 || appIndex <= projectStart {
-		return ""
-	}
-
-	return strings.Join(parts[projectStart:appIndex], "-")
+	return r.Labels[validation.LabelResourceSlug]
 }
 
-// GetAppSlugFromName extracts the app slug from application name
-func (r *Application) GetAppSlugFromName() string {
-	// Extract app slug from name format: project-<project-slug>-app-<app-slug>-kibaship-com
-	if !r.isValidApplicationName() {
+// GetProjectUUID returns the project UUID from labels
+func (r *Application) GetProjectUUID() string {
+	if r.Labels == nil {
 		return ""
 	}
-
-	parts := strings.Split(r.Name, "-")
-	if len(parts) < 5 {
-		return ""
-	}
-
-	// Find the "app" delimiter and extract everything between "app" and "kibaship"
-	appIndex := -1
-	kibashipIndex := -1
-	for i, part := range parts {
-		if part == "app" {
-			appIndex = i
-		} else if part == "kibaship" {
-			kibashipIndex = i
-			break
-		}
-	}
-
-	if appIndex == -1 || kibashipIndex == -1 || kibashipIndex <= appIndex+1 {
-		return ""
-	}
-
-	return strings.Join(parts[appIndex+1:kibashipIndex], "-")
+	return r.Labels[validation.LabelProjectUUID]
 }
 
 // SetupWebhookWithManager will setup the manager to manage the webhooks

@@ -412,7 +412,7 @@ var _ = Describe("Application Reconciliation", func() {
 
 			By("Verifying Application resource exists and passes validation")
 			appNamespace := "project-test-project-e2e-kibaship-com"
-			appName := "project-test-project-e2e-app-myapp-kibaship-com"
+			appName := "application-myapp-kibaship-com"
 			Eventually(func() bool {
 				cmd := exec.Command("kubectl", "get", "application", appName, "-n", appNamespace)
 				_, err := utils.Run(cmd)
@@ -453,8 +453,8 @@ var _ = Describe("Application Reconciliation", func() {
 			}, "30s", "2s").Should(BeTrue(), "Application should have required labels")
 
 			By("Verifying Application name follows correct format")
-			Expect(appName).To(MatchRegexp(`^project-[a-z0-9]([a-z0-9-]*[a-z0-9])?-app-[a-z0-9]([a-z0-9-]*[a-z0-9])?-kibaship-com$`),
-				"Application name should follow format project-<project-slug>-app-<app-slug>-kibaship-com")
+			Expect(appName).To(MatchRegexp(`^application-[a-z0-9]([a-z0-9-]*[a-z0-9])?-kibaship-com$`),
+				"Application name should follow format application-<app-slug>-kibaship-com")
 
 			By("Verifying Application GitRepository configuration is valid")
 			Eventually(func() bool {
@@ -514,6 +514,231 @@ var _ = Describe("Application Reconciliation", func() {
 				// Validate UUID format
 				return len(uuid) > 0 && strings.Contains(uuid, "-")
 			}, "30s", "2s").Should(BeTrue(), "Application should have valid UUID label set by controller")
+		})
+	})
+})
+
+var _ = Describe("Deployment Reconciliation", func() {
+	var (
+		k8sClient kubernetes.Interface
+		ctx       context.Context
+	)
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		client, err := getKubernetesClient()
+		Expect(err).NotTo(HaveOccurred())
+		k8sClient = client
+	})
+
+	AfterEach(func() {
+		By("Cleaning up test deployment")
+		cmd := exec.Command("kubectl", "delete", "-f", "test/e2e/test-deployment.yaml", "--ignore-not-found=true")
+		_, _ = utils.Run(cmd)
+
+		By("Cleaning up test application")
+		cmd = exec.Command("kubectl", "delete", "-f", "test/e2e/test-application.yaml", "--ignore-not-found=true")
+		_, _ = utils.Run(cmd)
+
+		By("Cleaning up test project")
+		cmd = exec.Command("kubectl", "delete", "-f", "test/e2e/test-project.yaml", "--ignore-not-found=true")
+		_, _ = utils.Run(cmd)
+
+		// Wait for namespace cleanup
+		Eventually(func() bool {
+			_, err := k8sClient.CoreV1().Namespaces().Get(ctx, "project-test-project-e2e-kibaship-com", metav1.GetOptions{})
+			return err != nil // namespace should be gone
+		}, "2m", "5s").Should(BeTrue(), "Project namespace should be deleted")
+	})
+
+	Context("When creating a new Deployment in an existing Application", func() {
+		It("should successfully reconcile with all controller side effects", func() {
+			By("Creating the test project first")
+			cmd := exec.Command("kubectl", "apply", "-f", "test/e2e/test-project.yaml")
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Waiting for project to be ready")
+			Eventually(func() bool {
+				cmd := exec.Command("kubectl", "get", "project", "test-project-e2e", "-o", "jsonpath={.status.phase}")
+				output, err := cmd.CombinedOutput()
+				if err != nil {
+					return false
+				}
+				return strings.TrimSpace(string(output)) == "Ready"
+			}, "2m", "5s").Should(BeTrue(), "Project should be Ready before creating Application")
+
+			By("Creating the test application")
+			cmd = exec.Command("kubectl", "apply", "-f", "test/e2e/test-application.yaml")
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Waiting for application to be ready")
+			appNamespace := "project-test-project-e2e-kibaship-com"
+			appName := "application-myapp-kibaship-com"
+			Eventually(func() bool {
+				cmd := exec.Command("kubectl", "get", "application", appName, "-n", appNamespace, "-o", "jsonpath={.status.phase}")
+				output, err := cmd.CombinedOutput()
+				if err != nil {
+					return false
+				}
+				return strings.TrimSpace(string(output)) == "Ready"
+			}, "2m", "5s").Should(BeTrue(), "Application should be Ready before creating Deployment")
+
+			By("Applying the test deployment YAML")
+			cmd = exec.Command("kubectl", "apply", "-f", "test/e2e/test-deployment.yaml")
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Verifying Deployment resource exists and passes validation")
+			deploymentNamespace := "project-test-project-e2e-kibaship-com"
+			deploymentName := "deployment-test-deploy-kibaship-com"
+			Eventually(func() bool {
+				cmd := exec.Command("kubectl", "get", "deployment", deploymentName, "-n", deploymentNamespace)
+				_, err := utils.Run(cmd)
+				return err == nil
+			}, "30s", "2s").Should(BeTrue(), "Deployment should be created successfully")
+
+			By("Verifying Deployment has finalizer added")
+			Eventually(func() bool {
+				cmd := exec.Command("kubectl", "get", "deployment", deploymentName, "-n", deploymentNamespace, "-o", "jsonpath={.metadata.finalizers[0]}")
+				output, err := cmd.CombinedOutput()
+				if err != nil {
+					return false
+				}
+				return strings.Contains(string(output), "platform.operator.kibaship.com/deployment-finalizer")
+			}, "30s", "2s").Should(BeTrue(), "Deployment should have finalizer")
+
+			By("Verifying Deployment status becomes Initializing")
+			Eventually(func() bool {
+				cmd := exec.Command("kubectl", "get", "deployment", deploymentName, "-n", deploymentNamespace, "-o", "jsonpath={.status.phase}")
+				output, err := cmd.CombinedOutput()
+				if err != nil {
+					return false
+				}
+				phase := strings.TrimSpace(string(output))
+				return phase == "Initializing" || phase == "Running" || phase == "Succeeded" || phase == "Failed"
+			}, "2m", "5s").Should(BeTrue(), "Deployment should have a valid phase")
+
+			By("Verifying Deployment has required labels")
+			Eventually(func() bool {
+				cmd := exec.Command("kubectl", "get", "deployment", deploymentName, "-n", deploymentNamespace, "-o", "jsonpath={.metadata.labels}")
+				output, err := cmd.CombinedOutput()
+				if err != nil {
+					return false
+				}
+				labels := string(output)
+				return strings.Contains(labels, "platform.kibaship.com/uuid") &&
+					strings.Contains(labels, "platform.kibaship.com/slug") &&
+					strings.Contains(labels, "platform.kibaship.com/project-uuid") &&
+					strings.Contains(labels, "platform.kibaship.com/application-uuid")
+			}, "30s", "2s").Should(BeTrue(), "Deployment should have required labels")
+
+			By("Verifying Deployment name follows correct format")
+			Expect(deploymentName).To(MatchRegexp(`^deployment-[a-z0-9]([a-z0-9-]*[a-z0-9])?-kibaship-com$`),
+				"Deployment name should follow format deployment-<deployment-slug>-kibaship-com")
+
+			By("Verifying Deployment applicationRef points to the correct application")
+			Eventually(func() bool {
+				cmd := exec.Command("kubectl", "get", "deployment", deploymentName, "-n", deploymentNamespace, "-o", "jsonpath={.spec.applicationRef.name}")
+				output, err := cmd.CombinedOutput()
+				if err != nil {
+					return false
+				}
+				return strings.TrimSpace(string(output)) == "application-myapp-kibaship-com"
+			}, "30s", "2s").Should(BeTrue(), "Deployment should reference the correct application")
+
+			By("Verifying Deployment GitRepository configuration is valid")
+			Eventually(func() bool {
+				cmd := exec.Command("kubectl", "get", "deployment", deploymentName, "-n", deploymentNamespace, "-o", "jsonpath={.spec.gitRepository.commitSHA}")
+				output, err := cmd.CombinedOutput()
+				if err != nil {
+					return false
+				}
+				return strings.TrimSpace(string(output)) == "06369723ec630bb2698fff92ae22f5c048b2a513"
+			}, "30s", "2s").Should(BeTrue(), "Deployment should have valid GitRepository commitSHA")
+
+			Eventually(func() bool {
+				cmd := exec.Command("kubectl", "get", "deployment", deploymentName, "-n", deploymentNamespace, "-o", "jsonpath={.spec.gitRepository.branch}")
+				output, err := cmd.CombinedOutput()
+				if err != nil {
+					return false
+				}
+				return strings.TrimSpace(string(output)) == "main"
+			}, "30s", "2s").Should(BeTrue(), "Deployment should have valid GitRepository branch")
+
+			By("Verifying Deployment exists in the correct project namespace")
+			Expect(deploymentNamespace).To(Equal("project-test-project-e2e-kibaship-com"),
+				"Deployment should be created in the project namespace")
+
+			By("Verifying Deployment webhook validation passed")
+			// If we got this far, webhook validation passed since the Deployment was created successfully
+			// The webhook checks for proper name format, required labels, and GitRepository configuration
+
+			By("Verifying Deployment controller adds correct UUID labels")
+			// The controller should ensure UUID labels are set correctly through the ResourceLabeler
+			Eventually(func() bool {
+				cmd := exec.Command("kubectl", "get", "deployment", deploymentName, "-n", deploymentNamespace, "-o", "jsonpath={.metadata.labels.platform\\.kibaship\\.com/uuid}")
+				output, err := cmd.CombinedOutput()
+				if err != nil {
+					return false
+				}
+				uuid := strings.TrimSpace(string(output))
+				// Validate UUID format
+				return len(uuid) > 0 && strings.Contains(uuid, "-")
+			}, "30s", "2s").Should(BeTrue(), "Deployment should have valid UUID label set by controller")
+
+			By("Verifying Tekton Pipeline is created for the deployment")
+			// The deployment controller should create a Tekton Pipeline for CI/CD
+			Eventually(func() error {
+				cmd := exec.Command("kubectl", "get", "pipeline", "-n", deploymentNamespace, "-l", "platform.kibaship.com/deployment-uuid=789e4567-e89b-12d3-a456-426614174111")
+				_, err := cmd.CombinedOutput()
+				return err
+			}, "1m", "5s").Should(Succeed(), "Tekton Pipeline should be created for deployment")
+
+			By("Verifying PipelineRun is created for the deployment")
+			// The deployment controller should trigger a PipelineRun for the initial deployment
+			Eventually(func() error {
+				cmd := exec.Command("kubectl", "get", "pipelinerun", "-n", deploymentNamespace, "-l", "platform.kibaship.com/deployment-uuid=789e4567-e89b-12d3-a456-426614174111")
+				_, err := cmd.CombinedOutput()
+				return err
+			}, "1m", "5s").Should(Succeed(), "PipelineRun should be created for deployment")
+
+			By("Verifying Deployment status includes pipeline run information")
+			Eventually(func() bool {
+				cmd := exec.Command("kubectl", "get", "deployment", deploymentName, "-n", deploymentNamespace, "-o", "jsonpath={.status.currentPipelineRun}")
+				output, err := cmd.CombinedOutput()
+				if err != nil {
+					return false
+				}
+				// Check if currentPipelineRun is populated (not empty)
+				return len(strings.TrimSpace(string(output))) > 0
+			}, "2m", "5s").Should(BeTrue(), "Deployment status should include currentPipelineRun information")
+
+			By("Verifying all pipeline resources have proper tracking labels")
+			Eventually(func() error {
+				expectedLabels := map[string]string{
+					"app.kubernetes.io/managed-by":           "kibaship-operator",
+					"platform.kibaship.com/deployment-uuid":  "789e4567-e89b-12d3-a456-426614174111",
+					"platform.kibaship.com/application-uuid": "123e4567-e89b-12d3-a456-426614174000",
+					"platform.kibaship.com/project-uuid":     "550e8400-e29b-41d4-a716-446655440000",
+				}
+
+				// Check that pipeline has correct labels
+				cmd := exec.Command("kubectl", "get", "pipeline", "-n", deploymentNamespace, "-l", "platform.kibaship.com/deployment-uuid=789e4567-e89b-12d3-a456-426614174111", "-o", "jsonpath={.items[0].metadata.labels}")
+				output, err := cmd.CombinedOutput()
+				if err != nil {
+					return fmt.Errorf("failed to get pipeline labels: %v", err)
+				}
+
+				labels := string(output)
+				for key := range expectedLabels {
+					if !strings.Contains(labels, key) {
+						return fmt.Errorf("pipeline missing label: %s", key)
+					}
+				}
+				return nil
+			}, "1m", "5s").Should(Succeed(), "Pipeline resources should have correct tracking labels")
 		})
 	})
 })
