@@ -18,53 +18,52 @@ package utils
 
 import (
 	"regexp"
-	"testing"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 
 	"github.com/kibamail/kibaship-operator/pkg/utils"
 )
 
-func TestGenerateRandomSlug(t *testing.T) {
-	t.Run("generates correct length", func(t *testing.T) {
+var _ = Describe("GenerateRandomSlug", func() {
+	It("generates correct length", func() {
 		slug, err := utils.GenerateRandomSlug()
-		require.NoError(t, err)
-		assert.Len(t, slug, utils.SlugLength, "Slug should be exactly %d characters", utils.SlugLength)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(slug).To(HaveLen(utils.SlugLength))
 	})
 
-	t.Run("generates lowercase alphanumeric only", func(t *testing.T) {
+	It("generates lowercase alphanumeric only", func() {
 		slug, err := utils.GenerateRandomSlug()
-		require.NoError(t, err)
+		Expect(err).NotTo(HaveOccurred())
 
 		validCharRegex := regexp.MustCompile("^[a-z0-9]+$")
-		assert.True(t, validCharRegex.MatchString(slug), "Slug should contain only lowercase letters and numbers: %s", slug)
+		Expect(validCharRegex.MatchString(slug)).To(BeTrue(), "Slug should contain only lowercase letters and numbers: %s", slug)
 	})
 
-	t.Run("generates unique slugs", func(t *testing.T) {
+	It("generates unique slugs", func() {
 		const numSlugs = 100
 		slugs := make(map[string]bool)
 
 		for i := 0; i < numSlugs; i++ {
 			slug, err := utils.GenerateRandomSlug()
-			require.NoError(t, err)
+			Expect(err).NotTo(HaveOccurred())
 
 			// Check for duplicates
-			assert.False(t, slugs[slug], "Generated duplicate slug: %s", slug)
+			Expect(slugs[slug]).To(BeFalse(), "Generated duplicate slug: %s", slug)
 			slugs[slug] = true
 		}
 
-		assert.Len(t, slugs, numSlugs, "Should generate %d unique slugs", numSlugs)
+		Expect(slugs).To(HaveLen(numSlugs))
 	})
 
-	t.Run("uses all characters from charset", func(t *testing.T) {
+	It("uses all characters from charset", func() {
 		const numTests = 1000
 		charUsage := make(map[rune]int)
 
 		// Generate many slugs and track character usage
 		for i := 0; i < numTests; i++ {
 			slug, err := utils.GenerateRandomSlug()
-			require.NoError(t, err)
+			Expect(err).NotTo(HaveOccurred())
 
 			for _, char := range slug {
 				charUsage[char]++
@@ -79,7 +78,7 @@ func TestGenerateRandomSlug(t *testing.T) {
 				break
 			}
 		}
-		assert.True(t, foundLetter, "Should use lowercase letters")
+		Expect(foundLetter).To(BeTrue(), "Should use lowercase letters")
 
 		// Verify we use numbers
 		foundNumber := false
@@ -89,16 +88,16 @@ func TestGenerateRandomSlug(t *testing.T) {
 				break
 			}
 		}
-		assert.True(t, foundNumber, "Should use numbers")
+		Expect(foundNumber).To(BeTrue(), "Should use numbers")
 	})
 
-	t.Run("distribution is reasonably random", func(t *testing.T) {
+	It("distribution is reasonably random", func() {
 		const numSlugs = 1000
 		charCounts := make(map[rune]int)
 
 		for i := 0; i < numSlugs; i++ {
 			slug, err := utils.GenerateRandomSlug()
-			require.NoError(t, err)
+			Expect(err).NotTo(HaveOccurred())
 
 			for _, char := range slug {
 				charCounts[char]++
@@ -115,19 +114,17 @@ func TestGenerateRandomSlug(t *testing.T) {
 
 		for _, char := range utils.SlugCharset {
 			count := charCounts[rune(char)]
-			assert.True(t, count >= minExpected,
+			Expect(count).To(BeNumerically(">=", minExpected),
 				"Character %c appeared %d times, expected at least %d", char, count, minExpected)
-			assert.True(t, count <= maxExpected,
+			Expect(count).To(BeNumerically("<=", maxExpected),
 				"Character %c appeared %d times, expected at most %d", char, count, maxExpected)
 		}
 	})
-}
+})
 
-func BenchmarkGenerateRandomSlug(b *testing.B) {
-	for i := 0; i < b.N; i++ {
+var _ = Measure("GenerateRandomSlug performance", func(b Benchmarker) {
+	b.Time("runtime", func() {
 		_, err := utils.GenerateRandomSlug()
-		if err != nil {
-			b.Fatal(err)
-		}
-	}
-}
+		Expect(err).NotTo(HaveOccurred())
+	})
+}, 100)

@@ -20,11 +20,10 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 )
 
 // setupTestRouter creates a test router with the health endpoints
@@ -53,79 +52,68 @@ func readyzHandler(c *gin.Context) {
 	})
 }
 
-func TestHealthzEndpoint(t *testing.T) {
-	router := setupTestRouter()
+var _ = Describe("Health API", func() {
+	var router *gin.Engine
 
-	// Create a test request
-	req, err := http.NewRequest("GET", "/healthz", nil)
-	require.NoError(t, err)
+	BeforeEach(func() {
+		router = setupTestRouter()
+	})
 
-	// Create a response recorder
-	w := httptest.NewRecorder()
+	Describe("GET /healthz", func() {
+		It("returns health status", func() {
+			req, err := http.NewRequest("GET", "/healthz", nil)
+			Expect(err).NotTo(HaveOccurred())
 
-	// Perform the request
-	router.ServeHTTP(w, req)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
 
-	// Assert the response
-	assert.Equal(t, http.StatusOK, w.Code)
-	assert.Equal(t, "application/json; charset=utf-8", w.Header().Get("Content-Type"))
+			Expect(w.Code).To(Equal(http.StatusOK))
+			Expect(w.Header().Get("Content-Type")).To(Equal("application/json; charset=utf-8"))
 
-	// Parse and validate JSON response
-	var response map[string]interface{}
-	err = json.Unmarshal(w.Body.Bytes(), &response)
-	require.NoError(t, err)
+			var response map[string]interface{}
+			err = json.Unmarshal(w.Body.Bytes(), &response)
+			Expect(err).NotTo(HaveOccurred())
 
-	assert.Equal(t, "ok", response["status"])
-}
+			Expect(response["status"]).To(Equal("ok"))
+		})
+	})
 
-func TestReadyzEndpoint(t *testing.T) {
-	router := setupTestRouter()
+	Describe("GET /readyz", func() {
+		It("returns readiness status", func() {
+			req, err := http.NewRequest("GET", "/readyz", nil)
+			Expect(err).NotTo(HaveOccurred())
 
-	// Create a test request
-	req, err := http.NewRequest("GET", "/readyz", nil)
-	require.NoError(t, err)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
 
-	// Create a response recorder
-	w := httptest.NewRecorder()
+			Expect(w.Code).To(Equal(http.StatusOK))
+			Expect(w.Header().Get("Content-Type")).To(Equal("application/json; charset=utf-8"))
 
-	// Perform the request
-	router.ServeHTTP(w, req)
+			var response map[string]interface{}
+			err = json.Unmarshal(w.Body.Bytes(), &response)
+			Expect(err).NotTo(HaveOccurred())
 
-	// Assert the response
-	assert.Equal(t, http.StatusOK, w.Code)
-	assert.Equal(t, "application/json; charset=utf-8", w.Header().Get("Content-Type"))
+			Expect(response["status"]).To(Equal("ready"))
+		})
+	})
 
-	// Parse and validate JSON response
-	var response map[string]interface{}
-	err = json.Unmarshal(w.Body.Bytes(), &response)
-	require.NoError(t, err)
+	Describe("Invalid HTTP methods", func() {
+		DescribeTable("health endpoints with invalid methods",
+			func(method, path string, expectedStatus int) {
+				req, err := http.NewRequest(method, path, nil)
+				Expect(err).NotTo(HaveOccurred())
 
-	assert.Equal(t, "ready", response["status"])
-}
+				w := httptest.NewRecorder()
+				router.ServeHTTP(w, req)
 
-func TestHealthEndpointsWithInvalidMethods(t *testing.T) {
-	router := setupTestRouter()
-
-	tests := []struct {
-		method   string
-		path     string
-		expected int
-	}{
-		{"POST", "/healthz", http.StatusNotFound},
-		{"PUT", "/healthz", http.StatusNotFound},
-		{"DELETE", "/healthz", http.StatusNotFound},
-		{"POST", "/readyz", http.StatusNotFound},
-		{"PUT", "/readyz", http.StatusNotFound},
-		{"DELETE", "/readyz", http.StatusNotFound},
-	}
-
-	for _, test := range tests {
-		req, err := http.NewRequest(test.method, test.path, nil)
-		require.NoError(t, err)
-
-		w := httptest.NewRecorder()
-		router.ServeHTTP(w, req)
-
-		assert.Equal(t, test.expected, w.Code, "Method %s on %s should return %d", test.method, test.path, test.expected)
-	}
-}
+				Expect(w.Code).To(Equal(expectedStatus))
+			},
+			Entry("POST /healthz", "POST", "/healthz", http.StatusNotFound),
+			Entry("PUT /healthz", "PUT", "/healthz", http.StatusNotFound),
+			Entry("DELETE /healthz", "DELETE", "/healthz", http.StatusNotFound),
+			Entry("POST /readyz", "POST", "/readyz", http.StatusNotFound),
+			Entry("PUT /readyz", "PUT", "/readyz", http.StatusNotFound),
+			Entry("DELETE /readyz", "DELETE", "/readyz", http.StatusNotFound),
+		)
+	})
+})
