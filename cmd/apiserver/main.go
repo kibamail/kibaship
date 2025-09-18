@@ -40,11 +40,17 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/kibamail/kibaship-operator/api/v1alpha1"
 	_ "github.com/kibamail/kibaship-operator/docs"
 	"github.com/kibamail/kibaship-operator/pkg/auth"
 	"github.com/kibamail/kibaship-operator/pkg/handlers"
+	"github.com/kibamail/kibaship-operator/pkg/services"
 	"github.com/swaggo/files"
 	"github.com/swaggo/gin-swagger"
+	"k8s.io/apimachinery/pkg/runtime"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/rest"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func main() {
@@ -73,6 +79,27 @@ func main() {
 
 	log.Println("API key retrieved successfully from Kubernetes secret")
 
+	// Initialize Kubernetes client and scheme
+	log.Println("Initializing Kubernetes client...")
+	scheme := runtime.NewScheme()
+	_ = clientgoscheme.AddToScheme(scheme)
+	_ = v1alpha1.AddToScheme(scheme)
+
+	config, err := rest.InClusterConfig()
+	if err != nil {
+		log.Fatalf("Failed to create Kubernetes client config: %v", err)
+	}
+
+	k8sClient, err := client.New(config, client.Options{Scheme: scheme})
+	if err != nil {
+		log.Fatalf("Failed to create Kubernetes client: %v", err)
+	}
+
+	log.Println("Kubernetes client initialized successfully")
+
+	// Create services
+	projectService := services.NewProjectService(k8sClient, scheme)
+
 	// Create authenticator
 	authenticator := auth.NewAPIKeyAuthenticator(apiKey)
 
@@ -95,10 +122,11 @@ func main() {
 	protected.Use(authenticator.Middleware())
 	{
 		// Initialize handlers
-		projectHandler := handlers.NewProjectHandler()
+		projectHandler := handlers.NewProjectHandler(projectService)
 
 		// Project endpoints
 		protected.POST("/projects", projectHandler.CreateProject)
+		protected.GET("/projects/:slug", projectHandler.GetProject)
 	}
 
 	// Get port from environment or use default

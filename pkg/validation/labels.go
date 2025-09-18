@@ -35,6 +35,9 @@ const (
 	LabelApplicationUUID = "platform.kibaship.com/application-uuid"
 	// LabelDeploymentUUID is the label key for deployment UUID (for ApplicationDomains)
 	LabelDeploymentUUID = "platform.kibaship.com/deployment-uuid"
+
+	// AnnotationResourceName is the annotation key for resource display name
+	AnnotationResourceName = "platform.kibaship.com/name"
 )
 
 // ValidateUUID validates that a string is a valid UUID format

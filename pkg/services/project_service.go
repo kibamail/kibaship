@@ -1,0 +1,262 @@
+/*
+Copyright 2025.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package services
+
+import (
+	"context"
+	"fmt"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/kibamail/kibaship-operator/api/v1alpha1"
+	"github.com/kibamail/kibaship-operator/pkg/models"
+	"github.com/kibamail/kibaship-operator/pkg/templates"
+	"github.com/kibamail/kibaship-operator/pkg/utils"
+	"github.com/kibamail/kibaship-operator/pkg/validation"
+)
+
+// ProjectService handles Project CRD operations
+type ProjectService struct {
+	client client.Client
+	scheme *runtime.Scheme
+}
+
+// NewProjectService creates a new project service
+func NewProjectService(client client.Client, scheme *runtime.Scheme) *ProjectService {
+	return &ProjectService{
+		client: client,
+		scheme: scheme,
+	}
+}
+
+// CreateProject creates a new Project CRD in Kubernetes
+func (s *ProjectService) CreateProject(ctx context.Context, req *models.ProjectCreateRequest) (*models.Project, error) {
+	// Generate random slug
+	slug, err := utils.GenerateRandomSlug()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate project slug: %w", err)
+	}
+
+	// Check if slug already exists (very unlikely but possible)
+	exists, err := s.slugExists(ctx, slug)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check slug uniqueness: %w", err)
+	}
+
+	// If slug exists, try generating a new one (up to 3 attempts)
+	attempts := 0
+	for exists && attempts < 3 {
+		slug, err = utils.GenerateRandomSlug()
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate project slug: %w", err)
+		}
+		exists, err = s.slugExists(ctx, slug)
+		if err != nil {
+			return nil, fmt.Errorf("failed to check slug uniqueness: %w", err)
+		}
+		attempts++
+	}
+
+	if exists {
+		return nil, fmt.Errorf("failed to generate unique slug after 3 attempts")
+	}
+
+	// Create internal project model
+	project := models.NewProject(
+		req.Name,
+		req.Description,
+		req.WorkspaceUUID,
+		slug,
+		req.EnabledApplicationTypes,
+		req.ResourceProfile,
+		req.VolumeSettings,
+	)
+
+	// Create Kubernetes Project CRD
+	crd := s.convertToProjectCRD(project, req)
+
+	err = s.client.Create(ctx, crd)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Project CRD: %w", err)
+	}
+
+	// Update project with CRD information
+	project.Status = "Pending" // Will be updated by the operator
+
+	return project, nil
+}
+
+// GetProject retrieves a project by slug
+func (s *ProjectService) GetProject(ctx context.Context, slug string) (*models.Project, error) {
+	// List all projects and find by slug label
+	var projectList v1alpha1.ProjectList
+	err := s.client.List(ctx, &projectList, client.MatchingLabels{
+		validation.LabelResourceSlug: slug,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list projects: %w", err)
+	}
+
+	if len(projectList.Items) == 0 {
+		return nil, fmt.Errorf("project with slug %s not found", slug)
+	}
+
+	if len(projectList.Items) > 1 {
+		return nil, fmt.Errorf("multiple projects found with slug %s", slug)
+	}
+
+	project := s.convertFromProjectCRD(&projectList.Items[0])
+	return project, nil
+}
+
+// slugExists checks if a project with the given slug already exists
+func (s *ProjectService) slugExists(ctx context.Context, slug string) (bool, error) {
+	var projectList v1alpha1.ProjectList
+	err := s.client.List(ctx, &projectList, client.MatchingLabels{
+		validation.LabelResourceSlug: slug,
+	})
+	if err != nil {
+		return false, err
+	}
+	return len(projectList.Items) > 0, nil
+}
+
+// convertToProjectCRD converts internal project model to Kubernetes Project CRD
+func (s *ProjectService) convertToProjectCRD(project *models.Project, req *models.ProjectCreateRequest) *v1alpha1.Project {
+	// Get resource profile template
+	profile := models.ResourceProfileDevelopment
+	if req.ResourceProfile != nil {
+		profile = *req.ResourceProfile
+	}
+
+	applicationTypesConfig := templates.GetResourceProfileTemplate(profile, req.CustomResourceLimits)
+
+	// Apply enablement settings
+	if req.EnabledApplicationTypes != nil {
+		s.applyApplicationTypeEnablement(&applicationTypesConfig, req.EnabledApplicationTypes)
+	}
+
+	// Get volume settings
+	volumeConfig := v1alpha1.VolumeConfig{}
+	if req.VolumeSettings != nil && req.VolumeSettings.MaxStorageSize != "" {
+		volumeConfig.MaxStorageSize = req.VolumeSettings.MaxStorageSize
+	} else {
+		// Use default from profile
+		switch profile {
+		case models.ResourceProfileProduction:
+			volumeConfig.MaxStorageSize = "500Gi"
+		case models.ResourceProfileCustom:
+			volumeConfig.MaxStorageSize = "100Gi"
+		default:
+			volumeConfig.MaxStorageSize = "50Gi"
+		}
+	}
+
+	return &v1alpha1.Project{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "platform.operator.kibaship.com/v1alpha1",
+			Kind:       "Project",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: fmt.Sprintf("project-%s", project.Slug),
+			Labels: map[string]string{
+				validation.LabelResourceUUID:  project.UUID,
+				validation.LabelResourceSlug:  project.Slug,
+				validation.LabelWorkspaceUUID: project.WorkspaceUUID,
+			},
+			Annotations: map[string]string{
+				validation.AnnotationResourceName: project.Name,
+			},
+		},
+		Spec: v1alpha1.ProjectSpec{
+			ApplicationTypes: applicationTypesConfig,
+			Volumes:          volumeConfig,
+		},
+	}
+}
+
+// convertFromProjectCRD converts Kubernetes Project CRD to internal project model
+func (s *ProjectService) convertFromProjectCRD(crd *v1alpha1.Project) *models.Project {
+	labels := crd.GetLabels()
+	if labels == nil {
+		labels = make(map[string]string)
+	}
+
+	annotations := crd.GetAnnotations()
+	if annotations == nil {
+		annotations = make(map[string]string)
+	}
+
+	// Extract application type settings
+	appTypes := s.extractApplicationTypeSettings(&crd.Spec.ApplicationTypes)
+
+	// Determine resource profile (simplified - in reality you'd need more logic)
+	resourceProfile := models.ResourceProfileDevelopment
+
+	return &models.Project{
+		UUID:                    labels[validation.LabelResourceUUID],
+		Name:                    annotations[validation.AnnotationResourceName],
+		Slug:                    labels[validation.LabelResourceSlug],
+		Description:             "", // Would need to be stored in annotations or spec
+		WorkspaceUUID:           labels[validation.LabelWorkspaceUUID],
+		EnabledApplicationTypes: appTypes,
+		ResourceProfile:         resourceProfile,
+		VolumeSettings: models.VolumeSettings{
+			MaxStorageSize: crd.Spec.Volumes.MaxStorageSize,
+		},
+		Status:        crd.Status.Phase,
+		NamespaceName: crd.Status.NamespaceName,
+		CreatedAt:     crd.CreationTimestamp.Time,
+		UpdatedAt:     crd.CreationTimestamp.Time, // Would need to track updates
+	}
+}
+
+// applyApplicationTypeEnablement applies user-specified enablement settings
+func (s *ProjectService) applyApplicationTypeEnablement(config *v1alpha1.ApplicationTypesConfig, settings *models.ApplicationTypeSettings) {
+	if settings.MySQL != nil {
+		config.MySQL.Enabled = *settings.MySQL
+	}
+	if settings.MySQLCluster != nil {
+		config.MySQLCluster.Enabled = *settings.MySQLCluster
+	}
+	if settings.Postgres != nil {
+		config.Postgres.Enabled = *settings.Postgres
+	}
+	if settings.PostgresCluster != nil {
+		config.PostgresCluster.Enabled = *settings.PostgresCluster
+	}
+	if settings.DockerImage != nil {
+		config.DockerImage.Enabled = *settings.DockerImage
+	}
+	if settings.GitRepository != nil {
+		config.GitRepository.Enabled = *settings.GitRepository
+	}
+}
+
+// extractApplicationTypeSettings extracts enablement settings from CRD
+func (s *ProjectService) extractApplicationTypeSettings(config *v1alpha1.ApplicationTypesConfig) models.ApplicationTypeSettings {
+	return models.ApplicationTypeSettings{
+		MySQL:           &config.MySQL.Enabled,
+		MySQLCluster:    &config.MySQLCluster.Enabled,
+		Postgres:        &config.Postgres.Enabled,
+		PostgresCluster: &config.PostgresCluster.Enabled,
+		DockerImage:     &config.DockerImage.Enabled,
+		GitRepository:   &config.GitRepository.Enabled,
+	}
+}
