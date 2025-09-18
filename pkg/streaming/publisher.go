@@ -35,7 +35,9 @@ type projectStreamPublisher struct {
 }
 
 // NewProjectStreamPublisher creates a new project stream publisher
-func NewProjectStreamPublisher(connectionManager ConnectionManager, timeProvider TimeProvider, config *Config) ProjectStreamPublisher {
+func NewProjectStreamPublisher(
+	connectionManager ConnectionManager, timeProvider TimeProvider, config *Config,
+) ProjectStreamPublisher {
 	return &projectStreamPublisher{
 		connectionManager: connectionManager,
 		timeProvider:      timeProvider,
@@ -63,7 +65,7 @@ func (p *projectStreamPublisher) PublishEvent(ctx context.Context, event *Resour
 
 	client := p.connectionManager.GetClient()
 	if client == nil {
-		return fmt.Errorf("Redis client is not available")
+		return fmt.Errorf("redis client is not available")
 	}
 
 	// Enrich event with sequence number and timestamp

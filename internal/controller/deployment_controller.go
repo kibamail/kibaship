@@ -168,14 +168,11 @@ func (r *DeploymentReconciler) handleGitRepositoryDeployment(ctx context.Context
 	}
 
 	// Generate the pipeline name
-	pipelineName, err := r.generateGitRepositoryPipelineName(ctx, deployment, app)
-	if err != nil {
-		return fmt.Errorf("failed to generate pipeline name: %w", err)
-	}
+	pipelineName := r.generateGitRepositoryPipelineName(ctx, deployment, app)
 
 	// Check if pipeline already exists
 	existingPipeline := &tektonv1.Pipeline{}
-	err = r.Get(ctx, types.NamespacedName{
+	err := r.Get(ctx, types.NamespacedName{
 		Name:      pipelineName,
 		Namespace: deployment.Namespace,
 	}, existingPipeline)
@@ -312,9 +309,9 @@ func (r *DeploymentReconciler) handleMySQLDeployment(ctx context.Context, deploy
 }
 
 // generateGitRepositoryPipelineName generates the pipeline name for GitRepository applications
-func (r *DeploymentReconciler) generateGitRepositoryPipelineName(ctx context.Context, deployment *platformv1alpha1.Deployment, _ *platformv1alpha1.Application) (string, error) {
+func (r *DeploymentReconciler) generateGitRepositoryPipelineName(_ context.Context, deployment *platformv1alpha1.Deployment, _ *platformv1alpha1.Application) string {
 	deploymentSlug := deployment.GetSlug()
-	return fmt.Sprintf("pipeline-%s-kibaship-com", deploymentSlug), nil
+	return fmt.Sprintf("pipeline-%s-kibaship-com", deploymentSlug)
 }
 
 // createGitRepositoryPipeline creates a Tekton Pipeline for GitRepository applications

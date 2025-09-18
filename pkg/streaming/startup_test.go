@@ -71,7 +71,7 @@ var _ = Describe("StartupSequenceController", func() {
 
 				err := controller.Initialize(context.Background())
 				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("Valkey cluster failed to become ready"))
+				Expect(err.Error()).To(ContainSubstring("valkey cluster failed to become ready"))
 
 				readiness.AssertExpectations(GinkgoT())
 			})
@@ -84,7 +84,7 @@ var _ = Describe("StartupSequenceController", func() {
 
 				err := controller.Initialize(context.Background())
 				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("Valkey authentication secret not found"))
+				Expect(err.Error()).To(ContainSubstring("valkey authentication secret not found"))
 
 				readiness.AssertExpectations(GinkgoT())
 				secret.AssertExpectations(GinkgoT())
@@ -95,7 +95,8 @@ var _ = Describe("StartupSequenceController", func() {
 			It("should return an error", func() {
 				readiness.On("WaitForReady", mock.Anything, 5*time.Minute).Return(nil)
 				secret.On("GetValkeyPassword", mock.Anything).Return("test-password", nil)
-				conn.On("InitializeCluster", mock.Anything, mock.AnythingOfType("string"), "test-password").Return(errors.New("connection failed"))
+				conn.On("InitializeCluster", mock.Anything, mock.AnythingOfType("string"), "test-password").
+					Return(errors.New("connection failed"))
 
 				err := controller.Initialize(context.Background())
 				Expect(err).To(HaveOccurred())
@@ -114,7 +115,7 @@ var _ = Describe("StartupSequenceController", func() {
 
 				err := controller.Initialize(context.Background())
 				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("Valkey authentication secret empty after cluster ready"))
+				Expect(err.Error()).To(ContainSubstring("valkey authentication secret empty after cluster ready"))
 
 				readiness.AssertExpectations(GinkgoT())
 				secret.AssertExpectations(GinkgoT())

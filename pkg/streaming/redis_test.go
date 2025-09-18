@@ -23,6 +23,11 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+const (
+	testStreamName = "test-stream"
+	testPassword   = "test-password"
+)
+
 var _ = Describe("ValkeyClient", func() {
 	var client ValkeyClient
 
@@ -33,7 +38,7 @@ var _ = Describe("ValkeyClient", func() {
 	Describe("XAdd", func() {
 		Context("when adding successfully", func() {
 			It("should add entry to stream", func() {
-				stream := "test-stream"
+				stream := testStreamName
 				values := map[string]interface{}{
 					"key1": "value1",
 					"key2": "value2",
@@ -61,7 +66,7 @@ var _ = Describe("ValkeyClient", func() {
 
 		Context("with empty values", func() {
 			It("should return an error", func() {
-				stream := "test-stream"
+				stream := testStreamName
 				values := map[string]interface{}{}
 
 				entryID, err := client.XAdd(context.Background(), stream, values)
@@ -73,7 +78,7 @@ var _ = Describe("ValkeyClient", func() {
 
 		Context("with nil values", func() {
 			It("should return an error", func() {
-				stream := "test-stream"
+				stream := testStreamName
 				var values map[string]interface{}
 
 				entryID, err := client.XAdd(context.Background(), stream, values)
@@ -98,7 +103,7 @@ var _ = Describe("ValkeyClient", func() {
 				client, _ := NewTestValkeyClient("", "password", &Config{})
 				err := client.Ping(context.Background())
 				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("Valkey address is not configured"))
+				Expect(err.Error()).To(ContainSubstring("valkey address is not configured"))
 			})
 		})
 
@@ -128,7 +133,7 @@ var _ = Describe("ValkeyClient", func() {
 	Describe("NewValkeyClient", func() {
 		It("should create a properly configured client", func() {
 			address := "localhost:6379"
-			password := "test-password"
+			password := testPassword
 
 			client, _ := NewTestValkeyClient(address, password, &Config{})
 			Expect(client).NotTo(BeNil())

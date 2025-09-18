@@ -584,7 +584,8 @@ func CheckValkeyStatus(operatorNamespace string) {
 
 	// Show recent events related to Valkey
 	_, _ = fmt.Fprintf(GinkgoWriter, "\n--- Recent Events (may show Valkey cluster status) ---\n")
-	cmd = exec.Command("kubectl", "get", "events", "-n", operatorNamespace, "--sort-by=.metadata.creationTimestamp", "--field-selector=involvedObject.kind=Valkey")
+	cmd = exec.Command("kubectl", "get", "events", "-n", operatorNamespace,
+		"--sort-by=.metadata.creationTimestamp", "--field-selector=involvedObject.kind=Valkey")
 	if _, err := Run(cmd); err != nil {
 		_, _ = fmt.Fprintf(GinkgoWriter, "  No Valkey-specific events or error: %v\n", err)
 	}

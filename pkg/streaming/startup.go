@@ -58,7 +58,7 @@ func (s *startupSequenceController) Initialize(ctx context.Context) error {
 	log.Info("Step 1: Waiting for Valkey cluster to become ready", "timeout", s.config.StartupTimeout)
 	err := s.readinessMonitor.WaitForReady(ctx, s.config.StartupTimeout)
 	if err != nil {
-		return fmt.Errorf("Valkey cluster failed to become ready within %v: %w", s.config.StartupTimeout, err)
+		return fmt.Errorf("valkey cluster failed to become ready within %v: %w", s.config.StartupTimeout, err)
 	}
 	log.Info("✓ Valkey cluster is ready")
 
@@ -66,10 +66,10 @@ func (s *startupSequenceController) Initialize(ctx context.Context) error {
 	log.Info("Step 2: Fetching Valkey authentication secret")
 	password, err := s.secretManager.GetValkeyPassword(ctx)
 	if err != nil {
-		return fmt.Errorf("Valkey authentication secret not found after cluster ready: %w", err)
+		return fmt.Errorf("valkey authentication secret not found after cluster ready: %w", err)
 	}
 	if password == "" {
-		return fmt.Errorf("Valkey authentication secret empty after cluster ready")
+		return fmt.Errorf("valkey authentication secret empty after cluster ready")
 	}
 	log.Info("✓ Valkey authentication secret retrieved")
 

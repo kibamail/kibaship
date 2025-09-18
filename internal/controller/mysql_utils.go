@@ -158,7 +158,7 @@ func generateSecurePassword() (string, error) {
 }
 
 // generateMySQLResourceNames generates resource names following naming conventions
-func generateMySQLResourceNames(deployment *platformv1alpha1.Deployment, projectSlug, appSlug string) (secretName, clusterName string) {
+func generateMySQLResourceNames(deployment *platformv1alpha1.Deployment, _, _ string) (secretName, clusterName string) {
 	deploymentSlug := deployment.GetSlug()
 
 	// For secrets

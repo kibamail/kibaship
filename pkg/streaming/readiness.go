@@ -34,7 +34,9 @@ type valkeyReadinessMonitor struct {
 }
 
 // NewValkeyReadinessMonitor creates a new Valkey readiness monitor
-func NewValkeyReadinessMonitor(kubeClient KubernetesClient, timeProvider TimeProvider, config *Config) ValkeyReadinessMonitor {
+func NewValkeyReadinessMonitor(
+	kubeClient KubernetesClient, timeProvider TimeProvider, config *Config,
+) ValkeyReadinessMonitor {
 	return &valkeyReadinessMonitor{
 		client:       kubeClient,
 		timeProvider: timeProvider,

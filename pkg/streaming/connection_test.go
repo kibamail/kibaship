@@ -26,6 +26,11 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
+const (
+	testSeedAddress  = "test-service.test-namespace.svc.cluster.local"
+	testConnPassword = "test-password"
+)
+
 var _ = Describe("ConnectionManager", func() {
 	var (
 		config     *Config
@@ -48,8 +53,8 @@ var _ = Describe("ConnectionManager", func() {
 	Describe("InitializeCluster", func() {
 		Context("when connection is successful", func() {
 			It("should connect without errors", func() {
-				password := "test-password"
-				seedAddress := "test-service.test-namespace.svc.cluster.local"
+				password := testConnPassword
+				seedAddress := testSeedAddress
 				clientFactory := func(seedAddr, passwordParam string, configParam *Config) (ValkeyClient, error) {
 					Expect(seedAddr).To(Equal(seedAddress))
 					Expect(passwordParam).To(Equal(password))
@@ -71,8 +76,8 @@ var _ = Describe("ConnectionManager", func() {
 
 		Context("when ping fails", func() {
 			It("should return an error", func() {
-				password := "test-password"
-				seedAddress := "test-service.test-namespace.svc.cluster.local"
+				password := testConnPassword
+				seedAddress := testSeedAddress
 				clientFactory := func(seedAddr, passwordParam string, configParam *Config) (ValkeyClient, error) {
 					return mockClient, nil
 				}
@@ -93,7 +98,7 @@ var _ = Describe("ConnectionManager", func() {
 		Context("with empty password", func() {
 			It("should allow empty password", func() {
 				password := ""
-				seedAddress := "test-service.test-namespace.svc.cluster.local"
+				seedAddress := testSeedAddress
 				clientFactory := func(seedAddr, passwordParam string, configParam *Config) (ValkeyClient, error) {
 					Expect(seedAddr).To(Equal(seedAddress))
 					Expect(passwordParam).To(Equal(""))

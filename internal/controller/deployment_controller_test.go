@@ -38,7 +38,9 @@ import (
 )
 
 const (
-	expectedPipelineName = "pipeline-web-kibaship-com"
+	expectedPipelineName     = "pipeline-web-kibaship-com"
+	expectedMySQLSecretName  = "mysql-secret-deploy1-kibaship-com"
+	expectedMySQLClusterName = "mysql-deploy1"
 )
 
 var _ = Describe("Deployment Controller", func() {
@@ -245,7 +247,6 @@ var _ = Describe("Deployment Controller", func() {
 				Expect(err).NotTo(HaveOccurred())
 
 				By("Verifying pipeline exists")
-				expectedPipelineName := "pipeline-web-kibaship-com"
 				pipeline := &tektonv1.Pipeline{}
 				Eventually(func() error {
 					return k8sClient.Get(ctx, types.NamespacedName{
@@ -280,7 +281,6 @@ var _ = Describe("Deployment Controller", func() {
 				Expect(err).NotTo(HaveOccurred())
 
 				By("Verifying pipeline uses empty token secret for public repos")
-				expectedPipelineName := "pipeline-web-kibaship-com"
 				pipeline := &tektonv1.Pipeline{}
 				Eventually(func() error {
 					return k8sClient.Get(ctx, types.NamespacedName{
@@ -343,7 +343,6 @@ var _ = Describe("Deployment Controller", func() {
 				Expect(err).NotTo(HaveOccurred())
 
 				By("Verifying no pipeline was created")
-				expectedPipelineName := "pipeline-web-kibaship-com"
 				pipeline := &tektonv1.Pipeline{}
 				err = k8sClient.Get(ctx, types.NamespacedName{
 					Name:      expectedPipelineName,
@@ -949,7 +948,7 @@ var _ = Describe("Deployment Controller", func() {
 
 				// Verify MySQL credentials secret was created
 				secret := &corev1.Secret{}
-				expectedSecretName := "mysql-secret-deploy1-kibaship-com"
+				expectedSecretName := expectedMySQLSecretName
 				secretKey := types.NamespacedName{Name: expectedSecretName, Namespace: testNamespace.Name}
 				Eventually(func() error {
 					return k8sClient.Get(ctx, secretKey, secret)
@@ -974,7 +973,7 @@ var _ = Describe("Deployment Controller", func() {
 					Version: "v2",
 					Kind:    "InnoDBCluster",
 				})
-				expectedClusterName := "mysql-deploy1"
+				expectedClusterName := expectedMySQLClusterName
 				clusterKey := types.NamespacedName{Name: expectedClusterName, Namespace: testNamespace.Name}
 				Eventually(func() error {
 					return k8sClient.Get(ctx, clusterKey, cluster)
@@ -1039,7 +1038,7 @@ var _ = Describe("Deployment Controller", func() {
 
 				// Verify resources were created for first deployment
 				secret := &corev1.Secret{}
-				expectedSecretName := "mysql-secret-deploy1-kibaship-com"
+				expectedSecretName := expectedMySQLSecretName
 				secretKey := types.NamespacedName{Name: expectedSecretName, Namespace: testNamespace.Name}
 				Eventually(func() error {
 					return k8sClient.Get(ctx, secretKey, secret)
@@ -1051,7 +1050,7 @@ var _ = Describe("Deployment Controller", func() {
 					Version: "v2",
 					Kind:    "InnoDBCluster",
 				})
-				expectedClusterName := "mysql-deploy1"
+				expectedClusterName := expectedMySQLClusterName
 				clusterKey := types.NamespacedName{Name: expectedClusterName, Namespace: testNamespace.Name}
 				Eventually(func() error {
 					return k8sClient.Get(ctx, clusterKey, cluster)
@@ -1154,7 +1153,7 @@ var _ = Describe("Deployment Controller", func() {
 					Version: "v2",
 					Kind:    "InnoDBCluster",
 				})
-				expectedClusterName := "mysql-deploy1"
+				expectedClusterName := expectedMySQLClusterName
 				clusterKey := types.NamespacedName{Name: expectedClusterName, Namespace: testNamespace.Name}
 				Eventually(func() error {
 					return k8sClient.Get(ctx, clusterKey, cluster)
@@ -1212,7 +1211,7 @@ var _ = Describe("Deployment Controller", func() {
 
 				// Verify resources were still created successfully
 				secret := &corev1.Secret{}
-				expectedSecretName := "mysql-secret-deploy1-kibaship-com"
+				expectedSecretName := expectedMySQLSecretName
 				secretKey := types.NamespacedName{Name: expectedSecretName, Namespace: testNamespace.Name}
 				Eventually(func() error {
 					return k8sClient.Get(ctx, secretKey, secret)
@@ -1224,7 +1223,7 @@ var _ = Describe("Deployment Controller", func() {
 					Version: "v2",
 					Kind:    "InnoDBCluster",
 				})
-				expectedClusterName := "mysql-deploy1"
+				expectedClusterName := expectedMySQLClusterName
 				clusterKey := types.NamespacedName{Name: expectedClusterName, Namespace: testNamespace.Name}
 				Eventually(func() error {
 					return k8sClient.Get(ctx, clusterKey, cluster)

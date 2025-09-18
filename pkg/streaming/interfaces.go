@@ -184,10 +184,13 @@ func (r *ResourceEvent) Validate() error {
 	if r.ProjectUUID == "" {
 		return fmt.Errorf("project UUID is required")
 	}
-	if r.ResourceType == "" || (r.ResourceType != ResourceTypeProject && r.ResourceType != ResourceTypeApplication && r.ResourceType != ResourceTypeDeployment && r.ResourceType != ResourceTypeApplicationDomain) {
+	if r.ResourceType == "" || (r.ResourceType != ResourceTypeProject &&
+		r.ResourceType != ResourceTypeApplication && r.ResourceType != ResourceTypeDeployment &&
+		r.ResourceType != ResourceTypeApplicationDomain) {
 		return fmt.Errorf("valid resource type is required")
 	}
-	if r.Operation == "" || (r.Operation != OperationCreate && r.Operation != OperationUpdate && r.Operation != OperationDelete && r.Operation != OperationFailed && r.Operation != OperationReady) {
+	if r.Operation == "" || (r.Operation != OperationCreate && r.Operation != OperationUpdate &&
+		r.Operation != OperationDelete && r.Operation != OperationFailed && r.Operation != OperationReady) {
 		return fmt.Errorf("valid operation is required")
 	}
 	return nil
@@ -199,7 +202,7 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("namespace is required")
 	}
 	if c.ValkeyServiceName == "" {
-		return fmt.Errorf("Valkey service name is required")
+		return fmt.Errorf("valkey service name is required")
 	}
 	if c.ValkeyPort <= 0 {
 		return fmt.Errorf("valid Valkey port is required")
@@ -211,7 +214,10 @@ func (c *Config) Validate() error {
 }
 
 // NewResourceEvent creates a new resource event
-func NewResourceEvent(projectUUID, workspaceUUID string, resourceType ResourceType, resourceUUID, resourceSlug, namespace string, operation OperationType) *ResourceEvent {
+func NewResourceEvent(
+	projectUUID, workspaceUUID string, resourceType ResourceType, resourceUUID, resourceSlug, namespace string,
+	operation OperationType,
+) *ResourceEvent {
 	return &ResourceEvent{
 		EventID:       uuid.New().String(),
 		Timestamp:     time.Now(),
@@ -228,7 +234,10 @@ func NewResourceEvent(projectUUID, workspaceUUID string, resourceType ResourceTy
 }
 
 // NewResourceEventFromK8sResource creates a new resource event with the full Kubernetes resource in the payload
-func NewResourceEventFromK8sResource(projectUUID, workspaceUUID string, resourceType ResourceType, resourceUUID, resourceSlug, namespace string, operation OperationType, k8sResource client.Object) (*ResourceEvent, error) {
+func NewResourceEventFromK8sResource(
+	projectUUID, workspaceUUID string, resourceType ResourceType, resourceUUID, resourceSlug, namespace string,
+	operation OperationType, k8sResource client.Object,
+) (*ResourceEvent, error) {
 	event := NewResourceEvent(projectUUID, workspaceUUID, resourceType, resourceUUID, resourceSlug, namespace, operation)
 
 	// Serialize the Kubernetes resource to JSON

@@ -80,7 +80,7 @@ func (c *clusterConnectionManager) InitializeCluster(ctx context.Context, seedAd
 	// Test the connection
 	err = valkeyClient.Ping(ctx)
 	if err != nil {
-		valkeyClient.Close()
+		_ = valkeyClient.Close()
 		return fmt.Errorf("failed to ping Valkey cluster: %w", err)
 	}
 
