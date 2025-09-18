@@ -44,7 +44,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Create a new project with the provided name and description",
+                "description": "Create a new project with comprehensive resource management and application type configuration. The project will be assigned a random 8-character slug and configured with the specified resource profile.",
                 "consumes": [
                     "application/json"
                 ],
@@ -57,7 +57,7 @@
                 "summary": "Create a new project",
                 "parameters": [
                     {
-                        "description": "Project data",
+                        "description": "Project creation data",
                         "name": "project",
                         "in": "body",
                         "required": true,
@@ -68,19 +68,77 @@
                 ],
                 "responses": {
                     "201": {
-                        "description": "Created",
+                        "description": "Project created successfully",
                         "schema": {
                             "$ref": "#/definitions/models.ProjectResponse"
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "Validation errors in request data",
+                        "schema": {
+                            "$ref": "#/definitions/models.ValidationErrors"
+                        }
+                    },
+                    "401": {
+                        "description": "Authentication required",
                         "schema": {
                             "$ref": "#/definitions/auth.ErrorResponse"
                         }
                     },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/projects/{slug}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieve a project by its unique slug identifier",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "projects"
+                ],
+                "summary": "Get project by slug",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Project slug (8-character identifier)",
+                        "name": "slug",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Project details",
+                        "schema": {
+                            "$ref": "#/definitions/models.ProjectResponse"
+                        }
+                    },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "Authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Project not found",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
                         "schema": {
                             "$ref": "#/definitions/auth.ErrorResponse"
                         }
@@ -141,44 +199,221 @@
                 }
             }
         },
+        "models.ApplicationTypeResourceConfig": {
+            "type": "object",
+            "properties": {
+                "defaultLimits": {
+                    "$ref": "#/definitions/models.ResourceLimitsSpec"
+                },
+                "resourceBounds": {
+                    "$ref": "#/definitions/models.ResourceBoundsSpec"
+                }
+            }
+        },
+        "models.ApplicationTypeSettings": {
+            "type": "object",
+            "properties": {
+                "dockerImage": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "gitRepository": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "mysql": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "mysqlCluster": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "postgres": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "postgresCluster": {
+                    "type": "boolean",
+                    "example": false
+                }
+            }
+        },
+        "models.CustomResourceLimits": {
+            "type": "object",
+            "properties": {
+                "dockerImage": {
+                    "$ref": "#/definitions/models.ApplicationTypeResourceConfig"
+                },
+                "gitRepository": {
+                    "$ref": "#/definitions/models.ApplicationTypeResourceConfig"
+                },
+                "mysql": {
+                    "$ref": "#/definitions/models.ApplicationTypeResourceConfig"
+                },
+                "postgres": {
+                    "$ref": "#/definitions/models.ApplicationTypeResourceConfig"
+                }
+            }
+        },
         "models.ProjectCreateRequest": {
             "type": "object",
-            "required": [
-                "name"
-            ],
             "properties": {
+                "customResourceLimits": {
+                    "$ref": "#/definitions/models.CustomResourceLimits"
+                },
                 "description": {
                     "type": "string",
-                    "example": "A description of my project"
+                    "example": "A project for my awesome application"
+                },
+                "enabledApplicationTypes": {
+                    "$ref": "#/definitions/models.ApplicationTypeSettings"
                 },
                 "name": {
                     "type": "string",
                     "example": "my-awesome-project"
+                },
+                "resourceProfile": {
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.ResourceProfile"
+                        }
+                    ],
+                    "example": "development"
+                },
+                "volumeSettings": {
+                    "$ref": "#/definitions/models.VolumeSettings"
+                },
+                "workspaceUuid": {
+                    "type": "string",
+                    "example": "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
                 }
             }
         },
         "models.ProjectResponse": {
             "type": "object",
             "properties": {
-                "created_at": {
+                "createdAt": {
                     "type": "string",
                     "example": "2023-01-01T12:00:00Z"
                 },
                 "description": {
                     "type": "string",
-                    "example": "A description of my project"
+                    "example": "A project for my awesome application"
+                },
+                "enabledApplicationTypes": {
+                    "$ref": "#/definitions/models.ApplicationTypeSettings"
                 },
                 "name": {
                     "type": "string",
                     "example": "my-awesome-project"
                 },
-                "updated_at": {
+                "namespaceName": {
+                    "type": "string",
+                    "example": "project-abc123de"
+                },
+                "resourceProfile": {
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.ResourceProfile"
+                        }
+                    ],
+                    "example": "development"
+                },
+                "slug": {
+                    "type": "string",
+                    "example": "abc123de"
+                },
+                "status": {
+                    "type": "string",
+                    "example": "Ready"
+                },
+                "updatedAt": {
                     "type": "string",
                     "example": "2023-01-01T12:00:00Z"
                 },
                 "uuid": {
                     "type": "string",
                     "example": "123e4567-e89b-12d3-a456-426614174000"
+                },
+                "volumeSettings": {
+                    "$ref": "#/definitions/models.VolumeSettings"
+                },
+                "workspaceUuid": {
+                    "type": "string",
+                    "example": "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+                }
+            }
+        },
+        "models.ResourceBoundsSpec": {
+            "type": "object",
+            "properties": {
+                "maxLimits": {
+                    "$ref": "#/definitions/models.ResourceLimitsSpec"
+                },
+                "minLimits": {
+                    "$ref": "#/definitions/models.ResourceLimitsSpec"
+                }
+            }
+        },
+        "models.ResourceLimitsSpec": {
+            "type": "object",
+            "properties": {
+                "cpu": {
+                    "type": "string",
+                    "example": "1"
+                },
+                "memory": {
+                    "type": "string",
+                    "example": "2Gi"
+                },
+                "storage": {
+                    "type": "string",
+                    "example": "10Gi"
+                }
+            }
+        },
+        "models.ResourceProfile": {
+            "type": "string",
+            "enum": [
+                "development",
+                "production",
+                "custom"
+            ],
+            "x-enum-varnames": [
+                "ResourceProfileDevelopment",
+                "ResourceProfileProduction",
+                "ResourceProfileCustom"
+            ]
+        },
+        "models.ValidationError": {
+            "type": "object",
+            "properties": {
+                "field": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.ValidationErrors": {
+            "type": "object",
+            "properties": {
+                "errors": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.ValidationError"
+                    }
+                }
+            }
+        },
+        "models.VolumeSettings": {
+            "type": "object",
+            "properties": {
+                "maxStorageSize": {
+                    "type": "string",
+                    "example": "100Gi"
                 }
             }
         }

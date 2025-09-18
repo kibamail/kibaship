@@ -21,33 +21,152 @@ definitions:
         example: ready
         type: string
     type: object
+  models.ApplicationTypeResourceConfig:
+    properties:
+      defaultLimits:
+        $ref: '#/definitions/models.ResourceLimitsSpec'
+      resourceBounds:
+        $ref: '#/definitions/models.ResourceBoundsSpec'
+    type: object
+  models.ApplicationTypeSettings:
+    properties:
+      dockerImage:
+        example: true
+        type: boolean
+      gitRepository:
+        example: true
+        type: boolean
+      mysql:
+        example: true
+        type: boolean
+      mysqlCluster:
+        example: false
+        type: boolean
+      postgres:
+        example: true
+        type: boolean
+      postgresCluster:
+        example: false
+        type: boolean
+    type: object
+  models.CustomResourceLimits:
+    properties:
+      dockerImage:
+        $ref: '#/definitions/models.ApplicationTypeResourceConfig'
+      gitRepository:
+        $ref: '#/definitions/models.ApplicationTypeResourceConfig'
+      mysql:
+        $ref: '#/definitions/models.ApplicationTypeResourceConfig'
+      postgres:
+        $ref: '#/definitions/models.ApplicationTypeResourceConfig'
+    type: object
   models.ProjectCreateRequest:
     properties:
+      customResourceLimits:
+        $ref: '#/definitions/models.CustomResourceLimits'
       description:
-        example: A description of my project
+        example: A project for my awesome application
         type: string
+      enabledApplicationTypes:
+        $ref: '#/definitions/models.ApplicationTypeSettings'
       name:
         example: my-awesome-project
         type: string
-    required:
-    - name
+      resourceProfile:
+        allOf:
+        - $ref: '#/definitions/models.ResourceProfile'
+        example: development
+      volumeSettings:
+        $ref: '#/definitions/models.VolumeSettings'
+      workspaceUuid:
+        example: 6ba7b810-9dad-11d1-80b4-00c04fd430c8
+        type: string
     type: object
   models.ProjectResponse:
     properties:
-      created_at:
+      createdAt:
         example: "2023-01-01T12:00:00Z"
         type: string
       description:
-        example: A description of my project
+        example: A project for my awesome application
         type: string
+      enabledApplicationTypes:
+        $ref: '#/definitions/models.ApplicationTypeSettings'
       name:
         example: my-awesome-project
         type: string
-      updated_at:
+      namespaceName:
+        example: project-abc123de
+        type: string
+      resourceProfile:
+        allOf:
+        - $ref: '#/definitions/models.ResourceProfile'
+        example: development
+      slug:
+        example: abc123de
+        type: string
+      status:
+        example: Ready
+        type: string
+      updatedAt:
         example: "2023-01-01T12:00:00Z"
         type: string
       uuid:
         example: 123e4567-e89b-12d3-a456-426614174000
+        type: string
+      volumeSettings:
+        $ref: '#/definitions/models.VolumeSettings'
+      workspaceUuid:
+        example: 6ba7b810-9dad-11d1-80b4-00c04fd430c8
+        type: string
+    type: object
+  models.ResourceBoundsSpec:
+    properties:
+      maxLimits:
+        $ref: '#/definitions/models.ResourceLimitsSpec'
+      minLimits:
+        $ref: '#/definitions/models.ResourceLimitsSpec'
+    type: object
+  models.ResourceLimitsSpec:
+    properties:
+      cpu:
+        example: "1"
+        type: string
+      memory:
+        example: 2Gi
+        type: string
+      storage:
+        example: 10Gi
+        type: string
+    type: object
+  models.ResourceProfile:
+    enum:
+    - development
+    - production
+    - custom
+    type: string
+    x-enum-varnames:
+    - ResourceProfileDevelopment
+    - ResourceProfileProduction
+    - ResourceProfileCustom
+  models.ValidationError:
+    properties:
+      field:
+        type: string
+      message:
+        type: string
+    type: object
+  models.ValidationErrors:
+    properties:
+      errors:
+        items:
+          $ref: '#/definitions/models.ValidationError'
+        type: array
+    type: object
+  models.VolumeSettings:
+    properties:
+      maxStorageSize:
+        example: 100Gi
         type: string
     type: object
 host: localhost:8080
@@ -80,9 +199,11 @@ paths:
     post:
       consumes:
       - application/json
-      description: Create a new project with the provided name and description
+      description: Create a new project with comprehensive resource management and
+        application type configuration. The project will be assigned a random 8-character
+        slug and configured with the specified resource profile.
       parameters:
-      - description: Project data
+      - description: Project creation data
         in: body
         name: project
         required: true
@@ -92,20 +213,57 @@ paths:
       - application/json
       responses:
         "201":
-          description: Created
+          description: Project created successfully
           schema:
             $ref: '#/definitions/models.ProjectResponse'
         "400":
-          description: Bad Request
+          description: Validation errors in request data
+          schema:
+            $ref: '#/definitions/models.ValidationErrors'
+        "401":
+          description: Authentication required
           schema:
             $ref: '#/definitions/auth.ErrorResponse'
-        "401":
-          description: Unauthorized
+        "500":
+          description: Internal server error
           schema:
             $ref: '#/definitions/auth.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Create a new project
+      tags:
+      - projects
+  /projects/{slug}:
+    get:
+      description: Retrieve a project by its unique slug identifier
+      parameters:
+      - description: Project slug (8-character identifier)
+        in: path
+        name: slug
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Project details
+          schema:
+            $ref: '#/definitions/models.ProjectResponse'
+        "401":
+          description: Authentication required
+          schema:
+            $ref: '#/definitions/auth.ErrorResponse'
+        "404":
+          description: Project not found
+          schema:
+            $ref: '#/definitions/auth.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/auth.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get project by slug
       tags:
       - projects
   /readyz:

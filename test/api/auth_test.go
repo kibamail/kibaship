@@ -34,7 +34,6 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 
 	"github.com/kibamail/kibaship-operator/pkg/auth"
-	"github.com/kibamail/kibaship-operator/pkg/handlers"
 	"github.com/kibamail/kibaship-operator/pkg/models"
 )
 
@@ -77,8 +76,9 @@ func setupAuthenticatedRouter(apiKey string) *gin.Engine {
 	protected := router.Group("/")
 	protected.Use(authenticator.Middleware())
 	{
-		projectHandler := handlers.NewProjectHandler()
-		protected.POST("/projects", projectHandler.CreateProject)
+		// Use mock project handler for testing
+		mockHandler := &mockAuthTestProjectHandler{}
+		protected.POST("/projects", mockHandler.CreateProject)
 	}
 
 	return router
@@ -201,4 +201,32 @@ func TestSecretManagerMissingSecret(t *testing.T) {
 	_, err := secretManager.GetAPIKeyWithRetry(ctx)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "timeout waiting for secret")
+}
+
+// mockAuthTestProjectHandler provides a mock project handler for auth testing
+type mockAuthTestProjectHandler struct{}
+
+func (h *mockAuthTestProjectHandler) CreateProject(c *gin.Context) {
+	var req models.ProjectCreateRequest
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "Bad Request",
+			"message": err.Error(),
+		})
+		return
+	}
+
+	// Create mock project response
+	project := models.NewProject(
+		req.Name,
+		req.Description,
+		req.WorkspaceUUID,
+		"abc123de", // Mock slug
+		req.EnabledApplicationTypes,
+		req.ResourceProfile,
+		req.VolumeSettings,
+	)
+
+	c.JSON(http.StatusCreated, project.ToResponse())
 }
