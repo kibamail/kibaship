@@ -1,5 +1,14 @@
 basePath: /
 definitions:
+  auth.ErrorResponse:
+    properties:
+      error:
+        example: Unauthorized
+        type: string
+      message:
+        example: Invalid API key
+        type: string
+    type: object
   main.HealthResponse:
     properties:
       status:
@@ -10,6 +19,35 @@ definitions:
     properties:
       status:
         example: ready
+        type: string
+    type: object
+  models.ProjectCreateRequest:
+    properties:
+      description:
+        example: A description of my project
+        type: string
+      name:
+        example: my-awesome-project
+        type: string
+    required:
+    - name
+    type: object
+  models.ProjectResponse:
+    properties:
+      created_at:
+        example: "2023-01-01T12:00:00Z"
+        type: string
+      description:
+        example: A description of my project
+        type: string
+      name:
+        example: my-awesome-project
+        type: string
+      updated_at:
+        example: "2023-01-01T12:00:00Z"
+        type: string
+      uuid:
+        example: 123e4567-e89b-12d3-a456-426614174000
         type: string
     type: object
 host: localhost:8080
@@ -38,6 +76,38 @@ paths:
       summary: Health check
       tags:
       - health
+  /projects:
+    post:
+      consumes:
+      - application/json
+      description: Create a new project with the provided name and description
+      parameters:
+      - description: Project data
+        in: body
+        name: project
+        required: true
+        schema:
+          $ref: '#/definitions/models.ProjectCreateRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.ProjectResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/auth.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/auth.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create a new project
+      tags:
+      - projects
   /readyz:
     get:
       description: Check if the API server is ready to serve requests
@@ -51,4 +121,10 @@ paths:
       summary: Readiness check
       tags:
       - health
+securityDefinitions:
+  BearerAuth:
+    description: Type "Bearer" followed by a space and JWT token.
+    in: header
+    name: Authorization
+    type: apiKey
 swagger: "2.0"
