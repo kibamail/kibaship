@@ -633,12 +633,6 @@ spec:
     - jsonPath: .status.phase
       name: Phase
       type: string
-    - jsonPath: .status.currentPipelineRun.name
-      name: Current Run
-      type: string
-    - jsonPath: .status.lastSuccessfulRun.name
-      name: Last Success
-      type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
@@ -703,32 +697,6 @@ spec:
           status:
             description: DeploymentStatus defines the observed state of Deployment.
             properties:
-              builtImage:
-                description: Built image information from the last successful run
-                properties:
-                  builtAt:
-                    description: Build timestamp
-                    format: date-time
-                    type: string
-                  commitSha:
-                    description: Git commit SHA used for this image
-                    type: string
-                  digest:
-                    description: Image digest
-                    type: string
-                  reference:
-                    description: Full image reference with digest
-                    type: string
-                  tag:
-                    description: Image tag
-                    type: string
-                required:
-                - builtAt
-                - commitSha
-                - digest
-                - reference
-                - tag
-                type: object
               conditions:
                 description: Conditions represent the latest available observations
                   of the deployment's state
@@ -787,80 +755,6 @@ spec:
                   - type
                   type: object
                 type: array
-              currentPipelineRun:
-                description: Current pipeline run information
-                properties:
-                  commitSha:
-                    description: Git commit SHA that triggered this run
-                    type: string
-                  completionTime:
-                    description: Completion time
-                    format: date-time
-                    type: string
-                  image:
-                    description: Built image from this run
-                    type: string
-                  message:
-                    description: Message provides additional information about the
-                      pipeline run
-                    type: string
-                  name:
-                    description: Name of the pipeline run
-                    type: string
-                  namespace:
-                    description: Namespace of the pipeline run
-                    type: string
-                  phase:
-                    description: Phase of the pipeline run
-                    type: string
-                  startTime:
-                    description: Start time
-                    format: date-time
-                    type: string
-                required:
-                - name
-                - namespace
-                - phase
-                type: object
-              lastSuccessfulRun:
-                description: Last successful pipeline run
-                properties:
-                  commitSha:
-                    description: Git commit SHA that triggered this run
-                    type: string
-                  completionTime:
-                    description: Completion time
-                    format: date-time
-                    type: string
-                  image:
-                    description: Built image from this run
-                    type: string
-                  message:
-                    description: Message provides additional information about the
-                      pipeline run
-                    type: string
-                  name:
-                    description: Name of the pipeline run
-                    type: string
-                  namespace:
-                    description: Namespace of the pipeline run
-                    type: string
-                  phase:
-                    description: Phase of the pipeline run
-                    type: string
-                  startTime:
-                    description: Start time
-                    format: date-time
-                    type: string
-                required:
-                - name
-                - namespace
-                - phase
-                type: object
-              message:
-                description: Message provides additional information about the current
-                  status
-                type: string
               observedGeneration:
                 description: ObservedGeneration reflects the generation of the most
                   recently observed Deployment
@@ -869,44 +763,6 @@ spec:
               phase:
                 description: Current phase of the deployment
                 type: string
-              runHistory:
-                description: Pipeline run history (last 5 runs)
-                items:
-                  description: PipelineRunStatus tracks pipeline run information
-                  properties:
-                    commitSha:
-                      description: Git commit SHA that triggered this run
-                      type: string
-                    completionTime:
-                      description: Completion time
-                      format: date-time
-                      type: string
-                    image:
-                      description: Built image from this run
-                      type: string
-                    message:
-                      description: Message provides additional information about the
-                        pipeline run
-                      type: string
-                    name:
-                      description: Name of the pipeline run
-                      type: string
-                    namespace:
-                      description: Namespace of the pipeline run
-                      type: string
-                    phase:
-                      description: Phase of the pipeline run
-                      type: string
-                    startTime:
-                      description: Start time
-                      format: date-time
-                      type: string
-                  required:
-                  - name
-                  - namespace
-                  - phase
-                  type: object
-                type: array
             type: object
         type: object
     served: true
@@ -1651,7 +1507,7 @@ spec:
           value: myapps.kibaship.com
         - name: KIBASHIP_OPERATOR_DEFAULT_PORT
           value: "3000"
-        image: ghcr.io/kibamail/kibaship-operator:v0.0.10
+        image: ghcr.io/kibamail/kibaship-operator:v0.0.11
         livenessProbe:
           httpGet:
             path: /healthz
@@ -1834,8 +1690,8 @@ metadata:
   name: tekton-task-git-clone-kibaship-com
   namespace: tekton-pipelines
 spec:
-  description: A simplified git clone task that uses an access token from a secret
-    to clone a specific branch and commit from a repository.
+  description: A simplified git clone task that can clone from public repositories
+    or use an access token from a secret for private repositories.
   params:
   - description: Repository URL to clone from.
     name: url
@@ -1846,8 +1702,14 @@ spec:
   - description: Specific commit hash to checkout (required).
     name: commit
     type: string
-  - description: Name of the secret containing the access token.
+  - default: ""
+    description: Name of the secret containing the access token (optional for public
+      repos).
     name: token-secret
+    type: string
+  - default: "false"
+    description: Whether the repository is publicly accessible (true/false).
+    name: public-access
     type: string
   results:
   - description: The commit SHA that was checked out.
@@ -1862,11 +1724,10 @@ spec:
       value: $(params.branch)
     - name: COMMIT_HASH
       value: $(params.commit)
-    - name: ACCESS_TOKEN
-      valueFrom:
-        secretKeyRef:
-          key: token
-          name: $(params.token-secret)
+    - name: PUBLIC_ACCESS
+      value: $(params.public-access)
+    - name: TOKEN_SECRET_NAME
+      value: $(params.token-secret)
     - name: WORKSPACE_PATH
       value: $(workspaces.output.path)
     image: alpine/git:latest
@@ -1876,12 +1737,43 @@ spec:
       set -e
 
       echo "Starting git clone..."
+      echo "Repository: $REPO_URL"
+      echo "Public Access: $PUBLIC_ACCESS"
 
-      # Create authenticated URL by injecting token
-      AUTH_URL=$(echo "$REPO_URL" | sed "s|https://|https://x-access-token:${ACCESS_TOKEN}@|")
+      # Determine the URL to use based on public access
+      if [ "$PUBLIC_ACCESS" = "true" ]; then
+        echo "Using public access (no authentication)"
+        CLONE_URL="$REPO_URL"
+      else
+        echo "Using private access with token"
+        if [ -z "$TOKEN_SECRET_NAME" ] || [ "$TOKEN_SECRET_NAME" = "" ]; then
+          echo "Error: Private repository requires token-secret parameter"
+          exit 1
+        fi
+
+        # For private repos, try to read ACCESS_TOKEN from secret file
+        # The Tekton task runner will mount secrets automatically
+        ACCESS_TOKEN=""
+
+        # Try to find the token in common Tekton secret mount locations
+        if [ -f "/tekton/creds/$TOKEN_SECRET_NAME/token" ]; then
+          ACCESS_TOKEN=$(cat "/tekton/creds/$TOKEN_SECRET_NAME/token")
+        elif [ -f "/workspace/git-credentials/token" ]; then
+          ACCESS_TOKEN=$(cat "/workspace/git-credentials/token")
+        else
+          echo "Error: Could not find access token for private repository"
+          echo "Expected locations:"
+          echo "  /tekton/creds/$TOKEN_SECRET_NAME/token"
+          echo "  /workspace/git-credentials/token"
+          exit 1
+        fi
+
+        # Create authenticated URL by injecting token
+        CLONE_URL=$(echo "$REPO_URL" | sed "s|https://|https://x-access-token:${ACCESS_TOKEN}@|")
+      fi
 
       # Clone the repository with the specific branch
-      git clone --branch "$BRANCH_NAME" --single-branch "$AUTH_URL" "$WORKSPACE_PATH/repo"
+      git clone --branch "$BRANCH_NAME" --single-branch "$CLONE_URL" "$WORKSPACE_PATH/repo"
 
       # Navigate to the cloned repository
       cd "$WORKSPACE_PATH/repo"
