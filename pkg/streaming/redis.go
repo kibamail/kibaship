@@ -57,7 +57,7 @@ func NewValkeyClusterClient(seedAddress, password string, config *Config) (Valke
 	// Test cluster connectivity
 	ctx := context.Background()
 	if err := clusterClient.Ping(ctx).Err(); err != nil {
-		clusterClient.Close()
+		_ = clusterClient.Close()
 		return nil, fmt.Errorf("failed to connect to Valkey cluster: %w", err)
 	}
 

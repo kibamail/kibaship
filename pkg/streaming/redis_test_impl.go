@@ -58,7 +58,7 @@ func (r *testValkeyClient) Ping(ctx context.Context) error {
 		return fmt.Errorf("valkey: client is closed")
 	}
 	if r.address == "" {
-		return fmt.Errorf("Valkey address is not configured")
+		return fmt.Errorf("valkey address is not configured")
 	}
 
 	// Mock successful ping
@@ -72,7 +72,10 @@ func (r *testValkeyClient) ClusterNodes(ctx context.Context) (string, error) {
 	}
 
 	// Mock cluster nodes response
-	return "node1:6379@16379 master - 0 1703123456789 0 connected 0-5460\nnode2:6379@16379 master - 0 1703123456789 0 connected 5461-10922\nnode3:6379@16379 master - 0 1703123456789 0 connected 10923-16383\n", nil
+	clusterInfo := "node1:6379@16379 master - 0 1703123456789 0 connected 0-5460\n" +
+		"node2:6379@16379 master - 0 1703123456789 0 connected 5461-10922\n" +
+		"node3:6379@16379 master - 0 1703123456789 0 connected 10923-16383\n"
+	return clusterInfo, nil
 }
 
 // Close closes the client (test implementation)

@@ -71,7 +71,7 @@ var _ = Describe("Adapters", func() {
 		})
 
 		It("should implement KubernetesClient interface", func() {
-			var _ KubernetesClient = adapter
+			_ = adapter
 		})
 	})
 
@@ -84,8 +84,8 @@ var _ = Describe("Adapters", func() {
 			clientAdapter := NewKubernetesClientAdapter(k8sClient)
 
 			// Verify types implement the expected interfaces
-			var _ TimeProvider = timeProvider
-			var _ KubernetesClient = clientAdapter
+			_ = timeProvider
+			_ = clientAdapter
 
 			// Test concurrent usage (common in Kubernetes controllers)
 			done := make(chan bool, 2)

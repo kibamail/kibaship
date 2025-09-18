@@ -130,7 +130,7 @@ var _ = Describe("ProjectStreamPublisher", func() {
 
 				err := publisher.PublishEvent(context.Background(), event)
 				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("Redis client is not available"))
+				Expect(err.Error()).To(ContainSubstring("redis client is not available"))
 
 				connMgr.AssertExpectations(GinkgoT())
 			})
@@ -149,7 +149,8 @@ var _ = Describe("ProjectStreamPublisher", func() {
 
 				connMgr.On("IsConnected").Return(true)
 				connMgr.On("GetClient").Return(valkeyClient)
-				valkeyClient.On("XAdd", mock.Anything, mock.Anything, mock.Anything).Return("", errors.New("redis connection failed"))
+				valkeyClient.On("XAdd", mock.Anything, mock.Anything, mock.Anything).Return("",
+					errors.New("redis connection failed"))
 
 				err := publisher.PublishEvent(context.Background(), event)
 				Expect(err).To(HaveOccurred())

@@ -51,38 +51,6 @@ func GenerateSubdomain(appSlug string) (string, error) {
 	return subdomain, nil
 }
 
-// sanitizeAppSlug ensures the app slug is valid for DNS
-func sanitizeAppSlug(slug string) string {
-	// Convert to lowercase
-	slug = strings.ToLower(slug)
-
-	// Remove invalid characters, keep only alphanumeric and hyphens
-	var result strings.Builder
-	for _, r := range slug {
-		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' {
-			result.WriteRune(r)
-		}
-	}
-
-	cleaned := result.String()
-
-	// Ensure doesn't start or end with hyphen
-	cleaned = strings.Trim(cleaned, "-")
-
-	// Ensure not empty
-	if cleaned == "" {
-		cleaned = "app"
-	}
-
-	// Limit length for subdomain constraints
-	if len(cleaned) > 20 {
-		cleaned = cleaned[:20]
-		cleaned = strings.TrimSuffix(cleaned, "-")
-	}
-
-	return cleaned
-}
-
 // sanitizeSubdomain ensures the generated subdomain is valid for DNS
 func sanitizeSubdomain(subdomain string) string {
 	// Ensure it starts with alphanumeric

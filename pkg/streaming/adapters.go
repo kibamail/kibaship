@@ -71,7 +71,9 @@ func (k *kubernetesClientAdapter) List(ctx context.Context, list client.ObjectLi
 }
 
 // Watch watches for changes to Kubernetes objects
-func (k *kubernetesClientAdapter) Watch(ctx context.Context, list client.ObjectList, opts ...client.ListOption) (watch.Interface, error) {
+func (k *kubernetesClientAdapter) Watch(
+	ctx context.Context, list client.ObjectList, opts ...client.ListOption,
+) (watch.Interface, error) {
 	// For the production implementation, we'll need to create a proper watcher
 	// using the client's reader and the appropriate APIs
 	// For now, return an error to indicate this needs proper implementation

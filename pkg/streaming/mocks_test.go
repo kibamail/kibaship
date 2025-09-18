@@ -42,7 +42,9 @@ func (m *mockKubernetesClient) List(ctx context.Context, list client.ObjectList,
 	return args.Error(0)
 }
 
-func (m *mockKubernetesClient) Watch(ctx context.Context, list client.ObjectList, opts ...client.ListOption) (watch.Interface, error) {
+func (m *mockKubernetesClient) Watch(
+	ctx context.Context, list client.ObjectList, opts ...client.ListOption,
+) (watch.Interface, error) {
 	args := m.Called(ctx, list, opts)
 	return args.Get(0).(watch.Interface), args.Error(1)
 }

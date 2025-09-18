@@ -35,7 +35,7 @@ var _ = Describe("ValkeyReadinessMonitor", func() {
 			Expect(monitor).NotTo(BeNil())
 
 			// Verify it implements the interface
-			var _ ValkeyReadinessMonitor = monitor
+			_ = monitor
 		})
 	})
 })
