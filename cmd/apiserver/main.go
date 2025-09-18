@@ -24,6 +24,10 @@ limitations under the License.
 // @license.url http://www.apache.org/licenses/LICENSE-2.0.html
 // @host localhost:8080
 // @BasePath /
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
+// @description Type "Bearer" followed by a space and JWT token.
 package main
 
 import (
@@ -36,9 +40,11 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	_ "github.com/kibamail/kibaship-operator/docs"
+	"github.com/kibamail/kibaship-operator/pkg/auth"
+	"github.com/kibamail/kibaship-operator/pkg/handlers"
 	"github.com/swaggo/files"
 	"github.com/swaggo/gin-swagger"
-	_ "github.com/kibamail/kibaship-operator/docs"
 )
 
 func main() {
@@ -46,6 +52,29 @@ func main() {
 	if os.Getenv("GIN_MODE") == "" {
 		gin.SetMode(gin.ReleaseMode)
 	}
+
+	// Get namespace from environment or use default
+	namespace := os.Getenv("NAMESPACE")
+	if namespace == "" {
+		namespace = "default"
+	}
+
+	// Initialize secret manager and retrieve API key
+	log.Println("Initializing API key authentication...")
+	secretManager, err := auth.NewSecretManager(namespace)
+	if err != nil {
+		log.Fatalf("Failed to create secret manager: %v", err)
+	}
+
+	apiKey, err := secretManager.GetAPIKeyWithRetry(context.Background())
+	if err != nil {
+		log.Fatalf("Failed to retrieve API key from secret: %v", err)
+	}
+
+	log.Println("API key retrieved successfully from Kubernetes secret")
+
+	// Create authenticator
+	authenticator := auth.NewAPIKeyAuthenticator(apiKey)
 
 	// Create Gin router
 	router := gin.New()
@@ -57,9 +86,20 @@ func main() {
 	// Swagger documentation endpoint
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
-	// Health check endpoints
+	// Health check endpoints (public)
 	router.GET("/healthz", healthzHandler)
 	router.GET("/readyz", readyzHandler)
+
+	// Protected routes
+	protected := router.Group("/")
+	protected.Use(authenticator.Middleware())
+	{
+		// Initialize handlers
+		projectHandler := handlers.NewProjectHandler()
+
+		// Project endpoints
+		protected.POST("/projects", projectHandler.CreateProject)
+	}
 
 	// Get port from environment or use default
 	port := os.Getenv("PORT")
