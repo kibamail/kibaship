@@ -126,3 +126,106 @@ func (h *ProjectHandler) GetProject(c *gin.Context) {
 
 	c.JSON(http.StatusOK, project.ToResponse())
 }
+
+// DeleteProject handles DELETE /projects/:slug
+// @Summary Delete project by slug
+// @Description Delete a project by its unique slug identifier
+// @Tags projects
+// @Param slug path string true "Project slug (8-character identifier)"
+// @Success 204 "Project deleted successfully"
+// @Failure 401 {object} auth.ErrorResponse "Authentication required"
+// @Failure 404 {object} auth.ErrorResponse "Project not found"
+// @Failure 500 {object} auth.ErrorResponse "Internal server error"
+// @Security BearerAuth
+// @Router /projects/{slug} [delete]
+func (h *ProjectHandler) DeleteProject(c *gin.Context) {
+	slug := c.Param("slug")
+
+	if slug == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "Bad Request",
+			"message": "Project slug is required",
+		})
+		return
+	}
+
+	err := h.projectService.DeleteProject(c.Request.Context(), slug)
+	if err != nil {
+		if err.Error() == "project with slug "+slug+" not found" {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error":   "Not Found",
+				"message": "Project with slug '" + slug + "' was not found",
+			})
+			return
+		}
+
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "Internal Server Error",
+			"message": "Failed to delete project: " + err.Error(),
+		})
+		return
+	}
+
+	c.Status(http.StatusNoContent)
+}
+
+// UpdateProject handles PATCH /projects/:slug
+// @Summary Update project by slug
+// @Description Update a project by its unique slug identifier with partial updates
+// @Tags projects
+// @Accept json
+// @Produce json
+// @Param slug path string true "Project slug (8-character identifier)"
+// @Param project body models.ProjectUpdateRequest true "Project update data"
+// @Success 200 {object} models.ProjectResponse "Updated project details"
+// @Failure 400 {object} models.ValidationErrors "Validation errors in request data"
+// @Failure 401 {object} auth.ErrorResponse "Authentication required"
+// @Failure 404 {object} auth.ErrorResponse "Project not found"
+// @Failure 500 {object} auth.ErrorResponse "Internal server error"
+// @Security BearerAuth
+// @Router /projects/{slug} [patch]
+func (h *ProjectHandler) UpdateProject(c *gin.Context) {
+	slug := c.Param("slug")
+
+	if slug == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "Bad Request",
+			"message": "Project slug is required",
+		})
+		return
+	}
+
+	var req models.ProjectUpdateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "Bad Request",
+			"message": "Invalid JSON format: " + err.Error(),
+		})
+		return
+	}
+
+	// Validate the update request
+	if validationErr := req.ValidateUpdate(); validationErr != nil {
+		c.JSON(http.StatusBadRequest, validationErr)
+		return
+	}
+
+	project, err := h.projectService.UpdateProject(c.Request.Context(), slug, &req)
+	if err != nil {
+		if err.Error() == "project with slug "+slug+" not found" {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error":   "Not Found",
+				"message": "Project with slug '" + slug + "' was not found",
+			})
+			return
+		}
+
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "Internal Server Error",
+			"message": "Failed to update project: " + err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, project.ToResponse())
+}

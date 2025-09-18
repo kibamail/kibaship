@@ -21,6 +21,189 @@ definitions:
         example: ready
         type: string
     type: object
+  models.ApplicationCreateRequest:
+    properties:
+      dockerImage:
+        $ref: '#/definitions/models.DockerImageConfig'
+      gitRepository:
+        $ref: '#/definitions/models.GitRepositoryConfig'
+      mysql:
+        $ref: '#/definitions/models.MySQLConfig'
+      mysqlCluster:
+        $ref: '#/definitions/models.MySQLClusterConfig'
+      name:
+        example: my-web-app
+        type: string
+      postgres:
+        $ref: '#/definitions/models.PostgresConfig'
+      postgresCluster:
+        $ref: '#/definitions/models.PostgresClusterConfig'
+      projectSlug:
+        example: abc123de
+        type: string
+      type:
+        allOf:
+        - $ref: '#/definitions/models.ApplicationType'
+        example: DockerImage
+    type: object
+  models.ApplicationDomainCreateRequest:
+    properties:
+      applicationSlug:
+        example: abc123de
+        type: string
+      default:
+        example: false
+        type: boolean
+      domain:
+        example: my-app.example.com
+        type: string
+      port:
+        example: 3000
+        maximum: 65535
+        minimum: 1
+        type: integer
+      tlsEnabled:
+        example: true
+        type: boolean
+      type:
+        allOf:
+        - $ref: '#/definitions/models.ApplicationDomainType'
+        example: custom
+    required:
+    - applicationSlug
+    - domain
+    - port
+    type: object
+  models.ApplicationDomainPhase:
+    enum:
+    - Pending
+    - Ready
+    - Failed
+    type: string
+    x-enum-varnames:
+    - ApplicationDomainPhasePending
+    - ApplicationDomainPhaseReady
+    - ApplicationDomainPhaseFailed
+  models.ApplicationDomainResponse:
+    properties:
+      applicationSlug:
+        example: abc123de
+        type: string
+      applicationUuid:
+        example: 550e8400-e29b-41d4-a716-446655440001
+        type: string
+      certificateReady:
+        example: false
+        type: boolean
+      createdAt:
+        example: "2023-01-01T12:00:00Z"
+        type: string
+      default:
+        example: false
+        type: boolean
+      dnsConfigured:
+        example: false
+        type: boolean
+      domain:
+        example: my-app.example.com
+        type: string
+      ingressReady:
+        example: false
+        type: boolean
+      phase:
+        allOf:
+        - $ref: '#/definitions/models.ApplicationDomainPhase'
+        example: Pending
+      port:
+        example: 3000
+        type: integer
+      projectUuid:
+        example: 550e8400-e29b-41d4-a716-446655440002
+        type: string
+      slug:
+        example: def456gh
+        type: string
+      tlsEnabled:
+        example: true
+        type: boolean
+      type:
+        allOf:
+        - $ref: '#/definitions/models.ApplicationDomainType'
+        example: custom
+      updatedAt:
+        example: "2023-01-01T12:00:00Z"
+        type: string
+      uuid:
+        example: 550e8400-e29b-41d4-a716-446655440000
+        type: string
+    type: object
+  models.ApplicationDomainType:
+    enum:
+    - default
+    - custom
+    type: string
+    x-enum-varnames:
+    - ApplicationDomainTypeDefault
+    - ApplicationDomainTypeCustom
+  models.ApplicationResponse:
+    properties:
+      createdAt:
+        example: "2023-01-01T12:00:00Z"
+        type: string
+      dockerImage:
+        $ref: '#/definitions/models.DockerImageConfig'
+      gitRepository:
+        $ref: '#/definitions/models.GitRepositoryConfig'
+      mysql:
+        $ref: '#/definitions/models.MySQLConfig'
+      mysqlCluster:
+        $ref: '#/definitions/models.MySQLClusterConfig'
+      name:
+        example: my-web-app
+        type: string
+      postgres:
+        $ref: '#/definitions/models.PostgresConfig'
+      postgresCluster:
+        $ref: '#/definitions/models.PostgresClusterConfig'
+      projectSlug:
+        example: xyz789ab
+        type: string
+      projectUuid:
+        example: 123e4567-e89b-12d3-a456-426614174001
+        type: string
+      slug:
+        example: abc123de
+        type: string
+      status:
+        example: Running
+        type: string
+      type:
+        allOf:
+        - $ref: '#/definitions/models.ApplicationType'
+        example: DockerImage
+      updatedAt:
+        example: "2023-01-01T12:00:00Z"
+        type: string
+      uuid:
+        example: 123e4567-e89b-12d3-a456-426614174000
+        type: string
+    type: object
+  models.ApplicationType:
+    enum:
+    - MySQL
+    - MySQLCluster
+    - Postgres
+    - PostgresCluster
+    - DockerImage
+    - GitRepository
+    type: string
+    x-enum-varnames:
+    - ApplicationTypeMySQL
+    - ApplicationTypeMySQLCluster
+    - ApplicationTypePostgres
+    - ApplicationTypePostgresCluster
+    - ApplicationTypeDockerImage
+    - ApplicationTypeGitRepository
   models.ApplicationTypeResourceConfig:
     properties:
       defaultLimits:
@@ -49,6 +232,24 @@ definitions:
         example: false
         type: boolean
     type: object
+  models.ApplicationUpdateRequest:
+    properties:
+      dockerImage:
+        $ref: '#/definitions/models.DockerImageConfig'
+      gitRepository:
+        $ref: '#/definitions/models.GitRepositoryConfig'
+      mysql:
+        $ref: '#/definitions/models.MySQLConfig'
+      mysqlCluster:
+        $ref: '#/definitions/models.MySQLClusterConfig'
+      name:
+        example: updated-web-app
+        type: string
+      postgres:
+        $ref: '#/definitions/models.PostgresConfig'
+      postgresCluster:
+        $ref: '#/definitions/models.PostgresClusterConfig'
+    type: object
   models.CustomResourceLimits:
     properties:
       dockerImage:
@@ -59,6 +260,184 @@ definitions:
         $ref: '#/definitions/models.ApplicationTypeResourceConfig'
       postgres:
         $ref: '#/definitions/models.ApplicationTypeResourceConfig'
+    type: object
+  models.DeploymentCreateRequest:
+    properties:
+      applicationSlug:
+        example: abc123de
+        type: string
+      gitRepository:
+        $ref: '#/definitions/models.GitRepositoryDeploymentConfig'
+    required:
+    - applicationSlug
+    type: object
+  models.DeploymentPhase:
+    enum:
+    - Initializing
+    - Running
+    - Succeeded
+    - Failed
+    - Waiting
+    type: string
+    x-enum-varnames:
+    - DeploymentPhaseInitializing
+    - DeploymentPhaseRunning
+    - DeploymentPhaseSucceeded
+    - DeploymentPhaseFailed
+    - DeploymentPhaseWaiting
+  models.DeploymentResponse:
+    properties:
+      applicationSlug:
+        example: abc123de
+        type: string
+      applicationUuid:
+        example: 550e8400-e29b-41d4-a716-446655440001
+        type: string
+      createdAt:
+        example: "2023-01-01T12:00:00Z"
+        type: string
+      gitRepository:
+        $ref: '#/definitions/models.GitRepositoryDeploymentConfig'
+      phase:
+        allOf:
+        - $ref: '#/definitions/models.DeploymentPhase'
+        example: Initializing
+      projectUuid:
+        example: 550e8400-e29b-41d4-a716-446655440002
+        type: string
+      slug:
+        example: def456gh
+        type: string
+      updatedAt:
+        example: "2023-01-01T12:00:00Z"
+        type: string
+      uuid:
+        example: 550e8400-e29b-41d4-a716-446655440000
+        type: string
+    type: object
+  models.DockerImageConfig:
+    properties:
+      image:
+        example: nginx:latest
+        type: string
+      imagePullSecretRef:
+        example: docker-registry-secret
+        type: string
+      tag:
+        example: v1.0.0
+        type: string
+    type: object
+  models.GitProvider:
+    enum:
+    - github.com
+    - gitlab.com
+    - bitbucket.com
+    type: string
+    x-enum-varnames:
+    - GitProviderGitHub
+    - GitProviderGitLab
+    - GitProviderBitbucket
+  models.GitRepositoryConfig:
+    properties:
+      branch:
+        example: main
+        type: string
+      buildCommand:
+        example: npm run build
+        type: string
+      env:
+        example: app-env-vars
+        type: string
+      path:
+        example: ""
+        type: string
+      provider:
+        allOf:
+        - $ref: '#/definitions/models.GitProvider'
+        example: github.com
+      publicAccess:
+        example: false
+        type: boolean
+      repository:
+        example: myorg/myapp
+        type: string
+      rootDirectory:
+        example: ./
+        type: string
+      secretRef:
+        example: git-credentials
+        type: string
+      spaOutputDirectory:
+        example: dist
+        type: string
+      startCommand:
+        example: npm start
+        type: string
+    type: object
+  models.GitRepositoryDeploymentConfig:
+    properties:
+      branch:
+        example: main
+        type: string
+      commitSHA:
+        example: abc123def456
+        type: string
+    required:
+    - commitSHA
+    type: object
+  models.MySQLClusterConfig:
+    properties:
+      database:
+        example: myapp
+        type: string
+      replicas:
+        example: 3
+        type: integer
+      secretRef:
+        example: mysql-cluster-credentials
+        type: string
+      version:
+        example: "8.0"
+        type: string
+    type: object
+  models.MySQLConfig:
+    properties:
+      database:
+        example: myapp
+        type: string
+      secretRef:
+        example: mysql-credentials
+        type: string
+      version:
+        example: "8.0"
+        type: string
+    type: object
+  models.PostgresClusterConfig:
+    properties:
+      database:
+        example: myapp
+        type: string
+      replicas:
+        example: 3
+        type: integer
+      secretRef:
+        example: postgres-cluster-credentials
+        type: string
+      version:
+        example: "15"
+        type: string
+    type: object
+  models.PostgresConfig:
+    properties:
+      database:
+        example: myapp
+        type: string
+      secretRef:
+        example: postgres-credentials
+        type: string
+      version:
+        example: "15"
+        type: string
     type: object
   models.ProjectCreateRequest:
     properties:
@@ -119,6 +498,25 @@ definitions:
       workspaceUuid:
         example: 6ba7b810-9dad-11d1-80b4-00c04fd430c8
         type: string
+    type: object
+  models.ProjectUpdateRequest:
+    properties:
+      customResourceLimits:
+        $ref: '#/definitions/models.CustomResourceLimits'
+      description:
+        example: Updated project description
+        type: string
+      enabledApplicationTypes:
+        $ref: '#/definitions/models.ApplicationTypeSettings'
+      name:
+        example: updated-project-name
+        type: string
+      resourceProfile:
+        allOf:
+        - $ref: '#/definitions/models.ResourceProfile'
+        example: production
+      volumeSettings:
+        $ref: '#/definitions/models.VolumeSettings'
     type: object
   models.ResourceBoundsSpec:
     properties:
@@ -182,6 +580,364 @@ info:
   title: Kibaship Operator API
   version: "1.0"
 paths:
+  /applications/{applicationSlug}/deployments:
+    get:
+      description: Retrieve all deployments for a specific application
+      parameters:
+      - description: Application slug (8-character identifier)
+        in: path
+        name: applicationSlug
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of deployments
+          schema:
+            items:
+              $ref: '#/definitions/models.DeploymentResponse'
+            type: array
+        "401":
+          description: Authentication required
+          schema:
+            $ref: '#/definitions/auth.ErrorResponse'
+        "404":
+          description: Application not found
+          schema:
+            $ref: '#/definitions/auth.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/auth.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get deployments by application
+      tags:
+      - deployments
+    post:
+      consumes:
+      - application/json
+      description: Create a new deployment for an application
+      parameters:
+      - description: Application slug (8-character identifier)
+        in: path
+        name: applicationSlug
+        required: true
+        type: string
+      - description: Deployment creation data
+        in: body
+        name: deployment
+        required: true
+        schema:
+          $ref: '#/definitions/models.DeploymentCreateRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Deployment created successfully
+          schema:
+            $ref: '#/definitions/models.DeploymentResponse'
+        "400":
+          description: Validation errors in request data
+          schema:
+            $ref: '#/definitions/models.ValidationErrors'
+        "401":
+          description: Authentication required
+          schema:
+            $ref: '#/definitions/auth.ErrorResponse'
+        "404":
+          description: Application not found
+          schema:
+            $ref: '#/definitions/auth.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/auth.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create a new deployment
+      tags:
+      - deployments
+  /applications/{applicationSlug}/domains:
+    get:
+      description: Retrieve all domains for a specific application
+      parameters:
+      - description: Application slug (8-character identifier)
+        in: path
+        name: applicationSlug
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of application domains
+          schema:
+            items:
+              $ref: '#/definitions/models.ApplicationDomainResponse'
+            type: array
+        "401":
+          description: Authentication required
+          schema:
+            $ref: '#/definitions/auth.ErrorResponse'
+        "404":
+          description: Application not found
+          schema:
+            $ref: '#/definitions/auth.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/auth.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get application domains by application
+      tags:
+      - application-domains
+    post:
+      consumes:
+      - application/json
+      description: Create a new domain for an application
+      parameters:
+      - description: Application slug (8-character identifier)
+        in: path
+        name: applicationSlug
+        required: true
+        type: string
+      - description: Application domain creation data
+        in: body
+        name: domain
+        required: true
+        schema:
+          $ref: '#/definitions/models.ApplicationDomainCreateRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Application domain created successfully
+          schema:
+            $ref: '#/definitions/models.ApplicationDomainResponse'
+        "400":
+          description: Validation errors in request data
+          schema:
+            $ref: '#/definitions/models.ValidationErrors'
+        "401":
+          description: Authentication required
+          schema:
+            $ref: '#/definitions/auth.ErrorResponse'
+        "404":
+          description: Application not found
+          schema:
+            $ref: '#/definitions/auth.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/auth.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create a new application domain
+      tags:
+      - application-domains
+  /applications/{slug}:
+    delete:
+      description: Delete an application by its unique slug identifier
+      parameters:
+      - description: Application slug (8-character identifier)
+        in: path
+        name: slug
+        required: true
+        type: string
+      responses:
+        "204":
+          description: Application deleted successfully
+        "401":
+          description: Authentication required
+          schema:
+            $ref: '#/definitions/auth.ErrorResponse'
+        "404":
+          description: Application not found
+          schema:
+            $ref: '#/definitions/auth.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/auth.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete application by slug
+      tags:
+      - applications
+    get:
+      description: Retrieve an application by its unique slug identifier
+      parameters:
+      - description: Application slug (8-character identifier)
+        in: path
+        name: slug
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Application details
+          schema:
+            $ref: '#/definitions/models.ApplicationResponse'
+        "401":
+          description: Authentication required
+          schema:
+            $ref: '#/definitions/auth.ErrorResponse'
+        "404":
+          description: Application not found
+          schema:
+            $ref: '#/definitions/auth.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/auth.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get application by slug
+      tags:
+      - applications
+    patch:
+      consumes:
+      - application/json
+      description: Update an application by its unique slug identifier with partial
+        updates
+      parameters:
+      - description: Application slug (8-character identifier)
+        in: path
+        name: slug
+        required: true
+        type: string
+      - description: Application update data
+        in: body
+        name: application
+        required: true
+        schema:
+          $ref: '#/definitions/models.ApplicationUpdateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Updated application details
+          schema:
+            $ref: '#/definitions/models.ApplicationResponse'
+        "400":
+          description: Validation errors in request data
+          schema:
+            $ref: '#/definitions/models.ValidationErrors'
+        "401":
+          description: Authentication required
+          schema:
+            $ref: '#/definitions/auth.ErrorResponse'
+        "404":
+          description: Application not found
+          schema:
+            $ref: '#/definitions/auth.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/auth.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update application by slug
+      tags:
+      - applications
+  /deployments/{slug}:
+    get:
+      description: Retrieve a deployment by its unique slug identifier
+      parameters:
+      - description: Deployment slug (8-character identifier)
+        in: path
+        name: slug
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Deployment details
+          schema:
+            $ref: '#/definitions/models.DeploymentResponse'
+        "401":
+          description: Authentication required
+          schema:
+            $ref: '#/definitions/auth.ErrorResponse'
+        "404":
+          description: Deployment not found
+          schema:
+            $ref: '#/definitions/auth.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/auth.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get deployment by slug
+      tags:
+      - deployments
+  /domains/{slug}:
+    delete:
+      description: Delete an application domain by its unique slug identifier
+      parameters:
+      - description: Application domain slug (8-character identifier)
+        in: path
+        name: slug
+        required: true
+        type: string
+      responses:
+        "204":
+          description: Application domain deleted successfully
+        "401":
+          description: Authentication required
+          schema:
+            $ref: '#/definitions/auth.ErrorResponse'
+        "404":
+          description: Application domain not found
+          schema:
+            $ref: '#/definitions/auth.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/auth.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete application domain by slug
+      tags:
+      - application-domains
+    get:
+      description: Retrieve an application domain by its unique slug identifier
+      parameters:
+      - description: Application domain slug (8-character identifier)
+        in: path
+        name: slug
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Application domain details
+          schema:
+            $ref: '#/definitions/models.ApplicationDomainResponse'
+        "401":
+          description: Authentication required
+          schema:
+            $ref: '#/definitions/auth.ErrorResponse'
+        "404":
+          description: Application domain not found
+          schema:
+            $ref: '#/definitions/auth.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/auth.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get application domain by slug
+      tags:
+      - application-domains
   /healthz:
     get:
       description: Check if the API server is healthy
@@ -233,7 +989,114 @@ paths:
       summary: Create a new project
       tags:
       - projects
+  /projects/{projectSlug}/applications:
+    get:
+      description: Retrieve all applications for a specific project
+      parameters:
+      - description: Project slug (8-character identifier)
+        in: path
+        name: projectSlug
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of applications
+          schema:
+            items:
+              $ref: '#/definitions/models.ApplicationResponse'
+            type: array
+        "401":
+          description: Authentication required
+          schema:
+            $ref: '#/definitions/auth.ErrorResponse'
+        "404":
+          description: Project not found
+          schema:
+            $ref: '#/definitions/auth.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/auth.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get applications by project
+      tags:
+      - applications
+    post:
+      consumes:
+      - application/json
+      description: Create a new application within a project with type-specific configuration
+      parameters:
+      - description: Project slug (8-character identifier)
+        in: path
+        name: projectSlug
+        required: true
+        type: string
+      - description: Application creation data
+        in: body
+        name: application
+        required: true
+        schema:
+          $ref: '#/definitions/models.ApplicationCreateRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Application created successfully
+          schema:
+            $ref: '#/definitions/models.ApplicationResponse'
+        "400":
+          description: Validation errors in request data
+          schema:
+            $ref: '#/definitions/models.ValidationErrors'
+        "401":
+          description: Authentication required
+          schema:
+            $ref: '#/definitions/auth.ErrorResponse'
+        "404":
+          description: Project not found
+          schema:
+            $ref: '#/definitions/auth.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/auth.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create a new application
+      tags:
+      - applications
   /projects/{slug}:
+    delete:
+      description: Delete a project by its unique slug identifier
+      parameters:
+      - description: Project slug (8-character identifier)
+        in: path
+        name: slug
+        required: true
+        type: string
+      responses:
+        "204":
+          description: Project deleted successfully
+        "401":
+          description: Authentication required
+          schema:
+            $ref: '#/definitions/auth.ErrorResponse'
+        "404":
+          description: Project not found
+          schema:
+            $ref: '#/definitions/auth.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/auth.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete project by slug
+      tags:
+      - projects
     get:
       description: Retrieve a project by its unique slug identifier
       parameters:
@@ -264,6 +1127,50 @@ paths:
       security:
       - BearerAuth: []
       summary: Get project by slug
+      tags:
+      - projects
+    patch:
+      consumes:
+      - application/json
+      description: Update a project by its unique slug identifier with partial updates
+      parameters:
+      - description: Project slug (8-character identifier)
+        in: path
+        name: slug
+        required: true
+        type: string
+      - description: Project update data
+        in: body
+        name: project
+        required: true
+        schema:
+          $ref: '#/definitions/models.ProjectUpdateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Updated project details
+          schema:
+            $ref: '#/definitions/models.ProjectResponse'
+        "400":
+          description: Validation errors in request data
+          schema:
+            $ref: '#/definitions/models.ValidationErrors'
+        "401":
+          description: Authentication required
+          schema:
+            $ref: '#/definitions/auth.ErrorResponse'
+        "404":
+          description: Project not found
+          schema:
+            $ref: '#/definitions/auth.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/auth.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update project by slug
       tags:
       - projects
   /readyz:
