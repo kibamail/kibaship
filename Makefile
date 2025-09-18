@@ -51,6 +51,8 @@ endif
 OPERATOR_SDK_VERSION ?= v1.38.0
 # Image URL to use all building/pushing image targets
 IMG ?= $(IMAGE_TAG_BASE):v$(VERSION)
+# API Server image URL
+IMG_APISERVER ?= $(IMAGE_TAG_BASE)-apiserver:v$(VERSION)
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -110,7 +112,11 @@ vet: ## Run go vet against code.
 
 .PHONY: test
 test: manifests generate fmt vet setup-envtest ## Run tests.
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v /e2e) -v -ginkgo.v -ginkgo.show-node-events -coverprofile cover.out
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v /e2e | grep -v /test/api) -v -ginkgo.v -ginkgo.show-node-events -coverprofile cover.out
+
+.PHONY: test-api
+test-api: fmt vet ## Run API integration tests.
+	go test ./test/api/... -v
 
 # TODO(user): To use a different vendor for e2e tests, modify the setup under 'tests/e2e'.
 # The default setup assumes Kind is pre-installed and builds/loads the Manager Docker image locally.
@@ -171,9 +177,28 @@ lint-config: golangci-lint ## Verify golangci-lint linter configuration
 build: manifests generate fmt vet ## Build manager binary.
 	go build -o bin/manager cmd/main.go
 
+.PHONY: build-apiserver
+build-apiserver: ## Build API server docker image.
+	$(CONTAINER_TOOL) build -t ${IMG_APISERVER} -f Dockerfile.apiserver .
+
+.PHONY: build-all
+build-all: build build-apiserver ## Build both manager and API server docker images.
+
 .PHONY: run
 run: manifests generate fmt vet ## Run a controller from your host.
 	go run ./cmd/main.go
+
+.PHONY: run-apiserver
+run-apiserver: fmt vet ## Run API server from your host.
+	go run ./cmd/apiserver/main.go
+
+.PHONY: generate-openapi
+generate-openapi: ## Generate OpenAPI documentation from code annotations.
+	go run github.com/swaggo/swag/cmd/swag@latest init -g cmd/apiserver/main.go -o docs
+
+.PHONY: validate-openapi
+validate-openapi: generate-openapi ## Generate and validate OpenAPI documentation.
+	go test ./test/api/ -run TestOpenAPISpecValidation
 
 # If you wish to build the manager image targeting other platforms you can use the --platform flag.
 # (i.e. docker build --platform linux/arm64). However, you must enable docker buildKit for it.
@@ -186,13 +211,20 @@ docker-build: ## Build docker image with the manager.
 docker-push: ## Push docker image with the manager.
 	$(CONTAINER_TOOL) push ${IMG}
 
+.PHONY: docker-push-apiserver
+docker-push-apiserver: ## Push docker image with the API server.
+	$(CONTAINER_TOOL) push ${IMG_APISERVER}
+
+.PHONY: docker-push-all
+docker-push-all: docker-push docker-push-apiserver ## Push both manager and API server docker images.
+
 # PLATFORMS defines the target platforms for the manager image be built to provide support to multiple
 # architectures. (i.e. make docker-buildx IMG=myregistry/mypoperator:0.0.1). To use this option you need to:
 # - be able to use docker buildx. More info: https://docs.docker.com/build/buildx/
 # - have enabled BuildKit. More info: https://docs.docker.com/develop/develop-images/build_enhancements/
 # - be able to push the image to your registry (i.e. if you do not set a valid value via IMG=<myregistry/image:<tag>> then the export will fail)
 # To adequately provide solutions that are compatible with multiple platforms, you should consider using this option.
-PLATFORMS ?= linux/arm64,linux/amd64,linux/s390x,linux/ppc64le
+PLATFORMS ?= linux/arm64,linux/amd64
 .PHONY: docker-buildx
 docker-buildx: ## Build and push docker image for the manager for cross-platform support
 	# copy existing Dockerfile and insert --platform=${BUILDPLATFORM} into Dockerfile.cross, and preserve the original Dockerfile
@@ -202,6 +234,19 @@ docker-buildx: ## Build and push docker image for the manager for cross-platform
 	- $(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) --tag ${IMG} -f Dockerfile.cross .
 	- $(CONTAINER_TOOL) buildx rm kibaship-operator-builder
 	rm Dockerfile.cross
+
+.PHONY: docker-buildx-apiserver
+docker-buildx-apiserver: ## Build and push docker image for the API server for cross-platform support
+	# copy existing Dockerfile.apiserver and insert --platform=${BUILDPLATFORM} into Dockerfile.apiserver.cross, and preserve the original Dockerfile.apiserver
+	sed -e '1 s/\(^FROM\)/FROM --platform=\$$\{BUILDPLATFORM\}/; t' -e ' 1,// s//FROM --platform=\$$\{BUILDPLATFORM\}/' Dockerfile.apiserver > Dockerfile.apiserver.cross
+	- $(CONTAINER_TOOL) buildx create --name kibaship-apiserver-builder
+	$(CONTAINER_TOOL) buildx use kibaship-apiserver-builder
+	- $(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) --tag ${IMG_APISERVER} -f Dockerfile.apiserver.cross .
+	- $(CONTAINER_TOOL) buildx rm kibaship-apiserver-builder
+	rm Dockerfile.apiserver.cross
+
+.PHONY: docker-buildx-all
+docker-buildx-all: docker-buildx docker-buildx-apiserver ## Build and push both manager and API server docker images for cross-platform support
 
 .PHONY: build-installer
 build-installer: manifests generate kustomize ## Generate a consolidated YAML with CRDs and deployment.

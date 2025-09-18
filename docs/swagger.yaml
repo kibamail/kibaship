@@ -1,0 +1,54 @@
+basePath: /
+definitions:
+  main.HealthResponse:
+    properties:
+      status:
+        example: ok
+        type: string
+    type: object
+  main.ReadyResponse:
+    properties:
+      status:
+        example: ready
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact:
+    email: support@kibamail.com
+    name: API Support
+  description: REST API server for managing Kibaship Operator resources
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: https://github.com/kibamail/kibaship-operator
+  title: Kibaship Operator API
+  version: "1.0"
+paths:
+  /healthz:
+    get:
+      description: Check if the API server is healthy
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.HealthResponse'
+      summary: Health check
+      tags:
+      - health
+  /readyz:
+    get:
+      description: Check if the API server is ready to serve requests
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.ReadyResponse'
+      summary: Readiness check
+      tags:
+      - health
+swagger: "2.0"
