@@ -121,12 +121,43 @@ func main() {
 	protected := router.Group("/")
 	protected.Use(authenticator.Middleware())
 	{
-		// Initialize handlers
+		// Initialize services with dependency injection
 		projectHandler := handlers.NewProjectHandler(projectService)
+		applicationService := services.NewApplicationService(k8sClient, scheme, projectService)
+		deploymentService := services.NewDeploymentService(k8sClient, scheme, applicationService)
+		applicationDomainService := services.NewApplicationDomainService(k8sClient, scheme, applicationService)
+
+		// Set circular dependencies for auto-loading
+		applicationService.SetDomainService(applicationDomainService)
+		applicationService.SetDeploymentService(deploymentService)
+
+		// Initialize handlers
+		applicationHandler := handlers.NewApplicationHandler(applicationService)
+		deploymentHandler := handlers.NewDeploymentHandler(deploymentService)
+		applicationDomainHandler := handlers.NewApplicationDomainHandler(applicationDomainService)
 
 		// Project endpoints
 		protected.POST("/projects", projectHandler.CreateProject)
-		protected.GET("/projects/:slug", projectHandler.GetProject)
+		protected.GET("/project/:slug", projectHandler.GetProject)
+		protected.PATCH("/project/:slug", projectHandler.UpdateProject)
+		protected.DELETE("/project/:slug", projectHandler.DeleteProject)
+
+		// Application endpoints
+		protected.POST("/projects/:projectSlug/applications", applicationHandler.CreateApplication)
+		protected.GET("/projects/:projectSlug/applications", applicationHandler.GetApplicationsByProject)
+		protected.GET("/application/:slug", applicationHandler.GetApplication)
+		protected.PATCH("/application/:slug", applicationHandler.UpdateApplication)
+		protected.DELETE("/application/:slug", applicationHandler.DeleteApplication)
+
+		// Deployment endpoints
+		protected.POST("/applications/:applicationSlug/deployments", deploymentHandler.CreateDeployment)
+		protected.GET("/applications/:applicationSlug/deployments", deploymentHandler.GetDeploymentsByApplication)
+		protected.GET("/deployments/:slug", deploymentHandler.GetDeployment)
+
+		// Application Domain endpoints
+		protected.POST("/applications/:applicationSlug/domains", applicationDomainHandler.CreateApplicationDomain)
+		protected.GET("/domains/:slug", applicationDomainHandler.GetApplicationDomain)
+		protected.DELETE("/domains/:slug", applicationDomainHandler.DeleteApplicationDomain)
 	}
 
 	// Get port from environment or use default

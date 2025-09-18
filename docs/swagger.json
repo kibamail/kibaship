@@ -17,6 +17,564 @@
     "host": "localhost:8080",
     "basePath": "/",
     "paths": {
+        "/applications/{applicationSlug}/deployments": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieve all deployments for a specific application",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "deployments"
+                ],
+                "summary": "Get deployments by application",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Application slug (8-character identifier)",
+                        "name": "applicationSlug",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "List of deployments",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.DeploymentResponse"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Application not found",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Create a new deployment for an application",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "deployments"
+                ],
+                "summary": "Create a new deployment",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Application slug (8-character identifier)",
+                        "name": "applicationSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Deployment creation data",
+                        "name": "deployment",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.DeploymentCreateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Deployment created successfully",
+                        "schema": {
+                            "$ref": "#/definitions/models.DeploymentResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Validation errors in request data",
+                        "schema": {
+                            "$ref": "#/definitions/models.ValidationErrors"
+                        }
+                    },
+                    "401": {
+                        "description": "Authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Application not found",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/applications/{applicationSlug}/domains": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieve all domains for a specific application",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "application-domains"
+                ],
+                "summary": "Get application domains by application",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Application slug (8-character identifier)",
+                        "name": "applicationSlug",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "List of application domains",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.ApplicationDomainResponse"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Application not found",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Create a new domain for an application",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "application-domains"
+                ],
+                "summary": "Create a new application domain",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Application slug (8-character identifier)",
+                        "name": "applicationSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Application domain creation data",
+                        "name": "domain",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.ApplicationDomainCreateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Application domain created successfully",
+                        "schema": {
+                            "$ref": "#/definitions/models.ApplicationDomainResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Validation errors in request data",
+                        "schema": {
+                            "$ref": "#/definitions/models.ValidationErrors"
+                        }
+                    },
+                    "401": {
+                        "description": "Authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Application not found",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/applications/{slug}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieve an application by its unique slug identifier",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "applications"
+                ],
+                "summary": "Get application by slug",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Application slug (8-character identifier)",
+                        "name": "slug",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Application details",
+                        "schema": {
+                            "$ref": "#/definitions/models.ApplicationResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Application not found",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Delete an application by its unique slug identifier",
+                "tags": [
+                    "applications"
+                ],
+                "summary": "Delete application by slug",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Application slug (8-character identifier)",
+                        "name": "slug",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "Application deleted successfully"
+                    },
+                    "401": {
+                        "description": "Authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Application not found",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Update an application by its unique slug identifier with partial updates",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "applications"
+                ],
+                "summary": "Update application by slug",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Application slug (8-character identifier)",
+                        "name": "slug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Application update data",
+                        "name": "application",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.ApplicationUpdateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Updated application details",
+                        "schema": {
+                            "$ref": "#/definitions/models.ApplicationResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Validation errors in request data",
+                        "schema": {
+                            "$ref": "#/definitions/models.ValidationErrors"
+                        }
+                    },
+                    "401": {
+                        "description": "Authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Application not found",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/deployments/{slug}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieve a deployment by its unique slug identifier",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "deployments"
+                ],
+                "summary": "Get deployment by slug",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Deployment slug (8-character identifier)",
+                        "name": "slug",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Deployment details",
+                        "schema": {
+                            "$ref": "#/definitions/models.DeploymentResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Deployment not found",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/domains/{slug}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieve an application domain by its unique slug identifier",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "application-domains"
+                ],
+                "summary": "Get application domain by slug",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Application domain slug (8-character identifier)",
+                        "name": "slug",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Application domain details",
+                        "schema": {
+                            "$ref": "#/definitions/models.ApplicationDomainResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Application domain not found",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Delete an application domain by its unique slug identifier",
+                "tags": [
+                    "application-domains"
+                ],
+                "summary": "Delete application domain by slug",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Application domain slug (8-character identifier)",
+                        "name": "slug",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "Application domain deleted successfully"
+                    },
+                    "401": {
+                        "description": "Authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Application domain not found",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/healthz": {
             "get": {
                 "description": "Check if the API server is healthy",
@@ -94,6 +652,129 @@
                 }
             }
         },
+        "/projects/{projectSlug}/applications": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieve all applications for a specific project",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "applications"
+                ],
+                "summary": "Get applications by project",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Project slug (8-character identifier)",
+                        "name": "projectSlug",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "List of applications",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.ApplicationResponse"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Project not found",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Create a new application within a project with type-specific configuration",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "applications"
+                ],
+                "summary": "Create a new application",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Project slug (8-character identifier)",
+                        "name": "projectSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Application creation data",
+                        "name": "application",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.ApplicationCreateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Application created successfully",
+                        "schema": {
+                            "$ref": "#/definitions/models.ApplicationResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Validation errors in request data",
+                        "schema": {
+                            "$ref": "#/definitions/models.ValidationErrors"
+                        }
+                    },
+                    "401": {
+                        "description": "Authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Project not found",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/projects/{slug}": {
             "get": {
                 "security": [
@@ -123,6 +804,118 @@
                         "description": "Project details",
                         "schema": {
                             "$ref": "#/definitions/models.ProjectResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Project not found",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Delete a project by its unique slug identifier",
+                "tags": [
+                    "projects"
+                ],
+                "summary": "Delete project by slug",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Project slug (8-character identifier)",
+                        "name": "slug",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "Project deleted successfully"
+                    },
+                    "401": {
+                        "description": "Authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Project not found",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Update a project by its unique slug identifier with partial updates",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "projects"
+                ],
+                "summary": "Update project by slug",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Project slug (8-character identifier)",
+                        "name": "slug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Project update data",
+                        "name": "project",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.ProjectUpdateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Updated project details",
+                        "schema": {
+                            "$ref": "#/definitions/models.ProjectResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Validation errors in request data",
+                        "schema": {
+                            "$ref": "#/definitions/models.ValidationErrors"
                         }
                     },
                     "401": {
@@ -199,6 +992,268 @@
                 }
             }
         },
+        "models.ApplicationCreateRequest": {
+            "type": "object",
+            "properties": {
+                "dockerImage": {
+                    "$ref": "#/definitions/models.DockerImageConfig"
+                },
+                "gitRepository": {
+                    "$ref": "#/definitions/models.GitRepositoryConfig"
+                },
+                "mysql": {
+                    "$ref": "#/definitions/models.MySQLConfig"
+                },
+                "mysqlCluster": {
+                    "$ref": "#/definitions/models.MySQLClusterConfig"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "my-web-app"
+                },
+                "postgres": {
+                    "$ref": "#/definitions/models.PostgresConfig"
+                },
+                "postgresCluster": {
+                    "$ref": "#/definitions/models.PostgresClusterConfig"
+                },
+                "projectSlug": {
+                    "type": "string",
+                    "example": "abc123de"
+                },
+                "type": {
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.ApplicationType"
+                        }
+                    ],
+                    "example": "DockerImage"
+                }
+            }
+        },
+        "models.ApplicationDomainCreateRequest": {
+            "type": "object",
+            "required": [
+                "applicationSlug",
+                "domain",
+                "port"
+            ],
+            "properties": {
+                "applicationSlug": {
+                    "type": "string",
+                    "example": "abc123de"
+                },
+                "default": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "domain": {
+                    "type": "string",
+                    "example": "my-app.example.com"
+                },
+                "port": {
+                    "type": "integer",
+                    "maximum": 65535,
+                    "minimum": 1,
+                    "example": 3000
+                },
+                "tlsEnabled": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "type": {
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.ApplicationDomainType"
+                        }
+                    ],
+                    "example": "custom"
+                }
+            }
+        },
+        "models.ApplicationDomainPhase": {
+            "type": "string",
+            "enum": [
+                "Pending",
+                "Ready",
+                "Failed"
+            ],
+            "x-enum-varnames": [
+                "ApplicationDomainPhasePending",
+                "ApplicationDomainPhaseReady",
+                "ApplicationDomainPhaseFailed"
+            ]
+        },
+        "models.ApplicationDomainResponse": {
+            "type": "object",
+            "properties": {
+                "applicationSlug": {
+                    "type": "string",
+                    "example": "abc123de"
+                },
+                "applicationUuid": {
+                    "type": "string",
+                    "example": "550e8400-e29b-41d4-a716-446655440001"
+                },
+                "certificateReady": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "createdAt": {
+                    "type": "string",
+                    "example": "2023-01-01T12:00:00Z"
+                },
+                "default": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "dnsConfigured": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "domain": {
+                    "type": "string",
+                    "example": "my-app.example.com"
+                },
+                "ingressReady": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "phase": {
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.ApplicationDomainPhase"
+                        }
+                    ],
+                    "example": "Pending"
+                },
+                "port": {
+                    "type": "integer",
+                    "example": 3000
+                },
+                "projectUuid": {
+                    "type": "string",
+                    "example": "550e8400-e29b-41d4-a716-446655440002"
+                },
+                "slug": {
+                    "type": "string",
+                    "example": "def456gh"
+                },
+                "tlsEnabled": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "type": {
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.ApplicationDomainType"
+                        }
+                    ],
+                    "example": "custom"
+                },
+                "updatedAt": {
+                    "type": "string",
+                    "example": "2023-01-01T12:00:00Z"
+                },
+                "uuid": {
+                    "type": "string",
+                    "example": "550e8400-e29b-41d4-a716-446655440000"
+                }
+            }
+        },
+        "models.ApplicationDomainType": {
+            "type": "string",
+            "enum": [
+                "default",
+                "custom"
+            ],
+            "x-enum-varnames": [
+                "ApplicationDomainTypeDefault",
+                "ApplicationDomainTypeCustom"
+            ]
+        },
+        "models.ApplicationResponse": {
+            "type": "object",
+            "properties": {
+                "createdAt": {
+                    "type": "string",
+                    "example": "2023-01-01T12:00:00Z"
+                },
+                "dockerImage": {
+                    "$ref": "#/definitions/models.DockerImageConfig"
+                },
+                "gitRepository": {
+                    "$ref": "#/definitions/models.GitRepositoryConfig"
+                },
+                "mysql": {
+                    "$ref": "#/definitions/models.MySQLConfig"
+                },
+                "mysqlCluster": {
+                    "$ref": "#/definitions/models.MySQLClusterConfig"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "my-web-app"
+                },
+                "postgres": {
+                    "$ref": "#/definitions/models.PostgresConfig"
+                },
+                "postgresCluster": {
+                    "$ref": "#/definitions/models.PostgresClusterConfig"
+                },
+                "projectSlug": {
+                    "type": "string",
+                    "example": "xyz789ab"
+                },
+                "projectUuid": {
+                    "type": "string",
+                    "example": "123e4567-e89b-12d3-a456-426614174001"
+                },
+                "slug": {
+                    "type": "string",
+                    "example": "abc123de"
+                },
+                "status": {
+                    "type": "string",
+                    "example": "Running"
+                },
+                "type": {
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.ApplicationType"
+                        }
+                    ],
+                    "example": "DockerImage"
+                },
+                "updatedAt": {
+                    "type": "string",
+                    "example": "2023-01-01T12:00:00Z"
+                },
+                "uuid": {
+                    "type": "string",
+                    "example": "123e4567-e89b-12d3-a456-426614174000"
+                }
+            }
+        },
+        "models.ApplicationType": {
+            "type": "string",
+            "enum": [
+                "MySQL",
+                "MySQLCluster",
+                "Postgres",
+                "PostgresCluster",
+                "DockerImage",
+                "GitRepository"
+            ],
+            "x-enum-varnames": [
+                "ApplicationTypeMySQL",
+                "ApplicationTypeMySQLCluster",
+                "ApplicationTypePostgres",
+                "ApplicationTypePostgresCluster",
+                "ApplicationTypeDockerImage",
+                "ApplicationTypeGitRepository"
+            ]
+        },
         "models.ApplicationTypeResourceConfig": {
             "type": "object",
             "properties": {
@@ -239,6 +1294,33 @@
                 }
             }
         },
+        "models.ApplicationUpdateRequest": {
+            "type": "object",
+            "properties": {
+                "dockerImage": {
+                    "$ref": "#/definitions/models.DockerImageConfig"
+                },
+                "gitRepository": {
+                    "$ref": "#/definitions/models.GitRepositoryConfig"
+                },
+                "mysql": {
+                    "$ref": "#/definitions/models.MySQLConfig"
+                },
+                "mysqlCluster": {
+                    "$ref": "#/definitions/models.MySQLClusterConfig"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "updated-web-app"
+                },
+                "postgres": {
+                    "$ref": "#/definitions/models.PostgresConfig"
+                },
+                "postgresCluster": {
+                    "$ref": "#/definitions/models.PostgresClusterConfig"
+                }
+            }
+        },
         "models.CustomResourceLimits": {
             "type": "object",
             "properties": {
@@ -253,6 +1335,257 @@
                 },
                 "postgres": {
                     "$ref": "#/definitions/models.ApplicationTypeResourceConfig"
+                }
+            }
+        },
+        "models.DeploymentCreateRequest": {
+            "type": "object",
+            "required": [
+                "applicationSlug"
+            ],
+            "properties": {
+                "applicationSlug": {
+                    "type": "string",
+                    "example": "abc123de"
+                },
+                "gitRepository": {
+                    "$ref": "#/definitions/models.GitRepositoryDeploymentConfig"
+                }
+            }
+        },
+        "models.DeploymentPhase": {
+            "type": "string",
+            "enum": [
+                "Initializing",
+                "Running",
+                "Succeeded",
+                "Failed",
+                "Waiting"
+            ],
+            "x-enum-varnames": [
+                "DeploymentPhaseInitializing",
+                "DeploymentPhaseRunning",
+                "DeploymentPhaseSucceeded",
+                "DeploymentPhaseFailed",
+                "DeploymentPhaseWaiting"
+            ]
+        },
+        "models.DeploymentResponse": {
+            "type": "object",
+            "properties": {
+                "applicationSlug": {
+                    "type": "string",
+                    "example": "abc123de"
+                },
+                "applicationUuid": {
+                    "type": "string",
+                    "example": "550e8400-e29b-41d4-a716-446655440001"
+                },
+                "createdAt": {
+                    "type": "string",
+                    "example": "2023-01-01T12:00:00Z"
+                },
+                "gitRepository": {
+                    "$ref": "#/definitions/models.GitRepositoryDeploymentConfig"
+                },
+                "phase": {
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.DeploymentPhase"
+                        }
+                    ],
+                    "example": "Initializing"
+                },
+                "projectUuid": {
+                    "type": "string",
+                    "example": "550e8400-e29b-41d4-a716-446655440002"
+                },
+                "slug": {
+                    "type": "string",
+                    "example": "def456gh"
+                },
+                "updatedAt": {
+                    "type": "string",
+                    "example": "2023-01-01T12:00:00Z"
+                },
+                "uuid": {
+                    "type": "string",
+                    "example": "550e8400-e29b-41d4-a716-446655440000"
+                }
+            }
+        },
+        "models.DockerImageConfig": {
+            "type": "object",
+            "properties": {
+                "image": {
+                    "type": "string",
+                    "example": "nginx:latest"
+                },
+                "imagePullSecretRef": {
+                    "type": "string",
+                    "example": "docker-registry-secret"
+                },
+                "tag": {
+                    "type": "string",
+                    "example": "v1.0.0"
+                }
+            }
+        },
+        "models.GitProvider": {
+            "type": "string",
+            "enum": [
+                "github.com",
+                "gitlab.com",
+                "bitbucket.com"
+            ],
+            "x-enum-varnames": [
+                "GitProviderGitHub",
+                "GitProviderGitLab",
+                "GitProviderBitbucket"
+            ]
+        },
+        "models.GitRepositoryConfig": {
+            "type": "object",
+            "properties": {
+                "branch": {
+                    "type": "string",
+                    "example": "main"
+                },
+                "buildCommand": {
+                    "type": "string",
+                    "example": "npm run build"
+                },
+                "env": {
+                    "type": "string",
+                    "example": "app-env-vars"
+                },
+                "path": {
+                    "type": "string",
+                    "example": ""
+                },
+                "provider": {
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.GitProvider"
+                        }
+                    ],
+                    "example": "github.com"
+                },
+                "publicAccess": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "repository": {
+                    "type": "string",
+                    "example": "myorg/myapp"
+                },
+                "rootDirectory": {
+                    "type": "string",
+                    "example": "./"
+                },
+                "secretRef": {
+                    "type": "string",
+                    "example": "git-credentials"
+                },
+                "spaOutputDirectory": {
+                    "type": "string",
+                    "example": "dist"
+                },
+                "startCommand": {
+                    "type": "string",
+                    "example": "npm start"
+                }
+            }
+        },
+        "models.GitRepositoryDeploymentConfig": {
+            "type": "object",
+            "required": [
+                "commitSHA"
+            ],
+            "properties": {
+                "branch": {
+                    "type": "string",
+                    "example": "main"
+                },
+                "commitSHA": {
+                    "type": "string",
+                    "example": "abc123def456"
+                }
+            }
+        },
+        "models.MySQLClusterConfig": {
+            "type": "object",
+            "properties": {
+                "database": {
+                    "type": "string",
+                    "example": "myapp"
+                },
+                "replicas": {
+                    "type": "integer",
+                    "example": 3
+                },
+                "secretRef": {
+                    "type": "string",
+                    "example": "mysql-cluster-credentials"
+                },
+                "version": {
+                    "type": "string",
+                    "example": "8.0"
+                }
+            }
+        },
+        "models.MySQLConfig": {
+            "type": "object",
+            "properties": {
+                "database": {
+                    "type": "string",
+                    "example": "myapp"
+                },
+                "secretRef": {
+                    "type": "string",
+                    "example": "mysql-credentials"
+                },
+                "version": {
+                    "type": "string",
+                    "example": "8.0"
+                }
+            }
+        },
+        "models.PostgresClusterConfig": {
+            "type": "object",
+            "properties": {
+                "database": {
+                    "type": "string",
+                    "example": "myapp"
+                },
+                "replicas": {
+                    "type": "integer",
+                    "example": 3
+                },
+                "secretRef": {
+                    "type": "string",
+                    "example": "postgres-cluster-credentials"
+                },
+                "version": {
+                    "type": "string",
+                    "example": "15"
+                }
+            }
+        },
+        "models.PostgresConfig": {
+            "type": "object",
+            "properties": {
+                "database": {
+                    "type": "string",
+                    "example": "myapp"
+                },
+                "secretRef": {
+                    "type": "string",
+                    "example": "postgres-credentials"
+                },
+                "version": {
+                    "type": "string",
+                    "example": "15"
                 }
             }
         },
@@ -342,6 +1675,36 @@
                 "workspaceUuid": {
                     "type": "string",
                     "example": "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+                }
+            }
+        },
+        "models.ProjectUpdateRequest": {
+            "type": "object",
+            "properties": {
+                "customResourceLimits": {
+                    "$ref": "#/definitions/models.CustomResourceLimits"
+                },
+                "description": {
+                    "type": "string",
+                    "example": "Updated project description"
+                },
+                "enabledApplicationTypes": {
+                    "$ref": "#/definitions/models.ApplicationTypeSettings"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "updated-project-name"
+                },
+                "resourceProfile": {
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.ResourceProfile"
+                        }
+                    ],
+                    "example": "production"
+                },
+                "volumeSettings": {
+                    "$ref": "#/definitions/models.VolumeSettings"
                 }
             }
         },

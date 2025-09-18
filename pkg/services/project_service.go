@@ -125,6 +125,144 @@ func (s *ProjectService) GetProject(ctx context.Context, slug string) (*models.P
 	return project, nil
 }
 
+// DeleteProject deletes a project by slug
+func (s *ProjectService) DeleteProject(ctx context.Context, slug string) error {
+	// First check if project exists
+	var projectList v1alpha1.ProjectList
+	err := s.client.List(ctx, &projectList, client.MatchingLabels{
+		validation.LabelResourceSlug: slug,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to list projects: %w", err)
+	}
+
+	if len(projectList.Items) == 0 {
+		return fmt.Errorf("project with slug %s not found", slug)
+	}
+
+	if len(projectList.Items) > 1 {
+		return fmt.Errorf("multiple projects found with slug %s", slug)
+	}
+
+	// Delete the project CRD
+	project := &projectList.Items[0]
+	err = s.client.Delete(ctx, project)
+	if err != nil {
+		return fmt.Errorf("failed to delete Project CRD: %w", err)
+	}
+
+	return nil
+}
+
+// UpdateProject updates a project by slug with partial updates (PATCH)
+func (s *ProjectService) UpdateProject(ctx context.Context, slug string, req *models.ProjectUpdateRequest) (*models.Project, error) {
+	// First get the existing project
+	var projectList v1alpha1.ProjectList
+	err := s.client.List(ctx, &projectList, client.MatchingLabels{
+		validation.LabelResourceSlug: slug,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list projects: %w", err)
+	}
+
+	if len(projectList.Items) == 0 {
+		return nil, fmt.Errorf("project with slug %s not found", slug)
+	}
+
+	if len(projectList.Items) > 1 {
+		return nil, fmt.Errorf("multiple projects found with slug %s", slug)
+	}
+
+	// Get the existing CRD
+	existingCRD := &projectList.Items[0]
+
+	// Apply updates to annotations and spec
+	s.applyProjectUpdates(existingCRD, req)
+
+	// Update the CRD in Kubernetes
+	err = s.client.Update(ctx, existingCRD)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update Project CRD: %w", err)
+	}
+
+	// Convert back to internal model and return
+	updatedProject := s.convertFromProjectCRD(existingCRD)
+	return updatedProject, nil
+}
+
+// applyProjectUpdates applies patch updates to the existing CRD
+func (s *ProjectService) applyProjectUpdates(crd *v1alpha1.Project, req *models.ProjectUpdateRequest) {
+	annotations := crd.GetAnnotations()
+	if annotations == nil {
+		annotations = make(map[string]string)
+	}
+
+	// Update name in annotations
+	if req.Name != nil {
+		annotations[validation.AnnotationResourceName] = *req.Name
+		crd.SetAnnotations(annotations)
+	}
+
+	// Update description in annotations
+	if req.Description != nil {
+		annotations[validation.AnnotationResourceDescription] = *req.Description
+		crd.SetAnnotations(annotations)
+	}
+
+	// Update resource profile and regenerate spec if needed
+	if req.ResourceProfile != nil || req.CustomResourceLimits != nil {
+		profile := models.ResourceProfileDevelopment
+		if req.ResourceProfile != nil {
+			profile = *req.ResourceProfile
+		} else {
+			// Determine current profile from existing spec (simplified)
+			profile = s.determineCurrentResourceProfile(&crd.Spec.ApplicationTypes)
+		}
+
+		// Get new application types config
+		applicationTypesConfig := templates.GetResourceProfileTemplate(profile, req.CustomResourceLimits)
+
+		// Apply enablement settings if provided
+		if req.EnabledApplicationTypes != nil {
+			s.applyApplicationTypeEnablement(&applicationTypesConfig, req.EnabledApplicationTypes)
+		} else {
+			// Preserve existing enablement settings
+			existingEnablement := s.extractApplicationTypeSettings(&crd.Spec.ApplicationTypes)
+			s.applyApplicationTypeEnablement(&applicationTypesConfig, &existingEnablement)
+		}
+
+		crd.Spec.ApplicationTypes = applicationTypesConfig
+	} else if req.EnabledApplicationTypes != nil {
+		// Only update enablement settings
+		s.applyApplicationTypeEnablement(&crd.Spec.ApplicationTypes, req.EnabledApplicationTypes)
+	}
+
+	// Update volume settings
+	if req.VolumeSettings != nil && req.VolumeSettings.MaxStorageSize != "" {
+		crd.Spec.Volumes.MaxStorageSize = req.VolumeSettings.MaxStorageSize
+	}
+}
+
+// determineCurrentResourceProfile determines the resource profile from the current spec
+func (s *ProjectService) determineCurrentResourceProfile(appTypes *v1alpha1.ApplicationTypesConfig) models.ResourceProfile {
+	// Check MySQL default limits to determine profile
+	mysqlCPU := appTypes.MySQL.DefaultLimits.CPU
+	mysqlMemory := appTypes.MySQL.DefaultLimits.Memory
+
+	// Production profile has higher limits: 2 CPU, 4Gi memory
+	if mysqlCPU == "2" && mysqlMemory == "4Gi" {
+		return models.ResourceProfileProduction
+	}
+
+	// Development profile has lower limits: 500m CPU, 1Gi memory
+	if mysqlCPU == "500m" && mysqlMemory == "1Gi" {
+		return models.ResourceProfileDevelopment
+	}
+
+	// If it doesn't match standard profiles, it's likely custom
+	return models.ResourceProfileCustom
+}
+
 // slugExists checks if a project with the given slug already exists
 func (s *ProjectService) slugExists(ctx context.Context, slug string) (bool, error) {
 	var projectList v1alpha1.ProjectList
@@ -181,7 +319,8 @@ func (s *ProjectService) convertToProjectCRD(project *models.Project, req *model
 				validation.LabelWorkspaceUUID: project.WorkspaceUUID,
 			},
 			Annotations: map[string]string{
-				validation.AnnotationResourceName: project.Name,
+				validation.AnnotationResourceName:        project.Name,
+				validation.AnnotationResourceDescription: project.Description,
 			},
 		},
 		Spec: v1alpha1.ProjectSpec{
@@ -206,14 +345,14 @@ func (s *ProjectService) convertFromProjectCRD(crd *v1alpha1.Project) *models.Pr
 	// Extract application type settings
 	appTypes := s.extractApplicationTypeSettings(&crd.Spec.ApplicationTypes)
 
-	// Determine resource profile (simplified - in reality you'd need more logic)
-	resourceProfile := models.ResourceProfileDevelopment
+	// Determine resource profile from spec
+	resourceProfile := s.determineCurrentResourceProfile(&crd.Spec.ApplicationTypes)
 
 	return &models.Project{
 		UUID:                    labels[validation.LabelResourceUUID],
 		Name:                    annotations[validation.AnnotationResourceName],
 		Slug:                    labels[validation.LabelResourceSlug],
-		Description:             "", // Would need to be stored in annotations or spec
+		Description:             annotations[validation.AnnotationResourceDescription],
 		WorkspaceUUID:           labels[validation.LabelWorkspaceUUID],
 		EnabledApplicationTypes: appTypes,
 		ResourceProfile:         resourceProfile,

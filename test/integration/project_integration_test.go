@@ -282,7 +282,7 @@ func TestProjectRetrievalIntegration(t *testing.T) {
 
 	// Now test retrieval by slug
 	t.Run("Get project by slug", func(t *testing.T) {
-		req, err := http.NewRequest("GET", "/projects/"+createdProject.Slug, nil)
+		req, err := http.NewRequest("GET", "/project/"+createdProject.Slug, nil)
 		require.NoError(t, err)
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 
@@ -388,16 +388,48 @@ func setupIntegrationTestRouter(apiKey string) *gin.Engine {
 	// Create authenticator
 	authenticator := auth.NewAPIKeyAuthenticator(apiKey)
 
-	// Create real project service with Kubernetes client
+	// Create real services with Kubernetes client and dependency injection
 	projectService := services.NewProjectService(k8sClient, scheme)
 	projectHandler := handlers.NewProjectHandler(projectService)
+	applicationService := services.NewApplicationService(k8sClient, scheme, projectService)
+	deploymentService := services.NewDeploymentService(k8sClient, scheme, applicationService)
+	applicationDomainService := services.NewApplicationDomainService(k8sClient, scheme, applicationService)
+
+	// Set circular dependencies for auto-loading
+	applicationService.SetDomainService(applicationDomainService)
+	applicationService.SetDeploymentService(deploymentService)
+
+	// Create handlers
+	applicationHandler := handlers.NewApplicationHandler(applicationService)
+	deploymentHandler := handlers.NewDeploymentHandler(deploymentService)
+	applicationDomainHandler := handlers.NewApplicationDomainHandler(applicationDomainService)
 
 	// Protected routes
 	protected := router.Group("/")
 	protected.Use(authenticator.Middleware())
 	{
+		// Project endpoints
 		protected.POST("/projects", projectHandler.CreateProject)
-		protected.GET("/projects/:slug", projectHandler.GetProject)
+		protected.GET("/project/:slug", projectHandler.GetProject)
+		protected.PATCH("/project/:slug", projectHandler.UpdateProject)
+		protected.DELETE("/project/:slug", projectHandler.DeleteProject)
+
+		// Application endpoints
+		protected.POST("/projects/:projectSlug/applications", applicationHandler.CreateApplication)
+		protected.GET("/projects/:projectSlug/applications", applicationHandler.GetApplicationsByProject)
+		protected.GET("/application/:slug", applicationHandler.GetApplication)
+		protected.PATCH("/application/:slug", applicationHandler.UpdateApplication)
+		protected.DELETE("/application/:slug", applicationHandler.DeleteApplication)
+
+		// Deployment endpoints
+		protected.POST("/applications/:applicationSlug/deployments", deploymentHandler.CreateDeployment)
+		protected.GET("/applications/:applicationSlug/deployments", deploymentHandler.GetDeploymentsByApplication)
+		protected.GET("/deployments/:slug", deploymentHandler.GetDeployment)
+
+		// Application Domain endpoints
+		protected.POST("/applications/:applicationSlug/domains", applicationDomainHandler.CreateApplicationDomain)
+		protected.GET("/domains/:slug", applicationDomainHandler.GetApplicationDomain)
+		protected.DELETE("/domains/:slug", applicationDomainHandler.DeleteApplicationDomain)
 	}
 
 	return router
@@ -413,4 +445,223 @@ func boolPtr(b bool) *bool {
 
 func resourceProfilePtr(profile models.ResourceProfile) *models.ResourceProfile {
 	return &profile
+}
+
+func TestProjectUpdateIntegration(t *testing.T) {
+	ctx := context.Background()
+	apiKey := generateTestAPIKey()
+	router := setupIntegrationTestRouter(apiKey)
+
+	// First, create a project to update
+	payload := models.ProjectCreateRequest{
+		Name:            "Project To Update",
+		Description:     "Original description",
+		WorkspaceUUID:   "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+		ResourceProfile: resourceProfilePtr(models.ResourceProfileDevelopment),
+	}
+
+	jsonData, err := json.Marshal(payload)
+	require.NoError(t, err)
+
+	req, err := http.NewRequest("POST", "/projects", bytes.NewBuffer(jsonData))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusCreated, w.Code)
+
+	var createdProject models.ProjectResponse
+	err = json.Unmarshal(w.Body.Bytes(), &createdProject)
+	require.NoError(t, err)
+
+	// Test 1: Update project name and description
+	t.Run("Update project name and description", func(t *testing.T) {
+		updateReq := models.ProjectUpdateRequest{
+			Name:        stringPtr("Updated Project Name"),
+			Description: stringPtr("Updated description"),
+		}
+
+		jsonData, err := json.Marshal(updateReq)
+		require.NoError(t, err)
+
+		req, err := http.NewRequest("PATCH", "/project/"+createdProject.Slug, bytes.NewBuffer(jsonData))
+		require.NoError(t, err)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+
+		var updatedProject models.ProjectResponse
+		err = json.Unmarshal(w.Body.Bytes(), &updatedProject)
+		require.NoError(t, err)
+
+		assert.Equal(t, "Updated Project Name", updatedProject.Name)
+		assert.Equal(t, "Updated description", updatedProject.Description)
+		assert.Equal(t, createdProject.UUID, updatedProject.UUID)
+		assert.Equal(t, createdProject.Slug, updatedProject.Slug)
+
+		// Verify in Kubernetes
+		var project v1alpha1.Project
+		err = k8sClient.Get(ctx, client.ObjectKey{
+			Name: "project-" + createdProject.Slug,
+		}, &project)
+		require.NoError(t, err)
+
+		annotations := project.GetAnnotations()
+		assert.Equal(t, "Updated Project Name", annotations[validation.AnnotationResourceName])
+		assert.Equal(t, "Updated description", annotations[validation.AnnotationResourceDescription])
+	})
+
+	// Test 2: Update resource profile
+	t.Run("Update resource profile to production", func(t *testing.T) {
+		updateReq := models.ProjectUpdateRequest{
+			ResourceProfile: resourceProfilePtr(models.ResourceProfileProduction),
+		}
+
+		jsonData, err := json.Marshal(updateReq)
+		require.NoError(t, err)
+
+		req, err := http.NewRequest("PATCH", "/project/"+createdProject.Slug, bytes.NewBuffer(jsonData))
+		require.NoError(t, err)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+
+		var updatedProject models.ProjectResponse
+		err = json.Unmarshal(w.Body.Bytes(), &updatedProject)
+		require.NoError(t, err)
+
+		assert.Equal(t, models.ResourceProfileProduction, updatedProject.ResourceProfile)
+
+		// Verify production defaults were applied in Kubernetes
+		var project v1alpha1.Project
+		err = k8sClient.Get(ctx, client.ObjectKey{
+			Name: "project-" + createdProject.Slug,
+		}, &project)
+		require.NoError(t, err)
+
+		// Production profile should have higher limits
+		assert.Equal(t, "2", project.Spec.ApplicationTypes.MySQL.DefaultLimits.CPU)
+		assert.Equal(t, "4Gi", project.Spec.ApplicationTypes.MySQL.DefaultLimits.Memory)
+	})
+
+	// Test 3: Update non-existent project
+	t.Run("Update non-existent project returns 404", func(t *testing.T) {
+		updateReq := models.ProjectUpdateRequest{
+			Name: stringPtr("Non-existent"),
+		}
+
+		jsonData, err := json.Marshal(updateReq)
+		require.NoError(t, err)
+
+		req, err := http.NewRequest("PATCH", "/projects/notfound", bytes.NewBuffer(jsonData))
+		require.NoError(t, err)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusNotFound, w.Code)
+	})
+
+	// Clean up
+	var project v1alpha1.Project
+	err = k8sClient.Get(ctx, client.ObjectKey{
+		Name: "project-" + createdProject.Slug,
+	}, &project)
+	if err == nil {
+		k8sClient.Delete(ctx, &project)
+	}
+}
+
+func TestProjectDeleteIntegration(t *testing.T) {
+	ctx := context.Background()
+	apiKey := generateTestAPIKey()
+	router := setupIntegrationTestRouter(apiKey)
+
+	// First, create a project to delete
+	payload := models.ProjectCreateRequest{
+		Name:          "Project To Delete",
+		WorkspaceUUID: "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+	}
+
+	jsonData, err := json.Marshal(payload)
+	require.NoError(t, err)
+
+	req, err := http.NewRequest("POST", "/projects", bytes.NewBuffer(jsonData))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusCreated, w.Code)
+
+	var createdProject models.ProjectResponse
+	err = json.Unmarshal(w.Body.Bytes(), &createdProject)
+	require.NoError(t, err)
+
+	// Verify project exists in Kubernetes
+	var project v1alpha1.Project
+	err = k8sClient.Get(ctx, client.ObjectKey{
+		Name: "project-" + createdProject.Slug,
+	}, &project)
+	require.NoError(t, err, "Project should exist before deletion")
+
+	// Test 1: Delete the project
+	t.Run("Delete existing project", func(t *testing.T) {
+		req, err := http.NewRequest("DELETE", "/project/"+createdProject.Slug, nil)
+		require.NoError(t, err)
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusNoContent, w.Code)
+
+		// Verify project no longer exists in Kubernetes
+		var project v1alpha1.Project
+		err = k8sClient.Get(ctx, client.ObjectKey{
+			Name: "project-" + createdProject.Slug,
+		}, &project)
+		assert.Error(t, err, "Project should not exist after deletion")
+	})
+
+	// Test 2: Try to delete the same project again (should return 404)
+	t.Run("Delete non-existent project returns 404", func(t *testing.T) {
+		req, err := http.NewRequest("DELETE", "/project/"+createdProject.Slug, nil)
+		require.NoError(t, err)
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusNotFound, w.Code)
+	})
+
+	// Test 3: Try to delete with non-existent slug
+	t.Run("Delete with non-existent slug returns 404", func(t *testing.T) {
+		req, err := http.NewRequest("DELETE", "/projects/notfound", nil)
+		require.NoError(t, err)
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusNotFound, w.Code)
+	})
+}
+
+func stringPtr(s string) *string {
+	return &s
 }

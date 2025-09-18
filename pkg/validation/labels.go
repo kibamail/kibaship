@@ -38,6 +38,8 @@ const (
 
 	// AnnotationResourceName is the annotation key for resource display name
 	AnnotationResourceName = "platform.kibaship.com/name"
+	// AnnotationResourceDescription is the annotation key for resource description
+	AnnotationResourceDescription = "platform.kibaship.com/description"
 )
 
 // ValidateUUID validates that a string is a valid UUID format

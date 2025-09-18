@@ -357,6 +357,84 @@ func validateApplicationTypeResourceConfig(prefix string, config *ApplicationTyp
 	return errors
 }
 
+// ProjectUpdateRequest represents a request to update a project (PATCH operation)
+type ProjectUpdateRequest struct {
+	Name                    *string                  `json:"name,omitempty" example:"updated-project-name"`
+	Description             *string                  `json:"description,omitempty" example:"Updated project description"`
+	EnabledApplicationTypes *ApplicationTypeSettings `json:"enabledApplicationTypes,omitempty"`
+	ResourceProfile         *ResourceProfile         `json:"resourceProfile,omitempty" example:"production"`
+	CustomResourceLimits    *CustomResourceLimits    `json:"customResourceLimits,omitempty"`
+	VolumeSettings          *VolumeSettings          `json:"volumeSettings,omitempty"`
+}
+
+// ValidateUpdate validates a project update request
+func (req *ProjectUpdateRequest) ValidateUpdate() *ValidationErrors {
+	var errors []ValidationError
+
+	// Validate name if provided
+	if req.Name != nil {
+		if strings.TrimSpace(*req.Name) == "" {
+			errors = append(errors, ValidationError{
+				Field:   "name",
+				Message: "Project name cannot be empty",
+			})
+		}
+		if len(*req.Name) > 100 {
+			errors = append(errors, ValidationError{
+				Field:   "name",
+				Message: "Project name cannot exceed 100 characters",
+			})
+		}
+	}
+
+	// Validate description if provided
+	if req.Description != nil && len(*req.Description) > 500 {
+		errors = append(errors, ValidationError{
+			Field:   "description",
+			Message: "Project description cannot exceed 500 characters",
+		})
+	}
+
+	// Validate resource profile if provided
+	if req.ResourceProfile != nil {
+		if !isValidResourceProfile(*req.ResourceProfile) {
+			errors = append(errors, ValidationError{
+				Field:   "resourceProfile",
+				Message: "Resource profile must be one of: development, production, custom",
+			})
+		}
+
+		// If custom profile, custom resource limits should be provided
+		if *req.ResourceProfile == ResourceProfileCustom && req.CustomResourceLimits == nil {
+			errors = append(errors, ValidationError{
+				Field:   "customResourceLimits",
+				Message: "Custom resource limits are required when using 'custom' resource profile",
+			})
+		}
+	}
+
+	// Validate custom resource limits if provided
+	if req.CustomResourceLimits != nil {
+		errors = append(errors, validateCustomResourceLimits(req.CustomResourceLimits)...)
+	}
+
+	// Validate volume settings if provided
+	if req.VolumeSettings != nil && req.VolumeSettings.MaxStorageSize != "" {
+		if !isValidStorageSize(req.VolumeSettings.MaxStorageSize) {
+			errors = append(errors, ValidationError{
+				Field:   "volumeSettings.maxStorageSize",
+				Message: "Max storage size must be in valid format (e.g., '100Gi', '500Mi', '1Ti')",
+			})
+		}
+	}
+
+	if len(errors) > 0 {
+		return &ValidationErrors{Errors: errors}
+	}
+
+	return nil
+}
+
 func boolPtr(b bool) *bool {
 	return &b
 }
