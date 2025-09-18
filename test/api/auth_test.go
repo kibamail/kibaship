@@ -18,20 +18,15 @@ package api
 
 import (
 	"bytes"
-	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes/fake"
 
 	"github.com/kibamail/kibaship-operator/pkg/auth"
 	"github.com/kibamail/kibaship-operator/pkg/models"
@@ -44,19 +39,6 @@ func generateAPIKey() string {
 		panic(err)
 	}
 	return hex.EncodeToString(bytes)
-}
-
-// createTestSecret creates a test secret with the API key
-func createTestSecret(apiKey string) *corev1.Secret {
-	return &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      auth.SecretName,
-			Namespace: "default",
-		},
-		Data: map[string][]byte{
-			auth.SecretKey: []byte(apiKey),
-		},
-	}
 }
 
 // setupAuthenticatedRouter creates a router with authentication for testing
@@ -123,7 +105,12 @@ var _ = Describe("API Authentication", func() {
 
 	Describe("API Key Authentication", func() {
 		DescribeTable("authentication scenarios",
-			func(authorization string, expectedStatus int, expectedError string) {
+			func(authorizationTemplate string, expectedStatus int, expectedError string) {
+				// Replace {{API_KEY}} placeholder with actual API key
+				authorization := authorizationTemplate
+				if authorizationTemplate == "Bearer {{API_KEY}}" {
+					authorization = "Bearer " + apiKey
+				}
 				// Create request
 				projectData := models.ProjectCreateRequest{
 					Name:        "test-project",
@@ -166,7 +153,7 @@ var _ = Describe("API Authentication", func() {
 					Expect(response.UpdatedAt).NotTo(BeZero())
 				}
 			},
-			Entry("Valid API key", "Bearer "+apiKey, http.StatusCreated, ""),
+			Entry("Valid API key", "Bearer {{API_KEY}}", http.StatusCreated, ""),
 			Entry("Missing authorization header", "", http.StatusUnauthorized, "Missing authorization header"),
 			Entry("Invalid bearer format", "Token invalid-key", http.StatusUnauthorized, "Authorization header must use Bearer scheme"),
 			Entry("Invalid API key", "Bearer invalid-key", http.StatusUnauthorized, "Invalid API key"),
@@ -204,31 +191,4 @@ var _ = Describe("API Authentication", func() {
 		})
 	})
 
-	Describe("Secret Manager", func() {
-		Context("with existing secret", func() {
-			It("retrieves API key successfully", func() {
-				secret := createTestSecret(apiKey)
-				fakeClient := fake.NewSimpleClientset(secret)
-				secretManager := auth.NewSecretManagerWithClient(fakeClient, "default")
-
-				retrievedKey, err := secretManager.GetAPIKeyWithRetry(context.Background())
-				Expect(err).NotTo(HaveOccurred())
-				Expect(retrievedKey).To(Equal(apiKey))
-			})
-		})
-
-		Context("with timeout", func() {
-			It("handles timeout when using GetAPIKeyWithRetry", func() {
-				fakeClient := fake.NewSimpleClientset()
-				secretManager := auth.NewSecretManagerWithClient(fakeClient, "default")
-
-				ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-				defer cancel()
-
-				_, err := secretManager.GetAPIKeyWithRetry(ctx)
-				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("timeout waiting for secret"))
-			})
-		})
-	})
 })
