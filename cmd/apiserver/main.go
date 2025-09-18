@@ -65,19 +65,19 @@ func main() {
 		namespace = "default"
 	}
 
-	// Initialize secret manager and retrieve API key
+	// Initialize secret manager and create/retrieve API key
 	log.Println("Initializing API key authentication...")
 	secretManager, err := auth.NewSecretManager(namespace)
 	if err != nil {
 		log.Fatalf("Failed to create secret manager: %v", err)
 	}
 
-	apiKey, err := secretManager.GetAPIKeyWithRetry(context.Background())
+	apiKey, err := secretManager.CreateOrGetAPIKey(context.Background())
 	if err != nil {
-		log.Fatalf("Failed to retrieve API key from secret: %v", err)
+		log.Fatalf("Failed to create or retrieve API key: %v", err)
 	}
 
-	log.Println("API key retrieved successfully from Kubernetes secret")
+	log.Println("API key ready for authentication")
 
 	// Initialize Kubernetes client and scheme
 	log.Println("Initializing Kubernetes client...")

@@ -18,10 +18,13 @@ package auth
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"log"
-	"time"
 
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -32,10 +35,6 @@ const (
 	SecretName = "api-server-api-key-kibaship-com"
 	// SecretKey is the key within the secret data
 	SecretKey = "api-key"
-	// MaxRetryDuration is the maximum time to retry fetching the secret
-	MaxRetryDuration = 5 * time.Minute
-	// RetryInterval is the interval between retry attempts
-	RetryInterval = 15 * time.Second
 )
 
 // SecretManager handles retrieving API keys from Kubernetes secrets
@@ -70,37 +69,6 @@ func NewSecretManagerWithClient(client kubernetes.Interface, namespace string) *
 	}
 }
 
-// GetAPIKeyWithRetry retrieves the API key from the secret with retry logic
-func (s *SecretManager) GetAPIKeyWithRetry(ctx context.Context) (string, error) {
-	ctx, cancel := context.WithTimeout(ctx, MaxRetryDuration)
-	defer cancel()
-
-	ticker := time.NewTicker(RetryInterval)
-	defer ticker.Stop()
-
-	// Try immediately first
-	if apiKey, err := s.getAPIKey(ctx); err == nil {
-		return apiKey, nil
-	} else {
-		log.Printf("Failed to get API key, will retry: %v", err)
-	}
-
-	// Then retry with intervals
-	for {
-		select {
-		case <-ctx.Done():
-			return "", fmt.Errorf("timeout waiting for secret %s in namespace %s: %w", SecretName, s.namespace, ctx.Err())
-		case <-ticker.C:
-			if apiKey, err := s.getAPIKey(ctx); err == nil {
-				log.Printf("Successfully retrieved API key from secret %s", SecretName)
-				return apiKey, nil
-			} else {
-				log.Printf("Retrying to get API key: %v", err)
-			}
-		}
-	}
-}
-
 // getAPIKey retrieves the API key from the secret (single attempt)
 func (s *SecretManager) getAPIKey(ctx context.Context) (string, error) {
 	secret, err := s.client.CoreV1().Secrets(s.namespace).Get(ctx, SecretName, metav1.GetOptions{})
@@ -118,4 +86,60 @@ func (s *SecretManager) getAPIKey(ctx context.Context) (string, error) {
 	}
 
 	return string(apiKey), nil
+}
+
+// generateAPIKey generates a random 64-character API key
+func generateAPIKey() (string, error) {
+	bytes := make([]byte, 32) // 32 bytes = 64 hex characters
+	if _, err := rand.Read(bytes); err != nil {
+		return "", fmt.Errorf("failed to generate random bytes: %w", err)
+	}
+	return hex.EncodeToString(bytes), nil
+}
+
+// CreateOrGetAPIKey creates the API key secret if it doesn't exist, or returns the existing one
+func (s *SecretManager) CreateOrGetAPIKey(ctx context.Context) (string, error) {
+	// First, try to get the existing secret
+	if apiKey, err := s.getAPIKey(ctx); err == nil {
+		log.Printf("Using existing API key from secret %s", SecretName)
+		return apiKey, nil
+	}
+
+	// If the secret doesn't exist, create it
+	log.Printf("API key secret %s not found, creating new one...", SecretName)
+
+	// Generate a new API key
+	apiKey, err := generateAPIKey()
+	if err != nil {
+		return "", fmt.Errorf("failed to generate API key: %w", err)
+	}
+
+	// Create the secret
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      SecretName,
+			Namespace: s.namespace,
+			Labels: map[string]string{
+				"app":       "kibaship-operator",
+				"component": "api-server",
+			},
+		},
+		Data: map[string][]byte{
+			SecretKey: []byte(apiKey),
+		},
+		Type: corev1.SecretTypeOpaque,
+	}
+
+	_, err = s.client.CoreV1().Secrets(s.namespace).Create(ctx, secret, metav1.CreateOptions{})
+	if err != nil {
+		if errors.IsAlreadyExists(err) {
+			// Secret was created concurrently, try to get it
+			log.Printf("Secret %s was created concurrently, retrieving it...", SecretName)
+			return s.getAPIKey(ctx)
+		}
+		return "", fmt.Errorf("failed to create secret %s: %w", SecretName, err)
+	}
+
+	log.Printf("Successfully created API key secret %s", SecretName)
+	return apiKey, nil
 }
