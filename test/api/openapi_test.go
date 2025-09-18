@@ -19,10 +19,9 @@ package api
 import (
 	"os"
 	"path/filepath"
-	"testing"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 	"gopkg.in/yaml.v3"
 )
 
@@ -37,80 +36,92 @@ type OpenAPISpec struct {
 	Definitions map[string]interface{} `yaml:"definitions"`
 }
 
-func TestOpenAPISpecValidation(t *testing.T) {
-	// Get the project root directory
-	projectRoot := filepath.Join("..", "..")
-	specPath := filepath.Join(projectRoot, "docs", "swagger.yaml")
-
-	// Read the OpenAPI spec file
-	specData, err := os.ReadFile(specPath)
-	require.NoError(t, err, "Should be able to read swagger.yaml file")
-
-	// Parse the YAML
+var _ = Describe("OpenAPI Specification", func() {
 	var spec OpenAPISpec
-	err = yaml.Unmarshal(specData, &spec)
-	require.NoError(t, err, "Should be able to parse swagger.yaml as valid YAML")
 
-	// Validate required fields
-	t.Run("Required Fields", func(t *testing.T) {
-		// Check version (should be either swagger 2.0 or openapi 3.x)
-		assert.True(t, spec.Swagger == "2.0" || spec.OpenAPI != "", "Should have either swagger or openapi version")
+	BeforeEach(func() {
+		// Get the project root directory
+		projectRoot := filepath.Join("..", "..")
+		specPath := filepath.Join(projectRoot, "docs", "swagger.yaml")
 
-		// Check info section
-		assert.NotNil(t, spec.Info, "Should have info section")
-		assert.NotEmpty(t, spec.Info["title"], "Should have title in info")
-		assert.NotEmpty(t, spec.Info["version"], "Should have version in info")
+		// Read the OpenAPI spec file
+		specData, err := os.ReadFile(specPath)
+		Expect(err).NotTo(HaveOccurred(), "Should be able to read swagger.yaml file")
 
-		// Check paths
-		assert.NotNil(t, spec.Paths, "Should have paths section")
-		assert.NotEmpty(t, spec.Paths, "Should have at least one path defined")
+		// Parse the YAML
+		err = yaml.Unmarshal(specData, &spec)
+		Expect(err).NotTo(HaveOccurred(), "Should be able to parse swagger.yaml as valid YAML")
 	})
 
-	t.Run("Health Endpoints", func(t *testing.T) {
-		// Check that health endpoints are documented
-		assert.Contains(t, spec.Paths, "/healthz", "Should document /healthz endpoint")
-		assert.Contains(t, spec.Paths, "/readyz", "Should document /readyz endpoint")
+	Describe("Required Fields", func() {
+		It("has version information", func() {
+			// Check version (should be either swagger 2.0 or openapi 3.x)
+			Expect(spec.Swagger == "2.0" || spec.OpenAPI != "").To(BeTrue(), "Should have either swagger or openapi version")
+		})
 
-		// Check that health endpoints have GET methods
-		healthzPath, ok := spec.Paths["/healthz"].(map[string]interface{})
-		require.True(t, ok, "/healthz should be a valid path object")
-		assert.Contains(t, healthzPath, "get", "/healthz should have GET method")
+		It("has info section", func() {
+			Expect(spec.Info).NotTo(BeNil(), "Should have info section")
+			Expect(spec.Info["title"]).NotTo(BeEmpty(), "Should have title in info")
+			Expect(spec.Info["version"]).NotTo(BeEmpty(), "Should have version in info")
+		})
 
-		readyzPath, ok := spec.Paths["/readyz"].(map[string]interface{})
-		require.True(t, ok, "/readyz should be a valid path object")
-		assert.Contains(t, readyzPath, "get", "/readyz should have GET method")
+		It("has paths defined", func() {
+			Expect(spec.Paths).NotTo(BeNil(), "Should have paths section")
+			Expect(spec.Paths).NotTo(BeEmpty(), "Should have at least one path defined")
+		})
 	})
 
-	t.Run("Response Definitions", func(t *testing.T) {
-		// Check that response types are defined
-		assert.NotNil(t, spec.Definitions, "Should have definitions section")
-		assert.Contains(t, spec.Definitions, "main.HealthResponse", "Should define HealthResponse")
-		assert.Contains(t, spec.Definitions, "main.ReadyResponse", "Should define ReadyResponse")
+	Describe("Health Endpoints", func() {
+		It("documents health endpoints", func() {
+			Expect(spec.Paths).To(HaveKey("/healthz"), "Should document /healthz endpoint")
+			Expect(spec.Paths).To(HaveKey("/readyz"), "Should document /readyz endpoint")
+		})
 
-		// Validate HealthResponse structure
-		healthResp, ok := spec.Definitions["main.HealthResponse"].(map[string]interface{})
-		require.True(t, ok, "HealthResponse should be a valid definition")
-		assert.Equal(t, "object", healthResp["type"], "HealthResponse should be an object")
+		It("documents GET methods for health endpoints", func() {
+			healthzPath, ok := spec.Paths["/healthz"].(map[string]interface{})
+			Expect(ok).To(BeTrue(), "/healthz should be a valid path object")
+			Expect(healthzPath).To(HaveKey("get"), "/healthz should have GET method")
 
-		properties, ok := healthResp["properties"].(map[string]interface{})
-		require.True(t, ok, "HealthResponse should have properties")
-		assert.Contains(t, properties, "status", "HealthResponse should have status field")
-
-		// Validate ReadyResponse structure
-		readyResp, ok := spec.Definitions["main.ReadyResponse"].(map[string]interface{})
-		require.True(t, ok, "ReadyResponse should be a valid definition")
-		assert.Equal(t, "object", readyResp["type"], "ReadyResponse should be an object")
-
-		readyProperties, ok := readyResp["properties"].(map[string]interface{})
-		require.True(t, ok, "ReadyResponse should have properties")
-		assert.Contains(t, readyProperties, "status", "ReadyResponse should have status field")
+			readyzPath, ok := spec.Paths["/readyz"].(map[string]interface{})
+			Expect(ok).To(BeTrue(), "/readyz should be a valid path object")
+			Expect(readyzPath).To(HaveKey("get"), "/readyz should have GET method")
+		})
 	})
 
-	t.Run("API Metadata", func(t *testing.T) {
-		// Validate API metadata
-		assert.Equal(t, "Kibaship Operator API", spec.Info["title"], "Should have correct API title")
-		assert.Equal(t, "1.0", spec.Info["version"], "Should have correct API version")
-		assert.Equal(t, "/", spec.BasePath, "Should have correct base path")
-		assert.NotEmpty(t, spec.Host, "Should have host defined")
+	Describe("Response Definitions", func() {
+		It("defines response types", func() {
+			Expect(spec.Definitions).NotTo(BeNil(), "Should have definitions section")
+			Expect(spec.Definitions).To(HaveKey("main.HealthResponse"), "Should define HealthResponse")
+			Expect(spec.Definitions).To(HaveKey("main.ReadyResponse"), "Should define ReadyResponse")
+		})
+
+		It("has valid HealthResponse structure", func() {
+			healthResp, ok := spec.Definitions["main.HealthResponse"].(map[string]interface{})
+			Expect(ok).To(BeTrue(), "HealthResponse should be a valid definition")
+			Expect(healthResp["type"]).To(Equal("object"), "HealthResponse should be an object")
+
+			properties, ok := healthResp["properties"].(map[string]interface{})
+			Expect(ok).To(BeTrue(), "HealthResponse should have properties")
+			Expect(properties).To(HaveKey("status"), "HealthResponse should have status field")
+		})
+
+		It("has valid ReadyResponse structure", func() {
+			readyResp, ok := spec.Definitions["main.ReadyResponse"].(map[string]interface{})
+			Expect(ok).To(BeTrue(), "ReadyResponse should be a valid definition")
+			Expect(readyResp["type"]).To(Equal("object"), "ReadyResponse should be an object")
+
+			readyProperties, ok := readyResp["properties"].(map[string]interface{})
+			Expect(ok).To(BeTrue(), "ReadyResponse should have properties")
+			Expect(readyProperties).To(HaveKey("status"), "ReadyResponse should have status field")
+		})
 	})
-}
+
+	Describe("API Metadata", func() {
+		It("has correct metadata", func() {
+			Expect(spec.Info["title"]).To(Equal("Kibaship Operator API"), "Should have correct API title")
+			Expect(spec.Info["version"]).To(Equal("1.0"), "Should have correct API version")
+			Expect(spec.BasePath).To(Equal("/"), "Should have correct base path")
+			Expect(spec.Host).NotTo(BeEmpty(), "Should have host defined")
+		})
+	})
+})

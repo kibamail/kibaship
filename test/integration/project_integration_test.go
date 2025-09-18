@@ -23,13 +23,11 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"path/filepath"
-	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -49,30 +47,13 @@ var (
 	scheme    *runtime.Scheme
 )
 
-func TestMain(m *testing.M) {
-	// Set up test environment
-	setup()
-
-	// Run tests
-	code := m.Run()
-
-	// Tear down
-	teardown()
-
-	os.Exit(code)
-}
-
-func setup() {
+var _ = BeforeSuite(func() {
 	// Initialize scheme
 	scheme = runtime.NewScheme()
 	err := clientgoscheme.AddToScheme(scheme)
-	if err != nil {
-		panic(err)
-	}
+	Expect(err).NotTo(HaveOccurred())
 	err = v1alpha1.AddToScheme(scheme)
-	if err != nil {
-		panic(err)
-	}
+	Expect(err).NotTo(HaveOccurred())
 
 	// Set up envtest environment
 	testEnv = &envtest.Environment{
@@ -83,80 +64,104 @@ func setup() {
 	}
 
 	cfg, err := testEnv.Start()
-	if err != nil {
-		panic(err)
-	}
+	Expect(err).NotTo(HaveOccurred())
 
 	// Create Kubernetes client
 	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme})
-	if err != nil {
-		panic(err)
-	}
-}
+	Expect(err).NotTo(HaveOccurred())
+})
 
-func teardown() {
+var _ = AfterSuite(func() {
 	if testEnv != nil {
 		testEnv.Stop()
 	}
-}
+})
 
-func TestProjectCreationIntegration(t *testing.T) {
-	ctx := context.Background()
+var _ = Describe("Project Creation Integration", func() {
+	var ctx context.Context
+	var apiKey string
+	var router *gin.Engine
 
-	tests := []struct {
-		name           string
-		payload        models.ProjectCreateRequest
-		expectedStatus int
-		validateFunc   func(*testing.T, *models.ProjectResponse)
-	}{
-		{
-			name: "Create minimal project",
-			payload: models.ProjectCreateRequest{
+	BeforeEach(func() {
+		ctx = context.Background()
+		apiKey = generateTestAPIKey()
+		router = setupIntegrationTestRouter(apiKey)
+	})
+
+	DescribeTable("project creation scenarios",
+		func(payload models.ProjectCreateRequest, expectedStatus int, validateFunc func(*models.ProjectResponse)) {
+			// Prepare request
+			jsonData, err := json.Marshal(payload)
+			Expect(err).NotTo(HaveOccurred())
+
+			req, err := http.NewRequest("POST", "/projects", bytes.NewBuffer(jsonData))
+			Expect(err).NotTo(HaveOccurred())
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Authorization", "Bearer "+apiKey)
+
+			// Perform request
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			// Assert status code
+			Expect(w.Code).To(Equal(expectedStatus), "Response: %s", w.Body.String())
+
+			if expectedStatus == http.StatusCreated {
+				// Parse response
+				var response models.ProjectResponse
+				err = json.Unmarshal(w.Body.Bytes(), &response)
+				Expect(err).NotTo(HaveOccurred(), "Failed to parse project response: %s", w.Body.String())
+
+				// Run custom validation
+				validateFunc(&response)
+			}
+		},
+		Entry("Create minimal project",
+			models.ProjectCreateRequest{
 				Name:          "Integration Test Project",
 				WorkspaceUUID: "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
 			},
-			expectedStatus: http.StatusCreated,
-			validateFunc: func(t *testing.T, resp *models.ProjectResponse) {
+			http.StatusCreated,
+			func(resp *models.ProjectResponse) {
 				// Verify response structure
-				assert.NotEmpty(t, resp.UUID)
-				assert.NotEmpty(t, resp.Slug)
-				assert.Len(t, resp.Slug, 8)
-				assert.Equal(t, "Integration Test Project", resp.Name)
-				assert.Equal(t, "6ba7b810-9dad-11d1-80b4-00c04fd430c8", resp.WorkspaceUUID)
-				assert.Equal(t, models.ResourceProfileDevelopment, resp.ResourceProfile)
-				assert.Equal(t, "Pending", resp.Status)
-				assert.NotZero(t, resp.CreatedAt)
+				Expect(resp.UUID).NotTo(BeEmpty())
+				Expect(resp.Slug).NotTo(BeEmpty())
+				Expect(resp.Slug).To(HaveLen(8))
+				Expect(resp.Name).To(Equal("Integration Test Project"))
+				Expect(resp.WorkspaceUUID).To(Equal("6ba7b810-9dad-11d1-80b4-00c04fd430c8"))
+				Expect(resp.ResourceProfile).To(Equal(models.ResourceProfileDevelopment))
+				Expect(resp.Status).To(Equal("Pending"))
+				Expect(resp.CreatedAt).NotTo(BeZero())
 
 				// Verify Project CRD was actually created in Kubernetes
 				var project v1alpha1.Project
 				err := k8sClient.Get(ctx, client.ObjectKey{
 					Name: "project-" + resp.Slug,
 				}, &project)
-				require.NoError(t, err, "Project CRD should exist in Kubernetes")
+				Expect(err).NotTo(HaveOccurred(), "Project CRD should exist in Kubernetes")
 
 				// Verify CRD labels
 				labels := project.GetLabels()
-				assert.Equal(t, resp.UUID, labels[validation.LabelResourceUUID])
-				assert.Equal(t, resp.Slug, labels[validation.LabelResourceSlug])
-				assert.Equal(t, resp.WorkspaceUUID, labels[validation.LabelWorkspaceUUID])
+				Expect(labels[validation.LabelResourceUUID]).To(Equal(resp.UUID))
+				Expect(labels[validation.LabelResourceSlug]).To(Equal(resp.Slug))
+				Expect(labels[validation.LabelWorkspaceUUID]).To(Equal(resp.WorkspaceUUID))
 
 				// Verify CRD spec has correct defaults
-				assert.True(t, project.Spec.ApplicationTypes.MySQL.Enabled)
-				assert.True(t, project.Spec.ApplicationTypes.Postgres.Enabled)
-				assert.True(t, project.Spec.ApplicationTypes.DockerImage.Enabled)
-				assert.True(t, project.Spec.ApplicationTypes.GitRepository.Enabled)
-				assert.False(t, project.Spec.ApplicationTypes.MySQLCluster.Enabled)
-				assert.False(t, project.Spec.ApplicationTypes.PostgresCluster.Enabled)
-				assert.Equal(t, "50Gi", project.Spec.Volumes.MaxStorageSize)
+				Expect(project.Spec.ApplicationTypes.MySQL.Enabled).To(BeTrue())
+				Expect(project.Spec.ApplicationTypes.Postgres.Enabled).To(BeTrue())
+				Expect(project.Spec.ApplicationTypes.DockerImage.Enabled).To(BeTrue())
+				Expect(project.Spec.ApplicationTypes.GitRepository.Enabled).To(BeTrue())
+				Expect(project.Spec.ApplicationTypes.MySQLCluster.Enabled).To(BeFalse())
+				Expect(project.Spec.ApplicationTypes.PostgresCluster.Enabled).To(BeFalse())
+				Expect(project.Spec.Volumes.MaxStorageSize).To(Equal("50Gi"))
 
 				// Clean up - delete the created project
 				err = k8sClient.Delete(ctx, &project)
-				assert.NoError(t, err)
+				Expect(err).NotTo(HaveOccurred())
 			},
-		},
-		{
-			name: "Create production project with custom settings",
-			payload: models.ProjectCreateRequest{
+		),
+		Entry("Create production project with custom settings",
+			models.ProjectCreateRequest{
 				Name:          "Production Project",
 				Description:   "A production environment project",
 				WorkspaceUUID: "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
@@ -173,213 +178,198 @@ func TestProjectCreationIntegration(t *testing.T) {
 					MaxStorageSize: "200Gi",
 				},
 			},
-			expectedStatus: http.StatusCreated,
-			validateFunc: func(t *testing.T, resp *models.ProjectResponse) {
+			http.StatusCreated,
+			func(resp *models.ProjectResponse) {
 				// Verify response
-				assert.Equal(t, "Production Project", resp.Name)
-				assert.Equal(t, models.ResourceProfileProduction, resp.ResourceProfile)
-				assert.Equal(t, "200Gi", resp.VolumeSettings.MaxStorageSize)
+				Expect(resp.Name).To(Equal("Production Project"))
+				Expect(resp.ResourceProfile).To(Equal(models.ResourceProfileProduction))
+				Expect(resp.VolumeSettings.MaxStorageSize).To(Equal("200Gi"))
 
 				// Verify enablement settings
-				assert.True(t, *resp.EnabledApplicationTypes.MySQL)
-				assert.False(t, *resp.EnabledApplicationTypes.MySQLCluster)
-				assert.False(t, *resp.EnabledApplicationTypes.Postgres)
-				assert.False(t, *resp.EnabledApplicationTypes.PostgresCluster)
-				assert.True(t, *resp.EnabledApplicationTypes.DockerImage)
-				assert.True(t, *resp.EnabledApplicationTypes.GitRepository)
+				Expect(*resp.EnabledApplicationTypes.MySQL).To(BeTrue())
+				Expect(*resp.EnabledApplicationTypes.MySQLCluster).To(BeFalse())
+				Expect(*resp.EnabledApplicationTypes.Postgres).To(BeFalse())
+				Expect(*resp.EnabledApplicationTypes.PostgresCluster).To(BeFalse())
+				Expect(*resp.EnabledApplicationTypes.DockerImage).To(BeTrue())
+				Expect(*resp.EnabledApplicationTypes.GitRepository).To(BeTrue())
 
 				// Verify actual CRD in Kubernetes
 				var project v1alpha1.Project
 				err := k8sClient.Get(ctx, client.ObjectKey{
 					Name: "project-" + resp.Slug,
 				}, &project)
-				require.NoError(t, err)
+				Expect(err).NotTo(HaveOccurred())
 
 				// Verify application type settings in CRD
-				assert.True(t, project.Spec.ApplicationTypes.MySQL.Enabled)
-				assert.False(t, project.Spec.ApplicationTypes.MySQLCluster.Enabled)
-				assert.False(t, project.Spec.ApplicationTypes.Postgres.Enabled)
-				assert.False(t, project.Spec.ApplicationTypes.PostgresCluster.Enabled)
-				assert.True(t, project.Spec.ApplicationTypes.DockerImage.Enabled)
-				assert.True(t, project.Spec.ApplicationTypes.GitRepository.Enabled)
+				Expect(project.Spec.ApplicationTypes.MySQL.Enabled).To(BeTrue())
+				Expect(project.Spec.ApplicationTypes.MySQLCluster.Enabled).To(BeFalse())
+				Expect(project.Spec.ApplicationTypes.Postgres.Enabled).To(BeFalse())
+				Expect(project.Spec.ApplicationTypes.PostgresCluster.Enabled).To(BeFalse())
+				Expect(project.Spec.ApplicationTypes.DockerImage.Enabled).To(BeTrue())
+				Expect(project.Spec.ApplicationTypes.GitRepository.Enabled).To(BeTrue())
 
 				// Verify volume settings
-				assert.Equal(t, "200Gi", project.Spec.Volumes.MaxStorageSize)
+				Expect(project.Spec.Volumes.MaxStorageSize).To(Equal("200Gi"))
 
 				// Verify production resource defaults were applied
-				assert.Equal(t, "2", project.Spec.ApplicationTypes.MySQL.DefaultLimits.CPU)
-				assert.Equal(t, "4Gi", project.Spec.ApplicationTypes.MySQL.DefaultLimits.Memory)
-				assert.Equal(t, "20Gi", project.Spec.ApplicationTypes.MySQL.DefaultLimits.Storage)
+				Expect(project.Spec.ApplicationTypes.MySQL.DefaultLimits.CPU).To(Equal("2"))
+				Expect(project.Spec.ApplicationTypes.MySQL.DefaultLimits.Memory).To(Equal("4Gi"))
+				Expect(project.Spec.ApplicationTypes.MySQL.DefaultLimits.Storage).To(Equal("20Gi"))
 
 				// Clean up
 				err = k8sClient.Delete(ctx, &project)
-				assert.NoError(t, err)
+				Expect(err).NotTo(HaveOccurred())
 			},
-		},
-	}
+		),
+	)
+})
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Create test router with real Kubernetes integration
-			apiKey := generateTestAPIKey()
-			router := setupIntegrationTestRouter(apiKey)
+var _ = Describe("Project Retrieval Integration", func() {
+	var ctx context.Context
+	var apiKey string
+	var router *gin.Engine
+	var createdProject *models.ProjectResponse
 
-			// Prepare request
-			jsonData, err := json.Marshal(tt.payload)
-			require.NoError(t, err)
+	BeforeEach(func() {
+		ctx = context.Background()
+		apiKey = generateTestAPIKey()
+		router = setupIntegrationTestRouter(apiKey)
 
-			req, err := http.NewRequest("POST", "/projects", bytes.NewBuffer(jsonData))
-			require.NoError(t, err)
-			req.Header.Set("Content-Type", "application/json")
-			req.Header.Set("Authorization", "Bearer "+apiKey)
-
-			// Perform request
-			w := httptest.NewRecorder()
-			router.ServeHTTP(w, req)
-
-			// Assert status code
-			assert.Equal(t, tt.expectedStatus, w.Code, "Response: %s", w.Body.String())
-
-			if tt.expectedStatus == http.StatusCreated {
-				// Parse response
-				var response models.ProjectResponse
-				err = json.Unmarshal(w.Body.Bytes(), &response)
-				require.NoError(t, err, "Failed to parse project response: %s", w.Body.String())
-
-				// Run custom validation
-				tt.validateFunc(t, &response)
-			}
-		})
-	}
-}
-
-func TestProjectRetrievalIntegration(t *testing.T) {
-	ctx := context.Background()
-	apiKey := generateTestAPIKey()
-	router := setupIntegrationTestRouter(apiKey)
-
-	// First, create a project
-	payload := models.ProjectCreateRequest{
-		Name:          "Test Retrieval Project",
-		WorkspaceUUID: "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
-	}
-
-	jsonData, err := json.Marshal(payload)
-	require.NoError(t, err)
-
-	req, err := http.NewRequest("POST", "/projects", bytes.NewBuffer(jsonData))
-	require.NoError(t, err)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+apiKey)
-
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-	require.Equal(t, http.StatusCreated, w.Code)
-
-	var createdProject models.ProjectResponse
-	err = json.Unmarshal(w.Body.Bytes(), &createdProject)
-	require.NoError(t, err)
-
-	// Now test retrieval by slug
-	t.Run("Get project by slug", func(t *testing.T) {
-		req, err := http.NewRequest("GET", "/project/"+createdProject.Slug, nil)
-		require.NoError(t, err)
-		req.Header.Set("Authorization", "Bearer "+apiKey)
-
-		w := httptest.NewRecorder()
-		router.ServeHTTP(w, req)
-
-		assert.Equal(t, http.StatusOK, w.Code)
-
-		var retrievedProject models.ProjectResponse
-		err = json.Unmarshal(w.Body.Bytes(), &retrievedProject)
-		require.NoError(t, err)
-
-		// Verify retrieved project matches created project
-		assert.Equal(t, createdProject.UUID, retrievedProject.UUID)
-		assert.Equal(t, createdProject.Slug, retrievedProject.Slug)
-		assert.Equal(t, createdProject.Name, retrievedProject.Name)
-		assert.Equal(t, createdProject.WorkspaceUUID, retrievedProject.WorkspaceUUID)
-	})
-
-	t.Run("Get non-existent project returns 404", func(t *testing.T) {
-		req, err := http.NewRequest("GET", "/projects/notfound", nil)
-		require.NoError(t, err)
-		req.Header.Set("Authorization", "Bearer "+apiKey)
-
-		w := httptest.NewRecorder()
-		router.ServeHTTP(w, req)
-
-		assert.Equal(t, http.StatusNotFound, w.Code)
-	})
-
-	// Clean up - delete the created project
-	var project v1alpha1.Project
-	err = k8sClient.Get(ctx, client.ObjectKey{
-		Name: "project-" + createdProject.Slug,
-	}, &project)
-	if err == nil {
-		k8sClient.Delete(ctx, &project)
-	}
-}
-
-func TestSlugUniquenessIntegration(t *testing.T) {
-	ctx := context.Background()
-	apiKey := generateTestAPIKey()
-	router := setupIntegrationTestRouter(apiKey)
-
-	// Create multiple projects to test slug uniqueness
-	var createdSlugs []string
-	const numProjects = 5
-
-	for i := 0; i < numProjects; i++ {
+		// Create a project for retrieval tests
 		payload := models.ProjectCreateRequest{
-			Name:          fmt.Sprintf("Uniqueness Test Project %d", i+1),
+			Name:          "Test Retrieval Project",
 			WorkspaceUUID: "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
 		}
 
 		jsonData, err := json.Marshal(payload)
-		require.NoError(t, err)
+		Expect(err).NotTo(HaveOccurred())
 
 		req, err := http.NewRequest("POST", "/projects", bytes.NewBuffer(jsonData))
-		require.NoError(t, err)
+		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, req)
-		require.Equal(t, http.StatusCreated, w.Code, "Response: %s", w.Body.String())
+		Expect(w.Code).To(Equal(http.StatusCreated))
 
-		var response models.ProjectResponse
-		err = json.Unmarshal(w.Body.Bytes(), &response)
-		require.NoError(t, err)
+		var project models.ProjectResponse
+		err = json.Unmarshal(w.Body.Bytes(), &project)
+		Expect(err).NotTo(HaveOccurred())
+		createdProject = &project
+	})
 
-		// Verify slug is unique
-		for _, existingSlug := range createdSlugs {
-			assert.NotEqual(t, existingSlug, response.Slug, "Slug should be unique")
-		}
-
-		createdSlugs = append(createdSlugs, response.Slug)
-
-		// Verify project exists in Kubernetes
-		var project v1alpha1.Project
-		err = k8sClient.Get(ctx, client.ObjectKey{
-			Name: "project-" + response.Slug,
-		}, &project)
-		require.NoError(t, err, "Project should exist in Kubernetes")
-	}
-
-	// Clean up all created projects
-	for _, slug := range createdSlugs {
+	AfterEach(func() {
+		// Clean up - delete the created project
 		var project v1alpha1.Project
 		err := k8sClient.Get(ctx, client.ObjectKey{
-			Name: "project-" + slug,
+			Name: "project-" + createdProject.Slug,
 		}, &project)
 		if err == nil {
 			k8sClient.Delete(ctx, &project)
 		}
-	}
-}
+	})
+
+	It("retrieves project by slug", func() {
+		req, err := http.NewRequest("GET", "/project/"+createdProject.Slug, nil)
+		Expect(err).NotTo(HaveOccurred())
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		Expect(w.Code).To(Equal(http.StatusOK))
+
+		var retrievedProject models.ProjectResponse
+		err = json.Unmarshal(w.Body.Bytes(), &retrievedProject)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Verify retrieved project matches created project
+		Expect(retrievedProject.UUID).To(Equal(createdProject.UUID))
+		Expect(retrievedProject.Slug).To(Equal(createdProject.Slug))
+		Expect(retrievedProject.Name).To(Equal(createdProject.Name))
+		Expect(retrievedProject.WorkspaceUUID).To(Equal(createdProject.WorkspaceUUID))
+	})
+
+	It("returns 404 for non-existent project", func() {
+		req, err := http.NewRequest("GET", "/projects/notfound", nil)
+		Expect(err).NotTo(HaveOccurred())
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		Expect(w.Code).To(Equal(http.StatusNotFound))
+	})
+})
+
+var _ = Describe("Project Slug Uniqueness Integration", func() {
+	var ctx context.Context
+	var apiKey string
+	var router *gin.Engine
+	var createdSlugs []string
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		apiKey = generateTestAPIKey()
+		router = setupIntegrationTestRouter(apiKey)
+		createdSlugs = []string{}
+	})
+
+	AfterEach(func() {
+		// Clean up all created projects
+		for _, slug := range createdSlugs {
+			var project v1alpha1.Project
+			err := k8sClient.Get(ctx, client.ObjectKey{
+				Name: "project-" + slug,
+			}, &project)
+			if err == nil {
+				k8sClient.Delete(ctx, &project)
+			}
+		}
+	})
+
+	It("generates unique slugs for multiple projects", func() {
+		const numProjects = 5
+
+		for i := 0; i < numProjects; i++ {
+			payload := models.ProjectCreateRequest{
+				Name:          fmt.Sprintf("Uniqueness Test Project %d", i+1),
+				WorkspaceUUID: "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+			}
+
+			jsonData, err := json.Marshal(payload)
+			Expect(err).NotTo(HaveOccurred())
+
+			req, err := http.NewRequest("POST", "/projects", bytes.NewBuffer(jsonData))
+			Expect(err).NotTo(HaveOccurred())
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Authorization", "Bearer "+apiKey)
+
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+			Expect(w.Code).To(Equal(http.StatusCreated), "Response: %s", w.Body.String())
+
+			var response models.ProjectResponse
+			err = json.Unmarshal(w.Body.Bytes(), &response)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Verify slug is unique
+			for _, existingSlug := range createdSlugs {
+				Expect(response.Slug).NotTo(Equal(existingSlug), "Slug should be unique")
+			}
+
+			createdSlugs = append(createdSlugs, response.Slug)
+
+			// Verify project exists in Kubernetes
+			var project v1alpha1.Project
+			err = k8sClient.Get(ctx, client.ObjectKey{
+				Name: "project-" + response.Slug,
+			}, &project)
+			Expect(err).NotTo(HaveOccurred(), "Project should exist in Kubernetes")
+		}
+	})
+})
 
 func setupIntegrationTestRouter(apiKey string) *gin.Engine {
 	gin.SetMode(gin.TestMode)
@@ -447,220 +437,242 @@ func resourceProfilePtr(profile models.ResourceProfile) *models.ResourceProfile 
 	return &profile
 }
 
-func TestProjectUpdateIntegration(t *testing.T) {
-	ctx := context.Background()
-	apiKey := generateTestAPIKey()
-	router := setupIntegrationTestRouter(apiKey)
+var _ = Describe("Project Update Integration", func() {
+	var ctx context.Context
+	var apiKey string
+	var router *gin.Engine
+	var createdProject *models.ProjectResponse
 
-	// First, create a project to update
-	payload := models.ProjectCreateRequest{
-		Name:            "Project To Update",
-		Description:     "Original description",
-		WorkspaceUUID:   "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
-		ResourceProfile: resourceProfilePtr(models.ResourceProfileDevelopment),
-	}
+	BeforeEach(func() {
+		ctx = context.Background()
+		apiKey = generateTestAPIKey()
+		router = setupIntegrationTestRouter(apiKey)
 
-	jsonData, err := json.Marshal(payload)
-	require.NoError(t, err)
+		// Create a project to update
+		payload := models.ProjectCreateRequest{
+			Name:            "Project To Update",
+			Description:     "Original description",
+			WorkspaceUUID:   "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+			ResourceProfile: resourceProfilePtr(models.ResourceProfileDevelopment),
+		}
 
-	req, err := http.NewRequest("POST", "/projects", bytes.NewBuffer(jsonData))
-	require.NoError(t, err)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+apiKey)
+		jsonData, err := json.Marshal(payload)
+		Expect(err).NotTo(HaveOccurred())
 
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-	require.Equal(t, http.StatusCreated, w.Code)
+		req, err := http.NewRequest("POST", "/projects", bytes.NewBuffer(jsonData))
+		Expect(err).NotTo(HaveOccurred())
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+apiKey)
 
-	var createdProject models.ProjectResponse
-	err = json.Unmarshal(w.Body.Bytes(), &createdProject)
-	require.NoError(t, err)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		Expect(w.Code).To(Equal(http.StatusCreated))
 
-	// Test 1: Update project name and description
-	t.Run("Update project name and description", func(t *testing.T) {
+		var project models.ProjectResponse
+		err = json.Unmarshal(w.Body.Bytes(), &project)
+		Expect(err).NotTo(HaveOccurred())
+		createdProject = &project
+	})
+
+	AfterEach(func() {
+		// Clean up
+		var project v1alpha1.Project
+		err := k8sClient.Get(ctx, client.ObjectKey{
+			Name: "project-" + createdProject.Slug,
+		}, &project)
+		if err == nil {
+			k8sClient.Delete(ctx, &project)
+		}
+	})
+
+	It("updates project name and description", func() {
 		updateReq := models.ProjectUpdateRequest{
 			Name:        stringPtr("Updated Project Name"),
 			Description: stringPtr("Updated description"),
 		}
 
 		jsonData, err := json.Marshal(updateReq)
-		require.NoError(t, err)
+		Expect(err).NotTo(HaveOccurred())
 
 		req, err := http.NewRequest("PATCH", "/project/"+createdProject.Slug, bytes.NewBuffer(jsonData))
-		require.NoError(t, err)
+		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, req)
 
-		assert.Equal(t, http.StatusOK, w.Code)
+		Expect(w.Code).To(Equal(http.StatusOK))
 
 		var updatedProject models.ProjectResponse
 		err = json.Unmarshal(w.Body.Bytes(), &updatedProject)
-		require.NoError(t, err)
+		Expect(err).NotTo(HaveOccurred())
 
-		assert.Equal(t, "Updated Project Name", updatedProject.Name)
-		assert.Equal(t, "Updated description", updatedProject.Description)
-		assert.Equal(t, createdProject.UUID, updatedProject.UUID)
-		assert.Equal(t, createdProject.Slug, updatedProject.Slug)
+		Expect(updatedProject.Name).To(Equal("Updated Project Name"))
+		Expect(updatedProject.Description).To(Equal("Updated description"))
+		Expect(updatedProject.UUID).To(Equal(createdProject.UUID))
+		Expect(updatedProject.Slug).To(Equal(createdProject.Slug))
 
 		// Verify in Kubernetes
 		var project v1alpha1.Project
 		err = k8sClient.Get(ctx, client.ObjectKey{
 			Name: "project-" + createdProject.Slug,
 		}, &project)
-		require.NoError(t, err)
+		Expect(err).NotTo(HaveOccurred())
 
 		annotations := project.GetAnnotations()
-		assert.Equal(t, "Updated Project Name", annotations[validation.AnnotationResourceName])
-		assert.Equal(t, "Updated description", annotations[validation.AnnotationResourceDescription])
+		Expect(annotations[validation.AnnotationResourceName]).To(Equal("Updated Project Name"))
+		Expect(annotations[validation.AnnotationResourceDescription]).To(Equal("Updated description"))
 	})
 
-	// Test 2: Update resource profile
-	t.Run("Update resource profile to production", func(t *testing.T) {
+	It("updates resource profile to production", func() {
 		updateReq := models.ProjectUpdateRequest{
 			ResourceProfile: resourceProfilePtr(models.ResourceProfileProduction),
 		}
 
 		jsonData, err := json.Marshal(updateReq)
-		require.NoError(t, err)
+		Expect(err).NotTo(HaveOccurred())
 
 		req, err := http.NewRequest("PATCH", "/project/"+createdProject.Slug, bytes.NewBuffer(jsonData))
-		require.NoError(t, err)
+		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, req)
 
-		assert.Equal(t, http.StatusOK, w.Code)
+		Expect(w.Code).To(Equal(http.StatusOK))
 
 		var updatedProject models.ProjectResponse
 		err = json.Unmarshal(w.Body.Bytes(), &updatedProject)
-		require.NoError(t, err)
+		Expect(err).NotTo(HaveOccurred())
 
-		assert.Equal(t, models.ResourceProfileProduction, updatedProject.ResourceProfile)
+		Expect(updatedProject.ResourceProfile).To(Equal(models.ResourceProfileProduction))
 
 		// Verify production defaults were applied in Kubernetes
 		var project v1alpha1.Project
 		err = k8sClient.Get(ctx, client.ObjectKey{
 			Name: "project-" + createdProject.Slug,
 		}, &project)
-		require.NoError(t, err)
+		Expect(err).NotTo(HaveOccurred())
 
 		// Production profile should have higher limits
-		assert.Equal(t, "2", project.Spec.ApplicationTypes.MySQL.DefaultLimits.CPU)
-		assert.Equal(t, "4Gi", project.Spec.ApplicationTypes.MySQL.DefaultLimits.Memory)
+		Expect(project.Spec.ApplicationTypes.MySQL.DefaultLimits.CPU).To(Equal("2"))
+		Expect(project.Spec.ApplicationTypes.MySQL.DefaultLimits.Memory).To(Equal("4Gi"))
 	})
 
-	// Test 3: Update non-existent project
-	t.Run("Update non-existent project returns 404", func(t *testing.T) {
+	It("returns 404 for non-existent project update", func() {
 		updateReq := models.ProjectUpdateRequest{
 			Name: stringPtr("Non-existent"),
 		}
 
 		jsonData, err := json.Marshal(updateReq)
-		require.NoError(t, err)
+		Expect(err).NotTo(HaveOccurred())
 
 		req, err := http.NewRequest("PATCH", "/projects/notfound", bytes.NewBuffer(jsonData))
-		require.NoError(t, err)
+		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, req)
 
-		assert.Equal(t, http.StatusNotFound, w.Code)
+		Expect(w.Code).To(Equal(http.StatusNotFound))
+	})
+})
+
+var _ = Describe("Project Delete Integration", func() {
+	var ctx context.Context
+	var apiKey string
+	var router *gin.Engine
+	var createdProject *models.ProjectResponse
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		apiKey = generateTestAPIKey()
+		router = setupIntegrationTestRouter(apiKey)
+
+		// Create a project to delete
+		payload := models.ProjectCreateRequest{
+			Name:          "Project To Delete",
+			WorkspaceUUID: "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+		}
+
+		jsonData, err := json.Marshal(payload)
+		Expect(err).NotTo(HaveOccurred())
+
+		req, err := http.NewRequest("POST", "/projects", bytes.NewBuffer(jsonData))
+		Expect(err).NotTo(HaveOccurred())
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		Expect(w.Code).To(Equal(http.StatusCreated))
+
+		var project models.ProjectResponse
+		err = json.Unmarshal(w.Body.Bytes(), &project)
+		Expect(err).NotTo(HaveOccurred())
+		createdProject = &project
+
+		// Verify project exists in Kubernetes
+		var k8sProject v1alpha1.Project
+		err = k8sClient.Get(ctx, client.ObjectKey{
+			Name: "project-" + createdProject.Slug,
+		}, &k8sProject)
+		Expect(err).NotTo(HaveOccurred(), "Project should exist before deletion")
 	})
 
-	// Clean up
-	var project v1alpha1.Project
-	err = k8sClient.Get(ctx, client.ObjectKey{
-		Name: "project-" + createdProject.Slug,
-	}, &project)
-	if err == nil {
-		k8sClient.Delete(ctx, &project)
-	}
-}
-
-func TestProjectDeleteIntegration(t *testing.T) {
-	ctx := context.Background()
-	apiKey := generateTestAPIKey()
-	router := setupIntegrationTestRouter(apiKey)
-
-	// First, create a project to delete
-	payload := models.ProjectCreateRequest{
-		Name:          "Project To Delete",
-		WorkspaceUUID: "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
-	}
-
-	jsonData, err := json.Marshal(payload)
-	require.NoError(t, err)
-
-	req, err := http.NewRequest("POST", "/projects", bytes.NewBuffer(jsonData))
-	require.NoError(t, err)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+apiKey)
-
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-	require.Equal(t, http.StatusCreated, w.Code)
-
-	var createdProject models.ProjectResponse
-	err = json.Unmarshal(w.Body.Bytes(), &createdProject)
-	require.NoError(t, err)
-
-	// Verify project exists in Kubernetes
-	var project v1alpha1.Project
-	err = k8sClient.Get(ctx, client.ObjectKey{
-		Name: "project-" + createdProject.Slug,
-	}, &project)
-	require.NoError(t, err, "Project should exist before deletion")
-
-	// Test 1: Delete the project
-	t.Run("Delete existing project", func(t *testing.T) {
+	It("deletes existing project", func() {
 		req, err := http.NewRequest("DELETE", "/project/"+createdProject.Slug, nil)
-		require.NoError(t, err)
+		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, req)
 
-		assert.Equal(t, http.StatusNoContent, w.Code)
+		Expect(w.Code).To(Equal(http.StatusNoContent))
 
 		// Verify project no longer exists in Kubernetes
 		var project v1alpha1.Project
 		err = k8sClient.Get(ctx, client.ObjectKey{
 			Name: "project-" + createdProject.Slug,
 		}, &project)
-		assert.Error(t, err, "Project should not exist after deletion")
+		Expect(err).To(HaveOccurred(), "Project should not exist after deletion")
 	})
 
-	// Test 2: Try to delete the same project again (should return 404)
-	t.Run("Delete non-existent project returns 404", func(t *testing.T) {
+	It("returns 404 when deleting same project again", func() {
+		// First delete the project
 		req, err := http.NewRequest("DELETE", "/project/"+createdProject.Slug, nil)
-		require.NoError(t, err)
+		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, req)
+		Expect(w.Code).To(Equal(http.StatusNoContent))
 
-		assert.Equal(t, http.StatusNotFound, w.Code)
+		// Try to delete it again
+		req, err = http.NewRequest("DELETE", "/project/"+createdProject.Slug, nil)
+		Expect(err).NotTo(HaveOccurred())
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+
+		w = httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		Expect(w.Code).To(Equal(http.StatusNotFound))
 	})
 
-	// Test 3: Try to delete with non-existent slug
-	t.Run("Delete with non-existent slug returns 404", func(t *testing.T) {
+	It("returns 404 for non-existent project slug", func() {
 		req, err := http.NewRequest("DELETE", "/projects/notfound", nil)
-		require.NoError(t, err)
+		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, req)
 
-		assert.Equal(t, http.StatusNotFound, w.Code)
+		Expect(w.Code).To(Equal(http.StatusNotFound))
 	})
-}
+})
 
 func stringPtr(s string) *string {
 	return &s

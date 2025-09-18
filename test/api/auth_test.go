@@ -24,11 +24,11 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
@@ -84,125 +84,6 @@ func setupAuthenticatedRouter(apiKey string) *gin.Engine {
 	return router
 }
 
-func TestAPIKeyAuthentication(t *testing.T) {
-	apiKey := generateAPIKey()
-	router := setupAuthenticatedRouter(apiKey)
-
-	tests := []struct {
-		name           string
-		authorization  string
-		expectedStatus int
-		expectedError  string
-	}{
-		{
-			name:           "Valid API key",
-			authorization:  "Bearer " + apiKey,
-			expectedStatus: http.StatusCreated, // Will create a project
-		},
-		{
-			name:           "Missing authorization header",
-			authorization:  "",
-			expectedStatus: http.StatusUnauthorized,
-			expectedError:  "Missing authorization header",
-		},
-		{
-			name:           "Invalid bearer format",
-			authorization:  "Token " + apiKey,
-			expectedStatus: http.StatusUnauthorized,
-			expectedError:  "Authorization header must use Bearer scheme",
-		},
-		{
-			name:           "Invalid API key",
-			authorization:  "Bearer invalid-key",
-			expectedStatus: http.StatusUnauthorized,
-			expectedError:  "Invalid API key",
-		},
-		{
-			name:           "Empty bearer token",
-			authorization:  "Bearer ",
-			expectedStatus: http.StatusUnauthorized,
-			expectedError:  "Invalid API key",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Create request
-			projectData := models.ProjectCreateRequest{
-				Name:        "test-project",
-				Description: "A test project",
-			}
-			jsonData, err := json.Marshal(projectData)
-			require.NoError(t, err)
-
-			req, err := http.NewRequest("POST", "/projects", bytes.NewBuffer(jsonData))
-			require.NoError(t, err)
-			req.Header.Set("Content-Type", "application/json")
-
-			if tt.authorization != "" {
-				req.Header.Set("Authorization", tt.authorization)
-			}
-
-			// Perform request
-			w := httptest.NewRecorder()
-			router.ServeHTTP(w, req)
-
-			// Assert response
-			assert.Equal(t, tt.expectedStatus, w.Code)
-
-			if tt.expectedError != "" {
-				var response map[string]interface{}
-				err = json.Unmarshal(w.Body.Bytes(), &response)
-				require.NoError(t, err)
-
-				assert.Contains(t, response["message"], tt.expectedError)
-			} else {
-				// For successful requests, verify project was created
-				var response models.ProjectResponse
-				err = json.Unmarshal(w.Body.Bytes(), &response)
-				require.NoError(t, err)
-
-				assert.NotEmpty(t, response.UUID)
-				assert.Equal(t, "test-project", response.Name)
-				assert.Equal(t, "A test project", response.Description)
-				assert.NotZero(t, response.CreatedAt)
-				assert.NotZero(t, response.UpdatedAt)
-			}
-		})
-	}
-}
-
-func TestSecretManager(t *testing.T) {
-	apiKey := generateAPIKey()
-	secret := createTestSecret(apiKey)
-
-	// Create fake Kubernetes client
-	fakeClient := fake.NewSimpleClientset(secret)
-
-	// Create secret manager with fake client
-	secretManager := auth.NewSecretManagerWithClient(fakeClient, "default")
-
-	// Test successful API key retrieval
-	retrievedKey, err := secretManager.GetAPIKeyWithRetry(context.Background())
-	require.NoError(t, err)
-	assert.Equal(t, apiKey, retrievedKey)
-}
-
-func TestSecretManagerMissingSecret(t *testing.T) {
-	// Create fake client without the secret
-	fakeClient := fake.NewSimpleClientset()
-
-	secretManager := auth.NewSecretManagerWithClient(fakeClient, "default")
-
-	// Test that it fails when secret is missing
-	ctx, cancel := context.WithTimeout(context.Background(), 100) // Very short timeout for test
-	defer cancel()
-
-	_, err := secretManager.GetAPIKeyWithRetry(ctx)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "timeout waiting for secret")
-}
-
 // mockAuthTestProjectHandler provides a mock project handler for auth testing
 type mockAuthTestProjectHandler struct{}
 
@@ -230,3 +111,124 @@ func (h *mockAuthTestProjectHandler) CreateProject(c *gin.Context) {
 
 	c.JSON(http.StatusCreated, project.ToResponse())
 }
+
+var _ = Describe("API Authentication", func() {
+	var apiKey string
+	var router *gin.Engine
+
+	BeforeEach(func() {
+		apiKey = generateAPIKey()
+		router = setupAuthenticatedRouter(apiKey)
+	})
+
+	Describe("API Key Authentication", func() {
+		DescribeTable("authentication scenarios",
+			func(authorization string, expectedStatus int, expectedError string) {
+				// Create request
+				projectData := models.ProjectCreateRequest{
+					Name:        "test-project",
+					Description: "A test project",
+				}
+				jsonData, err := json.Marshal(projectData)
+				Expect(err).NotTo(HaveOccurred())
+
+				req, err := http.NewRequest("POST", "/projects", bytes.NewBuffer(jsonData))
+				Expect(err).NotTo(HaveOccurred())
+				req.Header.Set("Content-Type", "application/json")
+
+				if authorization != "" {
+					req.Header.Set("Authorization", authorization)
+				}
+
+				// Perform request
+				w := httptest.NewRecorder()
+				router.ServeHTTP(w, req)
+
+				// Assert response
+				Expect(w.Code).To(Equal(expectedStatus))
+
+				if expectedError != "" {
+					var response map[string]interface{}
+					err = json.Unmarshal(w.Body.Bytes(), &response)
+					Expect(err).NotTo(HaveOccurred())
+
+					Expect(response["message"]).To(ContainSubstring(expectedError))
+				} else {
+					// For successful requests, verify project was created
+					var response models.ProjectResponse
+					err = json.Unmarshal(w.Body.Bytes(), &response)
+					Expect(err).NotTo(HaveOccurred())
+
+					Expect(response.UUID).NotTo(BeEmpty())
+					Expect(response.Name).To(Equal("test-project"))
+					Expect(response.Description).To(Equal("A test project"))
+					Expect(response.CreatedAt).NotTo(BeZero())
+					Expect(response.UpdatedAt).NotTo(BeZero())
+				}
+			},
+			Entry("Valid API key", "Bearer "+apiKey, http.StatusCreated, ""),
+			Entry("Missing authorization header", "", http.StatusUnauthorized, "Missing authorization header"),
+			Entry("Invalid bearer format", "Token invalid-key", http.StatusUnauthorized, "Authorization header must use Bearer scheme"),
+			Entry("Invalid API key", "Bearer invalid-key", http.StatusUnauthorized, "Invalid API key"),
+			Entry("Empty bearer token", "Bearer ", http.StatusUnauthorized, "Invalid API key"),
+		)
+
+		It("accepts valid API key", func() {
+			// Create request
+			projectData := models.ProjectCreateRequest{
+				Name:        "test-project",
+				Description: "A test project",
+			}
+			jsonData, err := json.Marshal(projectData)
+			Expect(err).NotTo(HaveOccurred())
+
+			req, err := http.NewRequest("POST", "/projects", bytes.NewBuffer(jsonData))
+			Expect(err).NotTo(HaveOccurred())
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Authorization", "Bearer "+apiKey)
+
+			// Perform request
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			// Assert response
+			Expect(w.Code).To(Equal(http.StatusCreated))
+
+			var response models.ProjectResponse
+			err = json.Unmarshal(w.Body.Bytes(), &response)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(response.UUID).NotTo(BeEmpty())
+			Expect(response.Name).To(Equal("test-project"))
+			Expect(response.Description).To(Equal("A test project"))
+		})
+	})
+
+	Describe("Secret Manager", func() {
+		Context("with existing secret", func() {
+			It("retrieves API key successfully", func() {
+				secret := createTestSecret(apiKey)
+				fakeClient := fake.NewSimpleClientset(secret)
+				secretManager := auth.NewSecretManagerWithClient(fakeClient, "default")
+
+				retrievedKey, err := secretManager.GetAPIKeyWithRetry(context.Background())
+				Expect(err).NotTo(HaveOccurred())
+				Expect(retrievedKey).To(Equal(apiKey))
+			})
+		})
+
+		Context("with timeout", func() {
+			It("handles timeout when using GetAPIKeyWithRetry", func() {
+				fakeClient := fake.NewSimpleClientset()
+				secretManager := auth.NewSecretManagerWithClient(fakeClient, "default")
+
+				ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+				defer cancel()
+
+				_, err := secretManager.GetAPIKeyWithRetry(ctx)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("timeout waiting for secret"))
+			})
+		})
+	})
+})
