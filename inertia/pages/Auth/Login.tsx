@@ -3,8 +3,8 @@ import {
   Oauth2Methods,
   PageContainer,
   PageTitle,
-} from '~/Components/auth.jsx';
-// import { FlashMessage } from '#root/pages/components/flash/flash_message.jsx'
+} from '~/Components/auth';
+import { FlashMessage } from '~/Components/flash_message';
 import { PasswordField } from '~/Components/password-field';
 import { CheckCircleSolidIcon } from '~/Components/Icons/check-circle-solid.svg';
 import GuestLayout from '~/Layouts/GuestLayout';
@@ -13,6 +13,7 @@ import * as Alert from '@kibamail/owly/alert';
 import { Button } from '@kibamail/owly/button';
 import { Text } from '@kibamail/owly/text';
 import * as TextField from '@kibamail/owly/text-field';
+
 import { FormEventHandler } from 'react';
 interface LoginPageProps {
   passwordResetSuccess?: string;
@@ -22,7 +23,7 @@ export default function Login({ passwordResetSuccess }: LoginPageProps) {
   const { data, setData, post, processing, errors, reset } = useForm({
     email: '',
     password: '',
-    remember: true as boolean,
+    remember: false as boolean,
   });
 
   const submit: FormEventHandler = (e) => {
@@ -43,6 +44,9 @@ export default function Login({ passwordResetSuccess }: LoginPageProps) {
             'Choose your preferred method to access powerful emailing tools.'
           }
         />
+
+        <FlashMessage className="mt-10" />
+
 
         {passwordResetSuccess ? (
           <Alert.Root className="mt-4 -mb-6" variant={'success'}>
@@ -73,9 +77,12 @@ export default function Login({ passwordResetSuccess }: LoginPageProps) {
               id="email"
               placeholder="Enter your work email address"
               name="email"
+              required
+              type="email"
+
               onChange={(e) => setData('email', e.target.value)}
               value={data.email}
-            >
+>
               <TextField.Label htmlFor="email">Email address</TextField.Label>
 
               {errors?.email ? (
@@ -85,6 +92,7 @@ export default function Login({ passwordResetSuccess }: LoginPageProps) {
 
             <PasswordField
               name="password"
+              required
               onChange={(e) => setData('password', e.target.value)}
               value={data.password}
             >
@@ -94,11 +102,9 @@ export default function Login({ passwordResetSuccess }: LoginPageProps) {
             </PasswordField>
           </div>
 
-          <div className="flex justify-end">
+          <div className="mt-2 flex items-center justify-end">
             <Button asChild variant="tertiary" className="underline">
-              <Link href={'/auth/passwords/forgot'}>
-                Forgot your password ?
-              </Link>
+              <Link href={'/auth/passwords/forgot'}>Forgot your password ?</Link>
             </Button>
           </div>
 

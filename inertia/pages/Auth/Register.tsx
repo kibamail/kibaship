@@ -98,7 +98,7 @@ export default function Register({}: RegisterPageProps) {
         <div className="flex justify-center">
           <Text>
             Already have an account?
-            <Link className="kb-content-info ml-2 underline" href={'/login'}>
+            <Link className="kb-content-info ml-2 underline" href={'/auth/login'}>
               Login
             </Link>
           </Text>

@@ -8,6 +8,8 @@
 */
 
 import RegisterController from '#controllers/Auth/register_controller'
+import LoginController from '#controllers/Auth/login_controller'
+
 import router from '@adonisjs/core/services/router'
 import { middleware } from './kernel.js'
 import DashboardController from '#controllers/Dashboard/dashboard_controller'
@@ -23,6 +25,7 @@ import queue from '@rlanz/bull-queue/services/main'
 import ProvisionClusterJob from '#jobs/clusters/provision_cluster_job'
 import DigitalOceanController from '#controllers/cloud_providers/digital_ocean_controller'
 import ClusterDnsVerifyController from '#controllers/clusters/cluster_dns_verify_controller'
+import LogoutController from '#controllers/Auth/logout_controller'
 
 router.on('/').renderInertia('home')
 
@@ -34,10 +37,16 @@ router
     router.get('/:workspace/p/:project', [ProjectsController, 'show']),
     router.get('/:workspace/clusters', [ClustersController, 'index']).as('clusters.index'),
     router.post('/:workspace/clusters', [ClustersController, 'store']).as('clusters.store'),
-    router.post('/:workspace/clusters/bring-your-own', [ClustersController, 'storeBringYourOwn']).as('clusters.bring-your-own.store'),
+    router
+      .post('/:workspace/clusters/bring-your-own', [ClustersController, 'storeBringYourOwn'])
+      .as('clusters.bring-your-own.store'),
     router.get('/:workspace/clusters/:clusterId', [ClustersController, 'show']).as('clusters.show'),
-    router.get('/:workspace/clusters/:clusterId/logs', [ClusterLogsController, 'show']).as('clusters.logs'),
-    router.post('/:workspace/clusters/:clusterId/restart', [ClustersController, 'restart']).as('clusters.restart'),
+    router
+      .get('/:workspace/clusters/:clusterId/logs', [ClusterLogsController, 'show'])
+      .as('clusters.logs'),
+    router
+      .post('/:workspace/clusters/:clusterId/restart', [ClustersController, 'restart'])
+      .as('clusters.restart'),
     router.delete('/:workspace/clusters/:clusterId', [ClustersController, 'destroy']),
     router.post('/:workspace/clusters/providers', [CloudProvidersController, 'store']),
     router.post('/:workspace/clusters/:clusterId/dns/verify', [
@@ -66,7 +75,7 @@ router.get('/provision', async ({ response }) => {
   const cluster = await Cluster.complete(clusterFirst?.id)
 
   await queue.dispatch(ProvisionClusterJob, {
-    clusterId: cluster?.id as string
+    clusterId: cluster?.id as string,
   })
 
   return response.json({ cluster })
@@ -77,5 +86,9 @@ router
   .prefix('/w/applications')
   .use(middleware.auth())
 
+router.group(() => [router.post('/w/logout', [LogoutController, 'logout'])]).use(middleware.auth())
+
 router.get('/auth/register', [RegisterController, 'show']).use(middleware.guest())
 router.post('/auth/register', [RegisterController, 'store']).use(middleware.guest())
+router.get('/auth/login', [LoginController, 'show']).use(middleware.guest())
+router.post('/auth/login', [LoginController, 'store']).use(middleware.guest())

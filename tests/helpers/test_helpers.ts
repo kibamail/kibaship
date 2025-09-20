@@ -2,8 +2,9 @@ import User from '#models/user'
 import Workspace from '#models/workspace'
 import CloudProvider from '#models/cloud_provider'
 import Cluster from '#models/cluster'
+import ClusterLoadBalancer from '#models/cluster_load_balancer'
+
 import { randomBytes } from 'node:crypto'
-import hash from '@adonisjs/core/services/hash'
 import db from '@adonisjs/lucid/services/db'
 
 export interface UserWithWorkspace {
@@ -28,7 +29,7 @@ export interface TestClusterData {
  */
 export async function createUserWithWorkspace(): Promise<UserWithWorkspace> {
   const email = `test_${randomBytes(4).toString('hex')}@example.com`
-  const password = await hash.make('testpassword123')
+  const password = 'testpassword123'
 
   const { user, workspace } = await db.transaction(async (trx) => {
     const user = new User()
@@ -51,10 +52,10 @@ export async function createUserWithWorkspace(): Promise<UserWithWorkspace> {
     return { user, workspace }
   })
 
-  return { 
-    user, 
-    workspaceId: workspace.id, 
-    workspaceSlug: workspace.slug 
+  return {
+    user,
+    workspaceId: workspace.id,
+    workspaceSlug: workspace.slug
   }
 }
 
@@ -67,7 +68,7 @@ export async function createTestUser(email?: string, password?: string): Promise
 
   return User.create({
     email: testEmail,
-    password: await hash.make(testPassword),
+    password: testPassword,
   })
 }
 
@@ -81,7 +82,7 @@ export async function createRegisteredUser(email?: string, password?: string): P
   return db.transaction(async (trx) => {
     const user = new User()
     user.email = testEmail
-    user.password = await hash.make(testPassword)
+    user.password = testPassword
     user.useTransaction(trx)
     await user.save()
 
@@ -105,8 +106,8 @@ export async function createRegisteredUser(email?: string, password?: string): P
  */
 export async function createTestCloudProvider(workspaceId: string, token: string = 'test-token'): Promise<CloudProvider> {
   return CloudProvider.create({
-    name: 'Test Hetzner Provider',
-    type: 'hetzner',
+    name: 'Test digital ocean provider',
+    type: 'digital_ocean',
     workspaceId: workspaceId,
     credentials: { token },
   })
@@ -127,7 +128,6 @@ export async function createTestCluster(workspaceId: string, cloudProviderId: st
         control_plane_nodes_count: 3,
         worker_nodes_count: 3,
         server_type: 'cx11',
-        control_planes_volume_size: 50,
         workers_volume_size: 100,
       },
       workspaceId,
@@ -135,13 +135,25 @@ export async function createTestCluster(workspaceId: string, cloudProviderId: st
     )
 
     cluster.controlPlaneEndpoint = `https://kube.${cluster.subdomainIdentifier}`
+    const lb = new ClusterLoadBalancer()
+    lb.clusterId = cluster.id
+    lb.type = 'cluster'
+    lb.publicIpv4Address = null
+    lb.privateIpv4Address = null
+
+
+    lb.useTransaction(trx)
+    await lb.save()
+
 
     await cluster.save()
     await trx.commit()
 
     await cluster.load('cloudProvider')
-    await cluster.load('nodes')
+    await cluster.load('nodes', (query) => { query.preload('storages') })
     await cluster.load('sshKey')
+    await cluster.load('loadBalancers')
+
 
     if (cluster.nodes && cluster.nodes.length > 0) {
       for (const node of cluster.nodes) {

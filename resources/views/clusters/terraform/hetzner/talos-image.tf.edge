@@ -33,24 +33,7 @@ data "hcloud_images" "existing_talos_image" {
   with_selector = "name=kibaship-talos-linux-{{ cluster_talos_version }}-{{ cluster_region }}"
 }
 
-resource "hcloud_snapshot" "talos_image" {
-  count       = length(data.hcloud_images.existing_talos_image.images) == 0 ? 1 : 0
-  description = "kibaship-talos-linux-{{ cluster_talos_version }}-{{ cluster_region }}"
-  
-  labels = {
-    name        = "kibaship-talos-linux-{{ cluster_talos_version }}-{{ cluster_region }}"
-    talos_version = "{{ cluster_talos_version }}"
-    region      = "{{ cluster_region }}"
-    managed_by  = "kibaship"
-  }
 
-  # Note: This is a placeholder. In practice, you would need to:
-  # 1. Create a temporary server
-  # 2. Download and install the Talos image from factory.talos.dev
-  # 3. Take a snapshot of that server
-  # 4. Delete the temporary server
-  # This process is more complex than Digital Ocean's direct image upload
-}
 
 # For now, we'll use the Talos community Hetzner images
 data "hcloud_image" "talos" {

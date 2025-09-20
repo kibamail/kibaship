@@ -3,14 +3,21 @@ import { BaseModel, beforeCreate, column, hasMany } from '@adonisjs/lucid/orm'
 import { randomUUID } from 'node:crypto'
 import Workspace from '#models/workspace'
 import type { HasMany } from '@adonisjs/lucid/types/relations'
+import { compose } from '@adonisjs/core/helpers'
+import hash from '@adonisjs/core/services/hash'
+import { withAuthFinder } from '@adonisjs/auth/mixins/lucid'
 
 /**
  * User model for password-authenticated users with workspaces
  */
-export default class User extends BaseModel {
+const AuthFinder = withAuthFinder(() => hash.use('scrypt'), {
+  uids: ['email'],
+  passwordColumnName: 'password',
+})
+
+export default class User extends compose(BaseModel, AuthFinder) {
   @column({ isPrimary: true })
   declare id: string
-
 
   @column()
   declare email: string
@@ -31,5 +38,4 @@ export default class User extends BaseModel {
   public static async generateId(user: User) {
     user.id = randomUUID()
   }
-
 }

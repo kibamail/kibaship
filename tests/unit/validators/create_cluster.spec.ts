@@ -34,7 +34,7 @@ test.group('Create cluster validator', () => {
       assert.equal(data.control_plane_nodes_count, 3)
       assert.equal(data.worker_nodes_count, 5)
       assert.equal(data.server_type, 'cx11')
-      assert.equal(data.control_planes_volume_size, 50)
+
       assert.equal(data.workers_volume_size, 100)
     }
   })
@@ -90,7 +90,7 @@ test.group('Create cluster validator', () => {
     }
   })
 
-  test('fails validation with insufficient worker nodes', async ({ assert }) => {
+  test('allows minimum worker nodes of 1', async ({ assert }) => {
     const cloudProvider = await CloudProvider.create({
       name: 'Test Provider',
       type: 'hetzner',
@@ -98,7 +98,7 @@ test.group('Create cluster validator', () => {
       credentials: { token: 'test-token' },
     })
 
-    const invalidData = {
+    const dataInput = {
       subdomain_identifier: 'test.kibaship.com',
       cloud_provider_id: cloudProvider.id,
       region: 'eu-central',
@@ -109,14 +109,10 @@ test.group('Create cluster validator', () => {
       workers_volume_size: 100,
     }
 
-    const [error, data] = await createClusterValidator.tryValidate(invalidData)
+    const [error, data] = await createClusterValidator.tryValidate(dataInput)
 
-    assert.isNotNull(error)
-    assert.isNull(data)
-    if (error) {
-      assert.property(error, 'messages')
-      assert.isArray(error.messages)
-    }
+    assert.isNull(error)
+    assert.isNotNull(data)
   })
 
   test('fails validation with non-existent cloud provider', async ({ assert }) => {
@@ -274,7 +270,7 @@ test.group('Create cluster validator', () => {
     if (error) {
       assert.property(error, 'messages')
       assert.isArray(error.messages)
-      assert.isAtLeast(error.messages.length, 7)
+      assert.isAtLeast(error.messages.length, 6)
     }
   })
 

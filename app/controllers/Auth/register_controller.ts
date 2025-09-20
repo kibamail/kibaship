@@ -1,5 +1,4 @@
 import type { HttpContext } from '@adonisjs/core/http'
-import hash from '@adonisjs/core/services/hash'
 import db from '@adonisjs/lucid/services/db'
 import User from '#models/user'
 import Workspace from '#models/workspace'
@@ -13,12 +12,10 @@ export default class RegisterController {
   async store(ctx: HttpContext) {
     const payload = await ctx.request.validateUsing(registerUserValidator)
 
-    const hashedPassword = await hash.make(payload.password)
-
     const { user, workspace } = await db.transaction(async (trx) => {
       const user = new User()
       user.email = payload.email
-      user.password = hashedPassword
+      user.password = payload.password
       user.useTransaction(trx)
       await user.save()
 

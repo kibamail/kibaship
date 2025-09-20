@@ -12,9 +12,11 @@ export default function Home() {
           <p>Kibaship</p>
 
           <div className="flex gap-4">
-            <Button variant="secondary">Login</Button>
+            <Button variant="secondary" asChild>
+              <a href='/auth/login'>Login</a>
+            </Button>
             <Button variant="primary" asChild>
-              <a href="/auth/redirect">Get started for free</a>
+              <a href="/auth/register">Get started for free</a>
             </Button>
           </div>
         </div>

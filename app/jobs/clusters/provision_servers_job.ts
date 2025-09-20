@@ -157,17 +157,15 @@ export default class ProvisionServersJob extends Job {
     const configsPath = `talos-configs/${clusterId}`
     const terraformConfigsPath = `terraform/clusters/${clusterId}/configs`
     
-    const cluster = await Cluster.find(clusterId)
+    const cluster = await Cluster.complete(clusterId)
     if (!cluster) return
 
-    // Extract configurations from Terraform output
-    const talosConfigObj = output.talos_config?.value as Cluster['talosConfig']
-    const controlPlaneConfig = output.control_plane_machine_configuration?.value as string
-    const workerConfig = output.worker_machine_configuration?.value as string
     const kubeConfig = output.kubeconfig?.value as string
+    const talosConfig = output.talos_config?.value as Cluster['talosConfig']
+    const workerConfig = output.worker_machine_configuration?.value as string
+    const controlPlaneConfig = output.control_plane_machine_configuration?.value as string
 
-    // Generate proper talosconfig YAML structure from the client configuration object
-    if (talosConfigObj && cluster.nodes) {
+    if (talosConfig && cluster.nodes) {
       const controlPlaneEndpoints = cluster.nodes
         .filter(node => node.type === 'master')
         .map(node => node.ipv4Address)
@@ -178,9 +176,9 @@ export default class ProvisionServersJob extends Job {
         contexts: {
           [cluster.subdomainIdentifier]: {
             endpoints: controlPlaneEndpoints,
-            ca: talosConfigObj.ca_certificate,
-            crt: talosConfigObj.client_certificate,
-            key: talosConfigObj.client_key
+            ca: talosConfig.ca_certificate,
+            crt: talosConfig.client_certificate,
+            key: talosConfig.client_key
           }
         }
       }

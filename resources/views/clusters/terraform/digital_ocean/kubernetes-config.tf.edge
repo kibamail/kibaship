@@ -275,18 +275,18 @@ resource "helm_release" "mysql_operator" {
 
 # Fetch each Valkey CRD file from the repository
 @each(crd_file in valkey_crd_files)
-data "http" "valkey_crd_{{ crd_file.name }}" {
+data "http" "valkey_crd_{{ crd_file.name.toLowerCase().replaceAll('-', '_').replaceAll('.', '_') }}" {
   url = "{{ crd_file.url }}"
 }
 @end
 
 # Create kubectl_manifest resources for each Valkey CRD file
 @each((crd_file, index) in valkey_crd_files)
-resource "kubectl_manifest" "valkey_{{ crd_file.name }}" {
-  yaml_body = data.http.valkey_crd_{{ crd_file.name }}.response_body
+resource "kubectl_manifest" "valkey_{{ crd_file.name.toLowerCase().replaceAll('-', '_').replaceAll('.', '_') }}" {
+  yaml_body = data.http.valkey_crd_{{ crd_file.name.toLowerCase().replaceAll('-', '_').replaceAll('.', '_') }}.response_body
 
   @if(index > 0)
-  depends_on = [kubectl_manifest.valkey_{{ valkey_crd_files[index - 1].name }}]
+  depends_on = [kubectl_manifest.valkey_{{ valkey_crd_files[index - 1].name.toLowerCase().replaceAll('-', '_').replaceAll('.', '_') }}]
   @else
   depends_on = [helm_release.cilium]
   @endif

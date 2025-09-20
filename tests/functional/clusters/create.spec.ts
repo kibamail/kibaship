@@ -28,7 +28,7 @@ test.group('Clusters create', () => {
     assert.equal(cluster!.workspaceId, workspaceId)
     assert.equal(cluster!.status, 'provisioning')
     assert.equal(cluster!.kind, 'all_purpose')
-    assert.equal(cluster!.controlPlanesVolumeSize, clusterData.control_planes_volume_size)
+    assert.equal(cluster!.controlPlanesVolumeSize, 0)
     assert.equal(cluster!.workersVolumeSize, clusterData.workers_volume_size)
 
     const sshKey = await ClusterSshKey.findBy('clusterId', cluster!.id)

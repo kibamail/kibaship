@@ -12,6 +12,11 @@ interface FlashMessageProps extends Alert.AlertRootProps {
 }
 
 export function FlashMessage({ alert, ...rootProps }: FlashMessageProps) {
+
+    if (! alert) {
+        return null
+    }
+
     return (
         <Alert.Root {...rootProps} variant={alert?.variant}>
             <Alert.Icon>
