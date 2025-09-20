@@ -31,6 +31,12 @@ variable "location" {
   default     = "nbg1"
 }
 
+variable "network_zone" {
+  description = "Network zone (eu-central, us-east, etc.)"
+  type        = string
+}
+
+
 provider "hcloud" {
   token = var.hcloud_token
 }
@@ -47,7 +53,7 @@ resource "hcloud_network" "cluster_network" {
 resource "hcloud_network_subnet" "cluster_subnet" {
   network_id   = hcloud_network.cluster_network.id
   type         = "cloud"
-  network_zone = var.location
+  network_zone = var.network_zone
   ip_range     = "{{ cluster_network_ip_range }}"
 }
 

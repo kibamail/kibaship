@@ -33,11 +33,9 @@ data "hcloud_images" "existing_talos_image" {
   with_selector = "name=kibaship-talos-linux-{{ cluster_talos_version }}-{{ cluster_region }}"
 }
 
-
-
 # For now, we'll use the Talos community Hetzner images
 data "hcloud_image" "talos" {
-  with_selector = "name~talos"
+  with_selector = "name=talos"
   most_recent   = true
 }
 

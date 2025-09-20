@@ -236,6 +236,15 @@ export default class Cluster extends BaseModel {
   @column.dateTime({ autoCreate: true, autoUpdate: true })
   declare updatedAt: DateTime
 
+  @column.dateTime()
+  declare byocStartedAt: DateTime | null
+
+  @column.dateTime()
+  declare byocCompletedAt: DateTime | null
+
+  @column.dateTime()
+  declare byocErrorAt: DateTime | null
+
   @column({
     prepare: value => value ? encryption.encrypt(JSON.stringify(value)) : null,
     consume: value => value ? JSON.parse(encryption.decrypt(value) || '{}') : null,

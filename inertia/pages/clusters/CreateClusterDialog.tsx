@@ -20,6 +20,7 @@ import { VisuallyHidden } from '@radix-ui/react-visually-hidden'
 
 interface CreateClusterModalProps {
   isOpen: boolean
+  provider?: CloudProviderType
   onOpenChange: (open: boolean) => void
 }
 
@@ -32,6 +33,7 @@ const providerIcons: Record<CloudProviderType, React.ComponentType<{ className?:
   linode: LinodeIcon,
   vultr: VultrIcon,
   ovh: OVHIcon,
+  byoc: K8sIcon,
 }
 
 export function CreateClusterDialog({ isOpen, onOpenChange }: CreateClusterModalProps) {
@@ -107,7 +109,7 @@ export function CreateClusterDialog({ isOpen, onOpenChange }: CreateClusterModal
         </div>
 
         <form onSubmit={onSubmit}>
-          <div className="px-5 pb-5 space-y-4">
+          <div className="px-5 pb-2 space-y-4">
             <TextField.Root
               name="name"
               value={data.subdomain_identifier}

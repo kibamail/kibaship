@@ -44,6 +44,7 @@ export default class SourceProvidersController extends BaseController {
     const sourceCodeProvider = await SourceCodeProvider.firstOrCreate(
       {
         providerId: installation.id.toString(),
+        workspaceId: workspace.id
       },
       {
         workspaceId: workspace.id,

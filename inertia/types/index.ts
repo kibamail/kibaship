@@ -70,6 +70,7 @@ export type CloudProviderType =
   | 'linode'
   | 'vultr'
   | 'ovh'
+  | 'byoc'
 
 export interface CloudProvider {
   id: string

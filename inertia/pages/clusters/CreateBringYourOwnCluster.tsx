@@ -1,66 +1,61 @@
 import { Button } from '@kibamail/owly/button'
-import { Text } from '@kibamail/owly/text'
-import { PlusIcon } from '~/Components/Icons/plus.svg'
-import { useState } from 'react'
+import * as Select from '@kibamail/owly/select-field'
+import * as TextField from '@kibamail/owly/text-field'
+
 import { useForm, usePage } from '@inertiajs/react'
 import type { PageProps } from '~/types'
-import { AddNodeDialog } from './dialogs/AddNodeDialog'
-import { TalosConfigDialog } from './dialogs/TalosConfigDialog'
-import { KubeconfigDialog } from './dialogs/KubeconfigDialog'
 
 interface CreateBringYourOwnClusterProps {
   onSubmit?: () => void
 }
 
 interface BringYourOwnClusterForm {
-  nodes: Array<{
-    id: string
-    type: 'controlplane' | 'worker'
-    publicIp: string
-    privateIp: string
-    diskName?: string
-  }>
+  location: string
   talosConfig: {
     ca: string
     crt: string
     key: string
-  } | null
-  kubeconfig: {
-    clientKeyData: string
-    clientCertificateData: string
-    certificateAuthorityData: string
-  } | null
-  type: 'bring_your_own'
+  }
+  type: 'byoc'
 }
 
 export function CreateBringYourOwnCluster({ onSubmit }: CreateBringYourOwnClusterProps) {
   const { workspace } = usePage<PageProps>().props
   const { data, setData, post, processing, reset } = useForm<BringYourOwnClusterForm>({
-    nodes: [],
-    talosConfig: null,
-    kubeconfig: null,
-    type: 'bring_your_own'
+    location: '',
+    talosConfig: { ca: '', crt: '', key: '' },
+    type: 'byoc',
   })
-  
-  const [isAddNodeDialogOpen, setIsAddNodeDialogOpen] = useState(false)
-  const [isTalosConfigDialogOpen, setIsTalosConfigDialogOpen] = useState(false)
-  const [isKubeconfigDialogOpen, setIsKubeconfigDialogOpen] = useState(false)
 
-  const handleAddNode = (nodeData: Omit<BringYourOwnClusterForm['nodes'][number], 'id'>) => {
-    const newNode = {
-      id: Math.random().toString(36).substring(2, 11).toString(),
-      ...nodeData
-    }
-    setData('nodes', [...data.nodes, newNode])
-  }
-
-  const handleTalosConfigSave = (configData: BringYourOwnClusterForm['talosConfig']) => {
-    setData('talosConfig', configData)
-  }
-
-  const handleKubeconfigSave = (configData: BringYourOwnClusterForm['kubeconfig']) => {
-    setData('kubeconfig', configData)
-  }
+  const REGIONS = [
+    { group: 'North America', regions: [
+      { label: 'US East (N. Virginia)', value: 'us-east-1', flag: 'us' },
+      { label: 'US West (Oregon)', value: 'us-west-2', flag: 'us' },
+      { label: 'Canada (Central)', value: 'ca-central-1', flag: 'ca' },
+    ]},
+    { group: 'Europe', regions: [
+      { label: 'Ireland', value: 'eu-west-1', flag: 'ie' },
+      { label: 'London', value: 'eu-west-2', flag: 'gb' },
+      { label: 'Frankfurt', value: 'eu-central-1', flag: 'de' },
+      { label: 'Stockholm', value: 'eu-north-1', flag: 'se' },
+      { label: 'Helsinki', value: 'eu-north-2', flag: 'fi' },
+    ]},
+    { group: 'Asia Pacific', regions: [
+      { label: 'Singapore', value: 'ap-southeast-1', flag: 'sg' },
+      { label: 'Tokyo', value: 'ap-northeast-1', flag: 'jp' },
+      { label: 'Sydney', value: 'ap-southeast-2', flag: 'au' },
+    ]},
+    { group: 'South America', regions: [
+      { label: 'São Paulo', value: 'sa-east-1', flag: 'br' },
+    ]},
+    { group: 'Africa', regions: [
+      { label: 'Cape Town', value: 'af-south-1', flag: 'za' },
+    ]},
+    { group: 'Middle East', regions: [
+      { label: 'Bahrain', value: 'me-south-1', flag: 'bh' },
+      { label: 'UAE', value: 'me-central-1', flag: 'ae' },
+    ]},
+  ]
 
   const handleSubmit = () => {
     post(`/w/${workspace.slug}/clusters/bring-your-own`, {
@@ -71,136 +66,83 @@ export function CreateBringYourOwnCluster({ onSubmit }: CreateBringYourOwnCluste
     })
   }
 
-  const canSubmit = data.nodes.length > 0 && data.talosConfig !== null && data.kubeconfig !== null
+  const canSubmit = Boolean(
+    data.location && data.talosConfig.ca && data.talosConfig.crt && data.talosConfig.key
+  )
 
   return (
-    <div className="px-5 pb-5 space-y-4">
-      <div className="w-full flex flex-col p-3 rounded-md bg-owly-background-secondary border border-owly-border-tertiary">
-        <Text className="text-left text-owly-content-tertiary !text-sm">
-          Add your cluster nodes to get started. You can add both control plane and worker nodes.
-        </Text>
-
-        <div className="my-5 flex justify-center">
-          <Button 
-            variant="secondary" 
-            onClick={() => setIsAddNodeDialogOpen(true)}
-          >
-            <PlusIcon className="!size-4 mr-2" />
-            Add cluster node
-          </Button>
-        </div>
-      </div>
-
-      {data.nodes.length > 0 && (
-        <div className="space-y-3">
-          <Text className="font-medium">Added Nodes ({data.nodes.length})</Text>
-          {data.nodes.map((node) => (
-            <div 
-              key={node.id} 
-              className="p-3 border border-owly-border-tertiary rounded-md bg-owly-background-primary"
-            >
-              <div className="flex justify-between items-start">
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className={`px-2 py-0.5 text-xs rounded-full ${
-                      node.type === 'controlplane' 
-                        ? 'bg-blue-100 text-blue-800' 
-                        : 'bg-green-100 text-green-800'
-                    }`}>
-                      {node.type}
+    <div className="px-5">
+      <div className="space-y-2">
+        <Select.Root name="location" value={data.location} onValueChange={(v) => setData('location', v)}>
+          <Select.Label>Region</Select.Label>
+          <Select.Trigger placeholder="Select region" />
+          <Select.Content className='z-50'>
+            {REGIONS.map((group) => (
+              <Select.Group key={group.group}>
+                <Select.GroupLabel className='text-sm p-2'>{group.group}</Select.GroupLabel>
+                {group.regions.map((r) => (
+                  <Select.Item key={r.value} value={r.value}>
+                    <span className="flex items-center gap-2">
+                      <img src={`/flags/${r.flag}.svg`} alt="" className="w-4 h-4" />
+                      <span>{r.label}</span>
                     </span>
-                  </div>
-                  <Text className="text-sm">
-                    Public: {node.publicIp} | Private: {node.privateIp}
-                  </Text>
-                  {node.diskName && (
-                    <Text className="text-sm text-owly-content-tertiary">
-                      Disk: {node.diskName}
-                    </Text>
-                  )}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Talos Configuration */}
-      <div className="w-full flex flex-col p-3 rounded-md bg-owly-background-hover border border-owly-border-tertiary">
-        <Text className="text-left text-owly-content-tertiary !text-sm">
-          Add your Talos configuration for cluster authentication and management.
-        </Text>
-
-        <div className="my-5 flex justify-center">
-          <Button 
-            variant="secondary" 
-            onClick={() => setIsTalosConfigDialogOpen(true)}
-          >
-            {data.talosConfig ? (
-              <>✓ Talos Config Added</>
-            ) : (
-              <>
-                <PlusIcon className="!size-4 mr-2" />
-                Add talos config
-              </>
-            )}
-          </Button>
-        </div>
+                  </Select.Item>
+                ))}
+              </Select.Group>
+            ))}
+          </Select.Content>
+        </Select.Root>
       </div>
 
-      {/* Kubeconfig */}
-      <div className="w-full flex flex-col p-3 rounded-md bg-owly-background-hover border border-owly-border-tertiary">
-        <Text className="text-left text-owly-content-tertiary !text-sm">
-          Add your kubeconfig data to authenticate with the Kubernetes cluster.
-        </Text>
+      <div className="grid grid-cols-1 gap-4 mt-4">
+        <TextField.Root
+          name="talos.ca"
+          placeholder="LS0BVUdBeXRsY0FNaEFHcVQxQ2JQakFU..."
+          value={data.talosConfig.ca}
+          onChange={(e) => setData('talosConfig', { ...data.talosConfig, ca: (e.target as HTMLInputElement).value })}
+          required
+          autoComplete="off"
+          data-form-type="other"
+          data-lpignore="true"
+        >
+          <TextField.Label>Talos ca certificate</TextField.Label>
+        </TextField.Root>
 
-        <div className="my-5 flex justify-center">
-          <Button 
-            variant="secondary" 
-            onClick={() => setIsKubeconfigDialogOpen(true)}
-          >
-            {data.kubeconfig ? (
-              <>✓ Kubeconfig Added</>
-            ) : (
-              <>
-                <PlusIcon className="!size-4 mr-2" />
-                Add kubeconfig
-              </>
-            )}
-          </Button>
-        </div>
+        <TextField.Root
+          name="talos.crt"
+          placeholder="LS0BVUdBeXRsY0FNaEFHcVQxQ2JQakFU..."
+          value={data.talosConfig.crt}
+          onChange={(e) => setData('talosConfig', { ...data.talosConfig, crt: (e.target as HTMLInputElement).value })}
+          required
+          autoComplete="off"
+          data-form-type="other"
+          data-lpignore="true"
+        >
+          <TextField.Label>Talos client certificate</TextField.Label>
+        </TextField.Root>
+
+        <TextField.Root
+          name="talos.key"
+          placeholder="LS0BVUdBeXRsY0FNaEFHcVQxQ2JQakFU..."
+          value={data.talosConfig.key}
+          onChange={(e) => setData('talosConfig', { ...data.talosConfig, key: (e.target as HTMLInputElement).value })}
+          required
+          autoComplete="off"
+          data-form-type="other"
+          data-lpignore="true"
+          type="password"
+        >
+          <TextField.Label>Talos client key</TextField.Label>
+        </TextField.Root>
       </div>
 
-      {/* Submit Button */}
-      {canSubmit && (
-        <div className="flex justify-end pt-4">
-          <Button 
-            onClick={handleSubmit}
-            loading={processing}
-            disabled={processing}
-          >
-            Create Cluster
-          </Button>
-        </div>
-      )}
+      <div className="flex justify-end pt-2">
+        <Button onClick={handleSubmit} loading={processing} disabled={!canSubmit || processing}>
+          Create Cluster
+        </Button>
+      </div>
 
-      <AddNodeDialog
-        isOpen={isAddNodeDialogOpen}
-        onOpenChange={setIsAddNodeDialogOpen}
-        onAddNode={handleAddNode}
-      />
 
-      <TalosConfigDialog
-        isOpen={isTalosConfigDialogOpen}
-        onOpenChange={setIsTalosConfigDialogOpen}
-        onSave={handleTalosConfigSave}
-      />
-
-      <KubeconfigDialog
-        isOpen={isKubeconfigDialogOpen}
-        onOpenChange={setIsKubeconfigDialogOpen}
-        onSave={handleKubeconfigSave}
-      />
     </div>
   )
 }

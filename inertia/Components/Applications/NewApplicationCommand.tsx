@@ -275,7 +275,7 @@ export function NewApplicationCommand({ open, onOpenChange }: NewApplicationComm
                       href={command?.href as string}
                       onClick={command?.onClick}
                       rel="noopener noreferrer"
-                      className="flex items-center w-full justify-between"
+                      className="flex items-center w-full justify-between h-full cursor-pointer"
                     >
                       <div className="flex items-center gap-3">
                         {command.icon}
