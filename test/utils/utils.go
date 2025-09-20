@@ -28,6 +28,42 @@ import (
 	. "github.com/onsi/ginkgo/v2" // nolint:revive,staticcheck
 )
 
+// InstallGatewayAPI installs the required Gateway API CRDs and waits for them to be Established
+func InstallGatewayAPI() error {
+	urls := []string{
+		"https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.2.0/config/crd/standard/gateway.networking.k8s.io_gatewayclasses.yaml",
+		"https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.2.0/config/crd/standard/gateway.networking.k8s.io_gateways.yaml",
+		"https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.2.0/config/crd/standard/gateway.networking.k8s.io_httproutes.yaml",
+		"https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.2.0/config/crd/standard/gateway.networking.k8s.io_referencegrants.yaml",
+		"https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.2.0/config/crd/standard/gateway.networking.k8s.io_grpcroutes.yaml",
+		"https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.2.0/config/crd/experimental/gateway.networking.k8s.io_tlsroutes.yaml",
+	}
+
+	for _, url := range urls {
+		cmd := exec.Command("kubectl", "apply", "-f", url)
+		if _, err := Run(cmd); err != nil {
+			return err
+		}
+	}
+
+	crds := []string{
+		"gatewayclasses.gateway.networking.k8s.io",
+		"gateways.gateway.networking.k8s.io",
+		"httproutes.gateway.networking.k8s.io",
+		"referencegrants.gateway.networking.k8s.io",
+		"grpcroutes.gateway.networking.k8s.io",
+		"tlsroutes.gateway.networking.k8s.io",
+	}
+
+	for _, crd := range crds {
+		cmd := exec.Command("kubectl", "wait", "--for", "condition=Established", "crd", crd, "--timeout=300s")
+		if _, err := Run(cmd); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 const (
 	prometheusOperatorVersion = "v0.77.1"
 	prometheusOperatorURL     = "https://github.com/prometheus-operator/prometheus-operator/" +
