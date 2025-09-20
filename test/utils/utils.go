@@ -469,6 +469,30 @@ func DeployKibashipOperator() error {
 	return MonitorOperatorStartup("kibaship-operator", maxWaitTime)
 }
 
+// DeployAPIServer deploys the API server into the operator namespace and sets its image
+func DeployAPIServer(image string) error {
+	// Apply the api-server kustomization
+	cmd := exec.Command("kubectl", "apply", "-k", "config/api-server")
+	if _, err := Run(cmd); err != nil {
+		return err
+	}
+
+	// Update the deployment image to the locally built tag
+	cmd = exec.Command("kubectl", "-n", "kibaship-operator", "set", "image",
+		"deployment/apiserver", fmt.Sprintf("apiserver=%s", image))
+	if _, err := Run(cmd); err != nil {
+		return err
+	}
+
+	// Wait for rollout to complete
+	cmd = exec.Command("kubectl", "-n", "kibaship-operator", "rollout", "status",
+		"deployment/apiserver", "--timeout=5m")
+	if _, err := Run(cmd); err != nil {
+		return err
+	}
+	return nil
+}
+
 // UndeployKibashipOperator removes the kibaship-operator deployment
 func UndeployKibashipOperator() {
 	cmd := exec.Command("make", "undeploy")

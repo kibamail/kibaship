@@ -16,6 +16,8 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: kibamail/kibaship-operator
 
+  IMAGE_NAME_APISERVER: kibamail/kibaship-operator-apiserver
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -66,7 +68,21 @@ jobs:
           type=semver,pattern={{major}}.{{minor}}
           type=semver,pattern={{major}}
           type=sha,format=short,prefix=sha-
-
+    - name: Extract metadata (apiserver)
+      id: meta_apiserver
+      uses: docker/metadata-action@v5
+      env:
+        GITHUB_REF: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.ref || github.ref }}
+        GITHUB_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_APISERVER }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+          type=semver,pattern={{major}}
+          type=sha,format=short,prefix=sha-
     - name: Build and push Docker image
       uses: docker/build-push-action@v6
       with:
@@ -78,10 +94,23 @@ jobs:
         cache-from: type=gha
         cache-to: type=gha,mode=max
 
+    - name: Build and push Docker image (apiserver)
+      uses: docker/build-push-action@v6
+      with:
+        context: .
+        file: Dockerfile.apiserver
+        platforms: linux/amd64,linux/arm64
+        push: ${{ startsWith(github.event_name == 'workflow_run' && github.event.workflow_run.ref || github.ref, 'refs/tags/v') || startsWith(github.event_name == 'workflow_run' && github.event.workflow_run.ref || github.ref, 'refs/heads/main') }}
+        tags: ${{ steps.meta_apiserver.outputs.tags }}
+        labels: ${{ steps.meta_apiserver.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+
     - name: Generate deployment manifests
       if: ${{ startsWith(github.event_name == 'workflow_run' && github.event.workflow_run.ref || github.ref, 'refs/tags/v') }}
       run: |
-        make build-installer IMG=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}
+        make build-installer IMG=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }} IMG_APISERVER=${{ env.REGISTRY }}/${{ env.IMAGE_NAME_APISERVER }}:${{ steps.meta_apiserver.outputs.version }}
 
     - name: Upload deployment manifests
       if: ${{ startsWith(github.event_name == 'workflow_run' && github.event.workflow_run.ref || github.ref, 'refs/tags/v') || startsWith(github.event_name == 'workflow_run' && github.event.workflow_run.ref || github.ref, 'refs/heads/main') }}
@@ -146,8 +175,9 @@ jobs:
             KIBASHIP_OPERATOR_DEFAULT_PORT=3000
           ```
 
-          ### Container Image
+          ### Container Images
 
-          The container image for this release is available at:
-          `ghcr.io/kibamail/kibaship-operator:${{ steps.refname.outputs.name }}`
+          The container images for this release are available at:
+          - `ghcr.io/kibamail/kibaship-operator:${{ steps.refname.outputs.name }}`
+          - `ghcr.io/kibamail/kibaship-operator-apiserver:${{ steps.refname.outputs.name }}`
         generate_release_notes: true
