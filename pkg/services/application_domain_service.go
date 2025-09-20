@@ -39,9 +39,9 @@ type ApplicationDomainService struct {
 }
 
 // NewApplicationDomainService creates a new application domain service
-func NewApplicationDomainService(client client.Client, scheme *runtime.Scheme, applicationService *ApplicationService) *ApplicationDomainService {
+func NewApplicationDomainService(k8sClient client.Client, scheme *runtime.Scheme, applicationService *ApplicationService) *ApplicationDomainService {
 	return &ApplicationDomainService{
-		client:             client,
+		client:             k8sClient,
 		scheme:             scheme,
 		applicationService: applicationService,
 	}
@@ -170,13 +170,37 @@ func (s *ApplicationDomainService) GetApplicationDomainsByApplication(ctx contex
 		return nil, fmt.Errorf("failed to list application domains: %w", err)
 	}
 
-	var applicationDomains []*models.ApplicationDomain
+	applicationDomains := make([]*models.ApplicationDomain, 0, len(domainList.Items))
 	for _, crd := range domainList.Items {
 		applicationDomain := &models.ApplicationDomain{}
 		applicationDomain.ConvertFromCRD(&crd, application.Slug)
 		applicationDomains = append(applicationDomains, applicationDomain)
 	}
 
+	return applicationDomains, nil
+}
+
+// GetApplicationDomainsByApplicationUUIDNoValidate lists domains for an application UUID
+// without calling back into ApplicationService (avoids circular dependency). The caller is
+// responsible for providing the corresponding applicationSlug used for conversion.
+func (s *ApplicationDomainService) GetApplicationDomainsByApplicationUUIDNoValidate(
+	ctx context.Context,
+	applicationUUID string,
+	applicationSlug string,
+) ([]*models.ApplicationDomain, error) {
+	var domainList v1alpha1.ApplicationDomainList
+	if err := s.client.List(ctx, &domainList, client.MatchingLabels{
+		validation.LabelApplicationUUID: applicationUUID,
+	}); err != nil {
+		return nil, fmt.Errorf("failed to list application domains: %w", err)
+	}
+
+	applicationDomains := make([]*models.ApplicationDomain, 0, len(domainList.Items))
+	for i := range domainList.Items {
+		d := &models.ApplicationDomain{}
+		d.ConvertFromCRD(&domainList.Items[i], applicationSlug)
+		applicationDomains = append(applicationDomains, d)
+	}
 	return applicationDomains, nil
 }
 

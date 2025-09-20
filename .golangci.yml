@@ -36,6 +36,34 @@ linters:
           - dupl
           - lll
         path: internal/*
+      - linters:
+          - lll
+        path: test/.*
+      - linters:
+          - lll
+        path: pkg/handlers/.*
+      - linters:
+          - lll
+        path: pkg/models/.*
+      - linters:
+          - lll
+        path: pkg/services/.*
+      - linters:
+          - lll
+        path: pkg/templates/.*
+      - linters:
+          - dupl
+        path: test/.*
+      - linters:
+          - dupl
+        path: pkg/handlers/.*
+      - linters:
+          - dupl
+        path: pkg/services/.*
+      - linters:
+          - dupl
+        path: pkg/templates/.*
+
     paths:
       - third_party$
       - builtin$

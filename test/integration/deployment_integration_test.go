@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -106,7 +107,7 @@ var _ = Describe("Deployment Integration", func() {
 				Namespace: "default",
 			}, &application)
 			if err == nil {
-				k8sClient.Delete(ctx, &application)
+				_ = k8sClient.Delete(ctx, &application)
 			}
 
 			var project v1alpha1.Project
@@ -115,11 +116,11 @@ var _ = Describe("Deployment Integration", func() {
 				Namespace: "default",
 			}, &project)
 			if err == nil {
-				k8sClient.Delete(ctx, &project)
+				_ = k8sClient.Delete(ctx, &project)
 			}
 		})
 
-		It("creates GitRepository deployment successfully", func() {
+		It("creates GitRepository deployment successfully", NodeTimeout(30*time.Second), func(ctx SpecContext) {
 			payload := models.DeploymentCreateRequest{
 				ApplicationSlug: createdApplication.Slug,
 				GitRepository: &models.GitRepositoryDeploymentConfig{
@@ -180,7 +181,7 @@ var _ = Describe("Deployment Integration", func() {
 			Expect(deployment.Spec.GitRepository.Branch).To(Equal("main"))
 
 			// Clean up the created deployment
-			k8sClient.Delete(ctx, &deployment)
+			_ = k8sClient.Delete(ctx, &deployment)
 		})
 	})
 
@@ -199,7 +200,7 @@ var _ = Describe("Deployment Integration", func() {
 			cleanupTestDeployment(ctx, createdProject, createdApplication, createdDeployment)
 		})
 
-		It("retrieves deployment by slug", func() {
+		It("retrieves deployment by slug", NodeTimeout(30*time.Second), func(ctx SpecContext) {
 			req, err := http.NewRequest("GET", "/deployments/"+createdDeployment.Slug, nil)
 			Expect(err).NotTo(HaveOccurred())
 			req.Header.Set("Authorization", "Bearer "+apiKey)
@@ -217,7 +218,7 @@ var _ = Describe("Deployment Integration", func() {
 			Expect(response.ApplicationUUID).To(Equal(createdApplication.UUID))
 		})
 
-		It("retrieves deployments by application", func() {
+		It("retrieves deployments by application", NodeTimeout(30*time.Second), func(ctx SpecContext) {
 			req, err := http.NewRequest("GET", "/applications/"+createdApplication.Slug+"/deployments", nil)
 			Expect(err).NotTo(HaveOccurred())
 			req.Header.Set("Authorization", "Bearer "+apiKey)
@@ -326,7 +327,7 @@ func cleanupTestDeployment(ctx context.Context, project *models.ProjectResponse,
 		Namespace: "default",
 	}, &dep)
 	if err == nil {
-		k8sClient.Delete(ctx, &dep)
+		_ = k8sClient.Delete(ctx, &dep)
 	}
 
 	// Clean up application
@@ -336,7 +337,7 @@ func cleanupTestDeployment(ctx context.Context, project *models.ProjectResponse,
 		Namespace: "default",
 	}, &app)
 	if err == nil {
-		k8sClient.Delete(ctx, &app)
+		_ = k8sClient.Delete(ctx, &app)
 	}
 
 	// Clean up project
@@ -346,6 +347,6 @@ func cleanupTestDeployment(ctx context.Context, project *models.ProjectResponse,
 		Namespace: "default",
 	}, &proj)
 	if err == nil {
-		k8sClient.Delete(ctx, &proj)
+		_ = k8sClient.Delete(ctx, &proj)
 	}
 }

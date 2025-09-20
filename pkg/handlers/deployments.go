@@ -185,7 +185,7 @@ func (h *DeploymentHandler) GetDeploymentsByApplication(c *gin.Context) {
 	}
 
 	// Convert to response format
-	var responses []models.DeploymentResponse
+	responses := make([]models.DeploymentResponse, 0, len(deployments))
 	for _, deployment := range deployments {
 		responses = append(responses, deployment.ToResponse())
 	}

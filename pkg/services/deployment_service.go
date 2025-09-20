@@ -39,9 +39,9 @@ type DeploymentService struct {
 }
 
 // NewDeploymentService creates a new deployment service
-func NewDeploymentService(client client.Client, scheme *runtime.Scheme, applicationService *ApplicationService) *DeploymentService {
+func NewDeploymentService(k8sClient client.Client, scheme *runtime.Scheme, applicationService *ApplicationService) *DeploymentService {
 	return &DeploymentService{
-		client:             client,
+		client:             k8sClient,
 		scheme:             scheme,
 		applicationService: applicationService,
 	}
@@ -163,7 +163,7 @@ func (s *DeploymentService) GetDeploymentsByApplication(ctx context.Context, app
 		return nil, fmt.Errorf("failed to list deployments: %w", err)
 	}
 
-	var deployments []*models.Deployment
+	deployments := make([]*models.Deployment, 0, len(deploymentList.Items))
 	for _, crd := range deploymentList.Items {
 		deployment := &models.Deployment{}
 		deployment.ConvertFromCRD(&crd, application.Slug)

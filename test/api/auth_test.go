@@ -34,11 +34,11 @@ import (
 
 // generateAPIKey generates a random 48-character API key
 func generateAPIKey() string {
-	bytes := make([]byte, 24) // 24 bytes = 48 hex characters
-	if _, err := rand.Read(bytes); err != nil {
+	keyBytes := make([]byte, 24) // 24 bytes = 48 hex characters
+	if _, err := rand.Read(keyBytes); err != nil {
 		panic(err)
 	}
-	return hex.EncodeToString(bytes)
+	return hex.EncodeToString(keyBytes)
 }
 
 // setupAuthenticatedRouter creates a router with authentication for testing

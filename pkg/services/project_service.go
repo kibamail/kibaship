@@ -38,9 +38,9 @@ type ProjectService struct {
 }
 
 // NewProjectService creates a new project service
-func NewProjectService(client client.Client, scheme *runtime.Scheme) *ProjectService {
+func NewProjectService(k8sClient client.Client, scheme *runtime.Scheme) *ProjectService {
 	return &ProjectService{
-		client: client,
+		client: k8sClient,
 		scheme: scheme,
 	}
 }
@@ -211,7 +211,7 @@ func (s *ProjectService) applyProjectUpdates(crd *v1alpha1.Project, req *models.
 
 	// Update resource profile and regenerate spec if needed
 	if req.ResourceProfile != nil || req.CustomResourceLimits != nil {
-		profile := models.ResourceProfileDevelopment
+		var profile models.ResourceProfile
 		if req.ResourceProfile != nil {
 			profile = *req.ResourceProfile
 		} else {
