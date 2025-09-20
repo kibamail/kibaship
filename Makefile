@@ -254,6 +254,9 @@ build-installer: manifests generate kustomize ## Generate a consolidated YAML wi
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
 	$(KUSTOMIZE) build config/default > dist/install.yaml
 	echo "---" >> dist/install.yaml
+	cd config/api-server && $(KUSTOMIZE) edit set image apiserver=${IMG_APISERVER}
+	$(KUSTOMIZE) build config/api-server >> dist/install.yaml
+	echo "---" >> dist/install.yaml
 	$(KUSTOMIZE) build config/tekton-resources >> dist/install.yaml
 
 ##@ Deployment

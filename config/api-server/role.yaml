@@ -1,0 +1,13 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: apiserver-secret-access
+  labels:
+    app.kubernetes.io/name: kibaship-apiserver
+    app.kubernetes.io/managed-by: kustomize
+rules:
+  # Allow API server to manage its API key stored as a Secret in the operator namespace
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+

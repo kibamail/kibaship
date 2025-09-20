@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: apiserver
+  labels:
+    app.kubernetes.io/name: kibaship-apiserver
+    app.kubernetes.io/managed-by: kustomize
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: kibaship-apiserver
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+

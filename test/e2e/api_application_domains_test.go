@@ -1,0 +1,134 @@
+package e2e
+
+import (
+	"bytes"
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"os/exec"
+	"strings"
+	"time"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+)
+
+var _ = Describe("API Server Application Domains Auto-Loading", func() {
+	It("creates a GitRepository application and GET /applications/{slug} returns its default domain", func() {
+		By("fetching API key from api-server secret")
+		cmd := exec.Command("kubectl", "get", "secret", "api-server-api-key-kibaship-com", "-n", "kibaship-operator", "-o", "jsonpath={.data.api-key}")
+		output, err := cmd.CombinedOutput()
+		Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("failed to get api key secret: %s", string(output)))
+		encodedKey := strings.TrimSpace(string(output))
+		decodedKeyBytes, err := base64.StdEncoding.DecodeString(encodedKey)
+		Expect(err).NotTo(HaveOccurred(), "failed to base64 decode api key")
+		apiKey := strings.TrimSpace(string(decodedKeyBytes))
+
+		By("port-forwarding API service to localhost:18080")
+		pfCmd := exec.Command("kubectl", "-n", "kibaship-operator", "port-forward", "svc/apiserver", "18080:80")
+		Expect(pfCmd.Start()).To(Succeed(), "failed to start port-forward")
+		defer func() { _ = pfCmd.Process.Kill() }()
+
+		// Wait for readiness on /readyz
+		Eventually(func() bool {
+			resp, err := http.Get("http://127.0.0.1:18080/readyz")
+			if err != nil {
+				return false
+			}
+			io.Copy(io.Discard, resp.Body)
+			_ = resp.Body.Close()
+			return resp.StatusCode == http.StatusOK
+		}, "60s", "1s").Should(BeTrue(), "API server did not become ready via /readyz")
+
+		By("creating a project via POST /projects to host the application")
+		workspaceUUID := "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+		projReqBody := map[string]any{
+			"name":          "test-project-app-domain-api-e2e",
+			"workspaceUuid": workspaceUUID,
+		}
+		projBytes, _ := json.Marshal(projReqBody)
+		reqProj, _ := http.NewRequest("POST", "http://127.0.0.1:18080/projects", bytes.NewReader(projBytes))
+		reqProj.Header.Set("Content-Type", "application/json")
+		reqProj.Header.Set("Authorization", "Bearer "+apiKey)
+		httpClient := &http.Client{Timeout: 30 * time.Second}
+		respProj, err := httpClient.Do(reqProj)
+		Expect(err).NotTo(HaveOccurred(), "HTTP request to create project failed")
+		defer respProj.Body.Close()
+		Expect(respProj.StatusCode).To(Equal(http.StatusCreated))
+		var projResp struct {
+			Slug string `json:"slug"`
+		}
+		_ = json.NewDecoder(respProj.Body).Decode(&projResp)
+		Expect(projResp.Slug).NotTo(BeEmpty(), "project slug should be present")
+
+		By("creating an application via POST /projects/{slug}/applications (type: GitRepository)")
+		appReqBody := map[string]any{
+			"name": "my-web-app-e2e",
+			"type": "GitRepository",
+			"gitRepository": map[string]any{
+				"provider":      "github.com",
+				"repository":    "kibamail/kibamail",
+				"publicAccess":  true,
+				"branch":        "main",
+				"rootDirectory": "./",
+			},
+		}
+		appBytes, _ := json.Marshal(appReqBody)
+		reqApp, _ := http.NewRequest("POST", fmt.Sprintf("http://127.0.0.1:18080/projects/%s/applications", projResp.Slug), bytes.NewReader(appBytes))
+		reqApp.Header.Set("Content-Type", "application/json")
+		reqApp.Header.Set("Authorization", "Bearer "+apiKey)
+		respApp, err := httpClient.Do(reqApp)
+		Expect(err).NotTo(HaveOccurred(), "HTTP request to create application failed")
+		defer respApp.Body.Close()
+		Expect(respApp.StatusCode).To(Equal(http.StatusCreated))
+		var appResp struct {
+			Slug string `json:"slug"`
+		}
+		_ = json.NewDecoder(respApp.Body).Decode(&appResp)
+		Expect(appResp.Slug).NotTo(BeEmpty(), "application slug should be present")
+
+		appCRName := fmt.Sprintf("application-%s-kibaship-com", appResp.Slug)
+		By("waiting for Application CR to become Ready")
+		Eventually(func() bool {
+			cmd := exec.Command("kubectl", "-n", "default", "get", "application", appCRName, "-o", "jsonpath={.status.phase}")
+			output, err := cmd.CombinedOutput()
+			if err != nil {
+				return false
+			}
+			return strings.TrimSpace(string(output)) == readyPhase
+		}, "4m", "5s").Should(BeTrue(), "Application should become Ready")
+
+		By("eventually fetching GET /applications/{slug} and seeing the default domain auto-loaded")
+		targetDomainSuffix := ".myapps.kibaship.com"
+		Eventually(func(g Gomega) {
+			req, _ := http.NewRequest("GET", fmt.Sprintf("http://127.0.0.1:18080/applications/%s", appResp.Slug), nil)
+			req.Header.Set("Authorization", "Bearer "+apiKey)
+			resp, err := httpClient.Do(req)
+			g.Expect(err).NotTo(HaveOccurred())
+			defer resp.Body.Close()
+			g.Expect(resp.StatusCode).To(Equal(http.StatusOK))
+			var getResp struct {
+				Slug    string `json:"slug"`
+				Domains []struct {
+					Domain  string `json:"domain"`
+					Type    string `json:"type"`
+					Default bool   `json:"default"`
+				} `json:"domains"`
+			}
+			_ = json.NewDecoder(resp.Body).Decode(&getResp)
+			g.Expect(getResp.Slug).To(Equal(appResp.Slug))
+			g.Expect(getResp.Domains).NotTo(BeEmpty())
+			foundDefault := false
+			for _, d := range getResp.Domains {
+				if d.Default || strings.EqualFold(d.Type, "default") {
+					foundDefault = true
+					g.Expect(strings.HasSuffix(d.Domain, targetDomainSuffix)).To(BeTrue())
+					break
+				}
+			}
+			g.Expect(foundDefault).To(BeTrue())
+		}, "4m", "5s")
+	})
+})
