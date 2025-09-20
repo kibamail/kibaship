@@ -113,7 +113,7 @@ var _ = Describe("GenerateRandomSlug", func() {
 		maxExpected := int(expectedAvgPerChar * 1.5)
 
 		for _, char := range utils.SlugCharset {
-			count := charCounts[rune(char)]
+			count := charCounts[char]
 			Expect(count).To(BeNumerically(">=", minExpected),
 				"Character %c appeared %d times, expected at least %d", char, count, minExpected)
 			Expect(count).To(BeNumerically("<=", maxExpected),

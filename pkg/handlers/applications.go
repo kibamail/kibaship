@@ -288,7 +288,7 @@ func (h *ApplicationHandler) GetApplicationsByProject(c *gin.Context) {
 	}
 
 	// Convert to response format
-	var responses []models.ApplicationResponse
+	responses := make([]models.ApplicationResponse, 0, len(applications))
 	for _, app := range applications {
 		responses = append(responses, app.ToResponse())
 	}

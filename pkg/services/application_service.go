@@ -41,9 +41,9 @@ type ApplicationService struct {
 }
 
 // NewApplicationService creates a new ApplicationService
-func NewApplicationService(client client.Client, scheme *runtime.Scheme, projectService *ProjectService) *ApplicationService {
+func NewApplicationService(k8sClient client.Client, scheme *runtime.Scheme, projectService *ProjectService) *ApplicationService {
 	return &ApplicationService{
-		client:            client,
+		client:            k8sClient,
 		scheme:            scheme,
 		projectService:    projectService,
 		domainService:     nil, // Will be set later to avoid circular dependency
@@ -151,9 +151,9 @@ func (s *ApplicationService) GetApplication(ctx context.Context, slug string) (*
 
 	application := s.convertFromApplicationCRD(&applicationList.Items[0])
 
-	// Auto-load domains if domain service is available
+	// Auto-load domains if domain service is available, without circular dependency
 	if s.domainService != nil {
-		domains, err := s.domainService.GetApplicationDomainsByApplication(ctx, slug)
+		domains, err := s.domainService.GetApplicationDomainsByApplicationUUIDNoValidate(ctx, application.UUID, application.Slug)
 		if err != nil {
 			return nil, fmt.Errorf("failed to load application domains: %w", err)
 		}
@@ -245,7 +245,7 @@ func (s *ApplicationService) GetApplicationsByProject(ctx context.Context, proje
 		return nil, fmt.Errorf("failed to list applications: %w", err)
 	}
 
-	var applications []*models.Application
+	applications := make([]*models.Application, 0, len(applicationList.Items))
 	for _, item := range applicationList.Items {
 		app := s.convertFromApplicationCRD(&item)
 		applications = append(applications, app)

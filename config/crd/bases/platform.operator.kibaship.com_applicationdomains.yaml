@@ -94,8 +94,9 @@ spec:
                 type: integer
               tlsEnabled:
                 default: true
-                description: TLSEnabled indicates if TLS/SSL should be enabled for
-                  this domain
+                description: |-
+                  TLSEnabled indicates if TLS/SSL should be enabled for this domain
+                  Note: omit 'omitempty' so that false is preserved over the default.
                 type: boolean
               type:
                 allOf:
@@ -113,6 +114,7 @@ spec:
             - applicationRef
             - domain
             - port
+            - tlsEnabled
             type: object
           status:
             description: ApplicationDomainStatus defines the observed state of ApplicationDomain

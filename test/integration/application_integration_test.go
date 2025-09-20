@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	. "github.com/onsi/ginkgo/v2"
@@ -75,7 +76,7 @@ var _ = Describe("Application Creation Integration", func() {
 			Name: "project-" + createdProject.Slug,
 		}, &project)
 		if err == nil {
-			k8sClient.Delete(ctx, &project)
+			_ = k8sClient.Delete(ctx, &project)
 		}
 	})
 
@@ -320,7 +321,7 @@ var _ = Describe("Application Retrieval Integration", func() {
 			Namespace: "default",
 		}, &application)
 		if err == nil {
-			k8sClient.Delete(ctx, &application)
+			_ = k8sClient.Delete(ctx, &application)
 		}
 
 		// Clean up project
@@ -329,11 +330,11 @@ var _ = Describe("Application Retrieval Integration", func() {
 			Name: "project-" + createdProject.Slug,
 		}, &project)
 		if err == nil {
-			k8sClient.Delete(ctx, &project)
+			_ = k8sClient.Delete(ctx, &project)
 		}
 	})
 
-	It("retrieves application by slug", func() {
+	It("retrieves application by slug", NodeTimeout(30*time.Second), func(ctx SpecContext) {
 		req, err := http.NewRequest("GET", "/application/"+createdApplication.Slug, nil)
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Authorization", "Bearer "+apiKey)
@@ -354,7 +355,7 @@ var _ = Describe("Application Retrieval Integration", func() {
 		Expect(retrievedApplication.Type).To(Equal(createdApplication.Type))
 	})
 
-	It("retrieves applications by project", func() {
+	It("retrieves applications by project", NodeTimeout(30*time.Second), func(ctx SpecContext) {
 		req, err := http.NewRequest("GET", "/projects/"+createdProject.Slug+"/applications", nil)
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Authorization", "Bearer "+apiKey)
@@ -443,7 +444,7 @@ var _ = Describe("Application Update Integration", func() {
 			Namespace: "default",
 		}, &application)
 		if err == nil {
-			k8sClient.Delete(ctx, &application)
+			_ = k8sClient.Delete(ctx, &application)
 		}
 
 		// Clean up project
@@ -452,11 +453,11 @@ var _ = Describe("Application Update Integration", func() {
 			Name: "project-" + createdProject.Slug,
 		}, &project)
 		if err == nil {
-			k8sClient.Delete(ctx, &project)
+			_ = k8sClient.Delete(ctx, &project)
 		}
 	})
 
-	It("updates application name and Docker image", func() {
+	It("updates application name and Docker image", NodeTimeout(30*time.Second), func(ctx SpecContext) {
 		updateReq := models.ApplicationUpdateRequest{
 			Name: stringPtr("Updated App Name"),
 			DockerImage: &models.DockerImageConfig{
@@ -578,11 +579,11 @@ var _ = Describe("Application Delete Integration", func() {
 			Name: "project-" + createdProject.Slug,
 		}, &project)
 		if err == nil {
-			k8sClient.Delete(ctx, &project)
+			_ = k8sClient.Delete(ctx, &project)
 		}
 	})
 
-	It("deletes existing application", func() {
+	It("deletes existing application", NodeTimeout(30*time.Second), func(ctx SpecContext) {
 		req, err := http.NewRequest("DELETE", "/application/"+createdApplication.Slug, nil)
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Authorization", "Bearer "+apiKey)
@@ -714,7 +715,7 @@ var _ = Describe("Application Domain Auto Loading Integration", func() {
 				Namespace: "default",
 			}, &applicationDomain)
 			if err == nil {
-				k8sClient.Delete(ctx, &applicationDomain)
+				_ = k8sClient.Delete(ctx, &applicationDomain)
 			}
 		}
 
@@ -725,7 +726,7 @@ var _ = Describe("Application Domain Auto Loading Integration", func() {
 			Namespace: "default",
 		}, &application)
 		if err == nil {
-			k8sClient.Delete(ctx, &application)
+			_ = k8sClient.Delete(ctx, &application)
 		}
 
 		// Clean up project
@@ -734,11 +735,11 @@ var _ = Describe("Application Domain Auto Loading Integration", func() {
 			Name: "project-" + createdProject.Slug,
 		}, &project)
 		if err == nil {
-			k8sClient.Delete(ctx, &project)
+			_ = k8sClient.Delete(ctx, &project)
 		}
 	})
 
-	It("retrieves single application with auto-loaded domains", func() {
+	It("retrieves single application with auto-loaded domains", NodeTimeout(30*time.Second), func(ctx SpecContext) {
 		req, err := http.NewRequest("GET", "/application/"+createdApplication.Slug, nil)
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Authorization", "Bearer "+apiKey)
@@ -783,7 +784,7 @@ var _ = Describe("Application Domain Auto Loading Integration", func() {
 		Expect(customDomain.TLSEnabled).To(BeFalse())
 	})
 
-	It("retrieves applications by project with batch-loaded domains and deployments", func() {
+	It("retrieves applications by project with batch-loaded domains and deployments", NodeTimeout(30*time.Second), func(ctx SpecContext) {
 		// First create a deployment for the application
 		deploymentPayload := models.DeploymentCreateRequest{
 			ApplicationSlug: createdApplication.Slug,
@@ -853,7 +854,7 @@ var _ = Describe("Application Domain Auto Loading Integration", func() {
 			Namespace: "default",
 		}, &deployment)
 		if err == nil {
-			k8sClient.Delete(ctx, &deployment)
+			_ = k8sClient.Delete(ctx, &deployment)
 		}
 	})
 })

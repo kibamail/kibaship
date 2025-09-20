@@ -23,13 +23,16 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 
@@ -55,6 +58,11 @@ var _ = BeforeSuite(func() {
 	err = v1alpha1.AddToScheme(scheme)
 	Expect(err).NotTo(HaveOccurred())
 
+	// Fail fast if envtest assets are not configured
+	assets := os.Getenv("KUBEBUILDER_ASSETS")
+	Expect(assets).NotTo(BeEmpty(),
+		"KUBEBUILDER_ASSETS is not set. Install envtest binaries and export KUBEBUILDER_ASSETS. For example:\n  go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest\n  export KUBEBUILDER_ASSETS=$(setup-envtest use -p path 1.30.x)")
+
 	// Set up envtest environment
 	testEnv = &envtest.Environment{
 		CRDDirectoryPaths: []string{
@@ -63,8 +71,30 @@ var _ = BeforeSuite(func() {
 		ErrorIfCRDPathMissing: true,
 	}
 
-	cfg, err := testEnv.Start()
-	Expect(err).NotTo(HaveOccurred())
+	// Start control plane with a timeout so tests never hang
+	var cfg *rest.Config
+	cfgCh := make(chan *rest.Config, 1)
+	errCh := make(chan error, 1)
+	go func() {
+		c, e := testEnv.Start()
+		if e != nil {
+			errCh <- e
+			return
+		}
+		cfgCh <- c
+	}()
+
+	select {
+	case e := <-errCh:
+		Expect(e).NotTo(HaveOccurred())
+	case c := <-cfgCh:
+		cfg = c
+	case <-time.After(30 * time.Second):
+		Fail("timed out starting envtest control plane after 30s; verify KUBEBUILDER_ASSETS points to valid kube-apiserver/etcd binaries")
+	}
+
+	// Ensure all API requests fail fast rather than hang
+	cfg.Timeout = 15 * time.Second
 
 	// Create Kubernetes client
 	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme})
@@ -73,7 +103,7 @@ var _ = BeforeSuite(func() {
 
 var _ = AfterSuite(func() {
 	if testEnv != nil {
-		testEnv.Stop()
+		_ = testEnv.Stop()
 	}
 })
 
@@ -266,11 +296,11 @@ var _ = Describe("Project Retrieval Integration", func() {
 			Name: "project-" + createdProject.Slug,
 		}, &project)
 		if err == nil {
-			k8sClient.Delete(ctx, &project)
+			_ = k8sClient.Delete(ctx, &project)
 		}
 	})
 
-	It("retrieves project by slug", func() {
+	It("retrieves project by slug", NodeTimeout(30*time.Second), func(ctx SpecContext) {
 		req, err := http.NewRequest("GET", "/project/"+createdProject.Slug, nil)
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Authorization", "Bearer "+apiKey)
@@ -291,7 +321,7 @@ var _ = Describe("Project Retrieval Integration", func() {
 		Expect(retrievedProject.WorkspaceUUID).To(Equal(createdProject.WorkspaceUUID))
 	})
 
-	It("returns 404 for non-existent project", func() {
+	It("returns 404 for non-existent project", NodeTimeout(30*time.Second), func(ctx SpecContext) {
 		req, err := http.NewRequest("GET", "/projects/notfound", nil)
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Authorization", "Bearer "+apiKey)
@@ -324,12 +354,12 @@ var _ = Describe("Project Slug Uniqueness Integration", func() {
 				Name: "project-" + slug,
 			}, &project)
 			if err == nil {
-				k8sClient.Delete(ctx, &project)
+				_ = k8sClient.Delete(ctx, &project)
 			}
 		}
 	})
 
-	It("generates unique slugs for multiple projects", func() {
+	It("generates unique slugs for multiple projects", NodeTimeout(30*time.Second), func(ctx SpecContext) {
 		const numProjects = 5
 
 		for i := 0; i < numProjects; i++ {
@@ -385,7 +415,12 @@ func setupIntegrationTestRouter(apiKey string) *gin.Engine {
 	deploymentService := services.NewDeploymentService(k8sClient, scheme, applicationService)
 	applicationDomainService := services.NewApplicationDomainService(k8sClient, scheme, applicationService)
 
-	// Set circular dependencies for auto-loading
+	// NOTE: Do NOT wire circular dependencies in integration tests.
+	// We intentionally avoid auto-loading domains/deployments to prevent
+	// recursive calls (ApplicationService <-> ApplicationDomainService)
+	// and to keep tests focused on API validation + CRD insertion only.
+
+	// Wire only after breaking circular dependency in services: safe auto-loading in tests
 	applicationService.SetDomainService(applicationDomainService)
 	applicationService.SetDeploymentService(deploymentService)
 
@@ -481,11 +516,11 @@ var _ = Describe("Project Update Integration", func() {
 			Name: "project-" + createdProject.Slug,
 		}, &project)
 		if err == nil {
-			k8sClient.Delete(ctx, &project)
+			_ = k8sClient.Delete(ctx, &project)
 		}
 	})
 
-	It("updates project name and description", func() {
+	It("updates project name and description", NodeTimeout(30*time.Second), func(ctx SpecContext) {
 		updateReq := models.ProjectUpdateRequest{
 			Name:        stringPtr("Updated Project Name"),
 			Description: stringPtr("Updated description"),
@@ -525,7 +560,7 @@ var _ = Describe("Project Update Integration", func() {
 		Expect(annotations[validation.AnnotationResourceDescription]).To(Equal("Updated description"))
 	})
 
-	It("updates resource profile to production", func() {
+	It("updates resource profile to production", NodeTimeout(30*time.Second), func(ctx SpecContext) {
 		updateReq := models.ProjectUpdateRequest{
 			ResourceProfile: resourceProfilePtr(models.ResourceProfileProduction),
 		}
@@ -561,7 +596,7 @@ var _ = Describe("Project Update Integration", func() {
 		Expect(project.Spec.ApplicationTypes.MySQL.DefaultLimits.Memory).To(Equal("4Gi"))
 	})
 
-	It("returns 404 for non-existent project update", func() {
+	It("returns 404 for non-existent project update", NodeTimeout(30*time.Second), func(ctx SpecContext) {
 		updateReq := models.ProjectUpdateRequest{
 			Name: stringPtr("Non-existent"),
 		}
@@ -623,7 +658,7 @@ var _ = Describe("Project Delete Integration", func() {
 		Expect(err).NotTo(HaveOccurred(), "Project should exist before deletion")
 	})
 
-	It("deletes existing project", func() {
+	It("deletes existing project", NodeTimeout(30*time.Second), func(ctx SpecContext) {
 		req, err := http.NewRequest("DELETE", "/project/"+createdProject.Slug, nil)
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Authorization", "Bearer "+apiKey)
@@ -641,7 +676,7 @@ var _ = Describe("Project Delete Integration", func() {
 		Expect(err).To(HaveOccurred(), "Project should not exist after deletion")
 	})
 
-	It("returns 404 when deleting same project again", func() {
+	It("returns 404 when deleting same project again", NodeTimeout(30*time.Second), func(ctx SpecContext) {
 		// First delete the project
 		req, err := http.NewRequest("DELETE", "/project/"+createdProject.Slug, nil)
 		Expect(err).NotTo(HaveOccurred())
@@ -662,7 +697,7 @@ var _ = Describe("Project Delete Integration", func() {
 		Expect(w.Code).To(Equal(http.StatusNotFound))
 	})
 
-	It("returns 404 for non-existent project slug", func() {
+	It("returns 404 for non-existent project slug", NodeTimeout(30*time.Second), func(ctx SpecContext) {
 		req, err := http.NewRequest("DELETE", "/projects/notfound", nil)
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Authorization", "Bearer "+apiKey)

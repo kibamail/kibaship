@@ -85,7 +85,8 @@ type ApplicationDomainSpec struct {
 
 	// TLSEnabled indicates if TLS/SSL should be enabled for this domain
 	// +kubebuilder:default=true
-	TLSEnabled bool `json:"tlsEnabled,omitempty"`
+	// Note: omit 'omitempty' so that false is preserved over the default.
+	TLSEnabled bool `json:"tlsEnabled"`
 }
 
 // ApplicationDomainStatus defines the observed state of ApplicationDomain
