@@ -65,6 +65,9 @@ var _ = BeforeSuite(func() {
 	_, err := utils.Run(cmd)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to create kind cluster")
 
+	By("installing Gateway API CRDs")
+	Expect(utils.InstallGatewayAPI()).To(Succeed(), "Failed to install Gateway API CRDs")
+
 	By("building the manager(Operator) image")
 	cmd = exec.Command("make", "docker-build", fmt.Sprintf("IMG=%s", projectImage))
 	_, err = utils.Run(cmd)
