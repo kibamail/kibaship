@@ -208,7 +208,17 @@ export class TerraformService {
     const context = this.buildTemplateContext(cluster)
     const cloudProviderType = cluster.cloudProvider.type
 
-    const content = await this.edge.render(`${cloudProviderType}/${templateName}`, context)
+    let templatePath = `${cloudProviderType}/${templateName}`
+
+    if (templateName === TerraformTemplate.KUBERNETES_BOOT) {
+     templatePath= 'boot.tf'
+    }
+
+    if (templateName === TerraformTemplate.KUBERNETES_CONFIG) {
+      templatePath = 'config.tf'
+    }
+
+    const content = await this.edge.render(templatePath, context)
     const terraformFile: Omit<TerraformFile, 'key' | 'path'> = {
       name: templateName,
       content
