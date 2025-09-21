@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -179,10 +180,29 @@ func (s *ProjectService) UpdateProject(ctx context.Context, slug string, req *mo
 	// Apply updates to annotations and spec
 	s.applyProjectUpdates(existingCRD, req)
 
-	// Update the CRD in Kubernetes
-	err = s.client.Update(ctx, existingCRD)
+	// Update the CRD in Kubernetes with a simple conflict retry loop
+	var lastErr error
+	for i := 0; i < 3; i++ {
+		if err = s.client.Update(ctx, existingCRD); err == nil {
+			break
+		}
+		if apierrors.IsConflict(err) {
+			// Fetch latest, re-apply updates, and retry
+			var latest v1alpha1.Project
+			if getErr := s.client.Get(ctx, client.ObjectKey{Name: existingCRD.Name}, &latest); getErr != nil {
+				lastErr = fmt.Errorf("failed to refetch Project for conflict resolution: %w", getErr)
+				break
+			}
+			existingCRD = latest.DeepCopy()
+			s.applyProjectUpdates(existingCRD, req)
+			lastErr = err
+			continue
+		}
+		lastErr = err
+		break
+	}
 	if err != nil {
-		return nil, fmt.Errorf("failed to update Project CRD: %w", err)
+		return nil, fmt.Errorf("failed to update Project CRD: %w", lastErr)
 	}
 
 	// Convert back to internal model and return
