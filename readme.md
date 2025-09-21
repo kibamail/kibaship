@@ -106,7 +106,7 @@ Store target disk: /dev/nvme0n1 (Always use the first attached disk on hetzner)
 ```bash
 TARGET_DISK=/dev/disk/by-id/nvme-SAMSUNG_MZVL2512HCJQ-00B07_S63CNX0Y425254
 
-TARGET_VERSION="v1.11.0"
+TARGET_VERSION="v1.11.1"
 ```
 
 ```bash

@@ -87,20 +87,19 @@ provider "kubectl" {
 
 # Fetch each Gateway CRD file from the repository
 @each(crd_file in gateway_crd_files)
-data "http" "gateway_crd_{{ crd_file.name }}" {
+  data "http" "gateway_crd_{{ crd_file.name }}" {
   url = "{{ crd_file.url }}"
 }
 @end
 
 # Create kubectl_manifest resources for each Gateway CRD file
 @each((crd_file, index) in gateway_crd_files)
-resource "kubectl_manifest" "gateway_{{ crd_file.name }}" {
+  resource "kubectl_manifest" "gateway_{{ crd_file.name }}" {
   yaml_body = data.http.gateway_crd_{{ crd_file.name }}.response_body
-
   @if(index > 0)
-  depends_on = [kubectl_manifest.gateway_{{ gateway_crd_files[index - 1].name }}]
+    depends_on = [kubectl_manifest.gateway_{{ gateway_crd_files[index - 1].name }}]
   @endif
-}
+  }
 @end
 
 # Install Cilium CNI
@@ -221,29 +220,14 @@ resource "helm_release" "cert_manager" {
   depends_on = [helm_release.cilium]
 }
 
-# Install OpenEBS with Mayastor
-resource "helm_release" "openebs" {
-  name             = "openebs"
-  repository       = "https://openebs.github.io/openebs"
-  chart            = "openebs"
-  namespace        = "openebs"
+# Install Longhorn
+resource "helm_release" "longhorn" {
+  name             = "longhorn"
+  repository       = "https://charts.longhorn.io"
+  chart            = "longhorn"
+  namespace        = "longhorn-system"
   create_namespace = true
   cleanup_on_fail  = true
-  version          = "4.3.3"
-
-  set = [{
-    name  = "mayastor.csi.node.initContainers.enabled"
-    value = "false"
-  }, {
-    name  = "engines.local.lvm.enabled"
-    value = "true"
-  }, {
-    name  = "engines.local.zfs.enabled"
-    value = "false"
-  }, {
-    name  = "engines.local.replicated.mayastor.enabled"
-    value = "true"
-  }]
 
   depends_on = [helm_release.cilium]
 }
@@ -275,40 +259,38 @@ resource "helm_release" "mysql_operator" {
 
 # Fetch each Valkey CRD file from the repository
 @each(crd_file in valkey_crd_files)
-data "http" "valkey_crd_{{ crd_file.name.toLowerCase().replaceAll('-', '_').replaceAll('.', '_') }}" {
+  data "http" "valkey_crd_{{ crd_file.name.toLowerCase().replaceAll('-', '_').replaceAll('.', '_') }}" {
   url = "{{ crd_file.url }}"
 }
 @end
 
 # Create kubectl_manifest resources for each Valkey CRD file
 @each((crd_file, index) in valkey_crd_files)
-resource "kubectl_manifest" "valkey_{{ crd_file.name.toLowerCase().replaceAll('-', '_').replaceAll('.', '_') }}" {
+  resource "kubectl_manifest" "valkey_{{ crd_file.name.toLowerCase().replaceAll('-', '_').replaceAll('.', '_') }}" {
   yaml_body = data.http.valkey_crd_{{ crd_file.name.toLowerCase().replaceAll('-', '_').replaceAll('.', '_') }}.response_body
-
   @if(index > 0)
-  depends_on = [kubectl_manifest.valkey_{{ valkey_crd_files[index - 1].name.toLowerCase().replaceAll('-', '_').replaceAll('.', '_') }}]
+    depends_on = [kubectl_manifest.valkey_{{ valkey_crd_files[index - 1].name.toLowerCase().replaceAll('-', '_').replaceAll('.', '_') }}]
   @else
-  depends_on = [helm_release.cilium]
+    depends_on = [helm_release.cilium]
   @endif
-}
+  }
 @end
 
 # Fetch each Tekton CRD file from the repository
 @each(crd_file in tekton_crd_files)
-data "http" "tekton_crd_{{ crd_file.name }}" {
+  data "http" "tekton_crd_{{ crd_file.name }}" {
   url = "{{ crd_file.url }}"
 }
 @end
 
 # Create kubectl_manifest resources for each Tekton CRD file
 @each((crd_file, index) in tekton_crd_files)
-resource "kubectl_manifest" "tekton_{{ crd_file.name }}" {
+  resource "kubectl_manifest" "tekton_{{ crd_file.name }}" {
   yaml_body = data.http.tekton_crd_{{ crd_file.name }}.response_body
-
   @if(index > 0)
-  depends_on = [kubectl_manifest.tekton_{{ tekton_crd_files[index - 1].name }}]
+    depends_on = [kubectl_manifest.tekton_{{ tekton_crd_files[index - 1].name }}]
   @else
-  depends_on = [helm_release.cilium]
+    depends_on = [helm_release.cilium]
   @endif
-}
+  }
 @end

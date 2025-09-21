@@ -51,7 +51,7 @@ export interface ProvisioningStep {
 
 export interface ClusterProvisioningProgress {
   step: ProvisioningStepName
-  status: 'pending' | 'in_progress' | 'completed' | 'failed'
+  status: 'pending' | 'in_progress' | 'ready' | 'failed'
   startedAt?: string
   completedAt?: string
   steps: {
@@ -462,55 +462,55 @@ export default class Cluster extends BaseModel {
   public getStepStatus(stage: TerraformStage): ProvisioningStepStatus {
     switch (stage) {
       case 'talos-image':
-        if (this.talosImageCompletedAt) return 'completed'
+        if (this.talosImageCompletedAt) return 'ready'
         if (this.talosImageErrorAt) return 'failed'
         if (this.talosImageStartedAt) return 'in_progress'
         return 'pending'
 
       case 'network':
-        if (this.networkingCompletedAt) return 'completed'
+        if (this.networkingCompletedAt) return 'ready'
         if (this.networkingErrorAt) return 'failed'
         if (this.networkingStartedAt) return 'in_progress'
         return 'pending'
 
       case 'ssh-keys':
-        if (this.sshKeysCompletedAt) return 'completed'
+        if (this.sshKeysCompletedAt) return 'ready'
         if (this.sshKeysErrorAt) return 'failed'
         if (this.sshKeysStartedAt) return 'in_progress'
         return 'pending'
 
       case 'load-balancers':
-        if (this.loadBalancersCompletedAt) return 'completed'
+        if (this.loadBalancersCompletedAt) return 'ready'
         if (this.loadBalancersErrorAt) return 'failed'
         if (this.loadBalancersStartedAt) return 'in_progress'
         return 'pending'
 
       case 'servers':
-        if (this.serversCompletedAt) return 'completed'
+        if (this.serversCompletedAt) return 'ready'
         if (this.serversErrorAt) return 'failed'
         if (this.serversStartedAt) return 'in_progress'
         return 'pending'
 
       case 'volumes':
-        if (this.volumesCompletedAt) return 'completed'
+        if (this.volumesCompletedAt) return 'ready'
         if (this.volumesErrorAt) return 'failed'
         if (this.volumesStartedAt) return 'in_progress'
         return 'pending'
 
       case 'kubernetes-config':
-        if (this.kubernetesConfigCompletedAt) return 'completed'
+        if (this.kubernetesConfigCompletedAt) return 'ready'
         if (this.kubernetesConfigErrorAt) return 'failed'
         if (this.kubernetesConfigStartedAt) return 'in_progress'
         return 'pending'
 
       case 'kubernetes-boot':
-        if (this.kubernetesBootCompletedAt) return 'completed'
+        if (this.kubernetesBootCompletedAt) return 'ready'
         if (this.kubernetesBootErrorAt) return 'failed'
         if (this.kubernetesBootStartedAt) return 'in_progress'
         return 'pending'
 
       case 'dns':
-        if (this.dnsCompletedAt) return 'completed'
+        if (this.dnsCompletedAt) return 'ready'
         if (this.dnsErrorAt) return 'failed'
         if (this.dnsStartedAt) return 'in_progress'
         return 'pending'
@@ -571,7 +571,7 @@ export default class Cluster extends BaseModel {
       return 'in_progress'
     }
 
-    if (statuses.every((status) => status === 'completed')) {
+    if (statuses.every((status) => status === 'ready')) {
       return 'ready'
     }
 

@@ -42,12 +42,12 @@ interface TalosDisk {
 interface VolumesOutput {
   // Individual volume outputs for each volume slug
   [volumeOutputKey: string]: TerraformOutputValue
-  
+
   // Summary output with all volume IDs mapped by slug
   volume_ids: TerraformOutputValue & {
     value: Record<string, string>
   }
-  
+
   // Talos disk discovery outputs mapped by node slug
   all_worker_disks: TerraformOutputValue & {
     value: Record<string, TalosDisk[]>
@@ -105,11 +105,11 @@ export default class ProvisionVolumesJob extends Job {
         }
       }
 
-      cluster.volumesCompletedAt = DateTime.now()
+      cluster.volumesErrorAt = DateTime.now()
 
       await cluster.save()
 
-      await queue.dispatch(ProvisionKubernetesConfigJob, payload)
+      // await queue.dispatch(ProvisionKubernetesConfigJob, payload)
     } catch (error) {
       console.error(error)
       cluster.volumesErrorAt = DateTime.now()
@@ -123,7 +123,6 @@ export default class ProvisionVolumesJob extends Job {
    * This is an optional method that gets called when the retries has exceeded and is marked failed.
    */
   async rescue(_payload: ProvisionVolumesJobPayload) {}
-
 
   private async createOrUpdateVolumes(clusterId: string, output: VolumesOutput): Promise<void> {
     const cluster = await Cluster.query()

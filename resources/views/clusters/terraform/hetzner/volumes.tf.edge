@@ -64,7 +64,7 @@ resource "hcloud_volume_attachment" "attachment_{{ volume.slug }}" {
   data "talos_machine_disks" "worker_{{ worker.slug }}_disks" {
     client_configuration = {
       ca_certificate     = "{{ talos_ca_certificate }}"
-      client_certificate = "{{ talos_client_certificate }}"  
+      client_certificate = "{{ talos_client_certificate }}"
       client_key         = "{{ talos_client_key }}"
     }
     node     = "{{ worker.ipv4_address }}"
@@ -77,6 +77,46 @@ resource "hcloud_volume_attachment" "attachment_{{ volume.slug }}" {
   ]
   }
 @end
+# Talos filesystem mount for Longhorn
+@each((worker, index) in workers)
+  @if(worker.primary_disk_name)
+    resource "talos_machine_configuration_apply" "mount_longhorn_{{ worker.slug }}" {
+    client_configuration = {
+      ca_certificate     = "{{ talos_ca_certificate }}"
+      client_certificate = "{{ talos_client_certificate }}"
+      client_key         = "{{ talos_client_key }}"
+    }
+
+    node = "{{ worker.ipv4_address }}"
+
+    # Patch: format and mount the worker's primary disk to /var/lib/longhorn
+    config_patches = [
+      yamlencode({
+        machine = {
+          filesystems = [
+            {
+              device = "{{ worker.primary_disk_name }}"
+              format = "ext4"
+              label  = "LONGHORN"
+              mount  = {
+                path    = "/var/lib/longhorn"
+                options = ["rw", "noatime", "discard"]
+              }
+            }
+          ]
+        }
+      })
+    ]
+
+    depends_on = [
+    @each((volume, vIndex) in volumes)
+      hcloud_volume_attachment.attachment_{{ volume.slug }}{{ vIndex === volumes.length - 1 ? '' : ',' }}
+    @end
+    ]
+  }
+  @end
+@end
+
 
 # Individual Volume Outputs
 @each(volume in volumes)

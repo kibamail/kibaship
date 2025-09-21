@@ -38,9 +38,8 @@ variable "location" {
 provider "digitalocean" {
   token = var.do_token
 }
-
 @each((volume, index) in volumes)
-resource "digitalocean_volume" "volume_{{ volume.slug }}" {
+  resource "digitalocean_volume" "volume_{{ volume.slug }}" {
   region                   = var.location
   name                     = "volume-{{ volume.slug }}"
   size                     = {{ volume.size }}
@@ -59,31 +58,69 @@ resource "digitalocean_volume_attachment" "attachment_{{ volume.slug }}" {
 @end
 
 # Talos configuration for disk discovery
-@if(talos_ca_certificate && talos_client_certificate && talos_client_key)
 # Discover disks on each worker node using Talos
 @each((worker, index) in workers)
-data "talos_machine_disks" "worker_{{ worker.slug }}_disks" {
+  data "talos_machine_disks" "worker_{{ worker.slug }}_disks" {
   client_configuration = {
     ca_certificate     = "{{ talos_ca_certificate }}"
-    client_certificate = "{{ talos_client_certificate }}"  
+    client_certificate = "{{ talos_client_certificate }}"
     client_key         = "{{ talos_client_key }}"
   }
   node     = "{{ worker.ipv4_address }}"
   selector = "disk.size > 1u * GB"
 
   depends_on = [
-    @each((volume, index) in volumes)
+  @each((volume, index) in volumes)
     digitalocean_volume_attachment.attachment_{{ volume.slug }}{{ index === volumes.length - 1 ? '' : ',' }}
-    @end
+  @end
   ]
 }
 @end
+
+# Talos filesystem mount for Longhorn
+@each((worker, index) in workers)
+  @if(worker.primary_disk_name)
+    resource "talos_machine_configuration_apply" "mount_longhorn_{{ worker.slug }}" {
+  client_configuration = {
+    ca_certificate     = "{{ talos_ca_certificate }}"
+    client_certificate = "{{ talos_client_certificate }}"
+    client_key         = "{{ talos_client_key }}"
+  }
+
+  node = "{{ worker.ipv4_address }}"
+
+  # Patch: format and mount the worker's primary disk to /var/lib/longhorn
+  config_patches = [
+    yamlencode({
+      machine = {
+        filesystems = [
+          {
+            device = "{{ worker.primary_disk_name }}"
+            format = "ext4"
+            label  = "LONGHORN"
+            mount  = {
+              path    = "/var/lib/longhorn"
+              options = ["rw", "noatime", "discard"]
+            }
+          }
+        ]
+      }
+    })
+  ]
+
+  depends_on = [
+    @each((volume, vIndex) in volumes)
+      digitalocean_volume_attachment.attachment_{{ volume.slug }}{{ vIndex === volumes.length - 1 ? '' : ',' }}
+    @end
+    ]
+}
+  @end
 @end
 
 # Individual Volume Outputs
 @each(volume in volumes)
-output "volume_{{ volume.slug }}_id" {
-  description = "Volume ID for volume {{ volume.id }}"
+  output "volume_{{ volume.slug }}_id" {
+description = "Volume ID for volume {{ volume.id }}"
   value       = digitalocean_volume.volume_{{ volume.slug }}.id
 }
 
@@ -108,26 +145,26 @@ output "volume_ids" {
   description = "Map of volume slugs to volume IDs"
   value = {
 @each((volume, index) in volumes)
-    "{{ volume.slug }}" = digitalocean_volume.volume_{{ volume.slug }}.id{{ index === volumes.length - 1 ? '' : ',' }}
+  "{{ volume.slug }}" = digitalocean_volume.volume_{{ volume.slug }}.id{{ index === volumes.length - 1 ? '' : ',' }}
 @end
-  }
+}
 }
 
 # Talos disk discovery outputs
 @if(talos_ca_certificate && talos_client_certificate && talos_client_key)
-@each((worker, index) in workers)
-output "worker_{{ worker.slug }}_disks" {
+  @each((worker, index) in workers)
+    output "worker_{{ worker.slug }}_disks" {
   description = "Discovered disks on worker node {{ worker.slug }}"
   value       = data.talos_machine_disks.worker_{{ worker.slug }}_disks.disks
 }
-@end
-
-output "all_worker_disks" {
+  @end
+  
+  output "all_worker_disks" {
   description = "Map of worker slugs to their discovered disks"
   value = {
-@each((worker, index) in workers)
+  @each((worker, index) in workers)
     "{{ worker.slug }}" = data.talos_machine_disks.worker_{{ worker.slug }}_disks.disks{{ index === workers.length - 1 ? '' : ',' }}
-@end
+  @end
   }
 }
 @end

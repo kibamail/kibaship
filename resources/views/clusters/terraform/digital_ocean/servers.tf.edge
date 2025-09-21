@@ -69,6 +69,9 @@ locals {
     }
   }
 
+
+
+
   # Control plane specific cluster configuration
   control_plane_cluster_config = merge(local.cluster_config, {
     apiServer = {
@@ -80,7 +83,7 @@ locals {
             kind = "PodSecurityConfiguration"
             exemptions = {
               namespaces = [
-                "openebs"
+                "longhorn-system"
               ]
             }
           }
@@ -88,14 +91,10 @@ locals {
       ]
     }
   })
-  
+
   worker_machine_config = {
       machine = {
-        sysctls = {
-          "vm.nr_hugepages" = "1024"
-        }
         nodeLabels = {
-          "openebs.io/engine" = "mayastor",
           "ingress.kibaship.com/ready" = "true"
         }
         features = {
@@ -107,9 +106,9 @@ locals {
         kubelet = {
           extraMounts = [
             {
-              destination = "/var/local"
+              destination = "/var/lib/longhorn"
               type = "bind"
-              source = "/var/local"
+              source = "/var/lib/longhorn"
               options = [
                 "bind",
                 "rshared",
@@ -129,7 +128,7 @@ data "talos_machine_configuration" "machineconfig_cp" {
   cluster_endpoint = "https://{{ cluster_load_balancer_public_ipv4_address }}:6443"
   machine_type     = "controlplane"
   machine_secrets  = talos_machine_secrets.machine_secrets.machine_secrets
-  
+
   config_patches = [
     yamlencode({
       cluster = local.control_plane_cluster_config
@@ -143,7 +142,7 @@ data "talos_machine_configuration" "machineconfig_worker" {
   cluster_endpoint = "https://{{ cluster_load_balancer_public_ipv4_address }}:6443"
   machine_type     = "worker"
   machine_secrets  = talos_machine_secrets.machine_secrets.machine_secrets
-  
+
   config_patches = [
     yamlencode(merge(
       {
@@ -153,8 +152,6 @@ data "talos_machine_configuration" "machineconfig_worker" {
     ))
   ]
 }
-
-
 @each((node, index) in control_planes)
   resource "digitalocean_droplet" "control_plane_{{ node.slug }}" {
   name     = "cp-{{ index }}.{{ cluster_name }}"
@@ -162,7 +159,7 @@ data "talos_machine_configuration" "machineconfig_worker" {
   size     = var.server_type
   region   = "{{ cluster_region }}"
   ssh_keys = ["{{ cluster_ssh_key_id }}"]
-  
+
   # Use Talos machine configuration as user data
   user_data = data.talos_machine_configuration.machineconfig_cp.machine_configuration
 
@@ -172,7 +169,7 @@ data "talos_machine_configuration" "machineconfig_worker" {
   ]
 }
 @end
-  
+
 @each((node, index) in workers)
   resource "digitalocean_droplet" "worker_{{ node.slug }}" {
   name     = "worker-{{ index }}.{{ cluster_name }}"
@@ -180,7 +177,7 @@ data "talos_machine_configuration" "machineconfig_worker" {
   size     = var.server_type
   region   = "{{ cluster_region }}"
   ssh_keys = ["{{ cluster_ssh_key_id }}"]
-  
+
   # Use Talos machine configuration as user data
   user_data = data.talos_machine_configuration.machineconfig_worker.machine_configuration
 
@@ -197,14 +194,14 @@ data "talos_client_configuration" "talosconfig" {
   client_configuration = talos_machine_secrets.machine_secrets.client_configuration
   endpoints            = [
 @each((node, index) in control_planes)
-    digitalocean_droplet.control_plane_{{ node.slug }}.ipv4_address{{ index === control_planes.length - 1 ? '' : ',' }}
+  digitalocean_droplet.control_plane_{{ node.slug }}.ipv4_address{{ index === control_planes.length - 1 ? '' : ',' }}
 @end
-  ]
+]
 }
 
 # Apply machine configurations to nodes
 @each((node, index) in control_planes)
-resource "talos_machine_configuration_apply" "control_plane_{{ node.slug }}" {
+  resource "talos_machine_configuration_apply" "control_plane_{{ node.slug }}" {
   client_configuration        = talos_machine_secrets.machine_secrets.client_configuration
   machine_configuration_input = data.talos_machine_configuration.machineconfig_cp.machine_configuration
   node                        = digitalocean_droplet.control_plane_{{ node.slug }}.ipv4_address
@@ -212,7 +209,7 @@ resource "talos_machine_configuration_apply" "control_plane_{{ node.slug }}" {
 @end
 
 @each((node, index) in workers)
-resource "talos_machine_configuration_apply" "worker_{{ node.slug }}" {
+  resource "talos_machine_configuration_apply" "worker_{{ node.slug }}" {
   client_configuration        = talos_machine_secrets.machine_secrets.client_configuration
   machine_configuration_input = data.talos_machine_configuration.machineconfig_worker.machine_configuration
   node                        = digitalocean_droplet.worker_{{ node.slug }}.ipv4_address
@@ -223,15 +220,15 @@ resource "talos_machine_configuration_apply" "worker_{{ node.slug }}" {
 resource "talos_machine_bootstrap" "this" {
   depends_on = [
 @each((node, index) in control_planes)
-    talos_machine_configuration_apply.control_plane_{{ node.slug }}{{ index === control_planes.length - 1 ? '' : ',' }}
+  talos_machine_configuration_apply.control_plane_{{ node.slug }}{{ index === control_planes.length - 1 ? '' : ',' }}
 @end
 @if(workers && workers.length > 0)
-    ,
-@each((node, index) in workers)
+  ,
+  @each((node, index) in workers)
     talos_machine_configuration_apply.worker_{{ node.slug }}{{ index === workers.length - 1 ? '' : ',' }}
-@end
+  @end
 @endif
-  ]
+]
   node                 = digitalocean_droplet.control_plane_{{ control_planes[0].slug }}.ipv4_address
   client_configuration = talos_machine_secrets.machine_secrets.client_configuration
 }
@@ -244,7 +241,7 @@ resource "talos_cluster_kubeconfig" "this" {
   client_configuration = talos_machine_secrets.machine_secrets.client_configuration
   node                 = digitalocean_droplet.control_plane_{{ control_planes[0].slug }}.ipv4_address
 }
-    
+
 # Control Plane Server Outputs
 @each(node in control_planes)
   output "control_plane_{{ node.slug }}_server_id" {
@@ -262,7 +259,7 @@ output "control_plane_{{ node.slug }}_private_ip" {
   value       = digitalocean_droplet.control_plane_{{ node.slug }}.ipv4_address_private
 }
 @end
-    
+
 # Worker Server Outputs
 @each(node in workers)
   output "worker_{{ node.slug }}_server_id" {
@@ -280,7 +277,7 @@ output "worker_{{ node.slug }}_private_ip" {
   value       = digitalocean_droplet.worker_{{ node.slug }}.ipv4_address_private
 }
 @end
-    
+
 # Summary Outputs
 output "control_plane_server_ids" {
   description = "Map of control plane node IDs to server IDs"
