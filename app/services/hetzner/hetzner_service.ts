@@ -19,22 +19,44 @@ export class HetznerService {
     const client = this.client
     return {
       async create(name: string, public_key: string) {
-        return $trycatch(
-          () => client.post<{
+        return $trycatch(() =>
+          client.post<{
             ssh_key: {
               id: string
             }
           }>('/ssh_keys', {
             name,
-            public_key
+            public_key,
           })
         )
       },
       async delete(sshKeyId: string) {
-        return $trycatch(
-          () => client.delete(`/ssh_keys/${sshKeyId}`)
-        )
-      }
+        return $trycatch(() => client.delete(`/ssh_keys/${sshKeyId}`))
+      },
+    }
+  }
+
+  images() {
+    const client = this.client
+    return {
+      async get(type?: 'snapshot' | 'app' | 'system' | 'backup') {
+        return $trycatch(async () => {
+          const response = await client.get<{
+            images: {
+              id: number
+              type: typeof type
+              name: string
+              labels: Record<string, string>
+            }[]
+          }>('/images', {
+            params: {
+              type,
+            },
+          })
+
+          return response.data
+        })
+      },
     }
   }
 }

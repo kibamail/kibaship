@@ -1,8 +1,10 @@
 import { Job } from '@rlanz/bull-queue'
+import queue from '@rlanz/bull-queue/services/main'
 import Cluster from '#models/cluster'
 import { TerraformExecutor } from '#services/terraform/terraform_executor'
 import { TerraformService, TerraformTemplate } from '#services/terraform/terraform_service'
 import { DateTime } from 'luxon'
+import ClusterDnsVerifyJob from './cluster_dns_verify_job.js'
 
 interface ProvisionKubernetesBootJobPayload {
   clusterId: string
@@ -52,9 +54,12 @@ export default class ProvisionKubernetesBootJob extends Job {
       await executor.init()
       await executor.apply({ autoApprove: true })
 
-      cluster.kubernetesBootErrorAt = DateTime.now()
+      cluster.kubernetesBootCompletedAt = DateTime.now()
 
       await cluster.save()
+
+      // Dispatch DNS verification job to automatically check DNS configuration
+      await queue.dispatch(ClusterDnsVerifyJob, payload)
     } catch (error) {
       cluster.kubernetesBootErrorAt = DateTime.now()
 

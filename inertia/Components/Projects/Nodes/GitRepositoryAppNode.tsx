@@ -13,6 +13,8 @@ export function GitRepositoryAppNode({
 
   const application = applicationsMap[id]
 
+  console.log('@@@@@@@@@@@@@', application)
+
   return (
     <Link
       href={getApplicationUrl?.() as string}

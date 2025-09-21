@@ -1,5 +1,5 @@
 import { DateTime } from 'luxon'
-import { BaseModel, beforeCreate, column } from '@adonisjs/lucid/orm'
+import { BaseModel, beforeCreate, column, computed } from '@adonisjs/lucid/orm'
 import { randomUUID } from 'node:crypto'
 import encryption from '@adonisjs/core/services/encryption'
 
@@ -11,15 +11,36 @@ export default class CloudProvider extends BaseModel {
   declare name: string
 
   @column()
-  declare type: 'aws' | 'hetzner' | 'google_cloud' | 'digital_ocean' | 'leaseweb' | 'linode' | 'vultr' | 'ovh'
+  declare type:
+    | 'aws'
+    | 'hetzner'
+    | 'google_cloud'
+    | 'digital_ocean'
+    | 'leaseweb'
+    | 'linode'
+    | 'vultr'
+    | 'ovh'
+    | 'byoc'
 
   @column()
   declare workspaceId: string
 
+  @column.dateTime()
+  declare providerImageProvisioningStartedAt: DateTime | null
+
+  @column.dateTime()
+  declare providerImageProvisioningErrorAt: DateTime | null
+
+  @column.dateTime()
+  declare providerImageProvisioningCompletedAt: DateTime | null
+
+  @column.dateTime()
+  declare deletedAt: DateTime | null
+
   @column({
-    prepare: value => encryption.encrypt(JSON.stringify(value)),
-    consume: value => JSON.parse(encryption.decrypt(value) || '{}'),
-    serialize: __dirnamevalue => null,
+    prepare: (value) => encryption.encrypt(JSON.stringify(value)),
+    consume: (value) => JSON.parse(encryption.decrypt(value) || '{}'),
+    serialize: (__dirnamevalue) => null,
   })
   declare credentials: Partial<{
     // Common fields
@@ -47,8 +68,31 @@ export default class CloudProvider extends BaseModel {
   @column.dateTime({ autoCreate: true, autoUpdate: true })
   declare updatedAt: DateTime
 
+  @column()
+  declare providerImageArm64: string | null
+
+  @column()
+  declare providerImageAmd64: string | null
+
   public credentialsPath() {
     return `${this.workspaceId}/${this.type}/${this.id}`
+  }
+
+  @computed()
+  public get status() {
+    if (this.deletedAt) {
+      return 'deleted'
+    }
+
+    if (this.providerImageProvisioningCompletedAt) {
+      return 'ready'
+    }
+
+    if (this.providerImageProvisioningErrorAt) {
+      return 'failed'
+    }
+
+    return 'preparing'
   }
 
   /**
@@ -58,40 +102,40 @@ export default class CloudProvider extends BaseModel {
     switch (this.type) {
       case 'hetzner':
         return {
-          hcloud_token: this.credentials.token || ''
+          hcloud_token: this.credentials.token || '',
         }
       case 'aws':
         return {
           aws_access_key_id: this.credentials.access_key_id || '',
-          aws_secret_access_key: this.credentials.secret_access_key || ''
+          aws_secret_access_key: this.credentials.secret_access_key || '',
         }
       case 'digital_ocean':
         return {
-          do_token: this.credentials.token || ''
+          do_token: this.credentials.token || '',
         }
       case 'linode':
         return {
-          linode_token: this.credentials.token || ''
+          linode_token: this.credentials.token || '',
         }
       case 'vultr':
         return {
-          vultr_api_key: this.credentials.api_key || ''
+          vultr_api_key: this.credentials.api_key || '',
         }
       case 'google_cloud':
         return {
           gcp_project_id: this.credentials.project_id || '',
-          gcp_service_account_key: this.credentials.service_account_key || ''
+          gcp_service_account_key: this.credentials.service_account_key || '',
         }
       case 'leaseweb':
         return {
-          leaseweb_api_key: this.credentials.api_key || ''
+          leaseweb_api_key: this.credentials.api_key || '',
         }
       case 'ovh':
         return {
           ovh_endpoint: this.credentials.endpoint || '',
           ovh_application_key: this.credentials.application_key || '',
           ovh_application_secret: this.credentials.application_secret || '',
-          ovh_consumer_key: this.credentials.consumer_key || ''
+          ovh_consumer_key: this.credentials.consumer_key || '',
         }
       default:
         return {}
@@ -125,12 +169,12 @@ export default class CloudProvider extends BaseModel {
    */
   private getHetznerNetworkZone(location: string): string {
     const locationToZone: Record<string, string> = {
-      'nbg1': 'eu-central',    // Nuremberg
-      'fsn1': 'eu-central',    // Falkenstein
-      'hel1': 'eu-central',    // Helsinki
-      'ash': 'us-east',        // Ashburn
-      'hil': 'us-west',        // Hillsboro
-      'sin': 'ap-southeast',   // Singapore
+      nbg1: 'eu-central', // Nuremberg
+      fsn1: 'eu-central', // Falkenstein
+      hel1: 'eu-central', // Helsinki
+      ash: 'us-east', // Ashburn
+      hil: 'us-west', // Hillsboro
+      sin: 'ap-southeast', // Singapore
     }
     return locationToZone[location] || 'eu-central'
   }
@@ -140,19 +184,19 @@ export default class CloudProvider extends BaseModel {
    */
   private getDigitalOceanNetworkZone(location: string): string {
     const locationToZone: Record<string, string> = {
-      'nyc1': 'us-east',
-      'nyc2': 'us-east',
-      'nyc3': 'us-east',
-      'sfo1': 'us-west',
-      'sfo2': 'us-west',
-      'sfo3': 'us-west',
-      'ams2': 'eu-west',
-      'ams3': 'eu-west',
-      'sgp1': 'ap-southeast',
-      'lon1': 'eu-west',
-      'fra1': 'eu-central',
-      'tor1': 'us-east',
-      'blr1': 'ap-south',
+      nyc1: 'us-east',
+      nyc2: 'us-east',
+      nyc3: 'us-east',
+      sfo1: 'us-west',
+      sfo2: 'us-west',
+      sfo3: 'us-west',
+      ams2: 'eu-west',
+      ams3: 'eu-west',
+      sgp1: 'ap-southeast',
+      lon1: 'eu-west',
+      fra1: 'eu-central',
+      tor1: 'us-east',
+      blr1: 'ap-south',
     }
     return locationToZone[location] || 'us-east'
   }

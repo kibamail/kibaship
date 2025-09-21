@@ -7,6 +7,7 @@ import queue from '@rlanz/bull-queue/services/main'
 import { DateTime } from 'luxon'
 import ProvisionNetworkJob from './provision_network_job.js'
 import ProvisionSshKeysJob from './provision_ssh_keys_job.js'
+import { CloudProviderDefinitions } from '#services/cloud-providers/cloud_provider_definitions'
 
 interface ProvisionTalosImageJobPayload {
   clusterId: string
@@ -35,6 +36,23 @@ export default class ProvisionTalosImageJob extends Job {
       return
     }
 
+    if (cluster.cloudProvider.type === CloudProviderDefinitions.HETZNER) {
+      const serverTypes = CloudProviderDefinitions.serverTypes('hetzner')
+
+      if (serverTypes[cluster.serverType].arch === 'arm') {
+        cluster.providerImageId = cluster.cloudProvider.providerImageArm64
+      } else {
+        cluster.providerImageId = cluster.cloudProvider.providerImageAmd64
+      }
+
+      cluster.talosImageCompletedAt = DateTime.now()
+      await cluster.save()
+
+      await queue.dispatch(ProvisionNetworkJob, payload)
+
+      return
+    }
+
     cluster.talosImageStartedAt = DateTime.now()
     cluster.talosImageCompletedAt = null
     cluster.talosImageErrorAt = null
@@ -45,10 +63,9 @@ export default class ProvisionTalosImageJob extends Job {
     try {
       await terraform.generate(cluster, TerraformTemplate.TALOS_IMAGE)
 
-      const executor = new TerraformExecutor(cluster.id, 'talos-image')
-        .vars({
-          ...cluster.cloudProvider?.getTerraformCredentials(),
-        })
+      const executor = new TerraformExecutor(cluster.id, 'talos-image').vars({
+        ...cluster.cloudProvider?.getTerraformCredentials(),
+      })
 
       await executor.init()
       await executor.apply({ autoApprove: true })
@@ -62,12 +79,13 @@ export default class ProvisionTalosImageJob extends Job {
       await cluster.save()
 
       if (cluster.cloudProvider.type === 'digital_ocean') {
+        cluster.networkingCompletedAt = DateTime.now()
         await queue.dispatch(ProvisionSshKeysJob, payload)
-
-        return
+      } else {
+        await queue.dispatch(ProvisionNetworkJob, payload)
       }
 
-      await queue.dispatch(ProvisionNetworkJob, payload)
+      await cluster.save()
     } catch (error) {
       console.error(error)
       cluster.status = 'unhealthy'

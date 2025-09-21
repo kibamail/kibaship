@@ -21,149 +21,138 @@ import ProvisionKubernetesBootJob from '#jobs/clusters/provision_kubernetes_boot
 import { DateTime } from 'luxon'
 
 export default class ClustersController extends BaseController {
+  protected async clustersPageProps(ctx: HttpContext) {
+    const workspace = await this.workspace(ctx)
 
-    protected async clustersPageProps(ctx: HttpContext) {
-        const workspace = await this.workspace(ctx)
+    const connectedProviders = await CloudProvider.query().where('workspace_id', workspace.id)
 
-        const connectedProviders = await CloudProvider.query().where('workspace_id', workspace.id)
+    const clusters = await Cluster.query().where('workspace_id', workspace.id).preload('nodes')
 
-        const clusters = await Cluster.query().where('workspace_id', workspace.id).preload('nodes')
+    return {
+      ...(await this.pageProps(ctx)),
+      clusters,
+      connectedProviders,
+      providers: CloudProviderDefinitions.allProviders(),
+      regions: CloudProviderDefinitions.allRegions(),
+      serverTypes: CloudProviderDefinitions.allServerTypes(),
+      cloudProviderRegions: CloudProviderDefinitions.allRegions(),
+    }
+  }
 
-        return {
-            ...(await this.pageProps(ctx)),
-            clusters,
-            connectedProviders,
-            providers: CloudProviderDefinitions.allProviders(),
-            regions: CloudProviderDefinitions.allRegions(),
-            serverTypes: CloudProviderDefinitions.allServerTypes(),
-            cloudProviderRegions: CloudProviderDefinitions.allRegions(),
-        }
+  public async index(ctx: HttpContext) {
+    return ctx.inertia.render('clusters/clusters', await this.clustersPageProps(ctx))
+  }
+
+  public async show(ctx: HttpContext) {
+    const cluster = await Cluster.complete(ctx.params.clusterId)
+
+    if (!cluster) {
+      return ctx.response.status(404).json({ error: 'Cluster not found' })
     }
 
-    public async index(ctx: HttpContext) {
-        return ctx.inertia.render('clusters/clusters', await this.clustersPageProps(ctx))
+    return ctx.response.json(cluster)
+  }
+
+  public async store(ctx: HttpContext) {
+    const workspace = await this.workspace(ctx)
+    const payload = await ctx.request.validateUsing(createClusterValidator)
+
+    const cluster = await db.transaction(async (trx) => {
+      return await Cluster.createWithInfrastructure(payload, workspace.id, trx)
+    })
+
+    ctx.session.flash(
+      'success',
+      `Cluster "${cluster.location}" has been created and is being provisioned.`
+    )
+
+    queue.dispatch(ProvisionClusterJob, {
+      clusterId: cluster.id,
+    })
+
+    return ctx.response.redirect().toRoute('clusters.index', {
+      workspace: workspace.slug,
+    })
+  }
+
+  public async restart(ctx: HttpContext) {
+    const workspace = await this.workspace(ctx)
+    const clusterId = ctx.params.clusterId
+    const payload = await ctx.request.validateUsing(clusterRestartValidator)
+
+    const cluster = await Cluster.query()
+      .where('id', clusterId)
+      .where('workspace_id', workspace.id)
+      .preload('cloudProvider')
+      .firstOrFail()
+
+    if (payload.type === 'start') {
+      await queue.dispatch(ProvisionClusterJob, { clusterId })
+
+      return ctx.response.json({
+        message: 'Cluster provisioning restarted from beginning',
+        type: 'start',
+      })
     }
 
-    public async show(ctx: HttpContext) {
-        const cluster = await Cluster.complete(ctx.params.clusterId)
+    const failedStage = cluster.firstFailedStage
 
-        if (!cluster) {
-            return ctx.response.status(404).json({ error: 'Cluster not found' })
-        }
-
-        return ctx.response.json(cluster)
+    if (!failedStage) {
+      return ctx.response.status(400).json({
+        error: 'No failed stages found to restart from',
+      })
     }
 
-    public async store(ctx: HttpContext) {
-        const workspace = await this.workspace(ctx)
-        const payload = await ctx.request.validateUsing(createClusterValidator)
+    const job = this.getJobForStage(failedStage)
 
-        const cluster = await db.transaction(async (trx) => {
-            return await Cluster.createWithInfrastructure(payload, workspace.id, trx)
-        })
+    await queue.dispatch(job, { clusterId })
 
-        ctx.session.flash('success', `Cluster "${cluster.location}" has been created and is being provisioned.`)
+    return ctx.response.json({
+      message: `Cluster provisioning restarted from failed stage: ${failedStage}`,
+      type: 'failed',
+      stage: failedStage,
+    })
+  }
 
-        queue.dispatch(ProvisionClusterJob, {
-            clusterId: cluster.id
-        })
+  public async destroy(ctx: HttpContext) {
+    const workspace = await this.workspace(ctx)
+    const clusterId = ctx.params.clusterId
 
-        return ctx.response.redirect().toRoute('clusters.index', {
-            workspace: workspace.slug
-        })
+    const cluster = await Cluster.query()
+      .where('id', clusterId)
+      .where('workspace_id', workspace.id)
+      .firstOrFail()
+
+    cluster.deletedAt = DateTime.now()
+    await cluster.save()
+
+    await queue.dispatch(DestroyClusterJob, { clusterId: cluster.id })
+
+    return ctx.response.redirect().toRoute('workspace.cloud.clusters', {
+      workspace: workspace.slug,
+    })
+  }
+
+  private getJobForStage(stage: TerraformStage) {
+    switch (stage) {
+      case 'network':
+        return ProvisionNetworkJob
+      case 'ssh-keys':
+        return ProvisionSshKeysJob
+      case 'load-balancers':
+        return ProvisionLoadBalancersJob
+      case 'servers':
+        return ProvisionServersJob
+      case 'volumes':
+        return ProvisionVolumesJob
+      case 'talos-image':
+        return ProvisionTalosImageJob
+      case 'kubernetes-config':
+        return ProvisionKubernetesConfigJob
+      case 'kubernetes-boot':
+        return ProvisionKubernetesBootJob
+      default:
+        throw new Error(`Unknown stage: ${stage}`)
     }
-
-    public async storeBringYourOwn(ctx: HttpContext) {
-        const workspace = await this.workspace(ctx)
-        const payload = ctx.request.all()
-
-        console.log('Bring Your Own Cluster payload:', JSON.stringify(payload, null, 2))
-
-        ctx.session.flash('success', 'Bring your own cluster has been created successfully.')
-
-        return ctx.response.redirect().toRoute('clusters.index', {
-            workspace: workspace.slug
-        })
-    }
-
-    public async restart(ctx: HttpContext) {
-        const workspace = await this.workspace(ctx)
-        const clusterId = ctx.params.clusterId
-        const payload = await ctx.request.validateUsing(clusterRestartValidator)
-
-        const cluster = await Cluster.query()
-            .where('id', clusterId)
-            .where('workspace_id', workspace.id)
-            .preload('cloudProvider')
-            .firstOrFail()
-
-        if (payload.type === 'start') {
-            await queue.dispatch(ProvisionClusterJob, { clusterId })
-
-            return ctx.response.json({
-                message: 'Cluster provisioning restarted from beginning',
-                type: 'start'
-            })
-        }
-
-        const failedStage = cluster.firstFailedStage
-
-        if (!failedStage) {
-            return ctx.response.status(400).json({
-                error: 'No failed stages found to restart from'
-            })
-        }
-
-        const job = this.getJobForStage(failedStage)
-
-        await queue.dispatch(job, { clusterId })
-
-        return ctx.response.json({
-            message: `Cluster provisioning restarted from failed stage: ${failedStage}`,
-            type: 'failed',
-            stage: failedStage
-        })
-    }
-
-    public async destroy(ctx: HttpContext) {
-        const workspace = await this.workspace(ctx)
-        const clusterId = ctx.params.clusterId
-
-        const cluster = await Cluster.query()
-            .where('id', clusterId)
-            .where('workspace_id', workspace.id)
-            .firstOrFail()
-
-        cluster.deletedAt = DateTime.now()
-        await cluster.save()
-
-        await queue.dispatch(DestroyClusterJob, { clusterId: cluster.id })
-
-        return ctx.response.redirect().toRoute('clusters.index', {
-            workspace: workspace.slug
-        })
-    }
-
-    private getJobForStage(stage: TerraformStage) {
-        switch (stage) {
-            case 'network':
-                return ProvisionNetworkJob
-            case 'ssh-keys':
-                return ProvisionSshKeysJob
-            case 'load-balancers':
-                return ProvisionLoadBalancersJob
-            case 'servers':
-                return ProvisionServersJob
-            case 'volumes':
-                return ProvisionVolumesJob
-            case 'talos-image':
-                return ProvisionTalosImageJob
-            case 'kubernetes-config':
-                return ProvisionKubernetesConfigJob
-            case 'kubernetes-boot':
-                return ProvisionKubernetesBootJob
-            default:
-                throw new Error(`Unknown stage: ${stage}`)
-        }
-    }
+  }
 }

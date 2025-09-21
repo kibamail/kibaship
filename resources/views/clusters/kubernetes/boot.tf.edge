@@ -453,3 +453,5 @@ resource "kubernetes_manifest" "deployment_not_found_httproute" {
 
   depends_on = [kubernetes_manifest.deployment_not_found_service]
 }
+
+# for real applications, we need to create the reference grant in the ingress-gateway namespace, allowing the gateway to access services in the project namespace

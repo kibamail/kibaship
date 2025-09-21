@@ -13,16 +13,9 @@ interface ProjectsDropdownMenuProps {
 }
 
 export function ProjectsDropdownMenu({ rootId, onCreateProjectClick }: ProjectsDropdownMenuProps) {
-  const { props, url } = usePage<PageProps>()
-
-  const activeProjectIndex = props.projects?.findIndex((project) => url.includes(project.id))
-  const activeProject = props.projects?.[activeProjectIndex]
-
-  const handleCreateProjectClick = () => {
-    if (onCreateProjectClick) {
-      onCreateProjectClick()
-    }
-  }
+  const {
+    props: { activeProject, projects, workspace },
+  } = usePage<PageProps>()
 
   return (
     <DropdownMenu.Root modal={false}>
@@ -52,11 +45,11 @@ export function ProjectsDropdownMenu({ rootId, onCreateProjectClick }: ProjectsD
         className="border projects-dropdown-menu kb-border-tertiary absolute rounded-xl p-1 shadow-[0px_16px_24px_-8px_var(--black-10)] kb-background-primary w-70 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 z-50"
       >
         <DropdownMenu.RadioGroup value={activeProject?.id.toString()}>
-          {props.projects.map((project) => (
+          {projects.map((project) => (
             <DropdownMenu.RadioItem key={project.id} value={project.id.toString()} asChild>
               <Link
                 data-testid={`${rootId}-switch-project-id-${project.id}`}
-                href={`/w/${props?.workspace?.slug}/p/${project?.id}`}
+                href={`/w/${workspace?.slug}/p/${project.id}`}
                 className="p-2 flex items-center hover:bg-(--background-secondary) rounded-lg cursor-pointer"
               >
                 <ProjectAvatar name={project.name} size="sm" />
@@ -72,7 +65,7 @@ export function ProjectsDropdownMenu({ rootId, onCreateProjectClick }: ProjectsD
 
         <DropdownMenu.Item
           className="p-2 flex items-center hover:bg-(--background-secondary) rounded-lg cursor-pointer"
-          onSelect={handleCreateProjectClick}
+          onSelect={() => onCreateProjectClick?.()}
         >
           <PlusIcon className="mr-1.5 w-5 h-5 kb-content-tertiary" />
           <Text>Add new project</Text>

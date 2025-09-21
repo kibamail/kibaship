@@ -43,4 +43,5 @@ export const http = defineConfig({
  * Talos version configuration
  */
 export const talosVersion = env.get('TALOS_VERSION')
-export const talosFactoryHash = env.get('TALOS_FACTORY_HASH')
+export const talosFactoryHash = env.get('TALOS_FACTORY_HASH_DIGITAL_OCEAN')
+export const talosFactoryHashHetzner = env.get('TALOS_FACTORY_HASH_HETZNER')

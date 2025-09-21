@@ -19,7 +19,7 @@ export class ClusterDnsVerificationService {
     ['1.1.1.1', '1.1.0.1'],
 
     // OpenDNS
-    ['208.67.222.222', '208.67.220.220']
+    ['208.67.222.222', '208.67.220.220'],
   ]
 
   constructor(protected cluster: Cluster) {}
@@ -28,8 +28,8 @@ export class ClusterDnsVerificationService {
     for (const servers of this.dnsServersToVerify) {
       const { ingress } = await this.verifyOnDnsServers(servers)
 
-      if (! ingress) {
-        return { ingress: false, cluster: true}
+      if (!ingress) {
+        return { ingress: false, cluster: true }
       }
     }
 
@@ -66,10 +66,7 @@ export class ClusterDnsVerificationService {
     }
   }
 
-  private async verifyDnsRecord(
-    domain: string,
-    expectedIp: string | null
-  ): Promise<boolean> {
+  private async verifyDnsRecord(domain: string, expectedIp: string | null): Promise<boolean> {
     if (!expectedIp) {
       return false
     }

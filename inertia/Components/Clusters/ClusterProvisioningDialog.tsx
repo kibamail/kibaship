@@ -11,7 +11,7 @@ import { CloudCheckIcon } from '../Icons/cloud-check.svg'
 import { SettingsIcon } from '../Icons/settings.svg'
 import { StackIcon } from '../Icons/stack.svg'
 import { NavArrowDownIcon } from '../Icons/nav-arrow-down.svg'
-import { useRef } from 'react'
+import { useMemo, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { axios } from '~/app/axios'
 import { usePage } from '@inertiajs/react'
@@ -34,7 +34,7 @@ interface ClusterProvisioningDialogProps {
   onOpenChange: (open: boolean) => void
 }
 
-const provisioningSteps: ProvisioningStepInfo[] = [
+const defaultProvisioningSteps: ProvisioningStepInfo[] = [
   {
     stage: 'talos-image',
     title: 'Talos OS image',
@@ -96,7 +96,7 @@ function getLatestStage(cluster: Cluster | null | undefined): TerraformStage {
     return 'talos-image'
   }
 
-  const stagesWithStatus = provisioningSteps.map((step) => ({
+  const stagesWithStatus = defaultProvisioningSteps.map((step) => ({
     stage: step.stage,
     status: cluster ? cluster?.progress[step.stage] : 'pending',
   }))
@@ -111,7 +111,7 @@ export function ClusterProvisioningDialog({
   cluster: initialCluster,
   isOpen,
   onOpenChange,
-  onClusterUpdated
+  onClusterUpdated,
 }: ClusterProvisioningDialogProps) {
   const { props } = usePage<PageProps>()
   const queryClient = useQueryClient()
@@ -122,6 +122,22 @@ export function ClusterProvisioningDialog({
     update: false,
     logs: false,
   })
+
+  const provisioningSteps = useMemo(() => {
+    return defaultProvisioningSteps
+      .map((step) => {
+        if (initialCluster?.cloudProvider.type === 'digital_ocean' && step.stage === 'network') {
+          return null
+        }
+
+        if (initialCluster?.cloudProvider?.type === 'hetzner' && step.stage === 'talos-image') {
+          return null
+        }
+
+        return step
+      })
+      .filter(Boolean)
+  }, [initialCluster])
 
   const clusterQuery = useQuery<Cluster>({
     queryKey: ['clusters', initialCluster?.id],

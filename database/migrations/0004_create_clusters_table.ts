@@ -13,9 +13,17 @@ export default class extends BaseSchema {
       table.string('control_plane_endpoint').notNullable()
 
       table.uuid('workspace_id').nullable()
-      // if no cloud provider id is set, then this is a bare metal server, and we'll need the cluster owner to provide the actual 
-      table.uuid('cloud_provider_id').nullable().references('id').inTable('cloud_providers').onDelete('CASCADE')
-      table.enum('status', ['provisioning', 'healthy', 'unhealthy']).notNullable().defaultTo('provisioning')
+      // if no cloud provider id is set, then this is a bare metal server, and we'll need the cluster owner to provide the actual
+      table
+        .uuid('cloud_provider_id')
+        .nullable()
+        .references('id')
+        .inTable('cloud_providers')
+        .onDelete('CASCADE')
+      table
+        .enum('status', ['provisioning', 'healthy', 'unhealthy'])
+        .notNullable()
+        .defaultTo('provisioning')
 
       table.string('provider_network_id').nullable()
       table.string('provider_subnet_id').nullable()
@@ -76,7 +84,7 @@ export default class extends BaseSchema {
       table.timestamp('provisioning_started_at').nullable()
       table.timestamp('provisioning_completed_at').nullable()
 
-      // DNS fields  
+      // DNS fields
       table.timestamp('dns_started_at').nullable()
       table.timestamp('dns_completed_at').nullable()
       table.timestamp('dns_last_checked_at').nullable()

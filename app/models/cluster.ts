@@ -25,6 +25,7 @@ import type { HasMany, BelongsTo, HasOne } from '@adonisjs/lucid/types/relations
 import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
 import redis from '@adonisjs/redis/services/main'
 import logger from '@adonisjs/core/services/logger'
+import { CloudProviderDefinitions } from '#services/cloud-providers/cloud_provider_definitions'
 
 export enum ProvisioningStepName {
   TALOS_IMAGE = 'talosImage',
@@ -38,7 +39,7 @@ export enum ProvisioningStepName {
   OPERATOR = 'operator',
 }
 
-export type ProvisioningStepStatus = 'pending' | 'in_progress' | 'completed' | 'failed'
+export type ProvisioningStepStatus = 'pending' | 'in_progress' | 'ready' | 'failed' | 'deleting'
 
 export interface ProvisioningStep {
   status: ProvisioningStepStatus
@@ -84,7 +85,6 @@ export default class Cluster extends BaseModel {
 
   @column()
   declare workspaceId: string | null
-
 
   @column()
   declare cloudProviderId: string | null
@@ -246,9 +246,9 @@ export default class Cluster extends BaseModel {
   declare byocErrorAt: DateTime | null
 
   @column({
-    prepare: value => value ? encryption.encrypt(JSON.stringify(value)) : null,
-    consume: value => value ? JSON.parse(encryption.decrypt(value) || '{}') : null,
-    serializeAs: null
+    prepare: (value) => (value ? encryption.encrypt(JSON.stringify(value)) : null),
+    consume: (value) => (value ? JSON.parse(encryption.decrypt(value) || '{}') : null),
+    serializeAs: null,
   })
   declare kubeconfig: {
     host: string
@@ -258,9 +258,9 @@ export default class Cluster extends BaseModel {
   } | null
 
   @column({
-    prepare: value => value ? encryption.encrypt(JSON.stringify(value)) : null,
-    consume: value => value ? JSON.parse(encryption.decrypt(value) || '{}') : null,
-    serializeAs: null
+    prepare: (value) => (value ? encryption.encrypt(JSON.stringify(value)) : null),
+    consume: (value) => (value ? JSON.parse(encryption.decrypt(value) || '{}') : null),
+    serializeAs: null,
   })
   declare talosConfig: {
     ca_certificate: string
@@ -321,7 +321,9 @@ export default class Cluster extends BaseModel {
       }
     }
 
-    throw new Error('No available IP ranges. All ranges from 10.219.0.0/16 to 10.223.0.0/16 are in use for this user.')
+    throw new Error(
+      'No available IP ranges. All ranges from 10.219.0.0/16 to 10.223.0.0/16 are in use for this user.'
+    )
   }
 
   public static async createWithInfrastructure(
@@ -450,7 +452,7 @@ export default class Cluster extends BaseModel {
       .preload('loadBalancers')
       .preload('nodes')
       .preload('sshKey')
-      .preload('workspace', query => {
+      .preload('workspace', (query) => {
         query.preload('user')
       })
       .preload('nodes', (nodesQuery) => nodesQuery.preload('storages'))
@@ -513,7 +515,6 @@ export default class Cluster extends BaseModel {
         if (this.dnsStartedAt) return 'in_progress'
         return 'pending'
 
-
       default:
         return 'pending'
     }
@@ -533,16 +534,18 @@ export default class Cluster extends BaseModel {
       'dns',
     ]
 
-    return stages.reduce((acc, stage) => {
-      acc[stage] = this.getStepStatus(stage)
-      return acc
-    }, {} as Record<TerraformStage, ProvisioningStepStatus>)
+    return stages.reduce(
+      (acc, stage) => {
+        acc[stage] = this.getStepStatus(stage)
+        return acc
+      },
+      {} as Record<TerraformStage, ProvisioningStepStatus>
+    )
   }
 
   @computed()
   public get provisioningStatus(): ProvisioningStepStatus {
-
-    const stages: TerraformStage[] = [
+    let stages: TerraformStage[] = [
       'talos-image',
       'network',
       'ssh-keys',
@@ -554,18 +557,22 @@ export default class Cluster extends BaseModel {
       'dns',
     ]
 
-    const statuses = stages.map(stage => this.getStepStatus(stage))
+    if (this.deletedAt) {
+      return 'deleting'
+    }
 
-    if (statuses.some(status => status === 'failed')) {
+    const statuses = stages.map((stage) => this.getStepStatus(stage))
+
+    if (statuses.some((status) => status === 'failed')) {
       return 'failed'
     }
 
-    if (statuses.some(status => status === 'in_progress')) {
+    if (statuses.some((status) => status === 'in_progress')) {
       return 'in_progress'
     }
 
-    if (statuses.every(status => status === 'completed')) {
-      return 'completed'
+    if (statuses.every((status) => status === 'completed')) {
+      return 'ready'
     }
 
     return 'pending'
@@ -581,7 +588,7 @@ export default class Cluster extends BaseModel {
       'servers',
       'volumes',
       'kubernetes-config',
-      'kubernetes-boot'
+      'kubernetes-boot',
     ]
 
     for (const stage of stages) {
@@ -592,5 +599,54 @@ export default class Cluster extends BaseModel {
     }
 
     return null
+  }
+
+  /**
+   * Get the flag for this cluster based on its cloud provider and location.
+   * Returns the flag path for the region where this cluster is deployed.
+   * If cloudProvider is not loaded, checks if it's a BYOC cluster and uses BYOC regions.
+   * Otherwise returns the US flag as default.
+   */
+  @computed()
+  public get region(): { flag: string; name: string } {
+    try {
+      if (!this.cloudProvider || this.cloudProvider.type === 'byoc') {
+        const regionsByContinent = CloudProviderDefinitions.regions('byoc')
+        const allRegions = Object.values(regionsByContinent).flat()
+        const region = allRegions.find((region) => region.slug === this.location)
+
+        return (
+          region || {
+            name: 'Unknown',
+            flag: '/flags/us.svg',
+          }
+        )
+      }
+
+      if (!this.cloudProvider) {
+        return {
+          name: 'Unknown',
+          flag: '/flags/us.svg',
+        }
+      }
+
+      const regionsByContinent = CloudProviderDefinitions.regions(this.cloudProvider.type)
+
+      const allRegions = Object.values(regionsByContinent).flat()
+
+      const region = allRegions.find((region) => region.slug === this.location)
+
+      return (
+        region || {
+          name: 'Unknown',
+          flag: '/flags/us.svg',
+        }
+      )
+    } catch (error) {
+      return {
+        name: 'Unknown',
+        flag: '/flags/us.svg',
+      }
+    }
   }
 }

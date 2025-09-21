@@ -1,7 +1,7 @@
 import { Text } from '@kibamail/owly/text'
-import { TeamAvatar } from '../Dashboard/WorkspaceDropdownMenu'
 import { PageProps, Project } from '~/types'
 import { Link, usePage } from '@inertiajs/react'
+import { ItemAvatar } from '../ItemAvatar'
 
 interface ProjectCardProps {
   project: Project
@@ -18,7 +18,7 @@ export function ProjectCard({ project }: ProjectCardProps) {
       <div className="p-4 z-1 flex flex-col justify-between h-full relative cursor-pointer rounded-[11px]">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <TeamAvatar
+            <ItemAvatar
               name="kibaauth"
               className="!mr-0 !rounded-sm w-10 h-10 !text-lg font-semibold"
             />

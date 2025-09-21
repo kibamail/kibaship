@@ -49,25 +49,29 @@ export default class DestroyClusterJob extends Job {
 
     // Debug logging for volumes stage
     if (stage === 'volumes') {
-      logger.info(`Debug: Cluster nodes provider IDs:`, 
-        cluster.nodes.map(node => ({ 
-          id: node.id, 
-          slug: node.slug, 
+      logger.info(
+        `Debug: Cluster nodes provider IDs:`,
+        cluster.nodes.map((node) => ({
+          id: node.id,
+          slug: node.slug,
           providerId: node.providerId,
-          storages: node.storages?.map(s => s.slug) 
+          storages: node.storages?.map((s) => s.slug),
         }))
       )
-      
+
       // Also debug the volumes that will be generated for the template
-      const volumes = cluster.nodes?.map(node =>
-        node.storages.map(storage => ({
-          id: storage.id,
-          slug: storage.slug,
-          size: node.type === 'master' ? cluster.controlPlanesVolumeSize : cluster.workersVolumeSize,
-          node_provider_id: node.providerId
-        }))
-      ).flat()
-      
+      const volumes = cluster.nodes
+        ?.map((node) =>
+          node.storages.map((storage) => ({
+            id: storage.id,
+            slug: storage.slug,
+            size:
+              node.type === 'master' ? cluster.controlPlanesVolumeSize : cluster.workersVolumeSize,
+            node_provider_id: node.providerId,
+          }))
+        )
+        .flat()
+
       logger.info(`Debug: Volumes for template:`, volumes)
     }
 
@@ -75,28 +79,29 @@ export default class DestroyClusterJob extends Job {
     const terraform = new TerraformService(cluster.id)
     await terraform.generate(cluster, this.getTerraformTemplate(stage))
 
-    const ingressLoadBalancer = cluster.loadBalancers.find(lb => lb.type === 'ingress')
-    const kubeLoadBalancer = cluster.loadBalancers.find(lb => lb.type === 'cluster')
-    const controlPlaneServerIds = this.buildServerIdsMap(cluster.nodes.filter(n => n.type === 'master'))
-    const workerServerIds = this.buildServerIdsMap(cluster.nodes.filter(n => n.type === 'worker'))
+    const ingressLoadBalancer = cluster.loadBalancers.find((lb) => lb.type === 'ingress')
+    const kubeLoadBalancer = cluster.loadBalancers.find((lb) => lb.type === 'cluster')
+    const controlPlaneServerIds = this.buildServerIdsMap(
+      cluster.nodes.filter((n) => n.type === 'master')
+    )
+    const workerServerIds = this.buildServerIdsMap(cluster.nodes.filter((n) => n.type === 'worker'))
 
-    const executor = new TerraformExecutor(cluster.id, stage)
-      .vars({
-        ...cluster.cloudProvider?.getTerraformCredentials(),
-        cluster_name: cluster.subdomainIdentifier,
-        location: cluster.location,
-        network_zone: cluster.cloudProvider?.getNetworkZone(cluster.location) || 'eu-central',
-        public_key: cluster.sshKey?.publicKey || '',
-        network_id: cluster.providerNetworkId || '',
-        server_type: cluster.serverType,
-        ssh_key_id: cluster.sshKey?.providerId || '',
-        kube_load_balancer_id: kubeLoadBalancer?.providerId || '',
-        ingress_load_balancer_id: ingressLoadBalancer?.providerId || '',
-        control_planes_volume_size: cluster.controlPlanesVolumeSize,
-        workers_volume_size: cluster.workersVolumeSize,
-        control_plane_server_ids: JSON.stringify(controlPlaneServerIds),
-        worker_server_ids: JSON.stringify(workerServerIds)
-      })
+    const executor = new TerraformExecutor(cluster.id, stage).vars({
+      ...cluster.cloudProvider?.getTerraformCredentials(),
+      cluster_name: cluster.subdomainIdentifier,
+      location: cluster.location,
+      network_zone: cluster.cloudProvider?.getNetworkZone(cluster.location) || 'eu-central',
+      public_key: cluster.sshKey?.publicKey || '',
+      network_id: cluster.providerNetworkId || '',
+      server_type: cluster.serverType,
+      ssh_key_id: cluster.sshKey?.providerId || '',
+      kube_load_balancer_id: kubeLoadBalancer?.providerId || '',
+      ingress_load_balancer_id: ingressLoadBalancer?.providerId || '',
+      control_planes_volume_size: cluster.controlPlanesVolumeSize,
+      workers_volume_size: cluster.workersVolumeSize,
+      control_plane_server_ids: JSON.stringify(controlPlaneServerIds),
+      worker_server_ids: JSON.stringify(workerServerIds),
+    })
 
     try {
       await executor.init()
@@ -129,7 +134,7 @@ export default class DestroyClusterJob extends Job {
   private buildServerIdsMap(nodes: any[]): Record<string, string> {
     const serverIds: Record<string, string> = {}
 
-    nodes.forEach(node => {
+    nodes.forEach((node) => {
       if (node.providerId) {
         serverIds[node.id] = node.providerId
       }

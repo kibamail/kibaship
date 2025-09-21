@@ -16,6 +16,7 @@ import { LeaseWebIcon } from '~/Components/Icons/leaseweb.svg'
 import { LinodeIcon } from '~/Components/Icons/linode.svg'
 import { OVHIcon } from '~/Components/Icons/ovh.svg'
 import { VultrIcon } from '~/Components/Icons/vultr.svg'
+import { K8sIcon } from '~/Components/Icons/k8s.svg'
 
 interface CreateCloudProviderDialogProps {
   isOpen: boolean
@@ -32,6 +33,7 @@ const providerIcons: Record<CloudProviderType, React.ComponentType<{ className?:
   linode: LinodeIcon,
   vultr: VultrIcon,
   ovh: OVHIcon,
+  byoc: K8sIcon,
 }
 
 export function CreateCloudProviderDialog({

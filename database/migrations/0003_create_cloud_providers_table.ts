@@ -8,9 +8,24 @@ export default class extends BaseSchema {
       table.uuid('id').primary()
 
       table.string('name').notNullable()
-      table.enum('type', ['aws', 'hetzner', 'leaseweb', 'google_cloud', 'digital_ocean', 'linode', 'vultr', 'ovh']).notNullable()
+      table
+        .enum('type', [
+          'aws',
+          'hetzner',
+          'leaseweb',
+          'google_cloud',
+          'digital_ocean',
+          'linode',
+          'vultr',
+          'ovh',
+        ])
+        .notNullable()
       table.uuid('workspace_id').notNullable()
       table.text('credentials').notNullable()
+
+      table.timestamp('deleted_at').nullable()
+      table.string('provider_image_arm_64').nullable()
+      table.string('provider_image_amd_64').nullable()
 
       table.timestamp('created_at')
       table.timestamp('updated_at')

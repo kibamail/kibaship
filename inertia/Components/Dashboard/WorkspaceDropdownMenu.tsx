@@ -6,10 +6,10 @@ import { UserPlusIcon } from '~/Components/Icons/user-plus.svg'
 import { UserIcon } from '~/Components/Icons/user.svg'
 import { Text } from '@kibamail/owly/text'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import cn from 'classnames'
 import { SignoutForm } from './SignoutForm'
 import { PageProps } from '~/types'
 import { Link, usePage } from '@inertiajs/react'
+import { ItemAvatar } from '../ItemAvatar'
 
 interface WorkspacesDropdownMenuProps {
   rootId: string
@@ -39,7 +39,7 @@ export function WorkspacesDropdownMenu({
           className="grow flex items-center border transition ease-in-out border-(--border-tertiary) hover:bg-(--background-hover) focus:outline-none focus-within:border-(--border-focus) p-1 rounded-lg"
         >
           <span className="grow flex items-center">
-            <TeamAvatar name={activeWorkspace?.name} size="md" />
+            <ItemAvatar name={activeWorkspace?.name} size="md" />
 
             <Text className="kb-content-primary truncate capitalize">
               {activeWorkspace?.name || 'Select Workspace'}
@@ -64,7 +64,7 @@ export function WorkspacesDropdownMenu({
                 data-testid={`${rootId}-switch-workspace-id-${workspace.slug}`}
                 className="p-2 flex items-center hover:bg-(--background-secondary) rounded-lg cursor-pointer"
               >
-                <TeamAvatar name={workspace.name} size="sm" />
+                <ItemAvatar name={workspace.name} size="sm" />
                 <Text className="kb-content-secondary capitalize">{workspace.name}</Text>
 
                 <DropdownMenu.ItemIndicator className="ml-auto">
@@ -113,43 +113,4 @@ export function WorkspacesDropdownMenu({
       </DropdownMenu.Content>
     </DropdownMenu.Root>
   )
-}
-
-interface TeamAvatarProps {
-  size?: 'sm' | 'md'
-  name?: string
-  className?: string
-}
-
-export function TeamAvatar({ size = 'md', name, className }: TeamAvatarProps) {
-  return (
-    <span
-      className={cn(
-        'mr-1.5 text-sm shadow-[0px_0px_0px_1px_rgba(0,0,0,0.10)_inset] kb-background-info rounded-lg flex items-center justify-center kb-content-primary-inverse uppercase',
-        {
-          'w-5 h-5': size === 'sm',
-          'w-6 h-6': size === 'md',
-        },
-        getTeamAvatarBackgroundColor(name?.[0] ?? ''),
-        className
-      )}
-    >
-      {name?.[0]}
-    </span>
-  )
-}
-
-function getTeamAvatarBackgroundColor(firstCharacter: string) {
-  const colors = [
-    'kb-background-info',
-    'kb-background-positive',
-    'kb-background-negative',
-    'kb-background-warning',
-    'kb-background-highlight',
-  ]
-
-  const asciiValue = firstCharacter.charCodeAt(0)
-  const index = (asciiValue - 97) % colors.length
-
-  return colors[index] ?? colors?.[0]
 }

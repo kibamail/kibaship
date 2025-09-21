@@ -38,9 +38,8 @@ variable "location" {
 provider "hcloud" {
   token = var.hcloud_token
 }
-
 @each((volume, index) in volumes)
-resource "hcloud_volume" "volume_{{ volume.slug }}" {
+  resource "hcloud_volume" "volume_{{ volume.slug }}" {
   name     = "volume-{{ volume.slug }}"
   size     = {{ volume.size }}
   location = var.location
@@ -60,30 +59,28 @@ resource "hcloud_volume_attachment" "attachment_{{ volume.slug }}" {
 @end
 
 # Talos configuration for disk discovery
-@if(talos_ca_certificate && talos_client_certificate && talos_client_key)
 # Discover disks on each worker node using Talos
 @each((worker, index) in workers)
-data "talos_machine_disks" "worker_{{ worker.slug }}_disks" {
-  client_configuration = {
-    ca_certificate     = "{{ talos_ca_certificate }}"
-    client_certificate = "{{ talos_client_certificate }}"  
-    client_key         = "{{ talos_client_key }}"
-  }
-  node     = "{{ worker.ipv4_address }}"
-  selector = "disk.size > 1u * GB"
+  data "talos_machine_disks" "worker_{{ worker.slug }}_disks" {
+    client_configuration = {
+      ca_certificate     = "{{ talos_ca_certificate }}"
+      client_certificate = "{{ talos_client_certificate }}"  
+      client_key         = "{{ talos_client_key }}"
+    }
+    node     = "{{ worker.ipv4_address }}"
+    selector = "disk.size > 1u * GB"
 
-  depends_on = [
-    @each(volume in volumes)
-    hcloud_volume_attachment.attachment_{{ volume.slug }}{{ $loop.index === volumes.length - 1 ? '' : ',' }}
-    @end
+    depends_on = [
+  @each((volume, volumeIndex) in volumes)
+    hcloud_volume_attachment.attachment_{{ volume.slug }}{{ volumeIndex === volumes.length - 1 ? '' : ',' }}
+  @end
   ]
-}
-@end
+  }
 @end
 
 # Individual Volume Outputs
 @each(volume in volumes)
-output "volume_{{ volume.slug }}_id" {
+  output "volume_{{ volume.slug }}_id" {
   description = "Volume ID for volume {{ volume.id }}"
   value       = hcloud_volume.volume_{{ volume.slug }}.id
 }
@@ -109,26 +106,26 @@ output "volume_ids" {
   description = "Map of volume slugs to volume IDs"
   value = {
 @each((volume, index) in volumes)
-    "{{ volume.slug }}" = hcloud_volume.volume_{{ volume.slug }}.id{{ index === volumes.length - 1 ? '' : ',' }}
+  "{{ volume.slug }}" = hcloud_volume.volume_{{ volume.slug }}.id{{ index === volumes.length - 1 ? '' : ',' }}
 @end
-  }
+}
 }
 
 # Talos disk discovery outputs
 @if(talos_ca_certificate && talos_client_certificate && talos_client_key)
-@each((worker, index) in workers)
-output "worker_{{ worker.slug }}_disks" {
+  @each((worker, index) in workers)
+    output "worker_{{ worker.slug }}_disks" {
   description = "Discovered disks on worker node {{ worker.slug }}"
   value       = data.talos_machine_disks.worker_{{ worker.slug }}_disks.disks
 }
-@end
-
-output "all_worker_disks" {
+  @end
+  
+  output "all_worker_disks" {
   description = "Map of worker slugs to their discovered disks"
   value = {
-@each((worker, index) in workers)
+  @each((worker, index) in workers)
     "{{ worker.slug }}" = data.talos_machine_disks.worker_{{ worker.slug }}_disks.disks{{ index === workers.length - 1 ? '' : ',' }}
-@end
+  @end
   }
 }
 @end

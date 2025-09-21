@@ -1,26 +1,26 @@
 import { BaseController } from '#controllers/Base/base_controller'
-import Application from '#models/application'
 import Project from '#models/project'
 import type { HttpContext } from '@adonisjs/core/http'
 
 export default class ProjectsController extends BaseController {
+  public async store(ctx: HttpContext) {
+    const workspace = await this.workspace(ctx)
+    const name: string = ctx.request.input('name') || 'New project'
+
+    const project = await Project.create({ name, workspaceId: workspace.id })
+
+    ctx.session.put('project', project.id)
+
+    return ctx.response.redirect(`/w/${workspace.slug}/dashboard`)
+  }
+
   public async show(ctx: HttpContext) {
-    const applicationId = ctx.request.qs()?.application
-    const [project] = await Project.query().preload('cluster').preload('applications').where('id', ctx.params.project).limit(1)
+    const project = await Project.findOrFail(ctx.params.project)
 
+    const workspace = await this.workspace(ctx)
 
-    let application = applicationId ? await Application.findOrFail(applicationId) : null
+    await this.activateProect(ctx, project.id)
 
-    if (!project) {
-      throw new Error('Project not found')
-    }
-
-    return ctx.inertia.render(
-      'projects/project',
-      await this.pageProps(ctx, {
-        project,
-        application
-      })
-    )
+    return ctx.response.redirect(`/w/${workspace.slug}/dashboard`)
   }
 }

@@ -1,13 +1,14 @@
 import { Topbar } from '~/Components/Dashboard/Topbar'
-import { OnboardingSidebar } from '~/Components/Layout/OnboardingSidebar'
 import { Text } from '@kibamail/owly/text'
 import type { PropsWithChildren } from 'react'
+import { TopNavigation } from '~/Components/Dashboard/TopNavigation'
 
 export default function Authenticated({ children }: PropsWithChildren) {
   return (
     <div className="w-full h-screen border-l border-r kb-border-tertiary">
       <Topbar />
-      <main className="w-full kb-background-secondary flex flex-col h-[calc(100vh-5rem)] overflow-y-hidden">
+      <TopNavigation />
+      <main className="w-full kb-background-secondary flex flex-col h-[calc(100vh-7.25rem)] overflow-y-hidden">
         <div className="w-full pr-2 flex pl-2 h-full">
           <div className="w-full rounded-lg border border-b kb-border-tertiary overflow-y-auto h-full flex-grow">
             <div className="flex flex-grow w-full h-full">

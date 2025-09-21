@@ -79,6 +79,7 @@ export interface CloudProvider {
   workspace_id: string
   created_at: string
   updated_at: string
+  status: 'preparing' | 'ready' | 'deleted' | 'failed'
 }
 
 export interface CloudProviderRegion {
@@ -100,10 +101,10 @@ export enum ProvisioningStepName {
   SERVERS = 'servers',
   VOLUMES = 'volumes',
   K8S = 'k8s',
-  OPERATOR = 'operator'
+  OPERATOR = 'operator',
 }
 
-export type ProvisioningStepStatus = 'pending' | 'in_progress' | 'completed' | 'failed'
+export type ProvisioningStepStatus = 'pending' | 'in_progress' | 'ready' | 'failed' | 'deleting'
 
 export type ClusterNodeType = 'master' | 'worker'
 export type ClusterNodeStatus = 'provisioning' | 'healthy' | 'unhealthy'
@@ -113,6 +114,7 @@ export type ClusterLoadBalancerType = 'cluster' | 'ingress' | 'tcp' | 'udp'
 export interface Cluster {
   id: string
   location: string
+  region: { name: string; flag: string }
   controlPlaneEndpoint: string
   subdomainIdentifier: string
   kind: ClusterKind
@@ -162,7 +164,7 @@ export interface Cluster {
   kibashipOperatorCompletedAt: string | null
   kibashipOperatorErrorAt: string | null
   currentProvisioningStep: string | null
-  overallProvisioningStatus: string | null
+  provisioningStatus: ProvisioningStepStatus
   provisioningStartedAt: string | null
   provisioningCompletedAt: string | null
   kubeconfig: object | null
@@ -173,9 +175,9 @@ export interface Cluster {
   nodes?: ClusterNode[]
   sshKey?: ClusterSshKey
   loadBalancers?: ClusterLoadBalancer[]
-  cloudProvider?: CloudProvider
+  cloudProvider: CloudProvider
   progress: Record<TerraformStage, ProvisioningStepStatus>
-  firstFailedStage: TerraformStage|null
+  firstFailedStage: TerraformStage | null
 }
 
 export interface ProvisioningStepInfo {
@@ -184,7 +186,6 @@ export interface ProvisioningStepInfo {
   description: string
   icon: React.ReactNode
 }
-
 
 export interface ClusterNode {
   id: string
@@ -276,7 +277,6 @@ export interface SourceCodeProvider {
   type: 'user' | 'organization'
 }
 
-
 export interface Application {
   id: string
   name: string
@@ -292,8 +292,12 @@ export interface Deployment {
 
 export type PageProps<T extends Record<string, unknown> = Record<string, unknown>> = T & {
   profile: UserProfile
-  project: Project
+  activeProject: Project
   projects: Project[]
+  clusters: Cluster[]
+  applications: Application[]
   workspace: UserProfile['workspaces'][number]
+  providers: CloudProviderInfo[]
+  connectedProviders: CloudProvider[]
   cloudProviderRegions: Record<CloudProviderType, CloudProviderRegionsByContinent>
 }

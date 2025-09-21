@@ -1,7 +1,7 @@
 import { BaseSchema } from '@adonisjs/lucid/schema'
 
 export default class extends BaseSchema {
-  protected tableName = 'add_byoc_to_clusters'
+  protected tableName = 'clusters'
 
   async up() {
     this.schema.alterTable(this.tableName, (table) => {

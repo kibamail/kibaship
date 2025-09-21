@@ -31,6 +31,5 @@ export default class ProvisionClusterJob extends Job {
     await queue.dispatch(ProvisionTalosImageJob, payload)
   }
 
-  async rescue(_payload: ProvisionClusterJobPayload) {
-  }
+  async rescue(_payload: ProvisionClusterJobPayload) {}
 }

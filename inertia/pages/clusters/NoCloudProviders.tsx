@@ -29,7 +29,10 @@ interface CloudProviderWithIcon extends CloudProviderInfo {
 }
 
 // Icon mapping for cloud providers
-const providerIcons: Record<CloudProviderType, React.ComponentType<{ className?: string }>> = {
+export const providerIcons: Record<
+  CloudProviderType,
+  React.ComponentType<{ className?: string }>
+> = {
   aws: AWSIcon,
   hetzner: HetznerIcon,
   leaseweb: LeaseWebIcon,
@@ -46,7 +49,6 @@ export function NoCloudProviders() {
     PageProps & {
       regions: CloudProviderRegion[]
       serverTypes: CloudProviderServerType[]
-      providers: CloudProviderInfo[]
     }
   >()
   const [isDialogOpen, setIsDialogOpen] = useState(false)
@@ -67,7 +69,7 @@ export function NoCloudProviders() {
     }
   }
 
-  let cloudProvidersWithIcons: CloudProviderWithIcon[] = props.providers
+  const cloudProvidersWithIcons: CloudProviderWithIcon[] = props.providers
     .map((provider) => ({
       ...provider,
       icon: providerIcons[provider.type],
@@ -77,20 +79,6 @@ export function NoCloudProviders() {
       if (!a.implemented && b.implemented) return 1
       return 0
     })
-
-  cloudProvidersWithIcons = [
-    {
-      type: 'byoc',
-      name: 'Bring your own cluster',
-      implemented: true,
-      description:
-        'Already provisioned a cluster with talos ? Connect it to Kibaship and we will .',
-      documentationLink: 'https://kibaship.com/docs/byoc',
-      credentialFields: [],
-      icon: providerIcons['byoc'],
-    },
-    ...cloudProvidersWithIcons,
-  ]
 
   return (
     <>
@@ -133,29 +121,16 @@ export function NoCloudProviders() {
                     )}
                   </div>
 
-                  {provider.type === 'byoc' ? (
-                    <Button
-                      size="sm"
-                      className="pr-1"
-                      variant="secondary"
-                      disabled={!provider.implemented}
-                      onClick={() => setCreateClusterDialogOpen(true)}
-                    >
-                      <PlusIcon />
-                      Connect your cluster
-                    </Button>
-                  ) : (
-                    <Button
-                      size="sm"
-                      className="pr-1"
-                      variant="secondary"
-                      disabled={!provider.implemented}
-                      onClick={() => handleConnectProvider(provider.type)}
-                    >
-                      <PlusIcon />
-                      Connect provider
-                    </Button>
-                  )}
+                  <Button
+                    size="sm"
+                    className="pr-1"
+                    variant="secondary"
+                    disabled={!provider.implemented}
+                    onClick={() => handleConnectProvider(provider.type)}
+                  >
+                    <PlusIcon />
+                    Connect provider
+                  </Button>
                 </div>
               )
             })}
@@ -169,7 +144,10 @@ export function NoCloudProviders() {
         preselectedProviderType={selectedProviderType}
       />
 
-      <CreateClusterDialog isOpen={createClusterDialogOpen} onOpenChange={setCreateClusterDialogOpen} />
+      <CreateClusterDialog
+        isOpen={createClusterDialogOpen}
+        onOpenChange={setCreateClusterDialogOpen}
+      />
     </>
   )
 }

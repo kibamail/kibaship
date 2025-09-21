@@ -3,11 +3,20 @@ import { Button } from '@kibamail/owly'
 import { Heading } from '@kibamail/owly/heading'
 import { Text } from '@kibamail/owly/text'
 import { PlusIcon } from '../Icons/plus.svg'
-import { NewApplicationCommand } from '../Applications/NewApplicationCommand'
 import { useState } from 'react'
+import { CreateApplicationDialog } from '../Applications/CreateApplicationDialog'
+import { usePage } from '@inertiajs/react'
+import { PageProps } from '~/types'
+import { CreateProjectFlow } from './CreateProjectFlow'
 
-export function NoApplicationsInWorkspace() {
+export function NoApplicationsInProject() {
+  const { props } = usePage<PageProps>()
+
+  const hasNoProjects = props.projects.length == 0
+
   const [newApplicationCommandOpen, setNewApplicationCommandOpen] = useState(false)
+  const [createProjectDialogOpen, setCreateProjectDialogOpen] = useState(false)
+
   return (
     <div className="w-full h-full kb-background-hover flex flex-col items-center py-24 mt-12 border kb-border-tertiary rounded-lg px-6">
       <div className="flex flex-col items-center">
@@ -17,24 +26,38 @@ export function NoApplicationsInWorkspace() {
 
         <div className="mt-4 flex flex-col items-center max-w-lg">
           <Heading size="md" className="font-bold kb-content-secondary">
-            Create your first application
+            {hasNoProjects
+              ? 'You have no projects in this workspace.'
+              : 'Create your first application'}
           </Heading>
 
           <Text className="text-center kb-content-tertiary mt-4">
-            You haven't created any applications in this workspace yet. Applications help you
-            organize and manage your application environments, deployments, infrastructure and
-            resources.
+            {hasNoProjects
+              ? 'Projects help you organize your application environments, deployments, infrastructure and resources. Applications in a project can talk to each other. To deploy your first application, please create a project.'
+              : `You haven't created any applications in this project yet. Applications help you organize
+            and manage your environments, deployments, infrastructure and resources.`}
           </Text>
         </div>
 
         <div className="mt-6">
-          <Button variant="primary" onClick={() => setNewApplicationCommandOpen(true)}>
+          <Button
+            variant="primary"
+            onClick={
+              hasNoProjects
+                ? () => setCreateProjectDialogOpen(true)
+                : () => setNewApplicationCommandOpen(true)
+            }
+          >
             <PlusIcon className="!size-5" />
-            Create new application
+            {hasNoProjects ? 'Add new project' : 'Create new application'}
           </Button>
-          <NewApplicationCommand
-            open={newApplicationCommandOpen}
+          <CreateProjectFlow
+            isOpen={createProjectDialogOpen}
+            onOpenChange={setCreateProjectDialogOpen}
+          />
+          <CreateApplicationDialog
             onOpenChange={setNewApplicationCommandOpen}
+            isOpen={newApplicationCommandOpen}
           />
         </div>
       </div>

@@ -44,16 +44,12 @@ export function Topbar() {
             onCreateWorkspaceClick={handleCreateWorkspaceClick}
           />
 
-          {props?.projects?.length > 0 && (
-            <>
-              <SlashesIcon width={24} height={24} viewBox="0 0 24 24" />
+          <SlashesIcon width={24} height={24} viewBox="0 0 24 24" />
 
-              <ProjectsDropdownMenu
-                rootId="topbar-projects"
-                onCreateProjectClick={handleCreateProjectClick}
-              />
-            </>
-          )}
+          <ProjectsDropdownMenu
+            rootId="topbar-projects"
+            onCreateProjectClick={handleCreateProjectClick}
+          />
         </div>
 
         <div className="max-w-md hidden lg:flex w-full absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 justify-center items-center">

@@ -1,0 +1,40 @@
+# BYOC discovery stage
+# Injects Talos config values and (for now) exposes simple outputs.
+# In a follow-up, replace placeholders with real discovery logic (e.g., talosctl via local-exec/module).
+
+terraform {
+  backend "s3" {
+    bucket  = "{{ s3_bucket }}"
+    key     = "clusters/{{ cluster_id }}/kubernetes-byoc/terraform.tfstate"
+    region  = "{{ s3_region }}"
+    encrypt = true
+  }
+}
+
+# Talos variables (base64 values expected, like other templates)
+variable "talos_ca_certificate" {
+  type        = string
+  sensitive   = true
+  description = "Talos CA certificate (base64)"
+}
+
+variable "talos_client_certificate" {
+  type        = string
+  sensitive   = true
+  description = "Talos client certificate (base64)"
+}
+
+variable "talos_client_key" {
+  type        = string
+  sensitive   = true
+  description = "Talos client key (base64)"
+}
+
+# Future: populate these from actual discovery
+output "nodes" {
+  value = []
+}
+
+output "disks" {
+  value = []
+}

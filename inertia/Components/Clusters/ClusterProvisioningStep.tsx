@@ -22,8 +22,10 @@ export interface ClusterProvisioningStepProps {
 
 export function getStatusIcon(status: ProvisioningStepStatus, className: string = 'h-5 w-5') {
   switch (status) {
-    case 'completed':
+    case 'ready':
       return <CheckCircleSolidIcon className={`${className} text-owly-content-positive !size-4`} />
+    case 'deleting':
+      return <Spinner className={`${className} text-owly-content-negative !size-4`} />
     case 'in_progress':
       return <Spinner className={`${className} text-owly-content-info !size-4`} />
     case 'failed':
@@ -54,7 +56,7 @@ export default function ClusterProvisioningStep({
     }, 5)
   }, [logs, active])
 
-  const status = cluster? cluster.progress[info.stage]: 'pending'
+  const status = cluster ? cluster.progress[info.stage] : 'pending'
 
   return (
     <AccordionItem value={info.stage}>

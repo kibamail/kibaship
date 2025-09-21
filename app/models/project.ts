@@ -1,9 +1,17 @@
 import { DateTime } from 'luxon'
-import { afterCreate, BaseModel, beforeCreate, belongsTo, column, hasMany } from '@adonisjs/lucid/orm'
+import {
+  afterCreate,
+  BaseModel,
+  beforeCreate,
+  belongsTo,
+  column,
+  hasMany,
+} from '@adonisjs/lucid/orm'
 import { randomUUID } from 'node:crypto'
 import Environment from './environment.js'
 import Cluster from './cluster.js'
 import type { BelongsTo, HasMany } from '@adonisjs/lucid/types/relations'
+import { uniqueNamesGenerator, adjectives, animals } from 'unique-names-generator'
 import Application from './application.js'
 
 /**
@@ -49,6 +57,14 @@ export default class Project extends BaseModel {
     }
 
     project.clusterId = cluster.id
+
+    if (!project.name) {
+      project.name = uniqueNamesGenerator({
+        dictionaries: [adjectives, animals],
+        separator: ' ',
+        length: 2,
+      })
+    }
   }
 
   @afterCreate()

@@ -8,7 +8,12 @@ export default class extends BaseSchema {
       table.uuid('id').primary()
 
       table.uuid('workspace_id').notNullable()
-      table.uuid('cluster_id').notNullable().references('id').inTable('clusters')
+      table
+        .uuid('cluster_id')
+        .notNullable()
+        .references('id')
+        .inTable('clusters')
+        .onDelete('cascade')
       table.string('name')
 
       table.timestamp('created_at')
