@@ -21,6 +21,7 @@ import (
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -188,10 +189,29 @@ func (s *ApplicationService) UpdateApplication(ctx context.Context, slug string,
 	// Apply updates to annotations and spec
 	s.applyApplicationUpdates(existingCRD, req)
 
-	// Update the CRD in Kubernetes
-	err = s.client.Update(ctx, existingCRD)
+	// Update the CRD in Kubernetes with a simple conflict retry loop
+	var lastErr error
+	for i := 0; i < 3; i++ {
+		if err = s.client.Update(ctx, existingCRD); err == nil {
+			break
+		}
+		if apierrors.IsConflict(err) {
+			// Fetch latest, re-apply updates, and retry
+			var latest v1alpha1.Application
+			if getErr := s.client.Get(ctx, client.ObjectKey{Namespace: existingCRD.Namespace, Name: existingCRD.Name}, &latest); getErr != nil {
+				lastErr = fmt.Errorf("failed to refetch Application for conflict resolution: %w", getErr)
+				break
+			}
+			existingCRD = latest.DeepCopy()
+			s.applyApplicationUpdates(existingCRD, req)
+			lastErr = err
+			continue
+		}
+		lastErr = err
+		break
+	}
 	if err != nil {
-		return nil, fmt.Errorf("failed to update Application CRD: %w", err)
+		return nil, fmt.Errorf("failed to update Application CRD: %w", lastErr)
 	}
 
 	// Convert back to internal model and return
