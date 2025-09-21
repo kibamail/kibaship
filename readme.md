@@ -48,7 +48,6 @@ helm install \
     --set=gatewayAPI.enableAppProtocol=true
 ```
 
-
 ```tf
 extraManifests = [
     # Install gateway api CRDs
@@ -94,11 +93,11 @@ lrwxrwxrwx 1 root root 15 Sep  8 04:38 nvme-eui.002538b451b5c3fb-part3 -> ../../
 lrwxrwxrwx 1 root root 13 Sep  8 04:38 nvme-eui.002538b451b5c404 -> ../../nvme1n1
 ```
 
-From the above output, we will install talos on `/dev/disk/by-id/nvme-SAMSUNG_MZVL2512HCJQ-00B07_S63CNX0Y425245` 
+From the above output, we will install talos on `/dev/disk/by-id/nvme-SAMSUNG_MZVL2512HCJQ-00B07_S63CNX0Y425245`
 
 We will then use `/dev/disk/by-id/nvme-SAMSUNG_MZVL2512HCJQ-00B07_S63CNX0Y425254` for linstor storage and volumes on the cluster
 
-Prepare image on factory, select drbd. 
+Prepare image on factory, select drbd.
 
 Example link download and extract:
 
@@ -143,3 +142,10 @@ talosctl --nodes ${NODE_IP} get disks --insecure
 talosctl --nodes ${NODE_IP} get addresses --insecure
 talosctl --nodes ${NODE_IP} get links --insecure
 ```
+
+# Talos image configuration
+
+In talos factory, to generate the image hash, we need to ensure the following modules are selected for longhorn:
+
+- siderolabs/iscsi-tools (v0.2.0)
+- siderolabs/util-linux-tools (2.41.1)
