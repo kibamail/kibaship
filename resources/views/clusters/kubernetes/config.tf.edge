@@ -229,6 +229,25 @@ resource "helm_release" "longhorn" {
   create_namespace = true
   cleanup_on_fail  = true
 
+  set = [
+    {
+      name = "defaultSettings.defaultDataPath"
+      value = "/var/mnt/longhorn"
+    },
+    {
+      name = "persistence.defaultClass"
+      value = false
+    },
+    {
+      name = "defaultSettings.defaultReplicaCount"
+      value = 1
+    },
+    {
+      name = "defaultSettings.replicaAutoBalance"
+      value = "strict-local"
+    }
+  ]
+
   depends_on = [helm_release.cilium]
 }
 

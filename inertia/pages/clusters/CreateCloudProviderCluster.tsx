@@ -6,6 +6,7 @@ import { InputError } from '@kibamail/owly/input-hint'
 import { InputLabel } from '@kibamail/owly/input-label'
 import * as Select from '@kibamail/owly/select-field'
 import { useEffect, useMemo } from 'react'
+import { Badge } from '@kibamail/owly'
 
 interface CreateCloudProviderClusterProps {
   data: {
@@ -22,11 +23,11 @@ interface CreateCloudProviderClusterProps {
   connectedProviders: CloudProvider[]
 }
 
-export function CreateCloudProviderCluster({ 
-  data, 
-  setData, 
-  errors, 
-  connectedProviders 
+export function CreateCloudProviderCluster({
+  data,
+  setData,
+  errors,
+  connectedProviders,
 }: CreateCloudProviderClusterProps) {
   const { serverTypes, cloudProviderRegions } = usePage<
     PageProps & {
@@ -132,9 +133,7 @@ export function CreateCloudProviderCluster({
           <NumberField.IncrementButton />
           <NumberField.Hint>Minimum 3 worker nodes required</NumberField.Hint>
           {errors.worker_nodes_count && (
-            <NumberField.Error>
-              {formatErrorMessage(errors.worker_nodes_count)}
-            </NumberField.Error>
+            <NumberField.Error>{formatErrorMessage(errors.worker_nodes_count)}</NumberField.Error>
           )}
         </NumberField.Field>
       </NumberField.Root>
@@ -153,9 +152,7 @@ export function CreateCloudProviderCluster({
           <NumberField.IncrementButton />
           <NumberField.Hint>Storage size for each worker node (10-500 GB)</NumberField.Hint>
           {errors.workers_volume_size && (
-            <NumberField.Error>
-              {formatErrorMessage(errors.workers_volume_size)}
-            </NumberField.Error>
+            <NumberField.Error>{formatErrorMessage(errors.workers_volume_size)}</NumberField.Error>
           )}
         </NumberField.Field>
       </NumberField.Root>
@@ -175,16 +172,22 @@ export function CreateCloudProviderCluster({
                 disabled={!availableServers[serverType.slug]}
                 key={serverType.slug}
                 value={serverType.slug}
+                className="flex items-center w-full"
               >
-                <div className="flex flex-col">
-                  <span className="font-medium">{serverType.name}</span>
-                </div>
+                <span className="flex flex-col">
+                  <span className="font-medium text-sm">
+                    {serverType.name} -{' '}
+                    <Badge size="sm" variant="neutral">
+                      {serverType.arch}
+                    </Badge>
+                  </span>
+                </span>
               </Select.Item>
             ))}
           </Select.Content>
           <Select.Hint>
-            The available server types depend on the region you select above. Please select a
-            region first.
+            The available server types depend on the region you select above. Please select a region
+            first.
           </Select.Hint>
           {errors.server_type && (
             <Select.Error>{formatErrorMessage(errors.server_type)}</Select.Error>

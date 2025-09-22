@@ -91,7 +91,7 @@ export function CreateClusterDialog({ isOpen, onOpenChange }: CreateClusterModal
 
   return (
     <Dialog.Root open={isOpen} onOpenChange={onOpenChange}>
-      <Dialog.Content className="!max-w-[590px]">
+      <Dialog.Content className="!max-w-[640px]">
         <Dialog.Header>
           <Dialog.Title>Create New Cluster</Dialog.Title>
           <VisuallyHidden>
@@ -164,18 +164,17 @@ export function CreateClusterDialog({ isOpen, onOpenChange }: CreateClusterModal
                 <Select.Error>{formatErrorMessage(errors.provider)}</Select.Error>
               )}
             </Select.Root>
-
           </div>
 
           {data.provider === null ? (
-            <CreateBringYourOwnCluster 
+            <CreateBringYourOwnCluster
               onSubmit={() => {
                 reset()
                 onOpenChange(false)
               }}
             />
           ) : (
-            <CreateCloudProviderCluster 
+            <CreateCloudProviderCluster
               data={data}
               setData={setData}
               errors={errors}

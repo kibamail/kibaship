@@ -251,6 +251,7 @@ export interface CloudProviderServerType {
   ram: number
   disk: number
   name: string
+  arch: 'arm' | 'amd'
 }
 
 export interface CloudProviderInfo {
