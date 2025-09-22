@@ -1,7 +1,7 @@
 import { Job } from '@rlanz/bull-queue'
 import Cluster from '#models/cluster'
 import { DateTime } from 'luxon'
-import { TerraformExecutor } from '#services/terraform/terraform_executor'
+import { createExecutor } from '#services/terraform/main'
 import { TerraformService, TerraformTemplate } from '#services/terraform/terraform_service'
 
 interface ProvisionByocJobPayload {
@@ -35,7 +35,7 @@ export default class ProvisionByocJob extends Job {
       const terraform = new TerraformService(cluster.id)
       await terraform.generate(cluster, TerraformTemplate.KUBERNETES_BYOC)
 
-      const executor = new TerraformExecutor(cluster.id, 'kubernetes-byoc').vars({
+      const executor = (await createExecutor(cluster.id, 'kubernetes-byoc')).vars({
         talos_ca_certificate: cluster.talosConfig?.ca_certificate || '',
         talos_client_certificate: cluster.talosConfig?.client_certificate || '',
         talos_client_key: cluster.talosConfig?.client_key || '',

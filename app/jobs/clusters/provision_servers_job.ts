@@ -1,6 +1,6 @@
 import { Job } from '@rlanz/bull-queue'
 import Cluster from '#models/cluster'
-import { TerraformExecutor } from '#services/terraform/terraform_executor'
+import { createExecutor } from '#services/terraform/main'
 import { TerraformService, TerraformTemplate } from '#services/terraform/terraform_service'
 import { DateTime } from 'luxon'
 import queue from '@rlanz/bull-queue/services/main'
@@ -61,7 +61,7 @@ export default class ProvisionServersJob extends Job {
       const ingressLoadBalancer = cluster.loadBalancers.find(lb => lb.type === 'ingress')
       const kubeLoadBalancer = cluster.loadBalancers.find(lb => lb.type === 'cluster')
 
-      const executor = new TerraformExecutor(cluster.id, 'servers')
+      const executor = (await createExecutor(cluster.id, 'servers'))
         .vars({
           ...cluster.cloudProvider?.getTerraformCredentials(),
           location: cluster.location,

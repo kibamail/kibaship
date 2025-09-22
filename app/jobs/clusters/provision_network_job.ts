@@ -1,5 +1,5 @@
 import Cluster from '#models/cluster'
-import { TerraformExecutor } from '#services/terraform/terraform_executor'
+import { createExecutor } from '#services/terraform/main'
 import { TerraformService, TerraformTemplate } from '#services/terraform/terraform_service'
 import logger from '@adonisjs/core/services/logger'
 import { Job } from '@rlanz/bull-queue'
@@ -54,13 +54,14 @@ export default class ProvisionNetworkJob extends Job {
     try {
       await terraform.generate(cluster, TerraformTemplate.NETWORK)
 
-      const executor = new TerraformExecutor(cluster.id, 'network')
-        .vars({
-          ...cluster.cloudProvider?.getTerraformCredentials(),
-          cluster_name: cluster.subdomainIdentifier,
-          network_zone: cluster.cloudProvider?.getNetworkZone(cluster.location) || 'eu-central',
-          location: cluster.location
-        })
+      const executor = await createExecutor(cluster.id, 'network')
+
+      executor.vars({
+        ...cluster.cloudProvider?.getTerraformCredentials(),
+        cluster_name: cluster.subdomainIdentifier,
+        network_zone: cluster.cloudProvider?.getNetworkZone(cluster.location) || 'eu-central',
+        location: cluster.location,
+      })
 
       await executor.init()
       await executor.apply({ autoApprove: true })
@@ -70,8 +71,12 @@ export default class ProvisionNetworkJob extends Job {
 
       cluster.networkIpRange = output.network_ip_range.value as string
       cluster.providerNetworkId = output.network_id.value as string
-      cluster.subnetIpRange = (output.subnet_ip_range?.value as string || output.network_ip_range.value as string) || null
-      cluster.providerSubnetId = (output.subnet_id?.value || output.network_id.value) as string || null
+      cluster.subnetIpRange =
+        (output.subnet_ip_range?.value as string) ||
+        (output.network_ip_range.value as string) ||
+        null
+      cluster.providerSubnetId =
+        ((output.subnet_id?.value || output.network_id.value) as string) || null
 
       cluster.networkingCompletedAt = DateTime.now()
 
@@ -90,6 +95,5 @@ export default class ProvisionNetworkJob extends Job {
   /**
    * This is an optional method that gets called when the retries has exceeded and is marked failed.
    */
-  async rescue(_payload: ProvisionNetworkJobPayload) {
-  }
+  async rescue(_payload: ProvisionNetworkJobPayload) {}
 }

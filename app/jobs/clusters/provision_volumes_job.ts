@@ -2,7 +2,7 @@ import { Job } from '@rlanz/bull-queue'
 import queue from '@rlanz/bull-queue/services/main'
 import Cluster from '#models/cluster'
 import ClusterNodeStorage from '#models/cluster_node_storage'
-import { TerraformExecutor } from '#services/terraform/terraform_executor'
+import { createExecutor } from '#services/terraform/main'
 import { TerraformService, TerraformTemplate } from '#services/terraform/terraform_service'
 import { TalosDetectionService } from '#services/talos/talos_detection_service'
 import { DateTime } from 'luxon'
@@ -80,7 +80,7 @@ export default class ProvisionVolumesJob extends Job {
       const terraform = new TerraformService(payload.clusterId)
       await terraform.generate(cluster, TerraformTemplate.VOLUMES)
 
-      const executor = new TerraformExecutor(cluster.id, 'volumes').vars({
+      const executor = (await createExecutor(cluster.id, 'volumes')).vars({
         ...cluster.cloudProvider?.getTerraformCredentials(),
         cluster_name: cluster.subdomainIdentifier,
         location: cluster.location,

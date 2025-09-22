@@ -1,7 +1,7 @@
 import { Job } from '@rlanz/bull-queue'
 import queue from '@rlanz/bull-queue/services/main'
 import Cluster from '#models/cluster'
-import { TerraformExecutor } from '#services/terraform/terraform_executor'
+import { createExecutor } from '#services/terraform/main'
 import { TerraformService, TerraformTemplate } from '#services/terraform/terraform_service'
 import { KubernetesService } from '#services/kubernetes/kubernetes_service'
 import { DateTime } from 'luxon'
@@ -58,7 +58,7 @@ export default class ProvisionKubernetesConfigJob extends Job {
       const terraform = new TerraformService(payload.clusterId)
       await terraform.generate(cluster, TerraformTemplate.KUBERNETES_CONFIG)
 
-      const executor = new TerraformExecutor(cluster.id, 'kubernetes-config').vars({
+      const executor = (await createExecutor(cluster.id, 'kubernetes-config')).vars({
         ...cluster.cloudProvider?.getTerraformCredentials(),
         cluster_name: cluster.subdomainIdentifier,
         location: cluster.location,

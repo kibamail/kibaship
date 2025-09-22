@@ -1,6 +1,6 @@
 import { Job } from '@rlanz/bull-queue'
 import Cluster from '#models/cluster'
-import { TerraformExecutor } from '#services/terraform/terraform_executor'
+import { createExecutor } from '#services/terraform/main'
 import { TerraformService, TerraformTemplate } from '#services/terraform/terraform_service'
 import { DateTime } from 'luxon'
 import queue from '@rlanz/bull-queue/services/main'
@@ -49,7 +49,7 @@ export default class ProvisionSshKeysJob extends Job {
       const terraform = new TerraformService(payload.clusterId)
       await terraform.generate(cluster, TerraformTemplate.SSH_KEYS)
 
-      const executor = new TerraformExecutor(cluster.id, 'ssh-keys')
+      const executor = (await createExecutor(cluster.id, 'ssh-keys'))
         .vars({
           ...cluster.cloudProvider?.getTerraformCredentials(),
           cluster_name: cluster.subdomainIdentifier,

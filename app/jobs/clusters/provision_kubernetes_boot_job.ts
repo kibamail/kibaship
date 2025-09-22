@@ -1,7 +1,7 @@
 import { Job } from '@rlanz/bull-queue'
 import queue from '@rlanz/bull-queue/services/main'
 import Cluster from '#models/cluster'
-import { TerraformExecutor } from '#services/terraform/terraform_executor'
+import { createExecutor } from '#services/terraform/main'
 import { TerraformService, TerraformTemplate } from '#services/terraform/terraform_service'
 import { DateTime } from 'luxon'
 import ClusterDnsVerifyJob from './cluster_dns_verify_job.js'
@@ -41,7 +41,7 @@ export default class ProvisionKubernetesBootJob extends Job {
       const terraform = new TerraformService(payload.clusterId)
       await terraform.generate(cluster, TerraformTemplate.KUBERNETES_BOOT)
 
-      const executor = new TerraformExecutor(cluster.id, 'kubernetes-boot').vars({
+      const executor = (await createExecutor(cluster.id, 'kubernetes-boot')).vars({
         ...cluster.cloudProvider?.getTerraformCredentials(),
         cluster_name: cluster.subdomainIdentifier,
         location: cluster.location,

@@ -6,14 +6,28 @@ import app from '@adonisjs/core/services/app'
 import env from '#start/env'
 import { join } from 'node:path'
 import logger from '@adonisjs/core/services/logger'
+import { TerraformExecutorContract } from '#contracts/terraform_executor'
+import { writeFile } from 'node:fs/promises'
 
 export type TerraformCommand = 'init' | 'apply' | 'plan' | 'destroy'
-export type TerraformStage = 'network' | 'ssh-keys' | 'load-balancers' | 'servers' | 'volumes' | 'talos-image' | 'dns' | 'talos' | 'kubernetes-config' | 'kubernetes-boot' | 'kubernetes-byoc'
+export type TerraformStage =
+  | 'network'
+  | 'ssh-keys'
+  | 'load-balancers'
+  | 'servers'
+  | 'volumes'
+  | 'talos-image'
+  | 'dns'
+  | 'talos'
+  | 'kubernetes-config'
+  | 'kubernetes-boot'
+  | 'kubernetes-byoc'
 
 export interface TerraformExecutionOptions {
   autoApprove?: boolean
   jsonOutput?: boolean
   additionalArgs?: string[]
+  storePlanOutput?: boolean
 }
 
 export interface TerraformExecutionResult {
@@ -24,7 +38,103 @@ export interface TerraformExecutionResult {
 }
 
 export type TerraformLogCallback = (logType: string, message: string, timestamp: string) => void
-export type TerraformOutputCallback = (outputs: Record<string, any>) => void
+export type TerraformOutputCallback = (outputs: Record<string, unknown>) => void
+
+export interface TerraformPlanData {
+  format_version: string
+  terraform_version: string
+  variables?: Record<string, unknown>
+  planned_values?: {
+    outputs?: Record<string, { sensitive: boolean }>
+    root_module?: {
+      resources?: TerraformPlanResource[]
+    }
+  }
+  resource_changes?: TerraformResourceChange[]
+  output_changes?: Record<string, unknown>
+  prior_state?: {
+    values?: {
+      root_module?: {
+        resources?: TerraformPlanResource[]
+      }
+    }
+  }
+  configuration?: {
+    provider_config?: Record<string, TerraformProviderConfig>
+    root_module?: {
+      resources?: TerraformConfigResource[]
+      variables?: Record<string, { description?: string; sensitive?: boolean }>
+    }
+  }
+  timestamp?: string
+  applyable?: boolean
+  complete?: boolean
+  errored?: boolean
+}
+
+export interface TerraformPlanResource {
+  address: string
+  mode: 'managed' | 'data'
+  type: string
+  name: string
+  index?: number
+  provider_name: string
+  schema_version: number
+  values: Record<string, unknown>
+  sensitive_values?: Record<string, unknown>
+}
+
+export interface TerraformResourceChange {
+  address: string
+  mode: 'managed' | 'data'
+  type: string
+  name: string
+  index?: number
+  provider_name: string
+  change: {
+    actions: string[]
+    before: unknown
+    after: Record<string, unknown>
+    after_unknown?: Record<string, unknown>
+    before_sensitive?: boolean | Record<string, unknown>
+    after_sensitive?: boolean | Record<string, unknown>
+  }
+}
+
+export interface TerraformProviderConfig {
+  name: string
+  full_name: string
+  version_constraint?: string
+  expressions?: Record<string, unknown>
+}
+
+export interface TerraformConfigResource {
+  address: string
+  mode: 'managed' | 'data'
+  type: string
+  name: string
+  provider_config_key: string
+  expressions: Record<string, { constant_value?: unknown; references?: string[] }>
+  schema_version: number
+  count_expression?: { references: string[] }
+}
+
+export interface DigitalOceanCustomImageResource {
+  distribution: string
+  name: string
+  regions: string[]
+  url: string
+  description?: string | null
+  tags?: string[] | null
+  timeouts?: unknown | null
+}
+
+export interface DigitalOceanImagesFilter {
+  key: string
+  values: string[]
+  match_by?: string
+  all?: boolean
+}
 
 /**
  * Handles Terraform command execution with Redis stream logging
@@ -43,12 +153,13 @@ export type TerraformOutputCallback = (outputs: Record<string, any>) => void
  * await executor.apply({ autoApprove: true })
  * ```
  */
-export class TerraformExecutor {
+export class TerraformExecutor extends TerraformExecutorContract {
   private streamName: string
   private terraformDir: string
   private _vars: Record<string, string | number | boolean> = {}
 
-  constructor(protected clusterId: string, protected stage: TerraformStage) {
+  constructor(clusterId: string, stage: TerraformStage) {
+    super(clusterId, stage)
     this.streamName = RedisStreamConfig.getClusterStream(clusterId)
     this.terraformDir = join(app.makePath('storage'), `terraform/clusters/${clusterId}/${stage}`)
   }
@@ -62,8 +173,6 @@ export class TerraformExecutor {
     return this
   }
 
-
-
   /**
    * Initialize the Terraform stream
    */
@@ -75,7 +184,7 @@ export class TerraformExecutor {
         cluster_id: this.clusterId,
         stage: this.stage,
         timestamp: new Date().toISOString(),
-        message: `Terraform execution stream initialized for ${this.stage} stage`
+        message: `Terraform execution stream initialized for ${this.stage} stage`,
       })
       .onError((error) => {
         logger.error('Failed to initialize terraform stream:', error)
@@ -91,7 +200,7 @@ export class TerraformExecutor {
 
     const args = ['init']
 
-    args.push(...options.additionalArgs || [])
+    args.push(...(options.additionalArgs || []))
 
     await this.executeCommand('init', args)
   }
@@ -106,11 +215,21 @@ export class TerraformExecutor {
       args.push('-json')
     }
 
+    // Save plan to file if we need to store output
+    if (options.storePlanOutput) {
+      args.push('-out=terraform-plan.tfplan')
+    }
+
     if (options.additionalArgs) {
       args.push(...options.additionalArgs)
     }
 
     await this.executeCommand('plan', args)
+
+    // Store plan output if requested
+    if (options.storePlanOutput) {
+      await this.storePlanOutput()
+    }
   }
 
   /**
@@ -170,9 +289,7 @@ export class TerraformExecutor {
    */
   async getLogCount(): Promise<number> {
     try {
-      return await new RedisStream()
-        .stream(this.streamName)
-        .length()
+      return await new RedisStream().stream(this.streamName).length()
     } catch (error) {
       return 0
     }
@@ -240,7 +357,10 @@ export class TerraformExecutor {
    * Execute a terraform command with stream logging
    */
   private async executeCommand(command: TerraformCommand, args: string[]) {
-    await this.logToStream('command_start', `Starting terraform ${command} with args: ${args.join(' ')}`)
+    await this.logToStream(
+      'command_start',
+      `Starting terraform ${command} with args: ${args.join(' ')}`
+    )
 
     return new ChildProcess()
       .command('terraform')
@@ -273,6 +393,47 @@ export class TerraformExecutor {
   }
 
   /**
+   * Store the terraform plan output to a file in the terraform directory
+   */
+  private async storePlanOutput(): Promise<void> {
+    try {
+      const result = await new ChildProcess()
+        .command('terraform')
+        .args(['show', '-json', 'terraform-plan.tfplan'])
+        .cwd(this.terraformDir)
+        .env(this.getTerraformEnvironment())
+        .execute()
+
+      if (!result.stdout || typeof result.stdout !== 'string') {
+        throw new Error('No stdout received from terraform show command')
+      }
+
+      const planData = JSON.parse(result.stdout)
+      const sanitizedPlan = this.sanitizePlanOutput(planData)
+
+      const planOutputFile = join(this.terraformDir, 'terraform-plan-output.json')
+      await writeFile(planOutputFile, JSON.stringify(sanitizedPlan, null, 2))
+
+      logger.info(`Plan output stored to: ${planOutputFile}`)
+    } catch (error) {
+      logger.error('Failed to store plan output:', error)
+    }
+  }
+
+  /**
+   * Remove sensitive data from terraform plan output
+   */
+  private sanitizePlanOutput(planData: TerraformPlanData): TerraformPlanData {
+    const sanitized = { ...planData }
+
+    if (sanitized.variables) {
+      delete sanitized.variables
+    }
+
+    return sanitized
+  }
+
+  /**
    * Log a message to the Redis stream
    */
   private async logToStream(logType: string, message: string): Promise<void> {
@@ -284,7 +445,7 @@ export class TerraformExecutor {
           message: message.trim(),
           timestamp: new Date().toISOString(),
           cluster_id: this.clusterId,
-          stage: this.stage
+          stage: this.stage,
         })
         .add()
     } catch (error) {

@@ -1,7 +1,7 @@
 import { Job } from '@rlanz/bull-queue'
 import Cluster from '#models/cluster'
 import ClusterLoadBalancer from '#models/cluster_load_balancer'
-import { TerraformExecutor } from '#services/terraform/terraform_executor'
+import { createExecutor } from '#services/terraform/main'
 import { TerraformService, TerraformTemplate } from '#services/terraform/terraform_service'
 import { DateTime } from 'luxon'
 import queue from '@rlanz/bull-queue/services/main'
@@ -50,7 +50,7 @@ export default class ProvisionLoadBalancersJob extends Job {
       const terraform = new TerraformService(payload.clusterId)
       await terraform.generate(cluster, TerraformTemplate.LOAD_BALANCERS)
 
-      const executor = new TerraformExecutor(cluster.id, 'load-balancers')
+      const executor = (await createExecutor(cluster.id, 'load-balancers'))
         .vars({
           ...cluster.cloudProvider?.getTerraformCredentials(),
           cluster_name: cluster.subdomainIdentifier,

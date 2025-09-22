@@ -1,5 +1,5 @@
 import Cluster from '#models/cluster'
-import { TerraformExecutor } from '#services/terraform/terraform_executor'
+import { createExecutor } from '#services/terraform/main'
 import { TerraformService, TerraformTemplate } from '#services/terraform/terraform_service'
 import logger from '@adonisjs/core/services/logger'
 import { Job } from '@rlanz/bull-queue'
@@ -63,7 +63,9 @@ export default class ProvisionTalosImageJob extends Job {
     try {
       await terraform.generate(cluster, TerraformTemplate.TALOS_IMAGE)
 
-      const executor = new TerraformExecutor(cluster.id, 'talos-image').vars({
+      const executor = await createExecutor(cluster.id, 'talos-image')
+
+      executor.vars({
         ...cluster.cloudProvider?.getTerraformCredentials(),
       })
 

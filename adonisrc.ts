@@ -60,6 +60,7 @@ export default defineConfig({
     () => import('@adonisjs/redis/redis_provider'),
     () => import('@rlanz/bull-queue/queue_provider'),
     () => import('@adonisjs/drive/drive_provider'),
+    () => import('#providers/terraform_provider'),
   ],
 
   /*
@@ -96,6 +97,11 @@ export default defineConfig({
         files: ['tests/functional/**/*.spec(.ts|.js)'],
         name: 'functional',
         timeout: 30000,
+      },
+      {
+        files: ['tests/cluster-provisioning/**/*.spec(.ts|.js)'],
+        name: 'cluster-provisioning',
+        timeout: 60000,
       },
     ],
     forceExit: false,

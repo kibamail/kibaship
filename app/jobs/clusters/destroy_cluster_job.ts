@@ -1,6 +1,6 @@
 import { Job } from '@rlanz/bull-queue'
 import Cluster from '#models/cluster'
-import { TerraformExecutor, TerraformStage } from '#services/terraform/terraform_executor'
+import { createExecutor, TerraformStage } from '#services/terraform/main'
 import { TerraformService, TerraformTemplate } from '#services/terraform/terraform_service'
 import logger from '@adonisjs/core/services/logger'
 
@@ -86,7 +86,7 @@ export default class DestroyClusterJob extends Job {
     )
     const workerServerIds = this.buildServerIdsMap(cluster.nodes.filter((n) => n.type === 'worker'))
 
-    const executor = new TerraformExecutor(cluster.id, stage).vars({
+    const executor = (await createExecutor(cluster.id, stage)).vars({
       ...cluster.cloudProvider?.getTerraformCredentials(),
       cluster_name: cluster.subdomainIdentifier,
       location: cluster.location,

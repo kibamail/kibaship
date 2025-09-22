@@ -6,6 +6,7 @@ export default defineConfig({
     host: env.get('QUEUE_REDIS_HOST'),
     port: env.get('QUEUE_REDIS_PORT'),
     password: env.get('QUEUE_REDIS_PASSWORD'),
+    db: parseInt(env.get('QUEUE_REDIS_DB', '0')),
   },
 
   queue: {},

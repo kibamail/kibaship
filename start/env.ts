@@ -37,7 +37,6 @@ export default await Env.create(new URL('../', import.meta.url), {
   DB_PASSWORD: Env.schema.string.optional(),
   DB_DATABASE: Env.schema.string(),
 
-
   /*
   |----------------------------------------------------------
   | Redis server variables
@@ -121,5 +120,5 @@ export default await Env.create(new URL('../', import.meta.url), {
   */
   TALOS_VERSION: Env.schema.string(),
   TALOS_FACTORY_HASH_DIGITAL_OCEAN: Env.schema.string(),
-  TALOS_FACTORY_HASH_HETZNER: Env.schema.string()
+  TALOS_FACTORY_HASH_HETZNER: Env.schema.string(),
 })
