@@ -286,6 +286,10 @@ build-installer: manifests generate kustomize ## Generate a consolidated YAML wi
 	$(KUSTOMIZE) build config/cert-manager-webhook-kube-system >> dist/install.yaml
 	echo "---" >> dist/install.yaml
 	$(KUSTOMIZE) build config/tekton-resources >> dist/install.yaml
+	echo "---" >> dist/install.yaml
+	$(KUSTOMIZE) build config/certificates >> dist/install.yaml
+	echo "---" >> dist/install.yaml
+	$(KUSTOMIZE) build config/ingress-gateway >> dist/install.yaml
 
 ##@ Deployment
 

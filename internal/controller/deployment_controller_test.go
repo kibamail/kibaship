@@ -34,6 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	platformv1alpha1 "github.com/kibamail/kibaship-operator/api/v1alpha1"
+	"github.com/kibamail/kibaship-operator/pkg/config"
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 )
 
@@ -447,7 +448,7 @@ var _ = Describe("Deployment Controller", func() {
 
 			// Verify storage class is set to storage-replica-1
 			Expect(pvc.Spec.StorageClassName).NotTo(BeNil())
-			Expect(*pvc.Spec.StorageClassName).To(Equal("storage-replica-1"))
+			Expect(*pvc.Spec.StorageClassName).To(Equal(config.StorageClassReplica1))
 		})
 
 		It("should allocate 24GB storage for PipelineRun workspace PVC", func() {
@@ -519,7 +520,7 @@ var _ = Describe("Deployment Controller", func() {
 
 			// Verify storage class is set to storage-replica-1
 			Expect(pvc.Spec.StorageClassName).NotTo(BeNil())
-			Expect(*pvc.Spec.StorageClassName).To(Equal("storage-replica-1"))
+			Expect(*pvc.Spec.StorageClassName).To(Equal(config.StorageClassReplica1))
 
 			// Also verify access mode is ReadWriteOnce
 			Expect(pvc.Spec.AccessModes).To(ContainElement(corev1.ReadWriteOnce))
@@ -592,7 +593,7 @@ var _ = Describe("Deployment Controller", func() {
 
 			// Primary assertion: storage class must be storage-replica-1
 			Expect(pvc.Spec.StorageClassName).NotTo(BeNil(), "StorageClassName should not be nil")
-			Expect(*pvc.Spec.StorageClassName).To(Equal("storage-replica-1"), "StorageClassName should be 'storage-replica-1'")
+			Expect(*pvc.Spec.StorageClassName).To(Equal(config.StorageClassReplica1), "StorageClassName should be 'storage-replica-1'")
 		})
 
 		It("should use application branch when deployment branch is not specified", func() {
@@ -998,7 +999,7 @@ var _ = Describe("Deployment Controller", func() {
 				Expect(err).NotTo(HaveOccurred())
 				pvcSpec, _, err := unstructured.NestedMap(pvcTemplate, "spec")
 				Expect(err).NotTo(HaveOccurred())
-				Expect(pvcSpec["storageClassName"]).To(Equal("storage-replica-2"))
+				Expect(pvcSpec["storageClassName"]).To(Equal(config.StorageClassReplica2))
 
 				resources, _, err := unstructured.NestedMap(pvcSpec, "resources")
 				Expect(err).NotTo(HaveOccurred())

@@ -1,0 +1,15 @@
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: ingress-gateway-certificate-access
+  namespace: certificates
+spec:
+  from:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      namespace: ingress-gateway
+  to:
+    - group: ""
+      kind: Secret
+      name: tenant-wildcard-certificate
+

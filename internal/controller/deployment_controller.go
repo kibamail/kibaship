@@ -35,6 +35,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	platformv1alpha1 "github.com/kibamail/kibaship-operator/api/v1alpha1"
+	"github.com/kibamail/kibaship-operator/pkg/config"
 	"github.com/kibamail/kibaship-operator/pkg/streaming"
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 )
@@ -569,7 +570,7 @@ func (r *DeploymentReconciler) createPipelineRun(ctx context.Context, deployment
 							AccessModes: []corev1.PersistentVolumeAccessMode{
 								corev1.ReadWriteOnce,
 							},
-							StorageClassName: func() *string { s := "storage-replica-1"; return &s }(),
+							StorageClassName: func() *string { s := config.StorageClassReplica1; return &s }(),
 							Resources: corev1.VolumeResourceRequirements{
 								Requests: corev1.ResourceList{
 									corev1.ResourceStorage: resource.MustParse("24Gi"),

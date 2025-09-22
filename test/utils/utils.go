@@ -27,6 +27,8 @@ import (
 	"time"
 
 	. "github.com/onsi/ginkgo/v2" // nolint:revive,staticcheck
+
+	"github.com/kibamail/kibaship-operator/pkg/config"
 )
 
 // InstallGatewayAPI installs the required Gateway API CRDs and waits for them to be Established
@@ -581,16 +583,16 @@ func IsValkeyOperatorCRDsInstalled() bool {
 // CreateStorageReplicaStorageClass creates the storage-replica-1 storage class
 // that duplicates the default 'standard' storage class for test environments
 func CreateStorageReplicaStorageClass() error {
-	storageClassYAML := `apiVersion: storage.k8s.io/v1
+	storageClassYAML := fmt.Sprintf(`apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
-  name: storage-replica-1
+  name: %s
   annotations:
     description: "Test environment storage class that mirrors standard storage class"
 provisioner: rancher.io/local-path
 reclaimPolicy: Delete
 volumeBindingMode: WaitForFirstConsumer
-allowVolumeExpansion: false`
+allowVolumeExpansion: false`, config.StorageClassReplica1)
 
 	cmd := exec.Command("kubectl", "apply", "-f", "-")
 	cmd.Stdin = strings.NewReader(storageClassYAML)
@@ -600,7 +602,7 @@ allowVolumeExpansion: false`
 
 // CleanupStorageReplicaStorageClass removes the storage-replica-1 storage class
 func CleanupStorageReplicaStorageClass() {
-	cmd := exec.Command("kubectl", "delete", "storageclass", "storage-replica-1", "--ignore-not-found")
+	cmd := exec.Command("kubectl", "delete", "storageclass", config.StorageClassReplica1, "--ignore-not-found")
 	if _, err := Run(cmd); err != nil {
 		warnError(err)
 	}
