@@ -16,6 +16,9 @@ import (
 // Notifier defines the interface for sending webhook events.
 type Notifier interface {
 	NotifyProjectStatusChange(ctx context.Context, evt ProjectStatusEvent) error
+	NotifyApplicationStatusChange(ctx context.Context, evt ApplicationStatusEvent) error
+	NotifyApplicationDomainStatusChange(ctx context.Context, evt ApplicationDomainStatusEvent) error
+	NotifyDeploymentStatusChange(ctx context.Context, evt DeploymentStatusEvent) error
 }
 
 // ProjectStatusEvent is the payload for project status change notifications.
@@ -27,10 +30,46 @@ type ProjectStatusEvent struct {
 	Timestamp     time.Time                `json:"timestamp"`
 }
 
+// ApplicationStatusEvent is the payload for application status change notifications.
+type ApplicationStatusEvent struct {
+	Type          string                       `json:"type"`
+	PreviousPhase string                       `json:"previousPhase"`
+	NewPhase      string                       `json:"newPhase"`
+	Application   platformv1alpha1.Application `json:"application"`
+	Timestamp     time.Time                    `json:"timestamp"`
+}
+
+// ApplicationDomainStatusEvent is the payload for application domain status change notifications.
+type ApplicationDomainStatusEvent struct {
+	Type              string                             `json:"type"`
+	PreviousPhase     string                             `json:"previousPhase"`
+	NewPhase          string                             `json:"newPhase"`
+	ApplicationDomain platformv1alpha1.ApplicationDomain `json:"applicationDomain"`
+	Timestamp         time.Time                          `json:"timestamp"`
+}
+
+// DeploymentStatusEvent is the payload for deployment status change notifications.
+type DeploymentStatusEvent struct {
+	Type          string                      `json:"type"`
+	PreviousPhase string                      `json:"previousPhase"`
+	NewPhase      string                      `json:"newPhase"`
+	Deployment    platformv1alpha1.Deployment `json:"deployment"`
+	Timestamp     time.Time                   `json:"timestamp"`
+}
+
 // NoopNotifier is a drop-in that does nothing.
 type NoopNotifier struct{}
 
 func (n NoopNotifier) NotifyProjectStatusChange(ctx context.Context, evt ProjectStatusEvent) error {
+	return nil
+}
+func (n NoopNotifier) NotifyApplicationStatusChange(ctx context.Context, evt ApplicationStatusEvent) error {
+	return nil
+}
+func (n NoopNotifier) NotifyApplicationDomainStatusChange(ctx context.Context, evt ApplicationDomainStatusEvent) error {
+	return nil
+}
+func (n NoopNotifier) NotifyDeploymentStatusChange(ctx context.Context, evt DeploymentStatusEvent) error {
 	return nil
 }
 
@@ -65,12 +104,11 @@ func NewHTTPNotifier(targetURL string, signingKey []byte) *HTTPNotifier {
 	return &HTTPNotifier{client: c, targetURL: targetURL, signingKey: signingKey}
 }
 
-func (n *HTTPNotifier) NotifyProjectStatusChange(ctx context.Context, evt ProjectStatusEvent) error {
-	body, err := json.Marshal(evt)
+func (n *HTTPNotifier) postSigned(ctx context.Context, payload any) error {
+	body, err := json.Marshal(payload)
 	if err != nil {
 		return err
 	}
-	// compute signature
 	h := hmac.New(sha256.New, n.signingKey)
 	_, _ = h.Write(body)
 	sig := hex.EncodeToString(h.Sum(nil))
@@ -84,4 +122,20 @@ func (n *HTTPNotifier) NotifyProjectStatusChange(ctx context.Context, evt Projec
 	req.Header.Set("X-Kibaship-Signature", sig)
 	_, err = n.client.Do(req)
 	return err
+}
+
+func (n *HTTPNotifier) NotifyProjectStatusChange(ctx context.Context, evt ProjectStatusEvent) error {
+	return n.postSigned(ctx, evt)
+}
+
+func (n *HTTPNotifier) NotifyApplicationStatusChange(ctx context.Context, evt ApplicationStatusEvent) error {
+	return n.postSigned(ctx, evt)
+}
+
+func (n *HTTPNotifier) NotifyApplicationDomainStatusChange(ctx context.Context, evt ApplicationDomainStatusEvent) error {
+	return n.postSigned(ctx, evt)
+}
+
+func (n *HTTPNotifier) NotifyDeploymentStatusChange(ctx context.Context, evt DeploymentStatusEvent) error {
+	return n.postSigned(ctx, evt)
 }

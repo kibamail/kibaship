@@ -20,6 +20,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -36,6 +37,7 @@ import (
 
 	platformv1alpha1 "github.com/kibamail/kibaship-operator/api/v1alpha1"
 	"github.com/kibamail/kibaship-operator/pkg/config"
+	"github.com/kibamail/kibaship-operator/pkg/webhooks"
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 )
 
@@ -53,6 +55,7 @@ type DeploymentReconciler struct {
 	client.Client
 	Scheme           *runtime.Scheme
 	NamespaceManager *NamespaceManager
+	Notifier         webhooks.Notifier
 }
 
 // +kubebuilder:rbac:groups=platform.operator.kibaship.com,resources=deployments,verbs=get;list;watch;create;update;patch;delete
@@ -121,11 +124,17 @@ func (r *DeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 	}
 
+	// Track previous phase before updating status
+	prevPhase := deployment.Status.Phase
+
 	// Update deployment status
 	if err := r.updateDeploymentStatus(ctx, &deployment); err != nil {
 		log.Error(err, "Failed to update Deployment status")
 		return ctrl.Result{}, err
 	}
+
+	// Emit webhook on phase transition
+	r.emitDeploymentPhaseChange(ctx, &deployment, string(prevPhase), string(deployment.Status.Phase))
 
 	log.Info("Successfully reconciled Deployment")
 	return ctrl.Result{}, nil
@@ -666,6 +675,24 @@ func (r *DeploymentReconciler) getApplicationSlug(ctx context.Context, appUUID, 
 		return "", fmt.Errorf("application with UUID %s not found in namespace %s", appUUID, namespace)
 	}
 	return apps.Items[0].GetSlug(), nil
+}
+
+// emitDeploymentPhaseChange sends a webhook if Notifier is configured and the phase actually changed.
+func (r *DeploymentReconciler) emitDeploymentPhaseChange(ctx context.Context, deployment *platformv1alpha1.Deployment, prev, next string) {
+	if r.Notifier == nil {
+		return
+	}
+	if prev == next {
+		return
+	}
+	evt := webhooks.DeploymentStatusEvent{
+		Type:          "deployment.status.changed",
+		PreviousPhase: prev,
+		NewPhase:      next,
+		Deployment:    *deployment,
+		Timestamp:     time.Now().UTC(),
+	}
+	_ = r.Notifier.NotifyDeploymentStatusChange(ctx, evt)
 }
 
 // SetupWithManager sets up the controller with the Manager.
