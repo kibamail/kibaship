@@ -26,3 +26,4 @@ go.work
 *.swo
 *~
 apiserver
+___cert-manager-webhook-vercel/

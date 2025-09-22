@@ -1,0 +1,18 @@
+# Ignore common junk and reduce build context size
+.git
+bin
+build
+coverage
+*.coverprofile
+*.out
+.dist
+.dist-*
+dist
+release
+vendor
+node_modules
+**/*.md
+.DS_Store
+# Go build cache (not usually in context, but safe)
+**/*.test
+

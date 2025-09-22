@@ -1,0 +1,27 @@
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: selfsigned-issuer
+  namespace: kibaship-operator
+  labels:
+    app.kubernetes.io/name: kibaship-cert-manager-webhook
+    app.kubernetes.io/part-of: kibaship-operator
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: kibaship-dns01-webhook-cert
+  namespace: kibaship-operator
+  labels:
+    app.kubernetes.io/name: kibaship-cert-manager-webhook
+    app.kubernetes.io/part-of: kibaship-operator
+spec:
+  dnsNames:
+    - kibaship-cert-manager-webhook.kibaship-operator.svc
+    - kibaship-cert-manager-webhook.kibaship-operator.svc.cluster.local
+  issuerRef:
+    kind: Issuer
+    name: selfsigned-issuer
+  secretName: kibaship-dns01-webhook-tls
