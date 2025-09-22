@@ -80,9 +80,8 @@ func TestApplicationDomainCreation(t *testing.T) {
 
 	// Create the reconciler
 	reconciler := &ApplicationReconciler{
-		Client:          client,
-		Scheme:          scheme,
-		StreamPublisher: nil,
+		Client: client,
+		Scheme: scheme,
 	}
 
 	ctx := context.Background()
@@ -204,9 +203,8 @@ func TestApplicationDomainSkipsNonGitRepository(t *testing.T) {
 
 	// Create the reconciler
 	reconciler := &ApplicationReconciler{
-		Client:          client,
-		Scheme:          scheme,
-		StreamPublisher: nil,
+		Client: client,
+		Scheme: scheme,
 	}
 
 	ctx := context.Background()

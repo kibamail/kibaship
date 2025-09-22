@@ -18,13 +18,18 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"flag"
-	"fmt"
 	"os"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
+	"k8s.io/client-go/kubernetes"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
+
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -37,7 +42,8 @@ import (
 	platformv1alpha1 "github.com/kibamail/kibaship-operator/api/v1alpha1"
 	"github.com/kibamail/kibaship-operator/internal/bootstrap"
 	"github.com/kibamail/kibaship-operator/internal/controller"
-	"github.com/kibamail/kibaship-operator/pkg/streaming"
+	"github.com/kibamail/kibaship-operator/pkg/config"
+	"github.com/kibamail/kibaship-operator/pkg/webhooks"
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	// +kubebuilder:scaffold:imports
 )
@@ -104,75 +110,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Provision system Valkey cluster
-	valkeyProvisioner := controller.NewValkeyProvisioner(mgr.GetClient())
-	if err := valkeyProvisioner.ProvisionSystemValkeyCluster(context.Background()); err != nil {
-		setupLog.Error(err, "Failed to provision system Valkey cluster")
-		os.Exit(1)
-	}
-
-	// Get the operator namespace (assume same namespace as manager)
-	operatorNamespace := os.Getenv("NAMESPACE")
-	if operatorNamespace == "" {
-		// Fallback to reading from service account if NAMESPACE env var not set
-		operatorNamespace = "kibaship-operator" // Default namespace
-	}
-
-	// Create streaming configuration
-	streamingConfig := streaming.DefaultConfig(operatorNamespace)
-
-	// Create uncached Kubernetes client for startup initialization
-	// This is needed because mgr.GetClient() requires the manager cache to be started
+	// Create uncached Kubernetes client for bootstrap operations
 	uncachedClient, err := client.New(mgr.GetConfig(), client.Options{Scheme: mgr.GetScheme()})
 	if err != nil {
-		setupLog.Error(err, "Failed to create uncached client for streaming initialization")
+		setupLog.Error(err, "Failed to create uncached client")
 		os.Exit(1)
 	}
-	k8sClient := streaming.NewKubernetesClientAdapter(uncachedClient)
-
-	// BLOCKING STEP: Wait for Valkey cluster to become ready using simple polling
-	setupLog.Info("Waiting for Valkey cluster to become ready - this will block until ready or timeout",
-		"timeout", "5m", "checkInterval", "20s", "resource", streamingConfig.ValkeyServiceName)
-
-	valkeyGate := streaming.NewValkeyReadyGate(k8sClient, streamingConfig)
-	if err := valkeyGate.WaitForReady(context.Background()); err != nil {
-		setupLog.Error(err, "Valkey cluster failed to become ready within timeout - crashing pod")
-		os.Exit(1)
-	}
-
-	setupLog.Info("✅ Valkey cluster is ready - proceeding with streaming initialization")
-
-	// Initialize streaming components now that Valkey is ready
-	timeProvider := streaming.NewRealTimeProvider()
-	secretManager := streaming.NewSecretManager(k8sClient, streamingConfig)
-	connectionManager := streaming.NewConnectionManager(streamingConfig)
-
-	// Initialize cluster connection with auto-discovery
-	setupLog.Info("Establishing cluster connection to Valkey with auto-discovery")
-	password, err := secretManager.GetValkeyPassword(context.Background())
-	if err != nil {
-		setupLog.Error(err, "Failed to get Valkey password")
-		os.Exit(1)
-	}
-
-	// Build seed address for cluster discovery
-	seedAddress := fmt.Sprintf("%s.%s.svc.cluster.local",
-		streamingConfig.ValkeyServiceName,
-		streamingConfig.Namespace)
-
-	if err := connectionManager.InitializeCluster(context.Background(), seedAddress, password); err != nil {
-		setupLog.Error(err, "Failed to initialize Valkey cluster connection")
-		os.Exit(1)
-	}
-
-	setupLog.Info("✅ Valkey streaming initialized successfully")
-
-	// Create streaming publisher for controllers
-	streamPublisher := streaming.NewProjectStreamPublisher(
-		connectionManager,
-		timeProvider,
-		streamingConfig,
-	)
 
 	// Bootstrap: ensure storage classes first, then provision dynamic ingress/cert-manager resources
 	if err := bootstrap.EnsureStorageClasses(context.Background(), uncachedClient); err != nil {
@@ -184,12 +127,80 @@ func main() {
 		setupLog.Error(err, "bootstrap provisioning failed (continuing)")
 	}
 
-	// Now set up controllers with streaming publisher
-	if err := controller.NewProjectReconciler(
-		mgr.GetClient(),
-		mgr.GetScheme(),
-		streamPublisher,
-	).SetupWithManager(mgr); err != nil {
+	// Webhook configuration: require target URL and ensure signing Secret exists
+	webhookURL, err := config.RequireWebhookTargetURL()
+	if err != nil {
+		setupLog.Error(err, "missing required configuration")
+		os.Exit(1)
+	}
+	// Determine operator namespace
+	operatorNS := os.Getenv("POD_NAMESPACE")
+	if operatorNS == "" {
+		operatorNS = "kibaship-operator"
+	}
+	// Ensure signing secret exists (create if missing)
+	kcs, err := kubernetes.NewForConfig(mgr.GetConfig())
+	if err != nil {
+		setupLog.Error(err, "failed to build clientset")
+		os.Exit(1)
+	}
+	var signingKey []byte
+	secret, err := kcs.CoreV1().Secrets(operatorNS).Get(context.Background(), config.WebhookSecretName, metav1.GetOptions{})
+	if apierrors.IsNotFound(err) {
+		buf := make([]byte, 32)
+		if _, err := rand.Read(buf); err != nil {
+			setupLog.Error(err, "failed to generate webhook signing key")
+			os.Exit(1)
+		}
+		secret = &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      config.WebhookSecretName,
+				Namespace: operatorNS,
+			},
+			Type: corev1.SecretTypeOpaque,
+			Data: map[string][]byte{config.WebhookSecretKey: buf},
+		}
+		if _, err := kcs.CoreV1().Secrets(operatorNS).Create(context.Background(), secret, metav1.CreateOptions{}); err != nil {
+			setupLog.Error(err, "failed to create webhook signing secret")
+			os.Exit(1)
+		}
+		signingKey = buf
+	} else if err != nil {
+		setupLog.Error(err, "failed to read webhook signing secret")
+		os.Exit(1)
+	} else {
+		b, ok := secret.Data[config.WebhookSecretKey]
+		if !ok || len(b) == 0 {
+			buf := make([]byte, 32)
+			if _, err := rand.Read(buf); err != nil {
+				setupLog.Error(err, "failed to generate webhook signing key")
+				os.Exit(1)
+			}
+			if secret.Data == nil {
+				secret.Data = map[string][]byte{}
+			}
+			secret.Data[config.WebhookSecretKey] = buf
+			if _, err := kcs.CoreV1().Secrets(operatorNS).Update(context.Background(), secret, metav1.UpdateOptions{}); err != nil {
+				setupLog.Error(err, "failed to update webhook signing secret")
+				os.Exit(1)
+			}
+			signingKey = buf
+		} else {
+			signingKey = b
+		}
+	}
+
+	// Build notifier
+	n := webhooks.NewHTTPNotifier(webhookURL, signingKey)
+
+	// Now set up controllers
+	if err := (&controller.ProjectReconciler{
+		Client:           mgr.GetClient(),
+		Scheme:           mgr.GetScheme(),
+		NamespaceManager: controller.NewNamespaceManager(mgr.GetClient()),
+		Validator:        controller.NewProjectValidator(mgr.GetClient()),
+		Notifier:         n,
+	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Project")
 		os.Exit(1)
 	}
@@ -208,9 +219,8 @@ func main() {
 		os.Exit(1)
 	}
 	if err := (&controller.ApplicationReconciler{
-		Client:          mgr.GetClient(),
-		Scheme:          mgr.GetScheme(),
-		StreamPublisher: streamPublisher,
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Application")
 		os.Exit(1)
@@ -219,15 +229,13 @@ func main() {
 		Client:           mgr.GetClient(),
 		Scheme:           mgr.GetScheme(),
 		NamespaceManager: controller.NewNamespaceManager(mgr.GetClient()),
-		StreamPublisher:  streamPublisher,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Deployment")
 		os.Exit(1)
 	}
 	if err := (&controller.ApplicationDomainReconciler{
-		Client:          mgr.GetClient(),
-		Scheme:          mgr.GetScheme(),
-		StreamPublisher: streamPublisher,
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ApplicationDomain")
 		os.Exit(1)
@@ -237,16 +245,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	setupLog.Info("All controllers initialized with streaming publisher")
+	setupLog.Info("All controllers initialized")
 
-	// Set up graceful shutdown for streaming components
 	ctx := ctrl.SetupSignalHandler()
-	defer func() {
-		setupLog.Info("Shutting down Valkey streaming components")
-		if err := connectionManager.Close(); err != nil {
-			setupLog.Error(err, "Error during streaming shutdown")
-		}
-	}()
 
 	setupLog.Info("starting manager")
 	if err := mgr.Start(ctx); err != nil {

@@ -638,8 +638,16 @@ func DeployKibashipOperator() error {
 		return err
 	}
 
-	// Use enhanced monitoring with longer timeout to account for Valkey initialization
-	maxWaitTime := 8 * time.Minute // Increased from 4 minutes to accommodate Valkey startup
+	// If the test process provided a WEBHOOK_TARGET_URL, set it on the deployment before waiting
+	if tgt := os.Getenv("WEBHOOK_TARGET_URL"); tgt != "" {
+		setEnv := exec.Command("kubectl", "-n", "kibaship-operator", "set", "env", "deployment/kibaship-operator-controller-manager", "WEBHOOK_TARGET_URL="+tgt)
+		if _, err := Run(setEnv); err != nil {
+			return err
+		}
+	}
+
+	// Use enhanced monitoring with longer timeout
+	maxWaitTime := 8 * time.Minute
 	return MonitorOperatorStartup("kibaship-operator", maxWaitTime)
 }
 
@@ -908,5 +916,46 @@ func ConfigureCoreDNSForwarders() error {
 		return err
 	}
 
+	return nil
+}
+
+// DeployWebhookReceiver applies the test-only webhook receiver and waits for it to be ready.
+func DeployWebhookReceiver() error {
+	// Ensure namespace exists
+	cmd := exec.Command("kubectl", "create", "ns", "kibaship-operator", "--dry-run=client", "-o", "yaml")
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		apply := exec.Command("kubectl", "apply", "-f", "-")
+		apply.Stdin = bytes.NewReader(out)
+		if _, err := Run(apply); err != nil {
+			return err
+		}
+	}
+	// Apply receiver
+	cmd = exec.Command("kubectl", "apply", "-f", "hack/test-webhook-receiver.yaml")
+	if _, err := Run(cmd); err != nil {
+		return err
+	}
+	wait := exec.Command("kubectl", "-n", "kibaship-operator", "rollout", "status", "deploy/webhook-receiver", "--timeout=5m")
+	if err := WaitWithPodLogging(wait, "kibaship-operator", 5*time.Minute); err != nil {
+		_, _ = fmt.Fprintf(GinkgoWriter, "\n❌ Timeout or error waiting for webhook-receiver rollout. Deployment describe:\n")
+		desc := exec.Command("kubectl", "-n", "kibaship-operator", "describe", "deployment", "webhook-receiver")
+		_, _ = Run(desc)
+		return err
+	}
+	_, _ = fmt.Fprintf(GinkgoWriter, "✅ webhook-receiver is ready!\n")
+	return nil
+}
+
+// ConfigureOperatorWebhookEnv sets the operator's WEBHOOK_TARGET_URL env and waits for rollout.
+func ConfigureOperatorWebhookEnv(targetURL string) error {
+	cmd := exec.Command("kubectl", "-n", "kibaship-operator", "set", "env", "deployment/kibaship-operator-controller-manager", "WEBHOOK_TARGET_URL="+targetURL)
+	if _, err := Run(cmd); err != nil {
+		return err
+	}
+	wait := exec.Command("kubectl", "-n", "kibaship-operator", "rollout", "status", "deploy/kibaship-operator-controller-manager", "--timeout=5m")
+	if _, err := Run(wait); err != nil {
+		return err
+	}
 	return nil
 }
