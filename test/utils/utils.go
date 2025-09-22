@@ -64,6 +64,118 @@ func InstallGatewayAPI() error {
 	return nil
 }
 
+// InstallCiliumHelm installs Cilium via Helm with Gateway API enabled and waits for readiness
+func InstallCiliumHelm(version string) error {
+	// Ensure helm is available
+	cmd := exec.Command("helm", "version", "--short")
+	if _, err := Run(cmd); err != nil {
+		return fmt.Errorf("helm is required for installing cilium: %w", err)
+	}
+
+	// Add/update the Cilium Helm repo
+	cmd = exec.Command("helm", "repo", "add", "cilium", "https://helm.cilium.io")
+	if _, err := Run(cmd); err != nil {
+		return err
+	}
+	cmd = exec.Command("helm", "repo", "update")
+	if _, err := Run(cmd); err != nil {
+		return err
+	}
+
+	// Label control-plane nodes to satisfy the hostNetwork nodeLabelSelector used below
+	// Prefer label selectors for control-plane/master roles; fallback to known Kind control-plane node name
+	cmd = exec.Command("kubectl", "label", "nodes", "-l", "node-role.kubernetes.io/control-plane", "ingress.kibaship.com/ready=true", "--overwrite")
+	if _, err := Run(cmd); err != nil {
+		warnError(err)
+	}
+	cmd = exec.Command("kubectl", "label", "nodes", "-l", "node-role.kubernetes.io/master", "ingress.kibaship.com/ready=true", "--overwrite")
+	if _, err := Run(cmd); err != nil {
+		warnError(err)
+	}
+	// Fallback: label the expected Kind control-plane node name
+	clusterName := os.Getenv("KIND_CLUSTER")
+	if clusterName == "" {
+		clusterName = "kind"
+	}
+	ctrlPlaneNode := fmt.Sprintf("%s-control-plane", clusterName)
+	cmd = exec.Command("kubectl", "label", "node", ctrlPlaneNode, "ingress.kibaship.com/ready=true", "--overwrite")
+	if _, err := Run(cmd); err != nil {
+		warnError(err)
+	}
+
+	// Optionally remove kube-proxy if kubeProxyReplacement=true
+	cmd = exec.Command("kubectl", "-n", "kube-system", "delete", "ds", "kube-proxy", "--ignore-not-found")
+	if _, err := Run(cmd); err != nil {
+		warnError(err)
+	}
+
+	// Build Helm upgrade/install command with exact settings from user's Terraform
+	helmArgs := []string{
+		"upgrade", "--install", "cilium", "cilium/cilium",
+		"--namespace", "kube-system", "--create-namespace",
+		"--version", version,
+		"--set", "kubeProxyReplacement=true",
+		"--set", "tunnelProtocol=vxlan",
+		"--set", "gatewayAPI.enabled=true",
+		"--set", "gatewayAPI.hostNetwork.enabled=true",
+		"--set", "gatewayAPI.enableAlpn=true",
+		"--set", "gatewayAPI.hostNetwork.nodeLabelSelector=ingress.kibaship.com/ready=true",
+		"--set", "gatewayAPI.enableProxyProtocol=true",
+		"--set", "gatewayAPI.enableAppProtocol=true",
+		"--set", "ipam.mode=kubernetes",
+		"--set", "loadBalancer.mode=snat",
+		"--set", "k8sServiceHost=kibaship-operator-test-e2e-control-plane",
+		"--set", "k8sServicePort=6443",
+
+		"--set", "operator.replicas=1",
+		"--set", "bpf.masquerade=true",
+		"--set", "securityContext.capabilities.ciliumAgent={CHOWN,KILL,NET_ADMIN,NET_RAW,IPC_LOCK,SYS_ADMIN,SYS_RESOURCE,DAC_OVERRIDE,FOWNER,SETGID,SETUID}",
+		"--set", "securityContext.capabilities.cleanCiliumState={NET_ADMIN,SYS_ADMIN,SYS_RESOURCE}",
+		"--set", "cgroup.autoMount.enabled=false",
+		"--set", "cgroup.hostRoot=/sys/fs/cgroup",
+	}
+	cmd = exec.Command("helm", helmArgs...)
+	if _, err := Run(cmd); err != nil {
+		return err
+	}
+
+	// Wait for Cilium DaemonSet to be ready with periodic logging (max 5 minutes)
+	deadline := time.Now().Add(5 * time.Minute)
+	for {
+		if time.Now().After(deadline) {
+			// Print a last describe for diagnostics
+			_, _ = fmt.Fprintf(GinkgoWriter, "\nTimeout waiting for Cilium DaemonSet to be ready. Final diagnostics:\n")
+			cmd = exec.Command("kubectl", "-n", "kube-system", "describe", "ds", "cilium")
+			_, _ = Run(cmd)
+			return fmt.Errorf("timeout waiting for Cilium DaemonSet to be ready after 5m")
+		}
+
+		// Log current pods in kube-system for visibility
+		cmd = exec.Command("kubectl", "-n", "kube-system", "get", "pods", "-o", "wide")
+		_, _ = Run(cmd)
+
+		// Check DaemonSet readiness by comparing numberReady vs desiredNumberScheduled
+		cmd = exec.Command("kubectl", "-n", "kube-system", "get", "ds", "cilium", "-o", "jsonpath={.status.numberReady}")
+		outReady, errReady := cmd.CombinedOutput()
+		cmd = exec.Command("kubectl", "-n", "kube-system", "get", "ds", "cilium", "-o", "jsonpath={.status.desiredNumberScheduled}")
+		outDesired, errDesired := cmd.CombinedOutput()
+		ready := strings.TrimSpace(string(outReady))
+		desired := strings.TrimSpace(string(outDesired))
+		_, _ = fmt.Fprintf(GinkgoWriter, "Cilium DS status: ready=%s desired=%s\n", ready, desired)
+
+		if errReady == nil && errDesired == nil && ready != "" && ready == desired && ready != "0" {
+			break
+		}
+
+		time.Sleep(30 * time.Second)
+	}
+	cmd = exec.Command("kubectl", "-n", "kube-system", "rollout", "status", "deploy/cilium-operator", "--timeout=10m")
+	if _, err := Run(cmd); err != nil {
+		return err
+	}
+	return nil
+}
+
 const (
 	prometheusOperatorVersion = "v0.77.1"
 	prometheusOperatorURL     = "https://github.com/prometheus-operator/prometheus-operator/" +

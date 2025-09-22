@@ -124,6 +124,10 @@ test-api: fmt vet ## Run API integration tests.
 # - CERT_MANAGER_INSTALL_SKIP=true
 KIND_CLUSTER ?= kibaship-operator-test-e2e
 
+
+# Path to Kind cluster config (used during cluster creation)
+KIND_CONFIG ?= kind.config.yaml
+
 .PHONY: kind-create
 kind-create: ## Create a Kind cluster for e2e tests
 	@command -v $(KIND) >/dev/null 2>&1 || { \
@@ -131,7 +135,7 @@ kind-create: ## Create a Kind cluster for e2e tests
 		exit 1; \
 	}
 	@echo "Creating Kind cluster '$(KIND_CLUSTER)'..."
-	@$(KIND) create cluster --name $(KIND_CLUSTER)
+	@$(KIND) create cluster --name $(KIND_CLUSTER) --config $(KIND_CONFIG)
 
 .PHONY: kind-delete
 kind-delete: ## Delete the Kind cluster used for e2e tests
@@ -148,7 +152,7 @@ setup-test-e2e: ## Set up a Kind cluster for e2e tests if it does not exist
 			echo "Kind cluster '$(KIND_CLUSTER)' already exists. Skipping creation." ;; \
 		*) \
 			echo "Creating Kind cluster '$(KIND_CLUSTER)'..."; \
-			$(KIND) create cluster --name $(KIND_CLUSTER) ;; \
+			$(KIND) create cluster --name $(KIND_CLUSTER) --config $(KIND_CONFIG) ;; \
 	esac
 
 .PHONY: test-e2e
