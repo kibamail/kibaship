@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: kibaship-cert-manager-webhook
+  namespace: kibaship-operator
+  labels:
+    app.kubernetes.io/name: kibaship-cert-manager-webhook
+    app.kubernetes.io/part-of: kibaship-operator
+spec:
+  selector:
+    app.kubernetes.io/name: kibaship-cert-manager-webhook
+  ports:
+    - name: https
+      port: 443
+      targetPort: 8443
+      protocol: TCP

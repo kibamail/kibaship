@@ -54,6 +54,9 @@ IMG ?= $(IMAGE_TAG_BASE):v$(VERSION)
 # API Server image URL
 IMG_APISERVER ?= $(IMAGE_TAG_BASE)-apiserver:v$(VERSION)
 
+# Cert-manager webhook image URL
+IMG_CERT_MANAGER_WEBHOOK ?= $(IMAGE_TAG_BASE)-cert-manager-webhook:v$(VERSION)
+
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
 GOBIN=$(shell go env GOPATH)/bin
@@ -96,11 +99,11 @@ help: ## Display this help.
 
 .PHONY: manifests
 manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
-	$(CONTROLLER_GEN) rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases
+	$(CONTROLLER_GEN) rbac:roleName=manager-role crd webhook paths="./api/..." output:crd:artifacts:config=config/crd/bases
 
 .PHONY: generate
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
-	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
+	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./api/..."
 
 .PHONY: fmt
 fmt: ## Run go fmt against code.
@@ -222,6 +225,22 @@ docker-push-apiserver: ## Push docker image with the API server.
 .PHONY: docker-push-all
 docker-push-all: docker-push docker-push-apiserver ## Push both manager and API server docker images.
 
+
+##@ Webhook
+
+.PHONY: build-cert-manager-webhook
+build-cert-manager-webhook: ## Build Kibaship cert-manager DNS01 webhook binary.
+	mkdir -p bin
+	cd webhooks/cert-manager-kibaship-webhook && go build -o ../../bin/cert-manager-kibaship-webhook .
+
+.PHONY: docker-build-cert-manager-webhook
+docker-build-cert-manager-webhook: ## Build docker image for the Kibaship cert-manager DNS01 webhook.
+	$(CONTAINER_TOOL) build -t ${IMG_CERT_MANAGER_WEBHOOK} -f webhooks/cert-manager-kibaship-webhook/Dockerfile webhooks/cert-manager-kibaship-webhook
+
+.PHONY: docker-push-cert-manager-webhook
+docker-push-cert-manager-webhook: ## Push docker image for the Kibaship cert-manager DNS01 webhook.
+	$(CONTAINER_TOOL) push ${IMG_CERT_MANAGER_WEBHOOK}
+
 # PLATFORMS defines the target platforms for the manager image be built to provide support to multiple
 # architectures. (i.e. make docker-buildx IMG=myregistry/mypoperator:0.0.1). To use this option you need to:
 # - be able to use docker buildx. More info: https://docs.docker.com/build/buildx/
@@ -260,6 +279,11 @@ build-installer: manifests generate kustomize ## Generate a consolidated YAML wi
 	echo "---" >> dist/install.yaml
 	cd config/api-server && $(KUSTOMIZE) edit set image apiserver=${IMG_APISERVER}
 	$(KUSTOMIZE) build config/api-server >> dist/install.yaml
+	echo "---" >> dist/install.yaml
+	cd config/cert-manager-webhook && $(KUSTOMIZE) edit set image webhook=${IMG_CERT_MANAGER_WEBHOOK}
+	$(KUSTOMIZE) build config/cert-manager-webhook >> dist/install.yaml
+	echo "---" >> dist/install.yaml
+	$(KUSTOMIZE) build config/cert-manager-webhook-kube-system >> dist/install.yaml
 	echo "---" >> dist/install.yaml
 	$(KUSTOMIZE) build config/tekton-resources >> dist/install.yaml
 

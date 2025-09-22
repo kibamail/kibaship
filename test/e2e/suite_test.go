@@ -32,8 +32,9 @@ const (
 )
 
 var (
-	projectImage          = "kibaship.com/kibaship-operator:v0.0.1"
-	projectImageAPIServer = "kibaship.com/kibaship-operator-apiserver:v0.0.1"
+	projectImage            = "kibaship.com/kibaship-operator:v0.0.1"
+	projectImageAPIServer   = "kibaship.com/kibaship-operator-apiserver:v0.0.1"
+	projectImageCertWebhook = "kibaship.com/kibaship-operator-cert-manager-webhook:v0.0.1"
 )
 
 // getKubernetesClient creates a Kubernetes client using the current context
@@ -109,6 +110,18 @@ var _ = BeforeSuite(func() {
 
 	By("deploying API server into operator namespace")
 	Expect(utils.DeployAPIServer(projectImageAPIServer)).To(Succeed(), "Failed to deploy API server")
+
+	By("building the cert-manager webhook image")
+	cmd = exec.Command("make", "docker-build-cert-manager-webhook", fmt.Sprintf("IMG_CERT_MANAGER_WEBHOOK=%s", projectImageCertWebhook))
+	_, err = utils.Run(cmd)
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to build the cert-manager webhook image")
+
+	By("loading the cert-manager webhook image on Kind")
+	err = utils.LoadImageToKindClusterWithName(projectImageCertWebhook)
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to load the cert-manager webhook image into Kind")
+
+	By("deploying cert-manager webhook into operator namespace")
+	Expect(utils.DeployCertManagerWebhook(projectImageCertWebhook)).To(Succeed(), "Failed to deploy cert-manager webhook")
 })
 
 var _ = AfterSuite(func() {

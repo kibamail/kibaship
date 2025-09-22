@@ -19,6 +19,7 @@ package utils
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -140,34 +141,12 @@ func InstallCiliumHelm(version string) error {
 	}
 
 	// Wait for Cilium DaemonSet to be ready with periodic logging (max 5 minutes)
-	deadline := time.Now().Add(5 * time.Minute)
-	for {
-		if time.Now().After(deadline) {
-			// Print a last describe for diagnostics
-			_, _ = fmt.Fprintf(GinkgoWriter, "\nTimeout waiting for Cilium DaemonSet to be ready. Final diagnostics:\n")
-			cmd = exec.Command("kubectl", "-n", "kube-system", "describe", "ds", "cilium")
-			_, _ = Run(cmd)
-			return fmt.Errorf("timeout waiting for Cilium DaemonSet to be ready after 5m")
-		}
-
-		// Log current pods in kube-system for visibility
-		cmd = exec.Command("kubectl", "-n", "kube-system", "get", "pods", "-o", "wide")
-		_, _ = Run(cmd)
-
-		// Check DaemonSet readiness by comparing numberReady vs desiredNumberScheduled
-		cmd = exec.Command("kubectl", "-n", "kube-system", "get", "ds", "cilium", "-o", "jsonpath={.status.numberReady}")
-		outReady, errReady := cmd.CombinedOutput()
-		cmd = exec.Command("kubectl", "-n", "kube-system", "get", "ds", "cilium", "-o", "jsonpath={.status.desiredNumberScheduled}")
-		outDesired, errDesired := cmd.CombinedOutput()
-		ready := strings.TrimSpace(string(outReady))
-		desired := strings.TrimSpace(string(outDesired))
-		_, _ = fmt.Fprintf(GinkgoWriter, "Cilium DS status: ready=%s desired=%s\n", ready, desired)
-
-		if errReady == nil && errDesired == nil && ready != "" && ready == desired && ready != "0" {
-			break
-		}
-
-		time.Sleep(30 * time.Second)
+	waitCmd := exec.Command("kubectl", "-n", "kube-system", "rollout", "status", "ds/cilium", "--timeout=5m")
+	if err := WaitWithPodLogging(waitCmd, "kube-system", 5*time.Minute); err != nil {
+		_, _ = fmt.Fprintf(GinkgoWriter, "\nTimeout waiting for Cilium DaemonSet to be ready. Final diagnostics:\n")
+		desc := exec.Command("kubectl", "-n", "kube-system", "describe", "ds", "cilium")
+		_, _ = Run(desc)
+		return err
 	}
 	cmd = exec.Command("kubectl", "-n", "kube-system", "rollout", "status", "deploy/cilium-operator", "--timeout=10m")
 	if _, err := Run(cmd); err != nil {
@@ -212,6 +191,50 @@ func Run(cmd *exec.Cmd) (string, error) {
 	}
 
 	return "", nil
+}
+
+// WaitWithPodLogging runs the given wait command while logging pods in the provided namespace every 30s until timeout.
+func WaitWithPodLogging(waitCmd *exec.Cmd, logNamespace string, timeout time.Duration) error {
+	// Prepare command environment and streaming output
+	dir, _ := GetProjectDir()
+	waitCmd.Dir = dir
+	waitCmd.Env = append(os.Environ(), "GO111MODULE=on")
+	waitCmd.Stdout = GinkgoWriter
+	waitCmd.Stderr = GinkgoWriter
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	// Start the wait command asynchronously
+	if err := waitCmd.Start(); err != nil {
+		return fmt.Errorf("failed to start wait command %q: %w", strings.Join(waitCmd.Args, " "), err)
+	}
+
+	done := make(chan error, 1)
+	go func() { done <- waitCmd.Wait() }()
+
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case err := <-done:
+			return err
+		case <-ticker.C:
+			// Periodic pod listing for visibility
+			_, _ = fmt.Fprintf(GinkgoWriter, "\n--- Pods in %s namespace ---\n", logNamespace)
+			podCmd := exec.CommandContext(ctx, "kubectl", "get", "pods", "-n", logNamespace, "-o", "wide")
+			podCmd.Dir = dir
+			podCmd.Env = append(os.Environ(), "GO111MODULE=on")
+			podCmd.Stdout = GinkgoWriter
+			podCmd.Stderr = GinkgoWriter
+			_ = podCmd.Run()
+		case <-ctx.Done():
+			_ = waitCmd.Process.Kill()
+			<-done // ensure the process has exited
+			return fmt.Errorf("timeout after %v waiting for %q", timeout, strings.Join(waitCmd.Args, " "))
+		}
+	}
 }
 
 // InstallPrometheusOperator installs the prometheus Operator to be used to export the enabled metrics.
@@ -641,6 +664,39 @@ func DeployAPIServer(image string) error {
 	return nil
 }
 
+// DeployCertManagerWebhook deploys the cert-manager DNS01 webhook into the operator namespace and sets its image
+func DeployCertManagerWebhook(image string) error {
+	// Apply the webhook kustomization
+	cmd := exec.Command("kubectl", "apply", "-k", "config/cert-manager-webhook")
+	if _, err := Run(cmd); err != nil {
+		return err
+	}
+
+	// Update the deployment image to the locally built tag
+	cmd = exec.Command("kubectl", "-n", "kibaship-operator", "set", "image",
+		"deployment/kibaship-cert-manager-webhook", fmt.Sprintf("webhook=%s", image))
+	if _, err := Run(cmd); err != nil {
+		return err
+	}
+
+	// Ensure webhook can read kube-system/extension-apiserver-authentication (installed via Kustomize in kube-system)
+	cmd = exec.Command("kubectl", "apply", "-k", "config/cert-manager-webhook-kube-system")
+	if _, err := Run(cmd); err != nil {
+		return err
+	}
+
+	// Wait for rollout with periodic pod logging
+	waitCmd := exec.Command("kubectl", "-n", "kibaship-operator", "rollout", "status", "deployment/kibaship-cert-manager-webhook", "--timeout=5m")
+	if err := WaitWithPodLogging(waitCmd, "kibaship-operator", 5*time.Minute); err != nil {
+		_, _ = fmt.Fprintf(GinkgoWriter, "\n❌ Timeout or error waiting for cert-manager webhook rollout. Deployment describe:\n")
+		desc := exec.Command("kubectl", "-n", "kibaship-operator", "describe", "deployment", "kibaship-cert-manager-webhook")
+		_, _ = Run(desc)
+		return err
+	}
+	_, _ = fmt.Fprintf(GinkgoWriter, "✅ cert-manager webhook is ready!\n")
+	return nil
+}
+
 // UndeployKibashipOperator removes the kibaship-operator deployment
 func UndeployKibashipOperator() {
 	cmd := exec.Command("make", "undeploy")
@@ -780,61 +836,21 @@ func CheckValkeyStatus(operatorNamespace string) {
 	}
 }
 
-// MonitorOperatorStartup monitors operator startup with enhanced logging
+// MonitorOperatorStartup waits for the operator deployment to roll out, logging pods every 30s.
 func MonitorOperatorStartup(namespace string, timeout time.Duration) error {
-	_, _ = fmt.Fprintf(GinkgoWriter, "\n=== Enhanced Operator Startup Monitoring ===\n")
+	_, _ = fmt.Fprintf(GinkgoWriter, "\n=== Operator Startup Monitoring ===\n")
 	_, _ = fmt.Fprintf(GinkgoWriter, "Monitoring namespace: %s\n", namespace)
 	_, _ = fmt.Fprintf(GinkgoWriter, "Timeout: %v\n", timeout)
 
-	startTime := time.Now()
-	checkInterval := 10 * time.Second
-
-	for time.Since(startTime) < timeout {
-		elapsed := time.Since(startTime)
-		_, _ = fmt.Fprintf(GinkgoWriter, "\n--- Status Check (%.0fs elapsed) ---\n", elapsed.Seconds())
-
-		// Check deployment readiness
-		cmd := exec.Command("kubectl", "get", "deployment", "kibaship-operator-controller-manager",
-			"-n", namespace, "-o", "jsonpath={.status.readyReplicas}")
-		output, err := cmd.CombinedOutput()
-		readyReplicas := strings.TrimSpace(string(output))
-
-		if err == nil && readyReplicas == "1" {
-			_, _ = fmt.Fprintf(GinkgoWriter, "✅ Operator is ready!\n")
-			return nil
-		}
-
-		_, _ = fmt.Fprintf(GinkgoWriter, "Current ready replicas: %s\n", readyReplicas)
-
-		// Show all pods in namespace every 30 seconds to track Valkey startup progress
-		if int(elapsed.Seconds())%30 == 0 || elapsed > 30*time.Second {
-			_, _ = fmt.Fprintf(GinkgoWriter, "\n--- Namespace Pod Status (%.0fs elapsed) ---\n", elapsed.Seconds())
-			cmd = exec.Command("kubectl", "get", "pods", "-n", namespace, "-o", "wide")
-			if _, err := Run(cmd); err != nil {
-				_, _ = fmt.Fprintf(GinkgoWriter, "Error getting namespace pods: %v\n", err)
-			}
-
-			// Show Valkey resources specifically every 30 seconds
-			_, _ = fmt.Fprintf(GinkgoWriter, "\n--- Valkey Resources Status ---\n")
-			cmd = exec.Command("kubectl", "get", "valkey", "-n", namespace, "-o", "wide")
-			if _, err := Run(cmd); err != nil {
-				_, _ = fmt.Fprintf(GinkgoWriter, "No Valkey resources or error: %v\n", err)
-			}
-		}
-
-		// Detailed health check every 60 seconds or if not ready after 1 minute
-		if int(elapsed.Seconds())%60 == 0 || elapsed > time.Minute {
-			CheckOperatorHealthStatus(namespace)
-		}
-
-		_, _ = fmt.Fprintf(GinkgoWriter, "⏳ Waiting %v before next check...\n", checkInterval)
-		time.Sleep(checkInterval)
+	waitCmd := exec.Command("kubectl", "-n", namespace, "rollout", "status", "deploy/kibaship-operator-controller-manager", fmt.Sprintf("--timeout=%s", timeout))
+	if err := WaitWithPodLogging(waitCmd, namespace, timeout); err != nil {
+		_, _ = fmt.Fprintf(GinkgoWriter, "\n❌ Timeout reached - performing final diagnostic check\n")
+		CheckOperatorHealthStatus(namespace)
+		return fmt.Errorf("timeout waiting for operator to become ready after %v: %w", timeout, err)
 	}
 
-	_, _ = fmt.Fprintf(GinkgoWriter, "\n❌ Timeout reached - performing final diagnostic check\n")
-	CheckOperatorHealthStatus(namespace)
-
-	return fmt.Errorf("timeout waiting for operator to become ready after %v", timeout)
+	_, _ = fmt.Fprintf(GinkgoWriter, "✅ Operator is ready!\n")
+	return nil
 }
 
 // DiagnoseKibashipOperator provides a complete diagnostic check for the kibaship operator
