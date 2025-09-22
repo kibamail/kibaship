@@ -32,6 +32,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	platformv1alpha1 "github.com/kibamail/kibaship-operator/api/v1alpha1"
+	"github.com/kibamail/kibaship-operator/pkg/webhooks"
 )
 
 const (
@@ -46,7 +47,8 @@ const (
 // ApplicationDomainReconciler reconciles an ApplicationDomain object
 type ApplicationDomainReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme   *runtime.Scheme
+	Notifier webhooks.Notifier
 }
 
 // +kubebuilder:rbac:groups=platform.operator.kibaship.com,resources=applicationdomains,verbs=get;list;watch;create;update;patch;delete
@@ -223,6 +225,7 @@ func (r *ApplicationDomainReconciler) updateStatus(ctx context.Context, appDomai
 	// Update application domain status
 
 	now := metav1.Now()
+	prevPhase := appDomain.Status.Phase
 	appDomain.Status.Phase = phase
 	appDomain.Status.Message = message
 	appDomain.Status.LastReconcileTime = &now
@@ -270,16 +273,38 @@ func (r *ApplicationDomainReconciler) updateStatus(ctx context.Context, appDomai
 		return ctrl.Result{}, err
 	}
 
+	// Emit webhook on phase transition
+	r.emitApplicationDomainPhaseChange(ctx, appDomain, string(prevPhase), string(phase))
+
 	logger.Info("Updated ApplicationDomain status", "phase", phase, "message", message)
 
 	// Streaming removed; no external event emission
 
 	// Requeue if still pending
 	if phase == platformv1alpha1.ApplicationDomainPhasePending {
+
 		return ctrl.Result{RequeueAfter: time.Second * 30}, nil
 	}
 
 	return ctrl.Result{}, nil
+}
+
+// emitApplicationDomainPhaseChange sends a webhook if Notifier is configured and the phase actually changed.
+func (r *ApplicationDomainReconciler) emitApplicationDomainPhaseChange(ctx context.Context, appDomain *platformv1alpha1.ApplicationDomain, prev, next string) {
+	if r.Notifier == nil {
+		return
+	}
+	if prev == next {
+		return
+	}
+	evt := webhooks.ApplicationDomainStatusEvent{
+		Type:              "applicationdomain.status.changed",
+		PreviousPhase:     prev,
+		NewPhase:          next,
+		ApplicationDomain: *appDomain,
+		Timestamp:         time.Now().UTC(),
+	}
+	_ = r.Notifier.NotifyApplicationDomainStatusChange(ctx, evt)
 }
 
 // SetupWithManager sets up the controller with the Manager.

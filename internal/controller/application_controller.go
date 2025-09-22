@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -32,6 +33,7 @@ import (
 
 	platformv1alpha1 "github.com/kibamail/kibaship-operator/api/v1alpha1"
 	"github.com/kibamail/kibaship-operator/pkg/validation"
+	"github.com/kibamail/kibaship-operator/pkg/webhooks"
 )
 
 const (
@@ -45,7 +47,8 @@ const (
 // ApplicationReconciler reconciles a Application object
 type ApplicationReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme   *runtime.Scheme
+	Notifier webhooks.Notifier
 }
 
 // +kubebuilder:rbac:groups=platform.operator.kibaship.com,resources=applications,verbs=get;list;watch;create;update;patch;delete
@@ -173,11 +176,17 @@ func (r *ApplicationReconciler) handleApplicationReconcile(ctx context.Context, 
 		return ctrl.Result{}, err
 	}
 
+	// Track previous phase before updating status
+	prevPhase := app.Status.Phase
+
 	// Update Application status
 	if err := r.updateApplicationStatus(ctx, app); err != nil {
 		log.Error(err, "Failed to update Application status")
 		return ctrl.Result{}, err
 	}
+
+	// Emit webhook on phase transition
+	r.emitApplicationPhaseChange(ctx, app, prevPhase, app.Status.Phase)
 
 	log.Info("Successfully reconciled Application")
 	return ctrl.Result{}, nil
@@ -417,12 +426,31 @@ func (r *ApplicationReconciler) deleteAssociatedDomains(ctx context.Context, app
 	// Delete all matching ApplicationDomains
 	for _, domain := range domainList.Items {
 		log.Info("Deleting associated ApplicationDomain", "domain", domain.Spec.Domain)
+
 		if err := r.Delete(ctx, &domain); err != nil && !errors.IsNotFound(err) {
 			return fmt.Errorf("failed to delete ApplicationDomain %s: %w", domain.Name, err)
 		}
 	}
 
 	return nil
+}
+
+// emitApplicationPhaseChange sends a webhook if Notifier is configured and the phase actually changed.
+func (r *ApplicationReconciler) emitApplicationPhaseChange(ctx context.Context, app *platformv1alpha1.Application, prev, next string) {
+	if r.Notifier == nil {
+		return
+	}
+	if prev == next {
+		return
+	}
+	evt := webhooks.ApplicationStatusEvent{
+		Type:          "application.status.changed",
+		PreviousPhase: prev,
+		NewPhase:      next,
+		Application:   *app,
+		Timestamp:     time.Now().UTC(),
+	}
+	_ = r.Notifier.NotifyApplicationStatusChange(ctx, evt)
 }
 
 // SetupWithManager sets up the controller with the Manager.
