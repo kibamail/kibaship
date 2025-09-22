@@ -68,6 +68,9 @@ var _ = BeforeSuite(func() {
 	By("installing Gateway API CRDs")
 	Expect(utils.InstallGatewayAPI()).To(Succeed(), "Failed to install Gateway API CRDs")
 
+	By("installing Cilium (CNI) via Helm")
+	Expect(utils.InstallCiliumHelm("1.18.0")).To(Succeed(), "Failed to install Cilium via Helm")
+
 	By("building the manager(Operator) image")
 	cmd = exec.Command("make", "docker-build", fmt.Sprintf("IMG=%s", projectImage))
 	_, err = utils.Run(cmd)
