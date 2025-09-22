@@ -31,7 +31,6 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	platformv1alpha1 "github.com/kibamail/kibaship-operator/api/v1alpha1"
-	"github.com/kibamail/kibaship-operator/pkg/streaming"
 	"github.com/kibamail/kibaship-operator/pkg/validation"
 )
 
@@ -46,8 +45,7 @@ const (
 // ApplicationReconciler reconciles a Application object
 type ApplicationReconciler struct {
 	client.Client
-	Scheme          *runtime.Scheme
-	StreamPublisher streaming.ProjectStreamPublisher
+	Scheme *runtime.Scheme
 }
 
 // +kubebuilder:rbac:groups=platform.operator.kibaship.com,resources=applications,verbs=get;list;watch;create;update;patch;delete
@@ -116,9 +114,6 @@ func (r *ApplicationReconciler) handleDeletion(ctx context.Context, app *platfor
 	}
 
 	log.Info("Handling Application deletion")
-
-	// Publish Delete event before actual deletion
-	r.publishApplicationEvent(ctx, app, streaming.OperationDelete)
 
 	// Delete all Deployments associated with this Application
 	if err := r.deleteAssociatedDeployments(ctx, app); err != nil {
@@ -252,8 +247,7 @@ func (r *ApplicationReconciler) getProjectUUID(ctx context.Context, app *platfor
 
 // updateApplicationStatus updates the Application status
 func (r *ApplicationReconciler) updateApplicationStatus(ctx context.Context, app *platformv1alpha1.Application) error {
-	// Check if this is a new application (no status set yet)
-	isNewApplication := app.Status.Phase == ""
+	// Update Application status to reflect the current state
 
 	// Update the Application status to reflect the current state
 	app.Status.ObservedGeneration = app.Generation
@@ -286,63 +280,7 @@ func (r *ApplicationReconciler) updateApplicationStatus(ctx context.Context, app
 		return fmt.Errorf("failed to update Application status: %w", err)
 	}
 
-	// Publish appropriate event based on whether this is a new application
-	if isNewApplication {
-		r.publishApplicationEvent(ctx, app, streaming.OperationCreate)
-	} else {
-		r.publishApplicationEvent(ctx, app, streaming.OperationReady)
-	}
-
 	return nil
-}
-
-// publishApplicationEvent publishes an application event to the Redis stream
-func (r *ApplicationReconciler) publishApplicationEvent(ctx context.Context, app *platformv1alpha1.Application, operation streaming.OperationType) {
-	log := logf.FromContext(ctx)
-
-	// Skip publishing if StreamPublisher is not available
-	if r.StreamPublisher == nil {
-		return
-	}
-
-	// Extract required UUIDs from labels
-	projectUUID := app.Labels[validation.LabelProjectUUID]
-	workspaceUUID := app.Labels[validation.LabelWorkspaceUUID]
-	resourceUUID := app.Labels[validation.LabelResourceUUID]
-
-	if projectUUID == "" || workspaceUUID == "" || resourceUUID == "" {
-		log.Info("Skipping stream publish - missing required UUIDs",
-			"projectUUID", projectUUID,
-			"workspaceUUID", workspaceUUID,
-			"resourceUUID", resourceUUID)
-		return
-	}
-
-	// Create event with full Kubernetes resource
-	event, err := streaming.NewResourceEventFromK8sResource(
-		projectUUID,
-		workspaceUUID,
-		streaming.ResourceTypeApplication,
-		resourceUUID,
-		app.Name,
-		app.Namespace,
-		operation,
-		app,
-	)
-	if err != nil {
-		log.Error(err, "Failed to create resource event for application")
-		return
-	}
-
-	// Publish event
-	if err := r.StreamPublisher.PublishEvent(ctx, event); err != nil {
-		log.Error(err, "Failed to publish application event to stream")
-	} else {
-		log.Info("Successfully published application event",
-			"operation", operation,
-			"applicationUUID", resourceUUID,
-			"projectUUID", projectUUID)
-	}
 }
 
 // handleApplicationDomains handles the creation and management of ApplicationDomains for GitRepository applications

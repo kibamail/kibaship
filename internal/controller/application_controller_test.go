@@ -104,9 +104,8 @@ var _ = Describe("Application Controller", func() {
 		It("should successfully reconcile the resource", func() {
 			By("Reconciling the created resource")
 			controllerReconciler := &ApplicationReconciler{
-				Client:          k8sClient,
-				Scheme:          k8sClient.Scheme(),
-				StreamPublisher: nil,
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
 			}
 
 			// First reconcile adds finalizer
@@ -374,9 +373,8 @@ var _ = Describe("Application Controller", func() {
 
 			By("Reconciling the Application")
 			controllerReconciler := &ApplicationReconciler{
-				Client:          k8sClient,
-				Scheme:          k8sClient.Scheme(),
-				StreamPublisher: nil,
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
 			}
 
 			// First reconcile adds finalizer and UUID labels
@@ -426,9 +424,8 @@ var _ = Describe("Application Controller", func() {
 
 			By("Reconciling should fail due to missing UUID")
 			controllerReconciler := &ApplicationReconciler{
-				Client:          k8sClient,
-				Scheme:          k8sClient.Scheme(),
-				StreamPublisher: nil,
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
 			}
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{

@@ -32,8 +32,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	platformv1alpha1 "github.com/kibamail/kibaship-operator/api/v1alpha1"
-	"github.com/kibamail/kibaship-operator/pkg/streaming"
-	"github.com/kibamail/kibaship-operator/pkg/validation"
 )
 
 const (
@@ -48,8 +46,7 @@ const (
 // ApplicationDomainReconciler reconciles an ApplicationDomain object
 type ApplicationDomainReconciler struct {
 	client.Client
-	Scheme          *runtime.Scheme
-	StreamPublisher streaming.ProjectStreamPublisher
+	Scheme *runtime.Scheme
 }
 
 // +kubebuilder:rbac:groups=platform.operator.kibaship.com,resources=applicationdomains,verbs=get;list;watch;create;update;patch;delete
@@ -113,9 +110,6 @@ func (r *ApplicationDomainReconciler) handleDeletion(ctx context.Context, appDom
 	}
 
 	logger.Info("Cleaning up ApplicationDomain resources", "domain", appDomain.Spec.Domain)
-
-	// Publish Delete event before actual deletion
-	r.publishApplicationDomainEvent(ctx, appDomain, streaming.OperationDelete)
 
 	// TODO: In future phases, clean up ingress and certificate resources here
 
@@ -226,8 +220,7 @@ func (r *ApplicationDomainReconciler) updateStatus(ctx context.Context, appDomai
 
 	logger := log.FromContext(ctx)
 
-	// Check if this is a new application domain (no status set yet)
-	isNewApplicationDomain := appDomain.Status.Phase == ""
+	// Update application domain status
 
 	now := metav1.Now()
 	appDomain.Status.Phase = phase
@@ -279,23 +272,7 @@ func (r *ApplicationDomainReconciler) updateStatus(ctx context.Context, appDomai
 
 	logger.Info("Updated ApplicationDomain status", "phase", phase, "message", message)
 
-	// Publish appropriate streaming event based on phase and whether this is new
-	switch phase {
-	case platformv1alpha1.ApplicationDomainPhaseReady:
-		if isNewApplicationDomain {
-			r.publishApplicationDomainEvent(ctx, appDomain, streaming.OperationCreate)
-		} else {
-			r.publishApplicationDomainEvent(ctx, appDomain, streaming.OperationReady)
-		}
-	case platformv1alpha1.ApplicationDomainPhaseFailed:
-		r.publishApplicationDomainEvent(ctx, appDomain, streaming.OperationFailed)
-	case platformv1alpha1.ApplicationDomainPhasePending:
-		if isNewApplicationDomain {
-			r.publishApplicationDomainEvent(ctx, appDomain, streaming.OperationCreate)
-		} else {
-			r.publishApplicationDomainEvent(ctx, appDomain, streaming.OperationUpdate)
-		}
-	}
+	// Streaming removed; no external event emission
 
 	// Requeue if still pending
 	if phase == platformv1alpha1.ApplicationDomainPhasePending {
@@ -303,55 +280,6 @@ func (r *ApplicationDomainReconciler) updateStatus(ctx context.Context, appDomai
 	}
 
 	return ctrl.Result{}, nil
-}
-
-// publishApplicationDomainEvent publishes an application domain event to the Redis stream
-func (r *ApplicationDomainReconciler) publishApplicationDomainEvent(ctx context.Context, appDomain *platformv1alpha1.ApplicationDomain, operation streaming.OperationType) {
-	logger := log.FromContext(ctx)
-
-	// Skip publishing if StreamPublisher is not available
-	if r.StreamPublisher == nil {
-		return
-	}
-
-	// Extract required UUIDs from labels using validation constants
-	projectUUID := appDomain.Labels[validation.LabelProjectUUID]
-	workspaceUUID := appDomain.Labels[validation.LabelWorkspaceUUID]
-	resourceUUID := appDomain.Labels[validation.LabelResourceUUID]
-
-	if projectUUID == "" || workspaceUUID == "" || resourceUUID == "" {
-		logger.Info("Skipping stream publish - missing required UUIDs",
-			"projectUUID", projectUUID,
-			"workspaceUUID", workspaceUUID,
-			"resourceUUID", resourceUUID)
-		return
-	}
-
-	// Create event with full Kubernetes resource
-	event, err := streaming.NewResourceEventFromK8sResource(
-		projectUUID,
-		workspaceUUID,
-		streaming.ResourceTypeApplicationDomain,
-		resourceUUID,
-		appDomain.Name,
-		appDomain.Namespace,
-		operation,
-		appDomain,
-	)
-	if err != nil {
-		logger.Error(err, "Failed to create resource event for application domain")
-		return
-	}
-
-	// Publish event
-	if err := r.StreamPublisher.PublishEvent(ctx, event); err != nil {
-		logger.Error(err, "Failed to publish application domain event to stream")
-	} else {
-		logger.Info("Successfully published application domain event",
-			"operation", operation,
-			"domainUUID", resourceUUID,
-			"projectUUID", projectUUID)
-	}
 }
 
 // SetupWithManager sets up the controller with the Manager.

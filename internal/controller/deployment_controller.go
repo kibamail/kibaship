@@ -36,7 +36,6 @@ import (
 
 	platformv1alpha1 "github.com/kibamail/kibaship-operator/api/v1alpha1"
 	"github.com/kibamail/kibaship-operator/pkg/config"
-	"github.com/kibamail/kibaship-operator/pkg/streaming"
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 )
 
@@ -54,7 +53,6 @@ type DeploymentReconciler struct {
 	client.Client
 	Scheme           *runtime.Scheme
 	NamespaceManager *NamespaceManager
-	StreamPublisher  streaming.ProjectStreamPublisher
 }
 
 // +kubebuilder:rbac:groups=platform.operator.kibaship.com,resources=deployments,verbs=get;list;watch;create;update;patch;delete
@@ -142,9 +140,6 @@ func (r *DeploymentReconciler) handleDeletion(ctx context.Context, deployment *p
 	}
 
 	log.Info("Handling Deployment deletion")
-
-	// Publish Delete event before actual deletion
-	r.publishDeploymentEvent(ctx, deployment, streaming.OperationDelete)
 
 	// TODO: Clean up any deployment-specific resources (e.g., PipelineRuns)
 	// For now, we just remove the finalizer
@@ -598,8 +593,7 @@ func (r *DeploymentReconciler) createPipelineRun(ctx context.Context, deployment
 
 // updateDeploymentStatus updates the Deployment status
 func (r *DeploymentReconciler) updateDeploymentStatus(ctx context.Context, deployment *platformv1alpha1.Deployment) error {
-	// Check if this is a new deployment (no status set yet)
-	isNewDeployment := deployment.Status.Phase == ""
+	// Update Deployment status
 
 	deployment.Status.ObservedGeneration = deployment.Generation
 	deployment.Status.Phase = platformv1alpha1.DeploymentPhaseInitializing
@@ -628,63 +622,7 @@ func (r *DeploymentReconciler) updateDeploymentStatus(ctx context.Context, deplo
 		return fmt.Errorf("failed to update Deployment status: %w", err)
 	}
 
-	// Publish appropriate event based on whether this is a new deployment
-	if isNewDeployment {
-		r.publishDeploymentEvent(ctx, deployment, streaming.OperationCreate)
-	} else {
-		r.publishDeploymentEvent(ctx, deployment, streaming.OperationReady)
-	}
-
 	return nil
-}
-
-// publishDeploymentEvent publishes a deployment event to the Redis stream
-func (r *DeploymentReconciler) publishDeploymentEvent(ctx context.Context, deployment *platformv1alpha1.Deployment, operation streaming.OperationType) {
-	log := logf.FromContext(ctx)
-
-	// Skip publishing if StreamPublisher is not available
-	if r.StreamPublisher == nil {
-		return
-	}
-
-	// Extract required UUIDs from labels
-	projectUUID := deployment.Labels["platform.operator.kibaship.com/project-uuid"]
-	workspaceUUID := deployment.Labels["platform.operator.kibaship.com/workspace-uuid"]
-	resourceUUID := deployment.Labels["platform.operator.kibaship.com/resource-uuid"]
-
-	if projectUUID == "" || workspaceUUID == "" || resourceUUID == "" {
-		log.Info("Skipping stream publish - missing required UUIDs",
-			"projectUUID", projectUUID,
-			"workspaceUUID", workspaceUUID,
-			"resourceUUID", resourceUUID)
-		return
-	}
-
-	// Create event with full Kubernetes resource
-	event, err := streaming.NewResourceEventFromK8sResource(
-		projectUUID,
-		workspaceUUID,
-		streaming.ResourceTypeDeployment,
-		resourceUUID,
-		deployment.Name,
-		deployment.Namespace,
-		operation,
-		deployment,
-	)
-	if err != nil {
-		log.Error(err, "Failed to create resource event for deployment")
-		return
-	}
-
-	// Publish event
-	if err := r.StreamPublisher.PublishEvent(ctx, event); err != nil {
-		log.Error(err, "Failed to publish deployment event to stream")
-	} else {
-		log.Info("Successfully published deployment event",
-			"operation", operation,
-			"deploymentUUID", resourceUUID,
-			"projectUUID", projectUUID)
-	}
 }
 
 // truncateLabel truncates a label to 63 characters and adds a hash suffix if needed

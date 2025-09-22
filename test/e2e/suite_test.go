@@ -2,6 +2,7 @@ package e2e
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"testing"
 
@@ -98,6 +99,13 @@ var _ = BeforeSuite(func() {
 
 	By("creating storage-replica-1 storage class for test environment")
 	Expect(utils.CreateStorageReplicaStorageClass()).To(Succeed(), "Failed to create storage-replica-1 storage class")
+
+	By("deploying test webhook receiver in-cluster")
+	Expect(utils.DeployWebhookReceiver()).To(Succeed(), "Failed to deploy test webhook receiver")
+
+	By("setting WEBHOOK_TARGET_URL for operator deploy")
+	target := "http://webhook-receiver.kibaship-operator.svc.cluster.local:8080/webhook"
+	os.Setenv("WEBHOOK_TARGET_URL", target)
 
 	By("deploying kibaship-operator")
 	Expect(utils.DeployKibashipOperator()).To(Succeed(), "Failed to deploy kibaship-operator")

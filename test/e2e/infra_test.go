@@ -48,40 +48,5 @@ var _ = Describe("Infrastructure Health Check", func() {
 			}, "2m", "10s").Should(Succeed(), "Operator pod should be running")
 		})
 
-		It("should have valkey cluster running successfully", func() {
-			By("verifying valkey cluster pods are running")
-			Eventually(func() error {
-				client, err := getKubernetesClient()
-				if err != nil {
-					return fmt.Errorf("failed to create kubernetes client: %v", err)
-				}
-
-				ctx := context.Background()
-				pods, err := client.CoreV1().Pods("kibaship-operator").List(ctx, metav1.ListOptions{
-					LabelSelector: "app.kubernetes.io/name=valkey",
-				})
-				if err != nil {
-					return fmt.Errorf("failed to list valkey pods: %v", err)
-				}
-
-				if len(pods.Items) == 0 {
-					return fmt.Errorf("no valkey pods found with label app.kubernetes.io/name=valkey")
-				}
-
-				// Check that all valkey pods are running and ready
-				for _, pod := range pods.Items {
-					if pod.Status.Phase != corev1.PodRunning {
-						return fmt.Errorf("valkey pod %s is not running, phase: %s", pod.Name, pod.Status.Phase)
-					}
-					for _, containerStatus := range pod.Status.ContainerStatuses {
-						if !containerStatus.Ready {
-							return fmt.Errorf("valkey pod %s container %s is not ready", pod.Name, containerStatus.Name)
-						}
-					}
-				}
-
-				return nil
-			}, "2m", "10s").Should(Succeed(), "Valkey cluster pods should be running")
-		})
 	})
 })

@@ -73,7 +73,7 @@ var _ = Describe("Project Controller", func() {
 		})
 		It("should successfully reconcile the resource", func() {
 			By("Reconciling the created resource - first time (adds finalizer)")
-			controllerReconciler := NewProjectReconciler(k8sClient, k8sClient.Scheme(), nil)
+			controllerReconciler := NewProjectReconciler(k8sClient, k8sClient.Scheme())
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: typeNamespacedName,
@@ -128,7 +128,7 @@ var _ = Describe("Project Controller", func() {
 			}
 			Expect(k8sClient.Create(ctx, invalidResource)).To(Succeed())
 
-			controllerReconciler := NewProjectReconciler(k8sClient, k8sClient.Scheme(), nil)
+			controllerReconciler := NewProjectReconciler(k8sClient, k8sClient.Scheme())
 
 			// First reconcile adds finalizer
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
@@ -166,7 +166,7 @@ var _ = Describe("Project Controller", func() {
 			}
 			Expect(k8sClient.Create(ctx, invalidResource)).To(Succeed())
 
-			controllerReconciler := NewProjectReconciler(k8sClient, k8sClient.Scheme(), nil)
+			controllerReconciler := NewProjectReconciler(k8sClient, k8sClient.Scheme())
 
 			// First reconcile adds finalizer
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
@@ -217,7 +217,7 @@ var _ = Describe("Project Controller", func() {
 			}
 			Expect(k8sClient.Create(ctx, conflictingProject)).To(Succeed())
 
-			controllerReconciler := NewProjectReconciler(k8sClient, k8sClient.Scheme(), nil)
+			controllerReconciler := NewProjectReconciler(k8sClient, k8sClient.Scheme())
 
 			// First reconcile adds finalizer
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
@@ -257,7 +257,7 @@ var _ = Describe("Project Controller", func() {
 			Expect(k8sClient.Create(ctx, testProject)).To(Succeed())
 
 			By("Reconciling the project - first time (adds finalizer)")
-			controllerReconciler := NewProjectReconciler(k8sClient, k8sClient.Scheme(), nil)
+			controllerReconciler := NewProjectReconciler(k8sClient, k8sClient.Scheme())
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: types.NamespacedName{
 					Name: "owner-ref-project",
