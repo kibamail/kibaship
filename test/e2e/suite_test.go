@@ -65,7 +65,6 @@ var _ = BeforeSuite(func() {
 	cmd = exec.Command("make", "kind-create")
 	_, err := utils.Run(cmd)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to create kind cluster")
-
 	By("installing Gateway API CRDs")
 	Expect(utils.InstallGatewayAPI()).To(Succeed(), "Failed to install Gateway API CRDs")
 
@@ -73,6 +72,10 @@ var _ = BeforeSuite(func() {
 	Expect(utils.InstallCiliumHelm("1.18.0")).To(Succeed(), "Failed to install Cilium via Helm")
 
 	By("building the manager(Operator) image")
+
+	By("configuring CoreDNS to use public resolvers for e2e")
+	Expect(utils.ConfigureCoreDNSForwarders()).To(Succeed(), "Failed to configure CoreDNS forwarders")
+
 	cmd = exec.Command("make", "docker-build", fmt.Sprintf("IMG=%s", projectImage))
 	_, err = utils.Run(cmd)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to build the manager(Operator) image")
