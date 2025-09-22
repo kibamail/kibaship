@@ -629,6 +629,7 @@ func DeployKibashipOperator() error {
 		if _, err := Run(cmd); err != nil {
 			return err
 		}
+
 	}
 
 	// Then deploy the operator
@@ -662,6 +663,7 @@ func DeployAPIServer(image string) error {
 		"deployment/apiserver", "--timeout=5m")
 	if _, err := Run(cmd); err != nil {
 		return err
+
 	}
 	return nil
 }
@@ -886,4 +888,25 @@ func DiagnoseKibashipOperator() {
 	}
 
 	_, _ = fmt.Fprintf(GinkgoWriter, "\n🏁 DIAGNOSTIC REPORT COMPLETE\n")
+}
+
+// ConfigureCoreDNSForwarders applies a CoreDNS Corefile that forwards to public resolvers
+// and restarts the CoreDNS deployment.
+func ConfigureCoreDNSForwarders() error {
+	cmd := exec.Command("kubectl", "-n", "kube-system", "apply", "-f", "hack/coredns-corefile.yaml")
+	if _, err := Run(cmd); err != nil {
+		return err
+	}
+
+	cmd = exec.Command("kubectl", "-n", "kube-system", "rollout", "restart", "deploy/coredns")
+	if _, err := Run(cmd); err != nil {
+		return err
+	}
+
+	cmd = exec.Command("kubectl", "-n", "kube-system", "rollout", "status", "deploy/coredns", "--timeout=3m")
+	if _, err := Run(cmd); err != nil {
+		return err
+	}
+
+	return nil
 }

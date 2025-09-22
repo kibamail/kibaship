@@ -1509,6 +1509,8 @@ spec:
           value: myapps.kibaship.com
         - name: KIBASHIP_OPERATOR_DEFAULT_PORT
           value: "3000"
+        - name: KIBASHIP_ACME_EMAIL
+          value: test@kibaship.com
         image: ghcr.io/kibamail/kibaship-operator:v0.0.12
         livenessProbe:
           httpGet:
@@ -1891,6 +1893,21 @@ rules:
   - get
 ---
 apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: kibaship-cert-manager-webhook
+    app.kubernetes.io/part-of: kibaship-operator
+  name: kibaship-certwebhook-domain-solver
+rules:
+- apiGroups:
+  - dns.kibaship.com
+  resources:
+  - '*'
+  verbs:
+  - '*'
+---
+apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   labels:
@@ -1906,6 +1923,32 @@ subjects:
 - kind: ServiceAccount
   name: kibaship-cert-manager-webhook
   namespace: kibaship-operator
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kibaship-certwebhook-auth-delegator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:auth-delegator
+subjects:
+- kind: ServiceAccount
+  name: kibaship-cert-manager-webhook
+  namespace: kibaship-operator
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kibaship-certwebhook-domain-solver
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kibaship-certwebhook-domain-solver
+subjects:
+- kind: ServiceAccount
+  name: cert-manager
+  namespace: cert-manager
 ---
 apiVersion: v1
 kind: Service
@@ -1962,6 +2005,23 @@ spec:
       - name: webhook-tls
         secret:
           secretName: kibaship-dns01-webhook-tls
+---
+apiVersion: apiregistration.k8s.io/v1
+kind: APIService
+metadata:
+  annotations:
+    cert-manager.io/inject-ca-from: kibaship-operator/kibaship-dns01-webhook-cert
+  name: v1alpha1.dns.kibaship.com
+spec:
+  group: dns.kibaship.com
+  groupPriorityMinimum: 1000
+  insecureSkipTLSVerify: false
+  service:
+    name: kibaship-cert-manager-webhook
+    namespace: kibaship-operator
+    port: 443
+  version: v1alpha1
+  versionPriority: 15
 ---
 apiVersion: cert-manager.io/v1
 kind: Certificate
@@ -2171,7 +2231,7 @@ metadata:
   name: deployment-not-found
   namespace: ingress-gateway
 spec:
-  replicas: 3
+  replicas: 2
   selector:
     matchLabels:
       app: deployment-not-found
