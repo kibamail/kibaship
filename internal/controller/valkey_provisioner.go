@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/kibamail/kibaship-operator/pkg/config"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -163,7 +164,7 @@ func generateSystemValkeyCluster(name, namespace string) *unstructured.Unstructu
 								"storage": "1Gi",
 							},
 						},
-						"storageClassName": "storage-replica-1",
+						"storageClassName": config.StorageClassReplica1,
 					},
 				},
 			},

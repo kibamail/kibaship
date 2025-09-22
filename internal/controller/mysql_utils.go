@@ -27,6 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	platformv1alpha1 "github.com/kibamail/kibaship-operator/api/v1alpha1"
+	"github.com/kibamail/kibaship-operator/pkg/config"
 )
 
 const (
@@ -117,7 +118,7 @@ func generateInnoDBCluster(deployment *platformv1alpha1.Deployment, app *platfor
 					},
 					"spec": map[string]interface{}{
 						"accessModes":      []string{"ReadWriteOnce"},
-						"storageClassName": "storage-replica-2",
+						"storageClassName": config.StorageClassReplica2,
 						"resources": map[string]interface{}{
 							"requests": map[string]interface{}{
 								"storage": "512Mi",

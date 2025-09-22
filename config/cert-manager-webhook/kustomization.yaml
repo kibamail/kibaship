@@ -4,13 +4,16 @@ kind: Kustomization
 namespace: kibaship-operator
 
 resources:
-- serviceaccount.yaml
-- role.yaml
-- rolebinding.yaml
-- service.yaml
-- deployment.yaml
-- certificate.yaml
+  - serviceaccount.yaml
+  - role.yaml
+  - rolebinding.yaml
+  - service.yaml
+  - deployment.yaml
+  - certificate.yaml
+  - apiservice.yaml
+  - clusterrolebinding.yaml
+
 images:
-- name: webhook
-  newName: ghcr.io/kibamail/kibaship-operator-cert-manager-webhook
-  newTag: v0.0.12
+  - name: webhook
+    newName: ghcr.io/kibamail/kibaship-operator-cert-manager-webhook
+    newTag: v0.0.12

@@ -25,6 +25,8 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+
+	"github.com/kibamail/kibaship-operator/pkg/config"
 )
 
 const (
@@ -147,7 +149,7 @@ var _ = Describe("ValkeyProvisioner", func() {
 			// Check storage class name
 			storageClassName, found, _ := unstructured.NestedString(valkey.Object, "spec", "storage", "spec", "storageClassName")
 			Expect(found).To(BeTrue())
-			Expect(storageClassName).To(Equal("storage-replica-1"))
+			Expect(storageClassName).To(Equal(config.StorageClassReplica1))
 
 			// Check storage size
 			storageSize, found, _ := unstructured.NestedString(valkey.Object, "spec", "storage", "spec", "resources", "requests", "storage")

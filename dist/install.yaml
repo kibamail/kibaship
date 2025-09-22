@@ -1991,6 +1991,20 @@ metadata:
 spec:
   selfSigned: {}
 ---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: kibaship-certwebhook-auth-reader
+  namespace: kube-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: extension-apiserver-authentication-reader
+subjects:
+- kind: ServiceAccount
+  name: kibaship-cert-manager-webhook
+  namespace: kibaship-operator
+---
 apiVersion: tekton.dev/v1
 kind: Task
 metadata:
@@ -2110,3 +2124,99 @@ spec:
   workspaces:
   - description: The git repo will be cloned into this workspace.
     name: output
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: certificates
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: ingress-gateway-certificate-access
+  namespace: certificates
+spec:
+  from:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    namespace: ingress-gateway
+  to:
+  - group: ""
+    kind: Secret
+    name: tenant-wildcard-certificate
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  labels:
+    name: ingress-gateway
+  name: ingress-gateway
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: deployment-not-found
+  namespace: ingress-gateway
+spec:
+  ports:
+  - port: 80
+    protocol: TCP
+    targetPort: 3000
+  selector:
+    app: deployment-not-found
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: deployment-not-found
+  namespace: ingress-gateway
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: deployment-not-found
+  template:
+    metadata:
+      labels:
+        app: deployment-not-found
+    spec:
+      containers:
+      - image: ghcr.io/kibamail/kibaship-404-deployment-not-found:latest
+        name: deployment-not-found
+        ports:
+        - containerPort: 3000
+        resources:
+          limits:
+            cpu: 200m
+            memory: 256Mi
+          requests:
+            cpu: 100m
+            memory: 128Mi
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  annotations:
+    io.cilium.gateway/node-selector: ingress.kibaship.com/ready=true
+  name: ingress-gateway
+  namespace: ingress-gateway
+spec:
+  gatewayClassName: cilium
+  listeners:
+  - allowedRoutes:
+      namespaces:
+        from: All
+    name: http
+    port: 30080
+    protocol: HTTP
+  - allowedRoutes:
+      namespaces:
+        from: All
+    name: https
+    port: 30443
+    protocol: HTTPS
+    tls:
+      certificateRefs:
+      - kind: Secret
+        name: tenant-wildcard-certificate
+        namespace: certificates

@@ -35,6 +35,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	platformv1alpha1 "github.com/kibamail/kibaship-operator/api/v1alpha1"
+	"github.com/kibamail/kibaship-operator/internal/bootstrap"
 	"github.com/kibamail/kibaship-operator/internal/controller"
 	"github.com/kibamail/kibaship-operator/pkg/streaming"
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
@@ -172,6 +173,16 @@ func main() {
 		timeProvider,
 		streamingConfig,
 	)
+
+	// Bootstrap: ensure storage classes first, then provision dynamic ingress/cert-manager resources
+	if err := bootstrap.EnsureStorageClasses(context.Background(), uncachedClient); err != nil {
+		setupLog.Error(err, "bootstrap storage classes failed (continuing)")
+	}
+	acmeEmail := os.Getenv("KIBASHIP_ACME_EMAIL")
+	baseDomain := os.Getenv("KIBASHIP_OPERATOR_DOMAIN")
+	if err := bootstrap.ProvisionIngressAndCertificates(context.Background(), uncachedClient, baseDomain, acmeEmail); err != nil {
+		setupLog.Error(err, "bootstrap provisioning failed (continuing)")
+	}
 
 	// Now set up controllers with streaming publisher
 	if err := controller.NewProjectReconciler(
