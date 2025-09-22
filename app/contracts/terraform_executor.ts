@@ -1,4 +1,5 @@
-import { TerraformExecutionOptions, TerraformStage } from '#services/terraform/terraform_executor'
+import { TerraformExecutionOptions, TerraformStage, TerraformOutputResult } from '#services/terraform/terraform_executor'
+import { type Subprocess } from 'execa'
 
 /**
  * Abstract contract for TerraformExecutor to enable dependency injection and mocking
@@ -29,12 +30,12 @@ export abstract class TerraformExecutorContract {
   /**
    * Execute terraform apply
    */
-  abstract apply(options?: TerraformExecutionOptions): Promise<any>
+  abstract apply(options?: TerraformExecutionOptions): Promise<Subprocess>
 
   /**
    * Execute terraform destroy
    */
-  abstract destroy(options?: TerraformExecutionOptions): Promise<any>
+  abstract destroy(options?: TerraformExecutionOptions): Promise<Subprocess>
 
   /**
    * Get the stream name for this executor
@@ -54,10 +55,10 @@ export abstract class TerraformExecutorContract {
   /**
    * Read historical logs from the stream
    */
-  abstract readLogs(fromId?: string, count?: number): Promise<any[]>
+  abstract readLogs(fromId?: string, count?: number): Promise<unknown[]>
 
   /**
    * Get terraform output
    */
-  abstract output(): Promise<any>
+  abstract output(): Promise<TerraformOutputResult>
 }

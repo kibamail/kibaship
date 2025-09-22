@@ -1,4 +1,4 @@
-import { execa, type Options as ExecaOptions } from 'execa'
+import { execa, type Options as ExecaOptions, type Subprocess } from 'execa'
 
 export type StdoutCallback = (data: string) => void
 export type StderrCallback = (data: string) => void
@@ -120,7 +120,7 @@ export class ChildProcess {
   /**
    * Execute the child process
    */
-  async execute() {
+  execute(): Subprocess {
     const childProcess = execa(this._command, this._args, {
       ...this._options,
       stdio: 'pipe'

@@ -8,6 +8,7 @@ import { join } from 'node:path'
 import logger from '@adonisjs/core/services/logger'
 import { TerraformExecutorContract } from '#contracts/terraform_executor'
 import { writeFile } from 'node:fs/promises'
+import { type Subprocess } from 'execa'
 
 export type TerraformCommand = 'init' | 'apply' | 'plan' | 'destroy'
 export type TerraformStage =
@@ -35,6 +36,14 @@ export interface TerraformExecutionResult {
   exitCode: number
   streamName: string
   error?: string
+}
+
+/**
+ * Interface for terraform output result with proper typing
+ */
+export interface TerraformOutputResult {
+  stdout: string
+  stderr: string
 }
 
 export type TerraformLogCallback = (logType: string, message: string, timestamp: string) => void
@@ -235,7 +244,7 @@ export class TerraformExecutor extends TerraformExecutorContract {
   /**
    * Execute terraform apply
    */
-  async apply(options: TerraformExecutionOptions = {}) {
+  async apply(options: TerraformExecutionOptions = {}): Promise<Subprocess> {
     const args = ['apply']
 
     if (options.autoApprove) {
@@ -250,13 +259,13 @@ export class TerraformExecutor extends TerraformExecutorContract {
       args.push(...options.additionalArgs)
     }
 
-    return this.executeCommand('apply', args)
+    return Promise.resolve(this.executeCommand('apply', args))
   }
 
   /**
    * Execute terraform destroy
    */
-  async destroy(options: TerraformExecutionOptions = {}) {
+  async destroy(options: TerraformExecutionOptions = {}): Promise<Subprocess> {
     const args = ['destroy']
 
     if (options.autoApprove) {
@@ -267,7 +276,7 @@ export class TerraformExecutor extends TerraformExecutorContract {
       args.push(...options.additionalArgs)
     }
 
-    return this.executeCommand('destroy', args)
+    return Promise.resolve(this.executeCommand('destroy', args))
   }
 
   /**
@@ -332,32 +341,31 @@ export class TerraformExecutor extends TerraformExecutorContract {
   /**
    * Get terraform output and trigger callback
    */
-  public async output() {
-    return new ChildProcess()
+  public async output(): Promise<TerraformOutputResult> {
+    const [result, error] = await new ChildProcess()
       .command('terraform')
       .args(['output', '-json'])
       .cwd(this.terraformDir)
       .env(this.getTerraformEnvironment())
-      .onStdout(async () => {
-        logger.info('output_stdout fetched successfully')
-      })
-      .onStderr(async (data) => {
-        logger.info('output_stderr: failed fetching output', data)
-      })
-      .onClose(async (code) => {
-        logger.info('output_close: ', `Terraform output exited with code: ${code}`)
-      })
-      .onError(async (error) => {
-        logger.error('output_error: ', error.message)
-      })
-      .execute()
+      .executeAsync()
+
+    if (error || !result) {
+      logger.error('Failed to get terraform output:', error?.message)
+      throw error || new Error('Failed to get terraform output')
+    }
+
+    logger.info('Terraform output fetched successfully')
+    return {
+      stdout: result.stdout,
+      stderr: result.stderr,
+    }
   }
 
   /**
    * Execute a terraform command with stream logging
    */
-  private async executeCommand(command: TerraformCommand, args: string[]) {
-    await this.logToStream(
+  private executeCommand(command: TerraformCommand, args: string[]): Subprocess {
+    this.logToStream(
       'command_start',
       `Starting terraform ${command} with args: ${args.join(' ')}`
     )
@@ -397,12 +405,16 @@ export class TerraformExecutor extends TerraformExecutorContract {
    */
   private async storePlanOutput(): Promise<void> {
     try {
-      const result = await new ChildProcess()
+      const [result, error] = await new ChildProcess()
         .command('terraform')
         .args(['show', '-json', 'terraform-plan.tfplan'])
         .cwd(this.terraformDir)
         .env(this.getTerraformEnvironment())
-        .execute()
+        .executeAsync()
+
+      if (error || !result) {
+        throw error || new Error('Failed to execute terraform show command')
+      }
 
       if (!result.stdout || typeof result.stdout !== 'string') {
         throw new Error('No stdout received from terraform show command')

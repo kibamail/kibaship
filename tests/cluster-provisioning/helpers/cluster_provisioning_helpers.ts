@@ -1,6 +1,7 @@
 import { DateTime } from 'luxon'
-import { readFileSync } from 'node:fs'
+import { readFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
+import { type Subprocess } from 'execa'
 
 import db from '@adonisjs/lucid/services/db'
 import app from '@adonisjs/core/services/app'
@@ -21,6 +22,7 @@ import {
   TerraformExecutionOptions,
   TerraformStage,
   TerraformPlanData,
+  TerraformOutputResult,
   DigitalOceanCustomImageResource,
   DigitalOceanImagesFilter,
 } from '#services/terraform/terraform_executor'
@@ -180,11 +182,19 @@ export async function createFullyPopulatedDigitalOceanCluster() {
 export interface TerraformOutput {
   sensitive: boolean
   type: string
-  value: string | number | boolean
+  value: string | number | boolean | object
 }
 
 export interface MockTerraformOutputData {
   [key: string]: TerraformOutput
+}
+
+/**
+ * Interface for terraform execution result from ChildProcess.execute()
+ */
+export interface TerraformExecutionResult {
+  stdout: string
+  stderr: string
 }
 
 export class MockTerraformExecutor extends TerraformExecutor {
@@ -199,17 +209,26 @@ export class MockTerraformExecutor extends TerraformExecutor {
     return this
   }
 
-  async apply(_options?: TerraformExecutionOptions): Promise<any> {
+  async apply(_options?: TerraformExecutionOptions): Promise<Subprocess> {
     await super.plan({ ..._options, storePlanOutput: true })
-    return Promise.resolve({})
+
+    return Promise.resolve({
+      stdout: '',
+      stderr: '',
+      exitCode: 0,
+      killed: false,
+      signal: null,
+    } as unknown as Subprocess)
   }
 
-  async output(): Promise<any> {
+  async output(): Promise<TerraformOutputResult> {
     if (!this.mockOutputData) {
       throw new Error('Mock output data not set. Use setMockOutput() to set the expected output.')
     }
+
     return Promise.resolve({
       stdout: JSON.stringify(this.mockOutputData),
+      stderr: '',
     })
   }
 }
@@ -225,6 +244,38 @@ export const DIGITAL_OCEAN_TALOS_IMAGE_OUTPUT = {
   },
 }
 
+/**
+ * Hetzner Network terraform output for testing
+ */
+export const HETZNER_NETWORK_OUTPUT = {
+  network_id: { sensitive: false, type: 'string', value: 'hetzner-network-123456' },
+  network_name: { sensitive: false, type: 'string', value: 'test-cluster-network' },
+  network_ip_range: { sensitive: false, type: 'string', value: '10.0.0.0/16' },
+  network_labels: {
+    sensitive: false,
+    type: 'object',
+    value: { cluster: 'test-cluster', managed_by: 'kibaship' },
+  },
+  subnet_id: { sensitive: false, type: 'string', value: 'hetzner-subnet-789012' },
+  subnet_ip_range: { sensitive: false, type: 'string', value: '10.0.0.0/16' },
+  subnet_network_zone: { sensitive: false, type: 'string', value: 'eu-central' },
+}
+
+/**
+ * Digital Ocean Network terraform output for testing
+ */
+export const DIGITAL_OCEAN_NETWORK_OUTPUT = {
+  network_id: { sensitive: false, type: 'string', value: 'do-vpc-123456' },
+  network_name: { sensitive: false, type: 'string', value: 'test-cluster-network' },
+  network_ip_range: { sensitive: false, type: 'string', value: '10.0.0.0/16' },
+  network_region: { sensitive: false, type: 'string', value: 'nyc3' },
+  network_labels: {
+    sensitive: false,
+    type: 'object',
+    value: { cluster: 'test-cluster' },
+  },
+}
+
 export function setupTerraformExecutorMock() {
   app.container.bind('terraform.executor', () => MockTerraformExecutor)
 }
@@ -236,16 +287,48 @@ export function restoreTerraformExecutor() {
 export interface TerraformPlanValidationOptions {
   clusterId: string
   cluster: Cluster
+  stage?: string
 }
 
 export function validateTerraformPlan(options: TerraformPlanValidationOptions): TerraformPlanData {
+  // Auto-detect stage if not provided by checking which plan file exists
+  let stage = options.stage
+  if (!stage) {
+    const talosImagePlanFile = join(
+      process.cwd(),
+      'storage',
+      'terraform',
+      'clusters',
+      options.clusterId,
+      'talos-image',
+      'terraform-plan-output.json'
+    )
+    const networkPlanFile = join(
+      process.cwd(),
+      'storage',
+      'terraform',
+      'clusters',
+      options.clusterId,
+      'network',
+      'terraform-plan-output.json'
+    )
+
+    if (existsSync(talosImagePlanFile)) {
+      stage = 'talos-image'
+    } else if (existsSync(networkPlanFile)) {
+      stage = 'network'
+    } else {
+      throw new Error(`No terraform plan file found for cluster ${options.clusterId}`)
+    }
+  }
+
   const planOutputFile = join(
     process.cwd(),
     'storage',
     'terraform',
     'clusters',
     options.clusterId,
-    'talos-image',
+    stage,
     'terraform-plan-output.json'
   )
 
@@ -256,6 +339,38 @@ export function validateTerraformPlan(options: TerraformPlanValidationOptions): 
 }
 
 export function assertTerraformPlanValid(
+  planData: TerraformPlanData,
+  options: TerraformPlanValidationOptions,
+  assert: Assert
+): void {
+  // Basic plan validation
+  assert.equal(planData.format_version, '1.2')
+  assert.isString(planData.terraform_version)
+  assert.isTrue(planData.applyable)
+  assert.isTrue(planData.complete)
+  assert.isFalse(planData.errored)
+  assert.isUndefined(planData.variables, 'Variables section should be removed for security')
+
+  // Check if this is a talos-image plan
+  if (
+    planData.planned_values?.root_module?.resources?.some(
+      (r) => r.type === 'digitalocean_custom_image'
+    )
+  ) {
+    assertTalosImagePlanValid(planData, options, assert)
+  }
+
+  // Check if this is a network plan
+  if (
+    planData.planned_values?.root_module?.resources?.some(
+      (r) => r.type === 'digitalocean_vpc' || r.type === 'hcloud_network'
+    )
+  ) {
+    assertNetworkPlanValid(planData, options, assert)
+  }
+}
+
+function assertTalosImagePlanValid(
   planData: TerraformPlanData,
   options: TerraformPlanValidationOptions,
   assert: Assert
@@ -275,14 +390,6 @@ export function assertTerraformPlanValid(
   const expectedTalosVersion = cluster.talosVersion
   const expectedRegion = cluster.location
 
-  assert.equal(planData.format_version, '1.2')
-  assert.isString(planData.terraform_version)
-  assert.isTrue(planData.applyable)
-  assert.isTrue(planData.complete)
-  assert.isFalse(planData.errored)
-
-  assert.isUndefined(planData.variables, 'Variables section should be removed for security')
-
   const customImageResource = planData.planned_values?.root_module?.resources?.find(
     (r) => r.type === 'digitalocean_custom_image' && r.name === 'talos_image'
   )
@@ -295,9 +402,7 @@ export function assertTerraformPlanValid(
 
   const expectedImageName = `kibaship-talos-linux-${expectedTalosVersion}-${expectedRegion}`
   assert.equal(imageValues.name, expectedImageName)
-
   assert.deepEqual(imageValues.regions, [expectedRegion])
-
   assert.equal(imageValues.distribution, 'Unknown OS')
 
   const expectedUrlPattern = new RegExp(
@@ -345,4 +450,93 @@ export function assertTerraformPlanValid(
   assert.equal(doProvider.version_constraint, '~> 2.66')
   assert.equal(talosProvider.full_name, 'registry.terraform.io/siderolabs/talos')
   assert.equal(talosProvider.version_constraint, '0.9.0')
+}
+
+function assertNetworkPlanValid(
+  planData: TerraformPlanData,
+  options: TerraformPlanValidationOptions,
+  assert: Assert
+): void {
+  const { cluster } = options
+  const expectedRegion = cluster.location
+  const expectedNetworkName = `${cluster.subdomainIdentifier}-network`
+
+  if (cluster.cloudProvider.type === 'digital_ocean') {
+    // DigitalOcean VPC validation
+    const vpcResource = planData.planned_values?.root_module?.resources?.find(
+      (r) => r.type === 'digitalocean_vpc' && r.name === 'cluster_network'
+    )
+    assert.isDefined(vpcResource, 'digitalocean_vpc.cluster_network resource should be planned')
+
+    const vpcValues = vpcResource!.values as any
+    assert.equal(vpcValues.name, expectedNetworkName)
+    assert.equal(vpcValues.region, expectedRegion)
+    assert.equal(vpcValues.ip_range, '10.0.0.0/16')
+
+    // Check resource changes
+    const vpcChange = planData.resource_changes?.find(
+      (r) => r.type === 'digitalocean_vpc' && r.name === 'cluster_network'
+    )
+    assert.isDefined(vpcChange, 'digitalocean_vpc resource change should exist')
+    assert.deepEqual(vpcChange!.change.actions, ['create'])
+
+    // Check outputs
+    assert.property(planData.output_changes, 'network_id')
+    assert.property(planData.output_changes, 'network_name')
+    assert.property(planData.output_changes, 'network_ip_range')
+
+    // Validate provider configuration
+    assert.property(planData.configuration?.provider_config, 'digitalocean')
+    const doProvider = planData.configuration!.provider_config!.digitalocean
+    assert.equal(doProvider.full_name, 'registry.terraform.io/digitalocean/digitalocean')
+    assert.equal(doProvider.version_constraint, '~> 2.66')
+  } else if (cluster.cloudProvider.type === 'hetzner') {
+    // Hetzner network validation
+    const networkResource = planData.planned_values?.root_module?.resources?.find(
+      (r) => r.type === 'hcloud_network' && r.name === 'cluster_network'
+    )
+    assert.isDefined(networkResource, 'hcloud_network.cluster_network resource should be planned')
+
+    const networkValues = networkResource!.values as any
+    assert.equal(networkValues.name, expectedNetworkName)
+    assert.equal(networkValues.ip_range, '10.0.0.0/16')
+
+    // Check subnet resource
+    const subnetResource = planData.planned_values?.root_module?.resources?.find(
+      (r) => r.type === 'hcloud_network_subnet' && r.name === 'cluster_subnet'
+    )
+    assert.isDefined(
+      subnetResource,
+      'hcloud_network_subnet.cluster_subnet resource should be planned'
+    )
+
+    const subnetValues = subnetResource!.values as any
+    assert.equal(subnetValues.ip_range, '10.0.0.0/16')
+    assert.equal(subnetValues.network_zone, 'eu-central')
+
+    // Check resource changes
+    const networkChange = planData.resource_changes?.find(
+      (r) => r.type === 'hcloud_network' && r.name === 'cluster_network'
+    )
+    assert.isDefined(networkChange, 'hcloud_network resource change should exist')
+    assert.deepEqual(networkChange!.change.actions, ['create'])
+
+    const subnetChange = planData.resource_changes?.find(
+      (r) => r.type === 'hcloud_network_subnet' && r.name === 'cluster_subnet'
+    )
+    assert.isDefined(subnetChange, 'hcloud_network_subnet resource change should exist')
+    assert.deepEqual(subnetChange!.change.actions, ['create'])
+
+    // Check outputs
+    assert.property(planData.output_changes, 'network_id')
+    assert.property(planData.output_changes, 'subnet_id')
+    assert.property(planData.output_changes, 'network_ip_range')
+    assert.property(planData.output_changes, 'network_location')
+    assert.property(planData.output_changes, 'network_labels')
+
+    // Validate provider configuration
+    assert.property(planData.configuration?.provider_config, 'hcloud')
+    const hcloudProvider = planData.configuration!.provider_config!.hcloud
+    assert.equal(hcloudProvider.full_name, 'registry.terraform.io/hetznercloud/hcloud')
+  }
 }
