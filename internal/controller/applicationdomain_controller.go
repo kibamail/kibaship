@@ -24,7 +24,9 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -43,6 +45,10 @@ const (
 	// ApplicationDomainLabelDomainType is the label key for the domain type
 	ApplicationDomainLabelDomainType = "platform.operator.kibaship.com/domain-type"
 )
+const (
+	certificatesNamespace = "certificates"
+	clusterIssuerName     = "certmanager-acme-issuer"
+)
 
 // ApplicationDomainReconciler reconciles an ApplicationDomain object
 type ApplicationDomainReconciler struct {
@@ -54,6 +60,8 @@ type ApplicationDomainReconciler struct {
 // +kubebuilder:rbac:groups=platform.operator.kibaship.com,resources=applicationdomains,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=platform.operator.kibaship.com,resources=applicationdomains/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=platform.operator.kibaship.com,resources=applicationdomains/finalizers,verbs=update
+// Access cert-manager.io Certificates to provision TLS for domains
+// +kubebuilder:rbac:groups=cert-manager.io,resources=certificates,verbs=get;list;watch;create;update;patch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -96,10 +104,18 @@ func (r *ApplicationDomainReconciler) Reconcile(ctx context.Context, req ctrl.Re
 			fmt.Sprintf("Domain validation failed: %v", err))
 	}
 
-	// Update status to indicate domain is ready
-	// In future phases, this will include ingress and certificate creation
+	// Ensure a dedicated Certificate exists for this ApplicationDomain and record its reference
+	certName, certNS, err := r.ensureCertificateForDomain(ctx, &appDomain)
+	if err != nil {
+		logger.Error(err, "Failed to provision Certificate for ApplicationDomain")
+		return r.updateStatus(ctx, &appDomain, platformv1alpha1.ApplicationDomainPhaseFailed,
+			fmt.Sprintf("Certificate provisioning failed: %v", err))
+	}
+	appDomain.Status.CertificateRef = &platformv1alpha1.NamespacedRef{Name: certName, Namespace: certNS}
+
+	// Update status to indicate domain is ready (certificate issuance will progress asynchronously)
 	return r.updateStatus(ctx, &appDomain, platformv1alpha1.ApplicationDomainPhaseReady,
-		"Domain is configured and ready")
+		"Domain is configured and certificate requested")
 }
 
 // handleDeletion handles the cleanup when an ApplicationDomain is being deleted
@@ -305,6 +321,62 @@ func (r *ApplicationDomainReconciler) emitApplicationDomainPhaseChange(ctx conte
 		Timestamp:         time.Now().UTC(),
 	}
 	_ = r.Notifier.NotifyApplicationDomainStatusChange(ctx, evt)
+
+}
+
+// ensureCertificateForDomain ensures a cert-manager.io Certificate exists for the given ApplicationDomain.
+// It copies all labels from the ApplicationDomain onto the Certificate (including the domain UUID),
+// and returns the created/existing certificate name and namespace.
+func (r *ApplicationDomainReconciler) ensureCertificateForDomain(ctx context.Context, appDomain *platformv1alpha1.ApplicationDomain) (string, string, error) {
+	logger := log.FromContext(ctx)
+	certName := fmt.Sprintf("ad-%s", appDomain.Name)
+	obj := &unstructured.Unstructured{}
+	obj.SetGroupVersionKind(schema.GroupVersionKind{Group: "cert-manager.io", Version: "v1", Kind: "Certificate"})
+	obj.SetNamespace(certificatesNamespace)
+	obj.SetName(certName)
+
+	// Try to get existing Certificate
+	if err := r.Get(ctx, client.ObjectKey{Namespace: certificatesNamespace, Name: certName}, obj); err != nil {
+		if !errors.IsNotFound(err) {
+			return "", "", err
+		}
+		// Create new Certificate
+		labels := map[string]string{}
+		if appDomain.Labels != nil {
+			for k, v := range appDomain.Labels {
+				labels[k] = v
+			}
+		}
+		obj.SetLabels(labels)
+		obj.Object["spec"] = map[string]any{
+			"secretName": fmt.Sprintf("tls-%s", certName),
+			"issuerRef":  map[string]any{"name": clusterIssuerName, "kind": "ClusterIssuer"},
+			"dnsNames":   []any{appDomain.Spec.Domain},
+		}
+		if err := r.Create(ctx, obj); err != nil {
+			return "", "", err
+		}
+		logger.Info("Created Certificate for ApplicationDomain", "certificate", certName, "namespace", certificatesNamespace)
+	} else {
+		// Ensure labels include those from ApplicationDomain
+		labels := obj.GetLabels()
+		if labels == nil {
+			labels = map[string]string{}
+		}
+		changed := false
+		for k, v := range appDomain.GetLabels() {
+			if labels[k] != v {
+				labels[k] = v
+				changed = true
+			}
+		}
+		if changed {
+			obj.SetLabels(labels)
+			_ = r.Update(ctx, obj)
+		}
+	}
+
+	return certName, certificatesNamespace, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

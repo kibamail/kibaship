@@ -123,6 +123,18 @@ spec:
                 description: CertificateReady indicates if the TLS certificate is
                   ready
                 type: boolean
+              certificateRef:
+                description: CertificateRef references the cert-manager Certificate
+                  created for this domain
+                properties:
+                  name:
+                    type: string
+                  namespace:
+                    type: string
+                required:
+                - name
+                - namespace
+                type: object
               conditions:
                 description: Conditions represent the latest available observations
                   of the domain state

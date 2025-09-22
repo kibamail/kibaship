@@ -45,6 +45,8 @@ var _ = Describe("API Server Application Domain CRUD", func() {
 
 		httpClient := &http.Client{Timeout: 30 * time.Second}
 
+		var domainCRName string
+
 		By("creating a project via POST /projects")
 		workspaceUUID := "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
 		projReqBody := map[string]any{
@@ -120,6 +122,39 @@ var _ = Describe("API Server Application Domain CRUD", func() {
 		defer respGet.Body.Close()
 		Expect(respGet.StatusCode).To(Equal(http.StatusOK))
 
+		By("verifying Certificate is created and status.certificateRef is set")
+		domainCRName = fmt.Sprintf("domain-%s-kibaship-com", domResp.Slug)
+		// Certificate should be named ad-<applicationdomain-name> in the certificates namespace
+		certName := fmt.Sprintf("ad-%s", domainCRName)
+		Eventually(func() bool {
+			cmd := exec.Command("kubectl", "-n", "certificates", "get", "certificate", certName)
+			out, err := cmd.CombinedOutput()
+			_ = out
+			return err == nil
+		}, "2m", "5s").Should(BeTrue(), "expected certificate to be created")
+
+		// status.certificateRef should point to that certificate
+		Eventually(func() (string, error) {
+			cmd := exec.Command("kubectl", "-n", "default", "get", "applicationdomains.platform.operator.kibaship.com", domainCRName,
+				"-o", "jsonpath={.status.certificateRef.name}:{.status.certificateRef.namespace}")
+			out, err := cmd.CombinedOutput()
+			return string(out), err
+		}, "2m", "5s").Should(Equal(certName + ":certificates"))
+
+		// Certificate should carry key labels propagated from the ApplicationDomain
+		Eventually(func() (string, error) {
+			cmd := exec.Command("kubectl", "-n", "certificates", "get", "certificate", certName,
+				"-o", "jsonpath={.metadata.labels.platform\\.kibaship\\.com/uuid}")
+			out, err := cmd.CombinedOutput()
+			return strings.TrimSpace(string(out)), err
+		}, "2m", "5s").ShouldNot(BeEmpty())
+		Eventually(func() (string, error) {
+			cmd := exec.Command("kubectl", "-n", "certificates", "get", "certificate", certName,
+				"-o", "jsonpath={.metadata.labels.platform\\.kibaship\\.com/project-uuid}")
+			out, err := cmd.CombinedOutput()
+			return strings.TrimSpace(string(out)), err
+		}, "2m", "5s").ShouldNot(BeEmpty())
+
 		By("DELETE /domains/{slug} deletes the domain")
 		reqDel, _ := http.NewRequest("DELETE", fmt.Sprintf("http://127.0.0.1:18080/domains/%s", domResp.Slug), nil)
 		reqDel.Header.Set("Authorization", "Bearer "+apiKey)
@@ -130,7 +165,7 @@ var _ = Describe("API Server Application Domain CRUD", func() {
 
 		By("verifying ApplicationDomain CR for slug is gone")
 		// The CR name pattern for custom domains comes from service: domain-<slug>-kibaship-com
-		domainCRName := fmt.Sprintf("domain-%s-kibaship-com", domResp.Slug)
+		domainCRName = fmt.Sprintf("domain-%s-kibaship-com", domResp.Slug)
 		Eventually(func() bool {
 			cmd := exec.Command("kubectl", "-n", "default", "get", "applicationdomains.platform.operator.kibaship.com", domainCRName)
 			_, err := cmd.CombinedOutput()

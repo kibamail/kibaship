@@ -89,6 +89,13 @@ type ApplicationDomainSpec struct {
 	TLSEnabled bool `json:"tlsEnabled"`
 }
 
+// NamespacedRef is a simple reference to a namespaced object by name/namespace
+// Used to track external resources like Certificates created for this domain
+type NamespacedRef struct {
+	Name      string `json:"name"`
+	Namespace string `json:"namespace"`
+}
+
 // ApplicationDomainStatus defines the observed state of ApplicationDomain
 type ApplicationDomainStatus struct {
 	// Phase indicates the current phase of the domain
@@ -97,6 +104,9 @@ type ApplicationDomainStatus struct {
 
 	// CertificateReady indicates if the TLS certificate is ready
 	CertificateReady bool `json:"certificateReady,omitempty"`
+
+	// CertificateRef references the cert-manager Certificate created for this domain
+	CertificateRef *NamespacedRef `json:"certificateRef,omitempty"`
 
 	// IngressReady indicates if the ingress is configured and ready
 	IngressReady bool `json:"ingressReady,omitempty"`
