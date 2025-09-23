@@ -93,22 +93,26 @@ spec:
 
         # Clone the repository with the specific branch
         git clone --branch "$BRANCH_NAME" --single-branch "$CLONE_URL" "$WORKSPACE_PATH/repo"
-        
+
         # Navigate to the cloned repository
         cd "$WORKSPACE_PATH/repo"
-        
+
+        # Silence detached HEAD advice
+        git config --global advice.detachedHead false
+
+
         # Checkout the specific commit
         git checkout "$COMMIT_HASH"
-        
+
         # Verify we're on the correct commit
         ACTUAL_COMMIT=$(git rev-parse HEAD)
         if [ "$ACTUAL_COMMIT" != "$COMMIT_HASH" ]; then
           echo "Error: Expected commit $COMMIT_HASH but got $ACTUAL_COMMIT"
           exit 1
         fi
-        
+
         echo "Successfully cloned $REPO_URL at commit $COMMIT_HASH"
-        
+
         # Write results
         echo -n "$COMMIT_HASH" > $(results.commit.path)
         echo -n "$REPO_URL" > $(results.url.path)
