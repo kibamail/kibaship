@@ -19,6 +19,8 @@ env:
   IMAGE_NAME_APISERVER: kibamail/kibaship-operator-apiserver
   IMAGE_NAME_CERT_MANAGER_WEBHOOK: kibamail/kibaship-operator-cert-manager-webhook
 
+  IMAGE_NAME_RAILPACK_CLI: kibamail/kibaship-railpack-cli
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -98,7 +100,23 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
+
+      - name: Extract metadata (railpack-cli)
+        id: meta_railpack
+        uses: docker/metadata-action@v5
+        env:
+          GITHUB_REF: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.ref || github.ref }}
+          GITHUB_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_RAILPACK_CLI }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
             type=sha,format=short,prefix=sha-
+
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
         with:
@@ -131,6 +149,18 @@ jobs:
           push: ${{ startsWith(github.event_name == 'workflow_run' && github.event.workflow_run.ref || github.ref, 'refs/tags/v') || startsWith(github.event_name == 'workflow_run' && github.event.workflow_run.ref || github.ref, 'refs/heads/main') }}
           tags: ${{ steps.meta_webhook.outputs.tags }}
           labels: ${{ steps.meta_webhook.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push Docker image (railpack-cli)
+        uses: docker/build-push-action@v6
+        with:
+          context: build/railpack-cli
+          file: build/railpack-cli/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ startsWith(github.event_name == 'workflow_run' && github.event.workflow_run.ref || github.ref, 'refs/tags/v') || startsWith(github.event_name == 'workflow_run' && github.event.workflow_run.ref || github.ref, 'refs/heads/main') }}
+          tags: ${{ steps.meta_railpack.outputs.tags }}
+          labels: ${{ steps.meta_railpack.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -201,6 +231,7 @@ jobs:
             ```bash
             kubectl set env deployment/kibaship-operator-controller-manager \
               -n kibaship-operator \
+
               KIBASHIP_OPERATOR_DOMAIN=your-domain.com \
               KIBASHIP_OPERATOR_DEFAULT_PORT=3000
             ```
@@ -211,4 +242,5 @@ jobs:
             - `ghcr.io/kibamail/kibaship-operator:${{ steps.refname.outputs.name }}`
             - `ghcr.io/kibamail/kibaship-operator-apiserver:${{ steps.refname.outputs.name }}`
             - `ghcr.io/kibamail/kibaship-operator-cert-manager-webhook:${{ steps.refname.outputs.name }}`
+            - `ghcr.io/kibamail/kibaship-railpack-cli:${{ steps.refname.outputs.name }}`
           generate_release_notes: true
