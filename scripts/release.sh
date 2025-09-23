@@ -230,6 +230,15 @@ if ! make docker-build-cert-manager-webhook > /tmp/release-docker-build-webhook.
 fi
 log_success "Cert-manager webhook Docker build validation successful"
 
+# Validate Docker build for railpack-cli
+log_info "Validating Docker build (railpack-cli)..."
+if ! docker build -f build/railpack-cli/Dockerfile -t kibaship-railpack-cli:validate build/railpack-cli > /tmp/release-docker-build-railpack-cli.log 2>&1; then
+    log_error "Railpack CLI Docker build validation failed. Check /tmp/release-docker-build-railpack-cli.log"
+    exit 1
+fi
+log_success "Railpack CLI Docker build validation successful"
+
+
 log_success "All Docker build validations successful"
 
 # Commit version changes
@@ -272,6 +281,7 @@ read -p "Push tag v$NEW_VERSION to trigger CI/CD release? (y/N): " -n 1 -r
 echo
 if [[ $REPLY =~ ^[Yy]$ ]]; then
     log_info "Pushing release tag..."
+
     git push origin "v$NEW_VERSION"
 
     log_success "Release tag v$NEW_VERSION pushed successfully!"
@@ -281,7 +291,10 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
     echo "      - ghcr.io/kibamail/kibaship-operator:v$NEW_VERSION"
     echo "      - ghcr.io/kibamail/kibaship-operator-apiserver:v$NEW_VERSION"
     echo "      - ghcr.io/kibamail/kibaship-operator-cert-manager-webhook:v$NEW_VERSION"
+    echo "      - ghcr.io/kibamail/kibaship-railpack-cli:v$NEW_VERSION"
+
     echo "   2. Create GitHub release with dist/install.yaml"
+
     echo "   3. Run additional release validation"
     echo ""
     echo "🔗 Monitor progress at:"
@@ -299,6 +312,7 @@ echo "2. Verify Docker images are available:"
 echo "   - ghcr.io/kibamail/kibaship-operator:v$NEW_VERSION"
 echo "   - ghcr.io/kibamail/kibaship-operator-apiserver:v$NEW_VERSION"
 echo "   - ghcr.io/kibamail/kibaship-operator-cert-manager-webhook:v$NEW_VERSION"
+echo "   - ghcr.io/kibamail/kibaship-railpack-cli:v$NEW_VERSION"
 echo "3. Test installations:"
 echo "   kubectl: kubectl apply -f https://github.com/kibamail/kibaship-operator/releases/download/v$NEW_VERSION/install.yaml"
 echo "   helm: helm install kibaship-operator https://github.com/kibamail/kibaship-operator/releases/download/v$NEW_VERSION/kibaship-operator-$NEW_CHART_VERSION.tgz"
