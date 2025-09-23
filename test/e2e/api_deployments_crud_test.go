@@ -38,7 +38,7 @@ var _ = Describe("API Server Deployment CRUD", func() {
 			if err != nil {
 				return false
 			}
-			io.Copy(io.Discard, resp.Body)
+			_, _ = io.Copy(io.Discard, resp.Body)
 			_ = resp.Body.Close()
 			return resp.StatusCode == http.StatusOK
 		}, "60s", "1s").Should(BeTrue(), "API server did not become ready via /readyz")
@@ -46,7 +46,7 @@ var _ = Describe("API Server Deployment CRUD", func() {
 		httpClient := &http.Client{Timeout: 30 * time.Second}
 
 		By("creating a project via POST /projects")
-		workspaceUUID := "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+		workspaceUUID := workspaceUUIDConst
 		projReqBody := map[string]any{
 			"name":          "proj-for-deploy-crud-e2e",
 			"workspaceUuid": workspaceUUID,
@@ -57,7 +57,7 @@ var _ = Describe("API Server Deployment CRUD", func() {
 		reqProj.Header.Set("Authorization", "Bearer "+apiKey)
 		respProj, err := httpClient.Do(reqProj)
 		Expect(err).NotTo(HaveOccurred())
-		defer respProj.Body.Close()
+		defer func() { _ = respProj.Body.Close() }()
 		Expect(respProj.StatusCode).To(Equal(http.StatusCreated))
 		var projResp struct {
 			Slug string `json:"slug"`
@@ -83,7 +83,7 @@ var _ = Describe("API Server Deployment CRUD", func() {
 		reqApp.Header.Set("Authorization", "Bearer "+apiKey)
 		respApp, err := httpClient.Do(reqApp)
 		Expect(err).NotTo(HaveOccurred())
-		defer respApp.Body.Close()
+		defer func() { _ = respApp.Body.Close() }()
 		Expect(respApp.StatusCode).To(Equal(http.StatusCreated))
 		var appResp struct {
 			Slug string `json:"slug"`
@@ -104,7 +104,7 @@ var _ = Describe("API Server Deployment CRUD", func() {
 		reqDep.Header.Set("Authorization", "Bearer "+apiKey)
 		respDep, err := httpClient.Do(reqDep)
 		Expect(err).NotTo(HaveOccurred())
-		defer respDep.Body.Close()
+		defer func() { _ = respDep.Body.Close() }()
 		Expect(respDep.StatusCode).To(Equal(http.StatusCreated))
 		var depResp struct {
 			Slug string `json:"slug"`
@@ -134,7 +134,7 @@ var _ = Describe("API Server Deployment CRUD", func() {
 		reqList.Header.Set("Authorization", "Bearer "+apiKey)
 		respList, err := httpClient.Do(reqList)
 		Expect(err).NotTo(HaveOccurred())
-		defer respList.Body.Close()
+		defer func() { _ = respList.Body.Close() }()
 		Expect(respList.StatusCode).To(Equal(http.StatusOK))
 		var listResp []struct {
 			Slug string `json:"slug"`
@@ -155,7 +155,7 @@ var _ = Describe("API Server Deployment CRUD", func() {
 		reqGet.Header.Set("Authorization", "Bearer "+apiKey)
 		respGet, err := httpClient.Do(reqGet)
 		Expect(err).NotTo(HaveOccurred())
-		defer respGet.Body.Close()
+		defer func() { _ = respGet.Body.Close() }()
 		Expect(respGet.StatusCode).To(Equal(http.StatusOK))
 
 		By("GET /projects/{slug}/applications shows LatestDeployment populated")
@@ -166,7 +166,7 @@ var _ = Describe("API Server Deployment CRUD", func() {
 			if err != nil {
 				return false
 			}
-			defer resp.Body.Close()
+			defer func() { _ = resp.Body.Close() }()
 			if resp.StatusCode != http.StatusOK {
 				return false
 			}

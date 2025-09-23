@@ -38,7 +38,7 @@ var _ = Describe("API Server Application Domain CRUD", func() {
 			if err != nil {
 				return false
 			}
-			io.Copy(io.Discard, resp.Body)
+			_, _ = io.Copy(io.Discard, resp.Body)
 			_ = resp.Body.Close()
 			return resp.StatusCode == http.StatusOK
 		}, "60s", "1s").Should(BeTrue(), "API server did not become ready via /readyz")
@@ -48,7 +48,7 @@ var _ = Describe("API Server Application Domain CRUD", func() {
 		var domainCRName string
 
 		By("creating a project via POST /projects")
-		workspaceUUID := "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+		workspaceUUID := workspaceUUIDConst
 		projReqBody := map[string]any{
 			"name":          "proj-for-domain-crud-e2e",
 			"workspaceUuid": workspaceUUID,
@@ -59,7 +59,7 @@ var _ = Describe("API Server Application Domain CRUD", func() {
 		reqProj.Header.Set("Authorization", "Bearer "+apiKey)
 		respProj, err := httpClient.Do(reqProj)
 		Expect(err).NotTo(HaveOccurred())
-		defer respProj.Body.Close()
+		defer func() { _ = respProj.Body.Close() }()
 		Expect(respProj.StatusCode).To(Equal(http.StatusCreated))
 		var projResp struct {
 			Slug string `json:"slug"`
@@ -85,7 +85,7 @@ var _ = Describe("API Server Application Domain CRUD", func() {
 		reqApp.Header.Set("Authorization", "Bearer "+apiKey)
 		respApp, err := httpClient.Do(reqApp)
 		Expect(err).NotTo(HaveOccurred())
-		defer respApp.Body.Close()
+		defer func() { _ = respApp.Body.Close() }()
 		Expect(respApp.StatusCode).To(Equal(http.StatusCreated))
 		var appResp struct {
 			Slug string `json:"slug"`
@@ -106,7 +106,7 @@ var _ = Describe("API Server Application Domain CRUD", func() {
 		reqDom.Header.Set("Authorization", "Bearer "+apiKey)
 		respDom, err := httpClient.Do(reqDom)
 		Expect(err).NotTo(HaveOccurred())
-		defer respDom.Body.Close()
+		defer func() { _ = respDom.Body.Close() }()
 		Expect(respDom.StatusCode).To(Equal(http.StatusCreated))
 		var domResp struct {
 			Slug string `json:"slug"`
@@ -119,7 +119,7 @@ var _ = Describe("API Server Application Domain CRUD", func() {
 		reqGet.Header.Set("Authorization", "Bearer "+apiKey)
 		respGet, err := httpClient.Do(reqGet)
 		Expect(err).NotTo(HaveOccurred())
-		defer respGet.Body.Close()
+		defer func() { _ = respGet.Body.Close() }()
 		Expect(respGet.StatusCode).To(Equal(http.StatusOK))
 
 		By("verifying Certificate is created and status.certificateRef is set")
@@ -160,7 +160,7 @@ var _ = Describe("API Server Application Domain CRUD", func() {
 		reqDel.Header.Set("Authorization", "Bearer "+apiKey)
 		respDel, err := httpClient.Do(reqDel)
 		Expect(err).NotTo(HaveOccurred())
-		defer respDel.Body.Close()
+		defer func() { _ = respDel.Body.Close() }()
 		Expect(respDel.StatusCode).To(Equal(http.StatusNoContent))
 
 		By("verifying ApplicationDomain CR for slug is gone")

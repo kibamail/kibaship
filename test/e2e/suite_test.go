@@ -30,6 +30,10 @@ const (
 	applicationRefPath     = "jsonpath={.spec.applicationRef.name}"
 	gitCommitSHAPath       = "jsonpath={.spec.gitRepository.commitSHA}"
 	gitBranchPath          = "jsonpath={.spec.gitRepository.branch}"
+	// shared test constants
+	workspaceUUIDConst = "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+	kindServiceAccount = "ServiceAccount"
+	kindRole           = "Role"
 )
 
 var (
@@ -105,7 +109,8 @@ var _ = BeforeSuite(func() {
 
 	By("setting WEBHOOK_TARGET_URL for operator deploy")
 	target := "http://webhook-receiver.kibaship-operator.svc.cluster.local:8080/webhook"
-	os.Setenv("WEBHOOK_TARGET_URL", target)
+	err = os.Setenv("WEBHOOK_TARGET_URL", target)
+	Expect(err).NotTo(HaveOccurred(), "failed to set WEBHOOK_TARGET_URL")
 
 	By("deploying kibaship-operator")
 	Expect(utils.DeployKibashipOperator()).To(Succeed(), "Failed to deploy kibaship-operator")

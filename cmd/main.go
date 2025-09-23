@@ -123,7 +123,12 @@ func main() {
 	}
 	acmeEmail := os.Getenv("KIBASHIP_ACME_EMAIL")
 	baseDomain := os.Getenv("KIBASHIP_OPERATOR_DOMAIN")
-	if err := bootstrap.ProvisionIngressAndCertificates(context.Background(), uncachedClient, baseDomain, acmeEmail); err != nil {
+	if err := bootstrap.ProvisionIngressAndCertificates(
+		context.Background(),
+		uncachedClient,
+		baseDomain,
+		acmeEmail,
+	); err != nil {
 		setupLog.Error(err, "bootstrap provisioning failed (continuing)")
 	}
 
@@ -145,7 +150,11 @@ func main() {
 		os.Exit(1)
 	}
 	var signingKey []byte
-	secret, err := kcs.CoreV1().Secrets(operatorNS).Get(context.Background(), config.WebhookSecretName, metav1.GetOptions{})
+	secret, err := kcs.CoreV1().Secrets(operatorNS).Get(
+		context.Background(),
+		config.WebhookSecretName,
+		metav1.GetOptions{},
+	)
 	if apierrors.IsNotFound(err) {
 		buf := make([]byte, 32)
 		if _, err := rand.Read(buf); err != nil {
@@ -160,7 +169,11 @@ func main() {
 			Type: corev1.SecretTypeOpaque,
 			Data: map[string][]byte{config.WebhookSecretKey: buf},
 		}
-		if _, err := kcs.CoreV1().Secrets(operatorNS).Create(context.Background(), secret, metav1.CreateOptions{}); err != nil {
+		if _, err := kcs.CoreV1().Secrets(operatorNS).Create(
+			context.Background(),
+			secret,
+			metav1.CreateOptions{},
+		); err != nil {
 			setupLog.Error(err, "failed to create webhook signing secret")
 			os.Exit(1)
 		}
@@ -180,7 +193,11 @@ func main() {
 				secret.Data = map[string][]byte{}
 			}
 			secret.Data[config.WebhookSecretKey] = buf
-			if _, err := kcs.CoreV1().Secrets(operatorNS).Update(context.Background(), secret, metav1.UpdateOptions{}); err != nil {
+			if _, err := kcs.CoreV1().Secrets(operatorNS).Update(
+				context.Background(),
+				secret,
+				metav1.UpdateOptions{},
+			); err != nil {
 				setupLog.Error(err, "failed to update webhook signing secret")
 				os.Exit(1)
 			}

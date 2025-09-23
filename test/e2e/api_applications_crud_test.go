@@ -38,7 +38,7 @@ var _ = Describe("API Server Application CRUD", func() {
 			if err != nil {
 				return false
 			}
-			io.Copy(io.Discard, resp.Body)
+			_, _ = io.Copy(io.Discard, resp.Body)
 			_ = resp.Body.Close()
 			return resp.StatusCode == http.StatusOK
 		}, "60s", "1s").Should(BeTrue(), "API server did not become ready via /readyz")
@@ -46,7 +46,7 @@ var _ = Describe("API Server Application CRUD", func() {
 		httpClient := &http.Client{Timeout: 30 * time.Second}
 
 		By("creating a project via POST /projects")
-		workspaceUUID := "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+		workspaceUUID := workspaceUUIDConst
 		projReqBody := map[string]any{
 			"name":          "proj-for-app-crud-e2e",
 			"workspaceUuid": workspaceUUID,
@@ -57,7 +57,7 @@ var _ = Describe("API Server Application CRUD", func() {
 		reqProj.Header.Set("Authorization", "Bearer "+apiKey)
 		respProj, err := httpClient.Do(reqProj)
 		Expect(err).NotTo(HaveOccurred())
-		defer respProj.Body.Close()
+		defer func() { _ = respProj.Body.Close() }()
 		Expect(respProj.StatusCode).To(Equal(http.StatusCreated))
 		var projResp struct {
 			Slug string `json:"slug"`
@@ -83,7 +83,7 @@ var _ = Describe("API Server Application CRUD", func() {
 		reqApp.Header.Set("Authorization", "Bearer "+apiKey)
 		respApp, err := httpClient.Do(reqApp)
 		Expect(err).NotTo(HaveOccurred())
-		defer respApp.Body.Close()
+		defer func() { _ = respApp.Body.Close() }()
 		Expect(respApp.StatusCode).To(Equal(http.StatusCreated))
 		var appResp struct {
 			Slug string `json:"slug"`
@@ -101,7 +101,7 @@ var _ = Describe("API Server Application CRUD", func() {
 			if err != nil {
 				return 0
 			}
-			io.Copy(io.Discard, respGet.Body)
+			_, _ = io.Copy(io.Discard, respGet.Body)
 			_ = respGet.Body.Close()
 			return respGet.StatusCode
 		}, "60s", "1s").Should(Equal(http.StatusOK))
@@ -115,7 +115,7 @@ var _ = Describe("API Server Application CRUD", func() {
 		reqPatch.Header.Set("Authorization", "Bearer "+apiKey)
 		respPatch, err := httpClient.Do(reqPatch)
 		Expect(err).NotTo(HaveOccurred())
-		defer respPatch.Body.Close()
+		defer func() { _ = respPatch.Body.Close() }()
 		Expect(respPatch.StatusCode).To(Equal(http.StatusOK))
 		var patched struct {
 			Name string `json:"name"`
@@ -131,9 +131,9 @@ var _ = Describe("API Server Application CRUD", func() {
 			if err != nil {
 				return false
 			}
-			defer respList.Body.Close()
+			defer func() { _ = respList.Body.Close() }()
 			if respList.StatusCode != http.StatusOK {
-				io.Copy(io.Discard, respList.Body)
+				_, _ = io.Copy(io.Discard, respList.Body)
 				return false
 			}
 			var apps []struct {
@@ -153,7 +153,7 @@ var _ = Describe("API Server Application CRUD", func() {
 		reqDel.Header.Set("Authorization", "Bearer "+apiKey)
 		respDel, err := httpClient.Do(reqDel)
 		Expect(err).NotTo(HaveOccurred())
-		defer respDel.Body.Close()
+		defer func() { _ = respDel.Body.Close() }()
 		Expect(respDel.StatusCode).To(Equal(http.StatusNoContent))
 
 		By("verifying Application CR is gone")

@@ -38,7 +38,7 @@ var _ = Describe("API Server Project CRUD", func() {
 			if err != nil {
 				return false
 			}
-			io.Copy(io.Discard, resp.Body)
+			_, _ = io.Copy(io.Discard, resp.Body)
 			_ = resp.Body.Close()
 			return resp.StatusCode == http.StatusOK
 		}, "60s", "1s").Should(BeTrue(), "API server did not become ready via /readyz")
@@ -57,7 +57,7 @@ var _ = Describe("API Server Project CRUD", func() {
 		reqProj.Header.Set("Authorization", "Bearer "+apiKey)
 		respProj, err := httpClient.Do(reqProj)
 		Expect(err).NotTo(HaveOccurred())
-		defer respProj.Body.Close()
+		defer func() { _ = respProj.Body.Close() }()
 		Expect(respProj.StatusCode).To(Equal(http.StatusCreated))
 		var projResp struct {
 			Slug string `json:"slug"`
@@ -80,7 +80,7 @@ var _ = Describe("API Server Project CRUD", func() {
 			if err != nil {
 				return 0
 			}
-			io.Copy(io.Discard, respGet.Body)
+			_, _ = io.Copy(io.Discard, respGet.Body)
 			_ = respGet.Body.Close()
 			return respGet.StatusCode
 		}, "60s", "1s").Should(Equal(http.StatusOK))
@@ -108,7 +108,7 @@ var _ = Describe("API Server Project CRUD", func() {
 		reqDel.Header.Set("Authorization", "Bearer "+apiKey)
 		respDel, err := httpClient.Do(reqDel)
 		Expect(err).NotTo(HaveOccurred())
-		defer respDel.Body.Close()
+		defer func() { _ = respDel.Body.Close() }()
 		Expect(respDel.StatusCode).To(Equal(http.StatusNoContent))
 
 		By("verifying Project CR is gone")

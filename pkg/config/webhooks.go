@@ -1,7 +1,6 @@
 package config
 
 import (
-	"errors"
 	"fmt"
 	"os"
 )
@@ -23,7 +22,10 @@ const (
 func RequireWebhookTargetURL() (string, error) {
 	url := os.Getenv(EnvWebhookTargetURL)
 	if url == "" {
-		return "", errors.New(fmt.Sprintf("%s must be set (e.g., http://webhook-receiver.kibaship-operator.svc.cluster.local:8080/webhook)", EnvWebhookTargetURL))
+		return "", fmt.Errorf(
+			"%s must be set (e.g., http://webhook-receiver.kibaship-operator.svc.cluster.local:8080/webhook)",
+			EnvWebhookTargetURL,
+		)
 	}
 	return url, nil
 }

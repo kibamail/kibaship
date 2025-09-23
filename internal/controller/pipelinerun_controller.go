@@ -49,6 +49,12 @@ type PipelineRunWatcherReconciler struct {
 	Notifier webhooks.Notifier
 }
 
+const (
+	condTrue    = "True"
+	condFalse   = "False"
+	condUnknown = "Unknown"
+)
+
 func (r *PipelineRunWatcherReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
@@ -88,9 +94,9 @@ func (r *PipelineRunWatcherReconciler) Reconcile(ctx context.Context, req ctrl.R
 	// Derive deployment phase from PipelineRun condition Succeeded
 	status, reason, message := extractPRSucceeded(u)
 	switch status {
-	case "True":
+	case condTrue:
 		dep.Status.Phase = platformv1alpha1.DeploymentPhaseSucceeded
-	case "False":
+	case condFalse:
 		dep.Status.Phase = platformv1alpha1.DeploymentPhaseFailed
 	default:
 		dep.Status.Phase = platformv1alpha1.DeploymentPhaseRunning
@@ -146,7 +152,7 @@ func (r *PipelineRunWatcherReconciler) SetupWithManager(mgr ctrl.Manager) error 
 func extractPRSucceeded(u *unstructured.Unstructured) (status, reason, message string) {
 	conds, found, _ := unstructured.NestedSlice(u.Object, "status", "conditions")
 	if !found {
-		return "Unknown", "", ""
+		return condUnknown, "", ""
 	}
 	for _, c := range conds {
 		m, ok := c.(map[string]any)
@@ -158,19 +164,19 @@ func extractPRSucceeded(u *unstructured.Unstructured) (status, reason, message s
 			reason, _ = m["reason"].(string)
 			message, _ = m["message"].(string)
 			if status == "" {
-				status = "Unknown"
+				status = condUnknown
 			}
 			return
 		}
 	}
-	return "Unknown", "", ""
+	return condUnknown, "", ""
 }
 
 func toConditionStatus(s string) metav1.ConditionStatus {
 	switch s {
-	case "True":
+	case condTrue:
 		return metav1.ConditionTrue
-	case "False":
+	case condFalse:
 		return metav1.ConditionFalse
 	default:
 		return metav1.ConditionUnknown
