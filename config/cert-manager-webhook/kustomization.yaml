@@ -18,4 +18,4 @@ resources:
 images:
 - name: webhook
   newName: ghcr.io/kibamail/kibaship-operator-cert-manager-webhook
-  newTag: v0.1.0
+  newTag: v0.1.1
