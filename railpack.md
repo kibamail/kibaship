@@ -19,6 +19,68 @@ This document proposes a production-grade design to build container images from 
 
 ---
 
+## Implementation progress (2025-09-23)
+
+- [x] Created lightweight Railpack CLI image (v0.7.2)
+
+  - Path: build/railpack-cli/Dockerfile; Alpine base, non-root user, includes ca-certificates for HTTPS
+  - Publishes to: ghcr.io/kibamail/kibaship-railpack-cli:<tag>
+  - Excerpt:
+
+  ```dockerfile
+  FROM alpine:3.20
+  RUN apk add --no-cache ca-certificates
+  ENTRYPOINT ["/usr/local/bin/railpack"]
+  ```
+
+- [x] CI split into per-image workflows with gating on Tests/Lint/E2E
+
+  - Files: .github/workflows/build-operator.yml, build-apiserver.yml, build-cert-manager-webhook.yml, build-railpack-cli.yml
+  - Triggered on workflow_run for ["Tests", "E2E Tests", "Lint"] (success, main) and on push tags v\*
+  - Excerpt:
+
+  ```yaml
+  on:
+    workflow_run:
+      workflows: [Tests, E2E Tests, Lint]
+      types: [completed]
+  ```
+
+- [x] Release script validates Railpack image build
+
+  - scripts/release.sh now builds railpack-cli locally and fails early if it breaks
+
+  ```bash
+  log_info "Validating Docker build (railpack-cli)..."
+  docker build -f build/railpack-cli/Dockerfile -t kibaship-railpack-cli:validate build/railpack-cli
+  ```
+
+- [x] Prepare step image selection and usage updated
+
+  - Use ghcr.io/kibamail/kibaship-railpack-cli:v0.7.2 for the Tekton prepare step
+
+  ```yaml
+  steps:
+    - name: prepare
+      image: ghcr.io/kibamail/kibaship-railpack-cli:v0.7.2
+      workingDir: $(workspaces.output.path)/$(params.contextPath)
+      command: ["railpack"]
+      args:
+        [
+          "prepare",
+          "--plan-out",
+          "$(results.planPath.path)",
+          "--info-out",
+          "$(results.infoPath.path)",
+          "$(workspaces.output.path)/$(params.contextPath)",
+        ]
+  ```
+
+- [x] Rationale for ca-certificates in the image
+  - Ensures TLS verification works for any HTTPS calls during prepare (e.g., metadata lookups)
+
+---
+
 ## Architecture overview
 
 - Pipeline sequence:
@@ -101,7 +163,7 @@ spec:
     - name: contextPath
       default: "."
     - name: railpackVersion
-      default: "vX.Y.Z"
+      default: "v0.7.2"
     - name: buildSecrets
       type: array
       default: []
@@ -112,7 +174,7 @@ spec:
     - name: infoPath
   steps:
     - name: prepare
-      image: ghcr.io/railwayapp/railpack:${params.railpackVersion}
+      image: ghcr.io/kibamail/kibaship-railpack-cli:$(params.railpackVersion)
       workingDir: $(workspaces.output.path)/$(params.contextPath)
       script: |
         #!/bin/sh
@@ -169,7 +231,7 @@ spec:
     - name: cacheKey
       default: ""
     - name: railpackVersion
-      default: "vX.Y.Z"
+      default: "v0.7.2"
     - name: buildSecrets
       type: array
       default: []
@@ -432,7 +494,9 @@ spec:
 
 - [ ] Create Task spec with params: contextPath, railpackVersion, buildSecrets (array)
 - [ ] Mount workspace `output`
-- [ ] Choose railpack CLI image or build custom with pinned version
+- [x] Choose railpack CLI image or build custom with pinned version
+- [x] Created custom image build/railpack-cli/Dockerfile pinned to v0.7.2 and CI publishing via build-railpack-cli.yml
+
 - [ ] Implement step to run `railpack prepare` with `--plan-out` and `--info-out`
 - [ ] Inject `--env NAME=$NAME` for each secret name (no values)
 - [ ] Emit Tekton results: planPath, infoPath
