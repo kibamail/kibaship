@@ -1,0 +1,59 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: railpack-prepare
+  labels:
+    app.kubernetes.io/part-of: kibaship-operator
+spec:
+  description: |
+    Generate Railpack build plan and info without building the image. The outputs
+    are written into the shared workspace at /railway/plan.json and /railway/info.json.
+  params:
+    - name: contextPath
+      type: string
+      description: Relative path to the project root within the workspace
+      default: "."
+    - name: railpackVersion
+      type: string
+      description: Railpack CLI version (image tag)
+      default: "v0.7.2"
+    - name: env
+      type: array
+      description: Additional "KEY=VALUE" entries to pass via --env to railpack prepare
+      default: []
+  workspaces:
+    - name: source
+      description: Shared workspace containing the cloned repository
+  results:
+    - name: plan
+      description: Absolute path to the generated plan.json in the workspace
+    - name: info
+      description: Absolute path to the generated info.json in the workspace
+  steps:
+    - name: prepare
+      image: ghcr.io/kibamail/kibaship-railpack-cli:$(params.railpackVersion)
+      workingDir: $(workspaces.source.path)/$(params.contextPath)
+      script: |
+        #!/usr/bin/env sh
+        set -eu
+        # Ensure output directory exists at the workspace root
+        mkdir -p "$(workspaces.source.path)/railway"
+        PLAN="$(workspaces.source.path)/railway/plan.json"
+        INFO="$(workspaces.source.path)/railway/info.json"
+
+        # Collect optional env flags passed to prepare
+        ARGS=""
+        for e in $(params.env); do
+          ARGS="$ARGS --env $e"
+        done
+
+        # Generate plan and info at the required paths
+        railpack prepare . \
+          --plan-out "$PLAN" \
+          --info-out "$INFO" \
+          $ARGS
+
+        # Emit Tekton results with absolute file paths
+        printf "%s" "$PLAN" > "$(results.plan.path)"
+        printf "%s" "$INFO" > "$(results.info.path)"
+
