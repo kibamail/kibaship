@@ -1523,7 +1523,7 @@ spec:
           value: "3000"
         - name: KIBASHIP_ACME_EMAIL
           value: test@kibaship.com
-        image: ghcr.io/kibamail/kibaship-operator:v0.1.0
+        image: ghcr.io/kibamail/kibaship-operator:v0.1.1
         livenessProbe:
           httpGet:
             path: /healthz
@@ -1837,7 +1837,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
-        image: ghcr.io/kibamail/kibaship-operator-apiserver:v0.1.0
+        image: ghcr.io/kibamail/kibaship-operator-apiserver:v0.1.1
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
@@ -2002,7 +2002,7 @@ spec:
         - --tls-cert-file=/tls/tls.crt
         - --tls-private-key-file=/tls/tls.key
         - --secure-port=8443
-        image: ghcr.io/kibamail/kibaship-operator-cert-manager-webhook:v0.1.0
+        image: ghcr.io/kibamail/kibaship-operator-cert-manager-webhook:v0.1.1
         imagePullPolicy: IfNotPresent
         name: webhook
         ports:
