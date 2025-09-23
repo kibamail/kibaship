@@ -190,8 +190,8 @@ func main() {
 		}
 	}
 
-	// Build notifier
-	n := webhooks.NewHTTPNotifier(webhookURL, signingKey)
+	// Build notifier (inject cache-backed reader for enrichment)
+	n := webhooks.NewHTTPNotifier(webhookURL, signingKey, mgr.GetClient())
 
 	// Now set up controllers
 	if err := (&controller.ProjectReconciler{
@@ -243,6 +243,25 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "ApplicationDomain")
 		os.Exit(1)
 	}
+	// Watch cert-manager Certificates and mirror status to ApplicationDomains
+	if err := (&controller.CertificateWatcherReconciler{
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Notifier: n,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "CertificateWatcher")
+		os.Exit(1)
+	}
+	// Watch Tekton PipelineRuns and mirror status to Deployments
+	if err := (&controller.PipelineRunWatcherReconciler{
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Notifier: n,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "PipelineRunWatcher")
+		os.Exit(1)
+	}
+
 	if err := (&platformv1alpha1.ApplicationDomain{}).SetupWebhookWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create webhook", "webhook", "ApplicationDomain")
 		os.Exit(1)

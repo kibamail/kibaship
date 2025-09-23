@@ -11,6 +11,9 @@ import (
 
 	"github.com/hashicorp/go-retryablehttp"
 	platformv1alpha1 "github.com/kibamail/kibaship-operator/api/v1alpha1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // Notifier defines the interface for sending webhook events.
@@ -45,7 +48,9 @@ type ApplicationDomainStatusEvent struct {
 	PreviousPhase     string                             `json:"previousPhase"`
 	NewPhase          string                             `json:"newPhase"`
 	ApplicationDomain platformv1alpha1.ApplicationDomain `json:"applicationDomain"`
-	Timestamp         time.Time                          `json:"timestamp"`
+	// Certificate is optionally included for ApplicationDomain events when a CertificateRef exists
+	Certificate any       `json:"certificate,omitempty"`
+	Timestamp   time.Time `json:"timestamp"`
 }
 
 // DeploymentStatusEvent is the payload for deployment status change notifications.
@@ -54,7 +59,9 @@ type DeploymentStatusEvent struct {
 	PreviousPhase string                      `json:"previousPhase"`
 	NewPhase      string                      `json:"newPhase"`
 	Deployment    platformv1alpha1.Deployment `json:"deployment"`
-	Timestamp     time.Time                   `json:"timestamp"`
+	// PipelineRun is optionally included for Deployment events when a matching PipelineRun exists
+	PipelineRun any       `json:"pipelineRun,omitempty"`
+	Timestamp   time.Time `json:"timestamp"`
 }
 
 // NoopNotifier is a drop-in that does nothing.
@@ -78,11 +85,12 @@ type HTTPNotifier struct {
 	client     *retryablehttp.Client
 	targetURL  string
 	signingKey []byte
+	reader     client.Reader // cache-backed reader for enrichment
 }
 
 // NewHTTPNotifier constructs an HTTPNotifier with sane defaults.
 // Retry policy: retry on 408, 429, and all 5xx; backoff with jitter.
-func NewHTTPNotifier(targetURL string, signingKey []byte) *HTTPNotifier {
+func NewHTTPNotifier(targetURL string, signingKey []byte, reader client.Reader) *HTTPNotifier {
 	c := retryablehttp.NewClient()
 	c.RetryMax = 5
 	c.RetryWaitMin = 500 * time.Millisecond
@@ -101,7 +109,7 @@ func NewHTTPNotifier(targetURL string, signingKey []byte) *HTTPNotifier {
 		return code >= 500, nil
 	}
 	c.Logger = nil // keep quiet in tests; rely on our logs
-	return &HTTPNotifier{client: c, targetURL: targetURL, signingKey: signingKey}
+	return &HTTPNotifier{client: c, targetURL: targetURL, signingKey: signingKey, reader: reader}
 }
 
 func (n *HTTPNotifier) postSigned(ctx context.Context, payload any) error {
@@ -133,9 +141,38 @@ func (n *HTTPNotifier) NotifyApplicationStatusChange(ctx context.Context, evt Ap
 }
 
 func (n *HTTPNotifier) NotifyApplicationDomainStatusChange(ctx context.Context, evt ApplicationDomainStatusEvent) error {
+	// enrich with Certificate when available
+	ref := evt.ApplicationDomain.Status.CertificateRef
+	if n.reader != nil && ref != nil && ref.Name != "" && ref.Namespace != "" {
+		u := &unstructured.Unstructured{}
+		u.SetGroupVersionKind(schema.GroupVersionKind{Group: "cert-manager.io", Version: "v1", Kind: "Certificate"})
+		_ = n.reader.Get(ctx, client.ObjectKey{Name: ref.Name, Namespace: ref.Namespace}, u)
+		if len(u.Object) > 0 {
+			evt.Certificate = u.Object
+		}
+	}
 	return n.postSigned(ctx, evt)
 }
 
 func (n *HTTPNotifier) NotifyDeploymentStatusChange(ctx context.Context, evt DeploymentStatusEvent) error {
+	// enrich with latest PipelineRun when available and not already provided
+	if n.reader != nil && evt.PipelineRun == nil {
+		list := &unstructured.UnstructuredList{}
+		list.SetGroupVersionKind(schema.GroupVersionKind{Group: "tekton.dev", Version: "v1", Kind: "PipelineRunList"})
+		_ = n.reader.List(ctx, list,
+			client.InNamespace(evt.Deployment.Namespace),
+			client.MatchingLabels(map[string]string{"deployment.kibaship.com/name": evt.Deployment.Name}),
+		)
+		if len(list.Items) > 0 {
+			// pick newest by creationTimestamp
+			latest := list.Items[0]
+			for _, it := range list.Items[1:] {
+				if it.GetCreationTimestamp().After(latest.GetCreationTimestamp().Time) {
+					latest = it
+				}
+			}
+			evt.PipelineRun = latest.Object
+		}
+	}
 	return n.postSigned(ctx, evt)
 }
