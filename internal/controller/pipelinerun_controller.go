@@ -1,0 +1,190 @@
+/*
+Copyright 2025.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package controller
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+
+	platformv1alpha1 "github.com/kibamail/kibaship-operator/api/v1alpha1"
+	"github.com/kibamail/kibaship-operator/pkg/webhooks"
+)
+
+// +kubebuilder:rbac:groups=tekton.dev,resources=pipelineruns,verbs=get;list;watch
+// +kubebuilder:rbac:groups=platform.operator.kibaship.com,resources=deployments,verbs=get;list;watch
+// +kubebuilder:rbac:groups=platform.operator.kibaship.com,resources=deployments/status,verbs=get;update;patch
+
+// PipelineRunWatcherReconciler watches Tekton PipelineRuns and mirrors their status into Deployments
+// (correlated via label deployment.kibaship.com/name), then emits webhooks.
+type PipelineRunWatcherReconciler struct {
+	client.Client
+	Scheme   *runtime.Scheme
+	Notifier webhooks.Notifier
+}
+
+func (r *PipelineRunWatcherReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	logger := log.FromContext(ctx)
+
+	// Fetch the PipelineRun as unstructured
+	u := &unstructured.Unstructured{}
+	u.SetGroupVersionKind(schema.GroupVersionKind{Group: "tekton.dev", Version: "v1", Kind: "PipelineRun"})
+	if err := r.Get(ctx, req.NamespacedName, u); err != nil {
+		if errors.IsNotFound(err) {
+			return ctrl.Result{}, nil
+		}
+		return ctrl.Result{}, err
+	}
+
+	labels := u.GetLabels()
+	depName := ""
+	if labels != nil {
+		depName = labels["deployment.kibaship.com/name"]
+	}
+	if depName == "" {
+		// not ours
+		return ctrl.Result{}, nil
+	}
+
+	// Load the Deployment
+	var dep platformv1alpha1.Deployment
+	if err := r.Get(ctx, types.NamespacedName{Name: depName, Namespace: u.GetNamespace()}, &dep); err != nil {
+		if errors.IsNotFound(err) {
+			// deployment might have been deleted; ignore
+			return ctrl.Result{}, nil
+		}
+		logger.Error(err, "failed to get Deployment for PipelineRun", "deployment", depName)
+		return ctrl.Result{}, err
+	}
+
+	prev := string(dep.Status.Phase)
+
+	// Derive deployment phase from PipelineRun condition Succeeded
+	status, reason, message := extractPRSucceeded(u)
+	switch status {
+	case "True":
+		dep.Status.Phase = platformv1alpha1.DeploymentPhaseSucceeded
+	case "False":
+		dep.Status.Phase = platformv1alpha1.DeploymentPhaseFailed
+	default:
+		dep.Status.Phase = platformv1alpha1.DeploymentPhaseRunning
+	}
+
+	// Update a condition reflecting PR state
+	cond := metav1.Condition{
+		Type:               "PipelineRun",
+		Status:             toConditionStatus(status),
+		LastTransitionTime: metav1.Now(),
+		Reason:             reason,
+		Message:            message,
+	}
+	upsertCondition(&dep.Status.Conditions, cond)
+
+	// Persist status
+	if err := r.Status().Update(ctx, &dep); err != nil {
+		logger.Error(err, "update Deployment status failed", "dep", fmt.Sprintf("%s/%s", dep.Namespace, dep.Name))
+		return ctrl.Result{}, err
+	}
+
+	// Emit webhook if phase changed; include the PipelineRun inline
+	if r.Notifier != nil && prev != string(dep.Status.Phase) {
+		evt := webhooks.DeploymentStatusEvent{
+			Type:          "deployment.status.changed",
+			PreviousPhase: prev,
+			NewPhase:      string(dep.Status.Phase),
+			Deployment:    dep,
+			PipelineRun:   u.Object,
+			Timestamp:     time.Now().UTC(),
+		}
+		_ = r.Notifier.NotifyDeploymentStatusChange(ctx, evt)
+	}
+
+	return ctrl.Result{}, nil
+}
+
+func (r *PipelineRunWatcherReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	u := &unstructured.Unstructured{}
+	u.SetGroupVersionKind(schema.GroupVersionKind{Group: "tekton.dev", Version: "v1", Kind: "PipelineRun"})
+	pred := predicate.Funcs{
+		CreateFunc: func(e event.CreateEvent) bool { return false },
+		UpdateFunc: func(e event.UpdateEvent) bool { return true },
+		DeleteFunc: func(e event.DeleteEvent) bool { return false },
+	}
+	return ctrl.NewControllerManagedBy(mgr).
+		For(u).
+		WithEventFilter(pred).
+		Complete(r)
+}
+
+// extractPRSucceeded pulls .status.conditions[type=="Succeeded"]
+func extractPRSucceeded(u *unstructured.Unstructured) (status, reason, message string) {
+	conds, found, _ := unstructured.NestedSlice(u.Object, "status", "conditions")
+	if !found {
+		return "Unknown", "", ""
+	}
+	for _, c := range conds {
+		m, ok := c.(map[string]any)
+		if !ok {
+			continue
+		}
+		if t, _ := m["type"].(string); t == "Succeeded" {
+			status, _ = m["status"].(string)
+			reason, _ = m["reason"].(string)
+			message, _ = m["message"].(string)
+			if status == "" {
+				status = "Unknown"
+			}
+			return
+		}
+	}
+	return "Unknown", "", ""
+}
+
+func toConditionStatus(s string) metav1.ConditionStatus {
+	switch s {
+	case "True":
+		return metav1.ConditionTrue
+	case "False":
+		return metav1.ConditionFalse
+	default:
+		return metav1.ConditionUnknown
+	}
+}
+
+func upsertCondition(conds *[]metav1.Condition, c metav1.Condition) {
+	list := *conds
+	for i := range list {
+		if list[i].Type == c.Type {
+			list[i] = c
+			*conds = list
+			return
+		}
+	}
+	*conds = append(*conds, c)
+}
