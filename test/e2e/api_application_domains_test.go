@@ -103,7 +103,7 @@ var _ = Describe("API Server Application Domains Auto-Loading", func() {
 		By("eventually fetching GET /applications/{slug} and seeing the default domain auto-loaded")
 		targetDomainSuffix := ".myapps.kibaship.com"
 		Eventually(func() error {
-			req, _ := http.NewRequest("GET", fmt.Sprintf("http://127.0.0.1:18080/applications/%s", appResp.Slug), nil)
+			req, _ := http.NewRequest("GET", fmt.Sprintf("http://127.0.0.1:18080/application/%s", appResp.Slug), nil)
 			req.Header.Set("Authorization", "Bearer "+apiKey)
 			resp, err := httpClient.Do(req)
 			if err != nil {
