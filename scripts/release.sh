@@ -208,13 +208,29 @@ if ! helm template test-release deploy/helm/kibaship-operator/ > /tmp/release-he
 fi
 log_success "Helm template rendering successful"
 
-# Validate Docker build (but don't actually build for release)
-log_info "Validating Docker build..."
-if ! make docker-build > /tmp/release-docker-build.log 2>&1; then
-    log_error "Docker build validation failed. Check /tmp/release-docker-build.log"
+# Validate Docker builds (operator, apiserver, cert-manager-webhook)
+log_info "Validating Docker build (operator)..."
+if ! make docker-build > /tmp/release-docker-build-operator.log 2>&1; then
+    log_error "Operator Docker build validation failed. Check /tmp/release-docker-build-operator.log"
     exit 1
 fi
-log_success "Docker build validation successful"
+log_success "Operator Docker build validation successful"
+
+log_info "Validating Docker build (apiserver)..."
+if ! make build-apiserver > /tmp/release-docker-build-apiserver.log 2>&1; then
+    log_error "API server Docker build validation failed. Check /tmp/release-docker-build-apiserver.log"
+    exit 1
+fi
+log_success "API server Docker build validation successful"
+
+log_info "Validating Docker build (cert-manager-webhook)..."
+if ! make docker-build-cert-manager-webhook > /tmp/release-docker-build-webhook.log 2>&1; then
+    log_error "Cert-manager webhook Docker build validation failed. Check /tmp/release-docker-build-webhook.log"
+    exit 1
+fi
+log_success "Cert-manager webhook Docker build validation successful"
+
+log_success "All Docker build validations successful"
 
 # Commit version changes
 log_info "Committing version changes..."
@@ -261,7 +277,10 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
     log_success "Release tag v$NEW_VERSION pushed successfully!"
     echo ""
     echo "✅ CI/CD pipeline will now:"
-    echo "   1. Build and push Docker image to ghcr.io/kibamail/kibaship-operator:v$NEW_VERSION"
+    echo "   1. Build and push Docker images:"
+    echo "      - ghcr.io/kibamail/kibaship-operator:v$NEW_VERSION"
+    echo "      - ghcr.io/kibamail/kibaship-operator-apiserver:v$NEW_VERSION"
+    echo "      - ghcr.io/kibamail/kibaship-operator-cert-manager-webhook:v$NEW_VERSION"
     echo "   2. Create GitHub release with dist/install.yaml"
     echo "   3. Run additional release validation"
     echo ""
@@ -276,7 +295,10 @@ fi
 echo ""
 echo "Next steps:"
 echo "1. Monitor CI/CD pipeline execution"
-echo "2. Verify Docker image is available: ghcr.io/kibamail/kibaship-operator:v$NEW_VERSION"
+echo "2. Verify Docker images are available:"
+echo "   - ghcr.io/kibamail/kibaship-operator:v$NEW_VERSION"
+echo "   - ghcr.io/kibamail/kibaship-operator-apiserver:v$NEW_VERSION"
+echo "   - ghcr.io/kibamail/kibaship-operator-cert-manager-webhook:v$NEW_VERSION"
 echo "3. Test installations:"
 echo "   kubectl: kubectl apply -f https://github.com/kibamail/kibaship-operator/releases/download/v$NEW_VERSION/install.yaml"
 echo "   helm: helm install kibaship-operator https://github.com/kibamail/kibaship-operator/releases/download/v$NEW_VERSION/kibaship-operator-$NEW_CHART_VERSION.tgz"

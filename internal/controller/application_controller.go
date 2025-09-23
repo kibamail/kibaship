@@ -44,6 +44,8 @@ const (
 	DefaultDomainType = "default"
 )
 
+const applicationPhaseReady = "Ready"
+
 // ApplicationReconciler reconciles a Application object
 type ApplicationReconciler struct {
 	client.Client
@@ -260,7 +262,7 @@ func (r *ApplicationReconciler) updateApplicationStatus(ctx context.Context, app
 
 	// Update the Application status to reflect the current state
 	app.Status.ObservedGeneration = app.Generation
-	app.Status.Phase = "Ready"
+	app.Status.Phase = applicationPhaseReady
 
 	// Set condition for application readiness
 	condition := metav1.Condition{

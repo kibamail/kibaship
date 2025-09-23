@@ -37,7 +37,7 @@ var _ = Describe("API Server Application Domains Auto-Loading", func() {
 			if err != nil {
 				return false
 			}
-			io.Copy(io.Discard, resp.Body)
+			_, _ = io.Copy(io.Discard, resp.Body)
 			_ = resp.Body.Close()
 			return resp.StatusCode == http.StatusOK
 		}, "60s", "1s").Should(BeTrue(), "API server did not become ready via /readyz")
@@ -55,7 +55,7 @@ var _ = Describe("API Server Application Domains Auto-Loading", func() {
 		httpClient := &http.Client{Timeout: 30 * time.Second}
 		respProj, err := httpClient.Do(reqProj)
 		Expect(err).NotTo(HaveOccurred(), "HTTP request to create project failed")
-		defer respProj.Body.Close()
+		defer func() { _ = respProj.Body.Close() }()
 		Expect(respProj.StatusCode).To(Equal(http.StatusCreated))
 		var projResp struct {
 			Slug string `json:"slug"`
@@ -81,7 +81,7 @@ var _ = Describe("API Server Application Domains Auto-Loading", func() {
 		reqApp.Header.Set("Authorization", "Bearer "+apiKey)
 		respApp, err := httpClient.Do(reqApp)
 		Expect(err).NotTo(HaveOccurred(), "HTTP request to create application failed")
-		defer respApp.Body.Close()
+		defer func() { _ = respApp.Body.Close() }()
 		Expect(respApp.StatusCode).To(Equal(http.StatusCreated))
 		var appResp struct {
 			Slug string `json:"slug"`
@@ -102,13 +102,17 @@ var _ = Describe("API Server Application Domains Auto-Loading", func() {
 
 		By("eventually fetching GET /applications/{slug} and seeing the default domain auto-loaded")
 		targetDomainSuffix := ".myapps.kibaship.com"
-		Eventually(func(g Gomega) {
+		Eventually(func() error {
 			req, _ := http.NewRequest("GET", fmt.Sprintf("http://127.0.0.1:18080/applications/%s", appResp.Slug), nil)
 			req.Header.Set("Authorization", "Bearer "+apiKey)
 			resp, err := httpClient.Do(req)
-			g.Expect(err).NotTo(HaveOccurred())
-			defer resp.Body.Close()
-			g.Expect(resp.StatusCode).To(Equal(http.StatusOK))
+			if err != nil {
+				return err
+			}
+			defer func() { _ = resp.Body.Close() }()
+			if resp.StatusCode != http.StatusOK {
+				return fmt.Errorf("unexpected status: %d", resp.StatusCode)
+			}
 			var getResp struct {
 				Slug    string `json:"slug"`
 				Domains []struct {
@@ -117,18 +121,24 @@ var _ = Describe("API Server Application Domains Auto-Loading", func() {
 					Default bool   `json:"default"`
 				} `json:"domains"`
 			}
-			_ = json.NewDecoder(resp.Body).Decode(&getResp)
-			g.Expect(getResp.Slug).To(Equal(appResp.Slug))
-			g.Expect(getResp.Domains).NotTo(BeEmpty())
-			foundDefault := false
+			if err := json.NewDecoder(resp.Body).Decode(&getResp); err != nil {
+				return err
+			}
+			if getResp.Slug != appResp.Slug {
+				return fmt.Errorf("slug mismatch: %s", getResp.Slug)
+			}
+			if len(getResp.Domains) == 0 {
+				return fmt.Errorf("no domains returned")
+			}
 			for _, d := range getResp.Domains {
 				if d.Default || strings.EqualFold(d.Type, "default") {
-					foundDefault = true
-					g.Expect(strings.HasSuffix(d.Domain, targetDomainSuffix)).To(BeTrue())
-					break
+					if !strings.HasSuffix(d.Domain, targetDomainSuffix) {
+						return fmt.Errorf("default domain %s does not end with %s", d.Domain, targetDomainSuffix)
+					}
+					return nil
 				}
 			}
-			g.Expect(foundDefault).To(BeTrue())
-		}, "4m", "5s")
+			return fmt.Errorf("default domain not found")
+		}, "4m", "5s").Should(Succeed())
 	})
 })

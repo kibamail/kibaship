@@ -46,6 +46,12 @@ type CertificateWatcherReconciler struct {
 	Notifier webhooks.Notifier
 }
 
+const (
+	reasonReadyStr   = "Ready"
+	reasonFailedStr  = "Failed"
+	reasonPendingStr = "Pending"
+)
+
 // RBAC: read Certificates; update ApplicationDomain status
 // +kubebuilder:rbac:groups=cert-manager.io,resources=certificates,verbs=get;list;watch
 // +kubebuilder:rbac:groups=platform.operator.kibaship.com,resources=applicationdomains,verbs=get;list;watch
@@ -88,15 +94,15 @@ func (r *CertificateWatcherReconciler) Reconcile(ctx context.Context, req ctrl.R
 	// Derive phase
 	var newPhase platformv1alpha1.ApplicationDomainPhase
 	switch readyStatus {
-	case "True":
+	case condTrue:
 		newPhase = platformv1alpha1.ApplicationDomainPhaseReady
-	case "False":
+	case condFalse:
 		newPhase = platformv1alpha1.ApplicationDomainPhaseFailed
 	default:
 		newPhase = platformv1alpha1.ApplicationDomainPhasePending
 	}
 
-	ad.Status.CertificateReady = (readyStatus == "True")
+	ad.Status.CertificateReady = (readyStatus == condTrue)
 	ad.Status.Phase = newPhase
 	ad.Status.Message = joinNonEmpty(reason, message)
 	now := metav1.Now()
@@ -107,13 +113,13 @@ func (r *CertificateWatcherReconciler) Reconcile(ctx context.Context, req ctrl.R
 	switch readyStatus {
 	case "True":
 		cond.Status = metav1.ConditionTrue
-		cond.Reason = "Ready"
+		cond.Reason = reasonReadyStr
 	case "False":
 		cond.Status = metav1.ConditionFalse
-		cond.Reason = "Failed"
+		cond.Reason = reasonFailedStr
 	default:
 		cond.Status = metav1.ConditionUnknown
-		cond.Reason = "Pending"
+		cond.Reason = reasonPendingStr
 	}
 	meta.SetStatusCondition(&ad.Status.Conditions, cond)
 

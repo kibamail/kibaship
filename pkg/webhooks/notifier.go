@@ -140,7 +140,10 @@ func (n *HTTPNotifier) NotifyApplicationStatusChange(ctx context.Context, evt Ap
 	return n.postSigned(ctx, evt)
 }
 
-func (n *HTTPNotifier) NotifyApplicationDomainStatusChange(ctx context.Context, evt ApplicationDomainStatusEvent) error {
+func (n *HTTPNotifier) NotifyApplicationDomainStatusChange(
+	ctx context.Context,
+	evt ApplicationDomainStatusEvent,
+) error {
 	// enrich with Certificate when available
 	ref := evt.ApplicationDomain.Status.CertificateRef
 	if n.reader != nil && ref != nil && ref.Name != "" && ref.Namespace != "" {

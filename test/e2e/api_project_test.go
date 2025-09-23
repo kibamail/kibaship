@@ -42,13 +42,13 @@ var _ = Describe("API Server Project Creation", func() {
 			if err != nil {
 				return false
 			}
-			io.Copy(io.Discard, resp.Body)
+			_, _ = io.Copy(io.Discard, resp.Body)
 			_ = resp.Body.Close()
 			return resp.StatusCode == http.StatusOK
 		}, "60s", "1s").Should(BeTrue(), "API server did not become ready via /readyz")
 
 		By("calling POST /projects to create a project")
-		workspaceUUID := "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+		workspaceUUID := workspaceUUIDConst
 		bodyMap := map[string]any{
 			"name":          "test-project-api-e2e",
 			"workspaceUuid": workspaceUUID,
@@ -60,7 +60,7 @@ var _ = Describe("API Server Project Creation", func() {
 		httpClient := &http.Client{Timeout: 30 * time.Second}
 		httpResp, err := httpClient.Do(httpReq)
 		Expect(err).NotTo(HaveOccurred(), "HTTP request to create project failed")
-		defer httpResp.Body.Close()
+		defer func() { _ = httpResp.Body.Close() }()
 		Expect(httpResp.StatusCode).To(Equal(http.StatusCreated))
 
 		var respObj struct {
@@ -150,12 +150,12 @@ var _ = Describe("API Server Project Creation", func() {
 			}
 			hasSubject := false
 			for _, s := range rb.Subjects {
-				if s.Kind == "ServiceAccount" && s.Name == serviceAccountName && s.Namespace == expectedNamespace {
+				if s.Kind == kindServiceAccount && s.Name == serviceAccountName && s.Namespace == expectedNamespace {
 					hasSubject = true
 					break
 				}
 			}
-			hasRoleRef := rb.RoleRef.Kind == "Role" && rb.RoleRef.Name == roleName
+			hasRoleRef := rb.RoleRef.Kind == kindRole && rb.RoleRef.Name == roleName
 			return hasSubject && hasRoleRef
 		}, "1m", "5s").Should(BeTrue(), "RoleBinding should connect SA to Role")
 
