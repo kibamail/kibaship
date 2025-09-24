@@ -5,12 +5,18 @@ kind: Kustomization
 namespace: tekton-pipelines
 
 # Tekton resources for KibaShip operator
+
 resources:
-  - tasks/platform.operator.kibaship.com_git_clone_tasks.yaml
+- tasks/platform.operator.kibaship.com_git_clone_tasks.yaml
+- tasks/platform.operator.kibaship.com_railpack_prepare_tasks.yaml
 
 # Labels to add to all Tekton resources
 labels:
 - pairs:
-    app.kubernetes.io/name: kibaship-operator
-    app.kubernetes.io/managed-by: kibaship-operator
     app.kubernetes.io/component: tekton-integration
+    app.kubernetes.io/managed-by: kibaship-operator
+    app.kubernetes.io/name: kibaship-operator
+images:
+- name: ghcr.io/kibamail/kibaship-railpack-cli
+  newName: kibaship.com/kibaship-railpack-cli
+  newTag: v0.0.1

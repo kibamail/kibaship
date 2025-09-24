@@ -1,7 +1,10 @@
 apiVersion: tekton.dev/v1
 kind: Task
 metadata:
-  name: railpack-prepare
+  name: tekton-task-railpack-prepare-kibaship-com
+  annotations:
+    tekton.dev/displayName: "Railpack Prepare"
+    platform.kibaship.com/created-by: "kibaship-operator"
   labels:
     app.kubernetes.io/part-of: kibaship-operator
 spec:
@@ -16,13 +19,13 @@ spec:
     - name: railpackVersion
       type: string
       description: Railpack CLI version (image tag)
-      default: "v0.7.2"
-    - name: env
-      type: array
-      description: Additional "KEY=VALUE" entries to pass via --env to railpack prepare
-      default: []
+      default: "0.1.2"
+    - name: envArgs
+      type: string
+      description: Additional args to pass to railpack prepare, e.g. "--env FOO=bar --env BAZ=qux"
+      default: ""
   workspaces:
-    - name: source
+    - name: output
       description: Shared workspace containing the cloned repository
   results:
     - name: plan
@@ -32,28 +35,24 @@ spec:
   steps:
     - name: prepare
       image: ghcr.io/kibamail/kibaship-railpack-cli:$(params.railpackVersion)
-      workingDir: $(workspaces.source.path)/$(params.contextPath)
+      workingDir: $(workspaces.output.path)/repo/$(params.contextPath)
       script: |
         #!/usr/bin/env sh
         set -eu
         # Ensure output directory exists at the workspace root
-        mkdir -p "$(workspaces.source.path)/railway"
-        PLAN="$(workspaces.source.path)/railway/plan.json"
-        INFO="$(workspaces.source.path)/railway/info.json"
+        mkdir -p "$(workspaces.output.path)/railway"
+        PLAN="$(workspaces.output.path)/railway/plan.json"
+        INFO="$(workspaces.output.path)/railway/info.json"
 
-        # Collect optional env flags passed to prepare
-        ARGS=""
-        for e in $(params.env); do
-          ARGS="$ARGS --env $e"
-        done
+        # Collect optional args to pass to prepare (string)
+        ENV_ARGS='$(params.envArgs)'
 
         # Generate plan and info at the required paths
         railpack prepare . \
           --plan-out "$PLAN" \
           --info-out "$INFO" \
-          $ARGS
+          $ENV_ARGS
 
         # Emit Tekton results with absolute file paths
         printf "%s" "$PLAN" > "$(results.plan.path)"
         printf "%s" "$INFO" > "$(results.info.path)"
-

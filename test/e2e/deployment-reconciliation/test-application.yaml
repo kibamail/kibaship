@@ -14,9 +14,9 @@ spec:
     name: test-project-deployment-e2e
   gitRepository:
     provider: github.com
-    repository: kibamail/kibamail
+    repository: railwayapp/railpack
     publicAccess: true
     branch: main
-    rootDirectory: "./"
+    rootDirectory: "examples/node-next"
     buildCommand: "npm install && npm run build"
     startCommand: "npm start"

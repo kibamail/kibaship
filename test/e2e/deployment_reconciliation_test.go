@@ -120,7 +120,7 @@ var _ = Describe("Deployment Reconciliation", func() {
 				if err != nil {
 					return false
 				}
-				return strings.TrimSpace(string(output)) == "06369723ec630bb2698fff92ae22f5c048b2a513"
+				return strings.TrimSpace(string(output)) == "960ef4fb6190de6aa8b394bf2f0d552ee67675c3"
 			}, "30s", "2s").Should(BeTrue(), "Deployment should have valid GitRepository commitSHA")
 
 			Eventually(func() bool {
@@ -163,6 +163,31 @@ var _ = Describe("Deployment Reconciliation", func() {
 				_, err := cmd.CombinedOutput()
 				return err
 			}, "1m", "5s").Should(Succeed(), "PipelineRun should be created for deployment")
+
+			By("Verifying the 'prepare' Tekton task ran and succeeded")
+			var prName string
+			Eventually(func() error {
+				cmd := exec.Command("kubectl", "get", "pipelinerun", "-n", deploymentNamespace, "-l", deploymentUUIDLabel, "-o", "jsonpath={.items[0].metadata.name}")
+				out, err := cmd.CombinedOutput()
+				if err != nil {
+					return err
+				}
+				prName = strings.TrimSpace(string(out))
+				if prName == "" {
+					return fmt.Errorf("no pipelinerun name yet")
+				}
+				return nil
+			}, "2m", "5s").Should(Succeed(), "Should fetch PipelineRun name")
+
+			Eventually(func() (string, error) {
+				cmd := exec.Command(
+					"kubectl", "get", "taskrun", "-n", deploymentNamespace,
+					"-l", fmt.Sprintf("tekton.dev/pipelineRun=%s,tekton.dev/pipelineTask=prepare", prName),
+					"-o", "jsonpath={.items[0].status.conditions[?(@.type=='Succeeded')].status}",
+				)
+				out, err := cmd.CombinedOutput()
+				return strings.TrimSpace(string(out)), err
+			}, "10m", "10s").Should(Equal("True"), "prepare task should succeed")
 
 			By("Verifying all pipeline resources have proper tracking labels")
 			Eventually(func() error {

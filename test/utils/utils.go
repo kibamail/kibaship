@@ -490,6 +490,61 @@ func InstallTektonPipelines() error {
 	return nil
 }
 
+// ApplyTektonResources applies the repo's Tekton custom tasks/kustomization
+func ApplyTektonResources() error {
+	// If a local override image is provided, use kustomize to rewrite the railpack CLI image
+	if img := os.Getenv("RAILPACK_CLI_IMG"); img != "" {
+		// Ensure kustomize is available
+		cmd := exec.Command("make", "kustomize")
+		if _, err := Run(cmd); err != nil {
+			return fmt.Errorf("failed to prepare kustomize: %w", err)
+		}
+		// Use kustomize edit set image to override ghcr.io/kibamail/kibaship-railpack-cli
+		editCmd := exec.Command("bash", "-lc", fmt.Sprintf("cd config/tekton-resources && ../../bin/kustomize edit set image ghcr.io/kibamail/kibaship-railpack-cli=%s", img))
+		if _, err := Run(editCmd); err != nil {
+			return fmt.Errorf("failed to set railpack cli image override to %q: %w", img, err)
+		}
+	}
+
+	var lastErr error
+	for i := 0; i < 10; i++ {
+		cmd := exec.Command("kubectl", "apply", "-k", "config/tekton-resources")
+		if _, err := Run(cmd); err == nil {
+			lastErr = nil
+			break
+		} else {
+			lastErr = err
+			time.Sleep(3 * time.Second)
+		}
+	}
+	if lastErr != nil {
+		return lastErr
+	}
+
+	// Wait until the railpack prepare task is visible in the cluster
+	deadline := time.Now().Add(60 * time.Second)
+	for {
+		cmd := exec.Command("kubectl", "-n", "tekton-pipelines", "get", "task", "tekton-task-railpack-prepare-kibaship-com")
+		if _, err := Run(cmd); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("timeout waiting for tekton-task-railpack-prepare-kibaship-com to be available")
+		}
+		time.Sleep(2 * time.Second)
+	}
+
+	// If local override image set, patch the Task in-cluster to use it (ensures override even if kustomize miss)
+	if img := os.Getenv("RAILPACK_CLI_IMG"); img != "" {
+		patch := fmt.Sprintf(`[{"op":"replace","path":"/spec/steps/0/image","value":"%s"}]`, img)
+		cmd := exec.Command("kubectl", "-n", "tekton-pipelines", "patch", "task", "tekton-task-railpack-prepare-kibaship-com", "--type=json", "-p", patch)
+		if _, err := Run(cmd); err != nil {
+			return fmt.Errorf("failed to patch railpack-prepare task image to %q: %w", img, err)
+		}
+	}
+	return nil
+}
+
 // UninstallTektonPipelines uninstalls the full Tekton Pipelines operator
 func UninstallTektonPipelines() {
 	url := "https://storage.googleapis.com/tekton-releases/pipeline/previous/v1.4.0/release.yaml"

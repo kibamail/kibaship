@@ -17,5 +17,5 @@ spec:
   applicationRef:
     name: application-myapp-deployment-e2e-kibaship-com
   gitRepository:
-    commitSHA: "06369723ec630bb2698fff92ae22f5c048b2a513"
+    commitSHA: "960ef4fb6190de6aa8b394bf2f0d552ee67675c3"
     branch: "main"
