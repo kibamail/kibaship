@@ -40,6 +40,7 @@ var (
 	projectImage            = "kibaship.com/kibaship-operator:v0.0.1"
 	projectImageAPIServer   = "kibaship.com/kibaship-operator-apiserver:v0.0.1"
 	projectImageCertWebhook = "kibaship.com/kibaship-operator-cert-manager-webhook:v0.0.1"
+	projectImageRailpackCLI = "kibaship.com/kibaship-railpack-cli:v0.0.1"
 )
 
 // getKubernetesClient creates a Kubernetes client using the current context
@@ -98,6 +99,19 @@ var _ = BeforeSuite(func() {
 	By("installing Tekton Pipelines")
 	Expect(utils.InstallTektonPipelines()).To(Succeed(), "Failed to install Tekton Pipelines")
 
+	By("building the railpack-cli image")
+	cmd = exec.Command("docker", "build", "-f", "build/railpack-cli/Dockerfile", "-t", projectImageRailpackCLI, "build/railpack-cli")
+	_, err = utils.Run(cmd)
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to build the railpack-cli image")
+
+	By("loading the railpack-cli image on Kind")
+	err = utils.LoadImageToKindClusterWithName(projectImageRailpackCLI)
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to load the railpack-cli image into Kind")
+
+	By("applying Tekton custom tasks (git-clone, railpack-prepare) with local railpack image override")
+	Expect(os.Setenv("RAILPACK_CLI_IMG", projectImageRailpackCLI)).To(Succeed(), "failed to set RAILPACK_CLI_IMG env")
+	Expect(utils.ApplyTektonResources()).To(Succeed(), "Failed to apply Tekton custom tasks")
+
 	By("installing Valkey Operator")
 	Expect(utils.InstallValkeyOperator()).To(Succeed(), "Failed to install Valkey Operator")
 
@@ -114,6 +128,9 @@ var _ = BeforeSuite(func() {
 
 	By("deploying kibaship-operator")
 	Expect(utils.DeployKibashipOperator()).To(Succeed(), "Failed to deploy kibaship-operator")
+
+	By("re-applying Tekton custom tasks with local railpack image override (post-operator deploy)")
+	Expect(utils.ApplyTektonResources()).To(Succeed(), "Failed to re-apply Tekton custom tasks after operator deploy")
 
 	By("building the API server image")
 	cmd = exec.Command("make", "build-apiserver", fmt.Sprintf("IMG_APISERVER=%s", projectImageAPIServer))
