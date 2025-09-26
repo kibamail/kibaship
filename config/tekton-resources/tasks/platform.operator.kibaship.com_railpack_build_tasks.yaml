@@ -35,20 +35,10 @@ spec:
   results:
     - name: buildOutput
       description: Absolute path to the generated OCI archive
-  sidecars:
-    - name: buildkitd
-      image: moby/buildkit:latest
-      args: ["--addr", "tcp://0.0.0.0:1234"]
-      securityContext:
-        privileged: true
-        seccompProfile:
-          type: Unconfined
-      ports:
-        - containerPort: 1234
   stepTemplate:
     env:
       - name: BUILDKIT_HOST
-        value: tcp://localhost:1234
+        value: tcp://buildkitd.buildkit.svc:1234
   steps:
     - name: build
       image: $(params.buildImage)
@@ -57,19 +47,19 @@ spec:
         #!/usr/bin/env sh
         set -eu
         PLAN_DIR="$(workspaces.output.path)/railpack"
-        PLAN="$PLAN_DIR/plan.json"
+        PLAN="$PLAN_DIR/railpack-plan.json"
         CONTEXT_DIR="$(workspaces.output.path)/repo/$(params.contextPath)"
         DEST="$(workspaces.output.path)/$(params.outputPath)"
         mkdir -p "$(dirname "$DEST")"
         if [ ! -f "$PLAN" ]; then
-          echo "plan.json not found at $PLAN" >&2
+          echo "railpack-plan.json not found at $PLAN" >&2
           exit 1
         fi
         if [ ! -d "$CONTEXT_DIR" ]; then
           echo "context directory not found at $CONTEXT_DIR" >&2
           exit 1
         fi
-        # Use BuildKit gateway with Railpack frontend; provide local context. The frontend looks for plan.json in --local dockerfile.
+        # Use BuildKit gateway with Railpack frontend; provide local context. The frontend looks for railpack-plan in --local dockerfile.
         buildctl build \
           --progress=plain \
           --local context="$CONTEXT_DIR" \
