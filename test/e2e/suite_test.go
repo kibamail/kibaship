@@ -41,6 +41,7 @@ var (
 	projectImageAPIServer   = "kibaship.com/kibaship-operator-apiserver:v0.0.1"
 	projectImageCertWebhook = "kibaship.com/kibaship-operator-cert-manager-webhook:v0.0.1"
 	projectImageRailpackCLI = "kibaship.com/kibaship-railpack-cli:v0.0.1"
+	projectImageRailpackBld = "kibaship.com/kibaship-railpack-build:v0.0.1"
 )
 
 // getKubernetesClient creates a Kubernetes client using the current context
@@ -108,8 +109,18 @@ var _ = BeforeSuite(func() {
 	err = utils.LoadImageToKindClusterWithName(projectImageRailpackCLI)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to load the railpack-cli image into Kind")
 
-	By("applying Tekton custom tasks (git-clone, railpack-prepare) with local railpack image override")
+	By("building the railpack-build (buildctl client) image")
+	cmd = exec.Command("docker", "build", "-f", "build/railpack-build/Dockerfile", "-t", projectImageRailpackBld, "build/railpack-build")
+	_, err = utils.Run(cmd)
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to build the railpack-build image")
+
+	By("loading the railpack-build image on Kind")
+	err = utils.LoadImageToKindClusterWithName(projectImageRailpackBld)
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to load the railpack-build image into Kind")
+
+	By("applying Tekton custom tasks (git-clone, railpack-prepare, railpack-build) with local image overrides")
 	Expect(os.Setenv("RAILPACK_CLI_IMG", projectImageRailpackCLI)).To(Succeed(), "failed to set RAILPACK_CLI_IMG env")
+	Expect(os.Setenv("RAILPACK_BUILD_IMG", projectImageRailpackBld)).To(Succeed(), "failed to set RAILPACK_BUILD_IMG env")
 	Expect(utils.ApplyTektonResources()).To(Succeed(), "Failed to apply Tekton custom tasks")
 
 	By("installing Valkey Operator")

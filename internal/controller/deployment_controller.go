@@ -50,6 +50,8 @@ const (
 	GitCloneTaskName = "tekton-task-git-clone-kibaship-com"
 	// RailpackPrepareTaskName is the name of the railpack prepare task in tekton-pipelines namespace
 	RailpackPrepareTaskName = "tekton-task-railpack-prepare-kibaship-com"
+	// RailpackBuildTaskName is the name of the railpack build task in tekton-pipelines namespace
+	RailpackBuildTaskName = "tekton-task-railpack-build-kibaship-com"
 )
 
 // DeploymentReconciler reconciles a Deployment object
@@ -470,6 +472,32 @@ func (r *DeploymentReconciler) createGitRepositoryPipeline(ctx context.Context, 
 							return gitConfig.RootDirectory
 						}()}},
 						{Name: "railpackVersion", Value: tektonv1.ParamValue{Type: tektonv1.ParamTypeString, StringVal: "0.1.2"}},
+					},
+					Workspaces: []tektonv1.WorkspacePipelineTaskBinding{
+						{Name: "output", Workspace: workspaceName},
+					},
+				},
+				{
+					Name:     "build",
+					RunAfter: []string{"prepare"},
+					TaskRef: &tektonv1.TaskRef{
+						ResolverRef: tektonv1.ResolverRef{
+							Resolver: "cluster",
+							Params: []tektonv1.Param{
+								{Name: "kind", Value: tektonv1.ParamValue{Type: tektonv1.ParamTypeString, StringVal: "task"}},
+								{Name: "name", Value: tektonv1.ParamValue{Type: tektonv1.ParamTypeString, StringVal: RailpackBuildTaskName}},
+								{Name: "namespace", Value: tektonv1.ParamValue{Type: tektonv1.ParamTypeString, StringVal: "tekton-pipelines"}},
+							},
+						},
+					},
+					Params: []tektonv1.Param{
+						{Name: "contextPath", Value: tektonv1.ParamValue{Type: tektonv1.ParamTypeString, StringVal: func() string {
+							if gitConfig.RootDirectory == "" {
+								return "."
+							}
+							return gitConfig.RootDirectory
+						}()}},
+						{Name: "railpackFrontendSource", Value: tektonv1.ParamValue{Type: tektonv1.ParamTypeString, StringVal: "ghcr.io/railwayapp/railpack-frontend:v0.7.2"}},
 					},
 					Workspaces: []tektonv1.WorkspacePipelineTaskBinding{
 						{Name: "output", Workspace: workspaceName},

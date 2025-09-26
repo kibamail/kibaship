@@ -492,17 +492,24 @@ func InstallTektonPipelines() error {
 
 // ApplyTektonResources applies the repo's Tekton custom tasks/kustomization
 func ApplyTektonResources() error {
-	// If a local override image is provided, use kustomize to rewrite the railpack CLI image
-	if img := os.Getenv("RAILPACK_CLI_IMG"); img != "" {
+	// If local override images are provided, use kustomize to rewrite images
+	if cli := os.Getenv("RAILPACK_CLI_IMG"); cli != "" || os.Getenv("RAILPACK_BUILD_IMG") != "" {
 		// Ensure kustomize is available
 		cmd := exec.Command("make", "kustomize")
 		if _, err := Run(cmd); err != nil {
 			return fmt.Errorf("failed to prepare kustomize: %w", err)
 		}
-		// Use kustomize edit set image to override ghcr.io/kibamail/kibaship-railpack-cli
-		editCmd := exec.Command("bash", "-lc", fmt.Sprintf("cd config/tekton-resources && ../../bin/kustomize edit set image ghcr.io/kibamail/kibaship-railpack-cli=%s", img))
-		if _, err := Run(editCmd); err != nil {
-			return fmt.Errorf("failed to set railpack cli image override to %q: %w", img, err)
+		if cli != "" {
+			editCmd := exec.Command("bash", "-lc", fmt.Sprintf("cd config/tekton-resources && ../../bin/kustomize edit set image ghcr.io/kibamail/kibaship-railpack-cli=%s", cli))
+			if _, err := Run(editCmd); err != nil {
+				return fmt.Errorf("failed to set railpack cli image override to %q: %w", cli, err)
+			}
+		}
+		if build := os.Getenv("RAILPACK_BUILD_IMG"); build != "" {
+			editCmd := exec.Command("bash", "-lc", fmt.Sprintf("cd config/tekton-resources && ../../bin/kustomize edit set image ghcr.io/kibamail/kibaship-railpack-build=%s", build))
+			if _, err := Run(editCmd); err != nil {
+				return fmt.Errorf("failed to set railpack build image override to %q: %w", build, err)
+			}
 		}
 	}
 
@@ -534,12 +541,31 @@ func ApplyTektonResources() error {
 		time.Sleep(2 * time.Second)
 	}
 
-	// If local override image set, patch the Task in-cluster to use it (ensures override even if kustomize miss)
-	if img := os.Getenv("RAILPACK_CLI_IMG"); img != "" {
-		patch := fmt.Sprintf(`[{"op":"replace","path":"/spec/steps/0/image","value":"%s"}]`, img)
+	// Also wait for the railpack build task to be visible if present
+	for {
+		cmd := exec.Command("kubectl", "-n", "tekton-pipelines", "get", "task", "tekton-task-railpack-build-kibaship-com")
+		if _, err := Run(cmd); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("timeout waiting for tekton-task-railpack-build-kibaship-com to be available")
+		}
+		time.Sleep(2 * time.Second)
+	}
+
+	// If local override images set, patch the Tasks in-cluster to use them (ensures override even if kustomize miss)
+	if cli := os.Getenv("RAILPACK_CLI_IMG"); cli != "" {
+		patch := fmt.Sprintf(`[{"op":"replace","path":"/spec/steps/0/image","value":"%s"}]`, cli)
 		cmd := exec.Command("kubectl", "-n", "tekton-pipelines", "patch", "task", "tekton-task-railpack-prepare-kibaship-com", "--type=json", "-p", patch)
 		if _, err := Run(cmd); err != nil {
-			return fmt.Errorf("failed to patch railpack-prepare task image to %q: %w", img, err)
+			return fmt.Errorf("failed to patch railpack-prepare task image to %q: %w", cli, err)
+		}
+	}
+	if build := os.Getenv("RAILPACK_BUILD_IMG"); build != "" {
+		patch := fmt.Sprintf(`[{"op":"replace","path":"/spec/steps/0/image","value":"%s"}]`, build)
+		cmd := exec.Command("kubectl", "-n", "tekton-pipelines", "patch", "task", "tekton-task-railpack-build-kibaship-com", "--type=json", "-p", patch)
+		if _, err := Run(cmd); err != nil {
+			return fmt.Errorf("failed to patch railpack-build task image to %q: %w", build, err)
 		}
 	}
 	return nil
