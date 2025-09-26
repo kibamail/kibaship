@@ -1040,3 +1040,20 @@ func ConfigureOperatorWebhookEnv(targetURL string) error {
 	}
 	return nil
 }
+
+// InstallBuildkitSharedDaemon applies the shared BuildKit Deployment/Service and waits for readiness.
+func InstallBuildkitSharedDaemon() error {
+	cmd := exec.Command("kubectl", "apply", "-k", "config/buildkit")
+	if _, err := Run(cmd); err != nil {
+		return err
+	}
+	wait := exec.Command("kubectl", "-n", "buildkit", "rollout", "status", "deploy/buildkitd", "--timeout=5m")
+	if err := WaitWithPodLogging(wait, "buildkit", 5*time.Minute); err != nil {
+		_, _ = fmt.Fprintf(GinkgoWriter, "\n❌ Timeout or error waiting for buildkitd rollout. Deployment describe:\n")
+		desc := exec.Command("kubectl", "-n", "buildkit", "describe", "deployment", "buildkitd")
+		_, _ = Run(desc)
+		return err
+	}
+	_, _ = fmt.Fprintf(GinkgoWriter, "✅ buildkitd is ready!\n")
+	return nil
+}

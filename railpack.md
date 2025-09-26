@@ -180,12 +180,12 @@ This document proposes a production-grade design to build container images from 
 
 - Image: custom builder image with railpack CLI (or official if provided)
 - Command:
-  - `railpack prepare $CONTEXT --plan-out plan.json --info-out info.json` plus `--env` for each secret name (no values)
+  - `railpack prepare $CONTEXT --plan-out railpack-plan.json --info-out railpack-info.json` plus `--env` for each secret name (no values)
 - Inputs:
   - context: $(workspaces.output.path)/$(params.contextPath)
   - buildSecrets names via params; pass `--env NAME=$NAME` (names only) so plan includes required secret IDs
 - Outputs:
-  - plan.json, info.json in workspace
+  - railpack-plan.json, railpack-info.json in workspace
 - Version pinning:
   - Use $(params.railpackVersion) to select CLI version (image tag)
 
@@ -220,10 +220,10 @@ spec:
         ARGS=""
         for s in $(params.buildSecrets); do ARGS="$ARGS --env $s=$s"; done
         railpack prepare . \
-          --plan-out plan.json \
-          --info-out info.json $ARGS
-        printf "%s" "$(pwd)/plan.json" > $(results.planPath.path)
-        printf "%s" "$(pwd)/info.json" > $(results.infoPath.path)
+          --plan-out railpack-plan.json \
+          --info-out railpack-info.json $ARGS
+        printf "%s" "$(pwd)/railpack-plan.json" > $(results.planPath.path)
+        printf "%s" "$(pwd)/railpack-info.json" > $(results.infoPath.path)
 ```
 
 ### Step 2: railpack-build (BuildKit)

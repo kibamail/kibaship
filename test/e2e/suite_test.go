@@ -100,6 +100,9 @@ var _ = BeforeSuite(func() {
 	By("installing Tekton Pipelines")
 	Expect(utils.InstallTektonPipelines()).To(Succeed(), "Failed to install Tekton Pipelines")
 
+	By("installing shared BuildKit daemon for cluster-wide builds")
+	Expect(utils.InstallBuildkitSharedDaemon()).To(Succeed(), "Failed to install BuildKit daemon")
+
 	By("building the railpack-cli image")
 	cmd = exec.Command("docker", "build", "-f", "build/railpack-cli/Dockerfile", "-t", projectImageRailpackCLI, "build/railpack-cli")
 	_, err = utils.Run(cmd)

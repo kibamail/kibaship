@@ -287,6 +287,8 @@ build-installer: manifests generate kustomize ## Generate a consolidated YAML wi
 	echo "---" >> dist/install.yaml
 	$(KUSTOMIZE) build config/tekton-resources >> dist/install.yaml
 	echo "---" >> dist/install.yaml
+	$(KUSTOMIZE) build config/buildkit >> dist/install.yaml
+	echo "---" >> dist/install.yaml
 	$(KUSTOMIZE) build config/certificates >> dist/install.yaml
 	echo "---" >> dist/install.yaml
 	$(KUSTOMIZE) build config/ingress-gateway >> dist/install.yaml
