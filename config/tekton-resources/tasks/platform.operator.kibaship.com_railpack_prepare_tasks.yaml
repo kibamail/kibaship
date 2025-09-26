@@ -10,7 +10,7 @@ metadata:
 spec:
   description: |
     Generate Railpack build plan and info without building the image. The outputs
-    are written into the shared workspace at /railway/plan.json and /railway/info.json.
+    are written into the shared workspace at /railpack/plan.json and /railpack/info.json.
   params:
     - name: contextPath
       type: string
@@ -40,9 +40,9 @@ spec:
         #!/usr/bin/env sh
         set -eu
         # Ensure output directory exists at the workspace root
-        mkdir -p "$(workspaces.output.path)/railway"
-        PLAN="$(workspaces.output.path)/railway/plan.json"
-        INFO="$(workspaces.output.path)/railway/info.json"
+        mkdir -p "$(workspaces.output.path)/railpack"
+        PLAN="$(workspaces.output.path)/railpack/plan.json"
+        INFO="$(workspaces.output.path)/railpack/info.json"
 
         # Collect optional args to pass to prepare (string)
         ENV_ARGS='$(params.envArgs)'

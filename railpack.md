@@ -12,7 +12,7 @@ This document proposes a production-grade design to build container images from 
 ### Key references (from Railpack docs)
 
 - Prefer custom BuildKit frontend image: ghcr.io/railwayapp/railpack-frontend (version should match plan)
-- Use `railpack prepare` to generate: build plan (railpack-plan.json) and build info (railpack-info.json)
+- Use `railpack prepare` to generate: build plan (plan.json) and build info (info.json)
 - Pass secrets to prepare (names only) via `--env`, and mount actual values to build via BuildKit `--secret`
 - Provide `secrets-hash` build arg to force layer invalidation when secrets change
 - Provide `cache-key` build arg to isolate caches in multi-tenant environments
@@ -63,7 +63,7 @@ This document proposes a production-grade design to build container images from 
   steps:
     - name: prepare
       image: ghcr.io/kibamail/kibaship-railpack-cli:v0.7.2
-      workingDir: $(workspaces.output.path)/$(params.contextPath)
+      workingDir: $(workspaces.output.path)/repo/$(params.contextPath)
       command: ["railpack"]
       args:
         [
@@ -72,7 +72,7 @@ This document proposes a production-grade design to build container images from 
           "$(results.planPath.path)",
           "--info-out",
           "$(results.infoPath.path)",
-          "$(workspaces.output.path)/$(params.contextPath)",
+          "$(workspaces.output.path)/repo/$(params.contextPath)",
         ]
   ```
 
@@ -80,6 +80,44 @@ This document proposes a production-grade design to build container images from 
   - Ensures TLS verification works for any HTTPS calls during prepare (e.g., metadata lookups)
 
 ---
+
+## Implementation updates (2025-09-24)
+
+- Tekton Railpack Prepare Task implemented and applied
+
+  - File: config/tekton-resources/tasks/platform.operator.kibaship.com_railpack_prepare_tasks.yaml
+  - Params:
+    - contextPath (string, default ".") — set from Application.spec.gitRepository.rootDirectory
+    - railpackVersion (string, default "0.1.2") — selects the railpack-cli image tag
+    - envArgs (string, default "") — optional extra args passed to `railpack prepare` (e.g., `--env FOO=$FOO`)
+  - Workdir: `$(workspaces.output.path)/repo/$(params.contextPath)` (clone task writes into `repo/`)
+  - Outputs: plan and info written to workspace root under `/railpack/plan.json` and `/railpack/info.json`; Tekton results expose absolute paths
+
+- Operator wiring
+
+  - The operator passes Application.spec.gitRepository.rootDirectory to the prepare task as `contextPath`.
+  - RootDirectory is interpreted relative to the repository root. The clone step writes to `workspace/repo`, so the task uses `repo/<RootDirectory>` as working directory.
+  - The GitRepository.Path field is currently unused and slated for removal.
+
+- railpack-cli image adjustments
+
+  - Switched base to Debian bookworm-slim to avoid glibc/musl issues seen with Alpine in CI/e2e.
+  - Includes CA certificates and runs as a non-root user.
+  - The image bundles the Railpack binary (currently v0.7.2 musl build). The Tekton `railpackVersion` parameter selects the container image tag, not the internal binary version.
+
+- E2E test updates and verification
+
+  - Switched test application to the following repository and commit:
+    - Repository: https://github.com/railwayapp/railpack (public)
+    - Commit SHA: 960ef4fb6190de6aa8b394bf2f0d552ee67675c3
+    - RootDirectory: `examples/node-next`
+  - Ensured prepare runs inside the cloned repo by using workingDir `$(workspaces.output.path)/repo/$(params.contextPath)`.
+  - Implemented local image override for tests: build railpack-cli, load into kind, kustomize edit image, and patch the Tekton Task image post-apply.
+  - Full e2e suite passes (10/10): project/application/deployment CRUD, domains, Tekton pipeline provisioning, and prepare task success.
+
+- Known notes/quirks
+  - `railpackVersion` chooses the railpack-cli image tag; the bundled Railpack binary version is pinned in the Dockerfile and may differ in naming.
+  - RootDirectory is the only field used to select the working directory. Path is unused and will be removed.
 
 ## Architecture overview
 
@@ -130,8 +168,8 @@ This document proposes a production-grade design to build container images from 
 
 - image: fully qualified image reference pushed
 - digest: OCI digest
-- planPath: path to railpack-plan.json
-- infoPath: path to railpack-info.json
+- planPath: path to plan.json
+- infoPath: path to info.json
 - sbomRef: reference/URL to SBOM if published
 
 ---
@@ -142,12 +180,12 @@ This document proposes a production-grade design to build container images from 
 
 - Image: custom builder image with railpack CLI (or official if provided)
 - Command:
-  - `railpack prepare $CONTEXT --plan-out railpack-plan.json --info-out railpack-info.json` plus `--env` for each secret name (no values)
+  - `railpack prepare $CONTEXT --plan-out plan.json --info-out info.json` plus `--env` for each secret name (no values)
 - Inputs:
   - context: $(workspaces.output.path)/$(params.contextPath)
   - buildSecrets names via params; pass `--env NAME=$NAME` (names only) so plan includes required secret IDs
 - Outputs:
-  - railpack-plan.json, railpack-info.json in workspace
+  - plan.json, info.json in workspace
 - Version pinning:
   - Use $(params.railpackVersion) to select CLI version (image tag)
 
@@ -182,10 +220,10 @@ spec:
         ARGS=""
         for s in $(params.buildSecrets); do ARGS="$ARGS --env $s=$s"; done
         railpack prepare . \
-          --plan-out railpack-plan.json \
-          --info-out railpack-info.json $ARGS
-        printf "%s" "$(pwd)/railpack-plan.json" > $(results.planPath.path)
-        printf "%s" "$(pwd)/railpack-info.json" > $(results.infoPath.path)
+          --plan-out plan.json \
+          --info-out info.json $ARGS
+        printf "%s" "$(pwd)/plan.json" > $(results.planPath.path)
+        printf "%s" "$(pwd)/info.json" > $(results.infoPath.path)
 ```
 
 ### Step 2: railpack-build (BuildKit)
@@ -271,7 +309,7 @@ spec:
         #!/bin/sh
         set -eu
         IMG="$(params.imageRegistry)/$(params.imageRepository):$(params.imageTag)"
-        PLAN="$(workspaces.output.path)/railpack-plan.json"
+        PLAN="$(workspaces.output.path)/plan.json"
         # Compute secrets-hash (sorted NAME=VALUE lines)
         SH=""
         if [ -d /secrets ] && ls /secrets/* >/dev/null 2>&1; then
@@ -319,7 +357,7 @@ spec:
   - Write immutable digest pin to Deployment status for rollout
 - OCI annotations & labels:
   - org.opencontainers.image.source, revision, created, authors
-  - Railpack metadata from railpack-info.json
+  - Railpack metadata from info.json
 
 ---
 
@@ -349,7 +387,7 @@ fi
 
 - Tekton results: image, digest, build duration, planPath, infoPath
 - Emit deployment webhook on build completion including:
-  - status (Succeeded/Failed), image ref, digest, build logs URL, railpack-info
+  - status (Succeeded/Failed), image ref, digest, build logs URL, info
 - Metrics: record counts, durations, cache hit rate; expose via Prometheus
 - Logs: standardize step logs; attach log links to webhooks
 

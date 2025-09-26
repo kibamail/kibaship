@@ -189,6 +189,26 @@ var _ = Describe("Deployment Reconciliation", func() {
 				return strings.TrimSpace(string(out)), err
 			}, "10m", "10s").Should(Equal("True"), "prepare task should succeed")
 
+			By("Verifying the 'build' Tekton task ran and succeeded")
+			Eventually(func() (string, error) {
+				cmd := exec.Command(
+					"kubectl", "get", "taskrun", "-n", deploymentNamespace,
+					"-l", fmt.Sprintf("tekton.dev/pipelineRun=%s,tekton.dev/pipelineTask=build", prName),
+					"-o", "jsonpath={.items[0].status.conditions[?(@.type=='Succeeded')].status}",
+				)
+				out, err := cmd.CombinedOutput()
+				return strings.TrimSpace(string(out)), err
+			}, "10m", "10s").Should(Equal("True"), "build task should succeed")
+
+			By("Asserting the build step reported the output path via TaskRun result")
+			Eventually(func() (string, error) {
+				cmd := exec.Command("kubectl", "get", "taskrun", "-n", deploymentNamespace,
+					"-l", fmt.Sprintf("tekton.dev/pipelineRun=%s,tekton.dev/pipelineTask=build", prName),
+					"-o", "jsonpath={.items[0].status.results[?(@.name=='buildOutput')].value}")
+				out, err := cmd.CombinedOutput()
+				return strings.TrimSpace(string(out)), err
+			}, "2m", "5s").Should(Equal("/workspace/output/railpack/build/image.oci"), "buildOutput result should point to expected path")
+
 			By("Verifying all pipeline resources have proper tracking labels")
 			Eventually(func() error {
 				expectedLabels := map[string]string{

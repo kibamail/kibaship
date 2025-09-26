@@ -9,6 +9,7 @@ namespace: tekton-pipelines
 resources:
 - tasks/platform.operator.kibaship.com_git_clone_tasks.yaml
 - tasks/platform.operator.kibaship.com_railpack_prepare_tasks.yaml
+- tasks/platform.operator.kibaship.com_railpack_build_tasks.yaml
 
 # Labels to add to all Tekton resources
 labels:
@@ -17,6 +18,9 @@ labels:
     app.kubernetes.io/managed-by: kibaship-operator
     app.kubernetes.io/name: kibaship-operator
 images:
+- name: ghcr.io/kibamail/kibaship-railpack-build
+  newName: kibaship.com/kibaship-railpack-build
+  newTag: v0.0.1
 - name: ghcr.io/kibamail/kibaship-railpack-cli
   newName: kibaship.com/kibaship-railpack-cli
   newTag: v0.0.1
