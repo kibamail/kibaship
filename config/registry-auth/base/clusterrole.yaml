@@ -1,0 +1,10 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: registry-auth-secret-reader
+rules:
+  # Allow reading Secrets from any namespace
+  # This is required to validate credentials stored in {namespace}-registry-auth Secrets
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get"]

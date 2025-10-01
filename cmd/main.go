@@ -132,6 +132,21 @@ func main() {
 		setupLog.Error(err, "bootstrap provisioning failed (continuing)")
 	}
 
+	// Bootstrap: ensure registry credentials are provisioned
+	if err := bootstrap.EnsureRegistryCredentials(context.Background(), uncachedClient); err != nil {
+		setupLog.Error(err, "bootstrap registry credentials failed (continuing)")
+	}
+
+	// Bootstrap: ensure registry JWKS secret is provisioned
+	if err := bootstrap.EnsureRegistryJWKS(context.Background(), uncachedClient); err != nil {
+		setupLog.Error(err, "bootstrap registry JWKS failed (continuing)")
+	}
+
+	// Bootstrap: copy registry CA certificate to buildkit namespace
+	if err := bootstrap.EnsureRegistryCACertificateInBuildkit(context.Background(), uncachedClient); err != nil {
+		setupLog.Error(err, "bootstrap registry CA certificate in buildkit failed (continuing)")
+	}
+
 	// Webhook configuration: require target URL and ensure signing Secret exists
 	webhookURL, err := config.RequireWebhookTargetURL()
 	if err != nil {

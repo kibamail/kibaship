@@ -2524,3 +2524,417 @@ spec:
       - kind: Secret
         name: tenant-wildcard-certificate
         namespace: certificates
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: registry-auth
+  namespace: registry
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: registry-auth-secret-reader
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: registry-auth-secret-reader-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: registry-auth-secret-reader
+subjects:
+- kind: ServiceAccount
+  name: registry-auth
+  namespace: registry
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: registry-auth
+  name: registry-auth
+  namespace: registry
+spec:
+  ports:
+  - name: http
+    port: 80
+    protocol: TCP
+    targetPort: 8080
+  selector:
+    app: registry-auth
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: registry-auth
+  name: registry-auth
+  namespace: registry
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: registry-auth
+  template:
+    metadata:
+      labels:
+        app: registry-auth
+    spec:
+      containers:
+      - image: registry-auth:latest
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 20
+          timeoutSeconds: 5
+        name: registry-auth
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 3
+        resources:
+          limits:
+            cpu: 500m
+            memory: 256Mi
+          requests:
+            cpu: 50m
+            memory: 64Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 65532
+        volumeMounts:
+        - mountPath: /etc/registry-auth-keys
+          name: auth-keys
+          readOnly: true
+      serviceAccountName: registry-auth
+      volumes:
+      - name: auth-keys
+        secret:
+          items:
+          - key: tls.key
+            path: tls.key
+          - key: tls.crt
+            path: tls.crt
+          secretName: registry-auth-keys
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: registry-auth-keys
+  namespace: registry
+spec:
+  commonName: registry-auth-jwt-signer
+  duration: 87600h
+  issuerRef:
+    kind: Issuer
+    name: registry-selfsigned-issuer
+  privateKey:
+    algorithm: RSA
+    size: 4096
+  renewBefore: 720h
+  secretName: registry-auth-keys
+  subject:
+    organizations:
+    - kibaship
+  usages:
+  - digital signature
+  - key encipherment
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: registry-selfsigned-issuer
+  namespace: registry
+spec:
+  selfSigned: {}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: registry
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: registry
+  namespace: registry
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: registry-secret-reader
+  namespace: registry
+rules:
+- apiGroups:
+  - ""
+  resourceNames:
+  - registry-registry-auth
+  resources:
+  - secrets
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: registry-secret-reader-binding
+  namespace: registry
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: registry-secret-reader
+subjects:
+- kind: ServiceAccount
+  name: registry
+  namespace: registry
+---
+apiVersion: v1
+data:
+  config.yml: |-
+    version: 0.1
+    log:
+      fields:
+        service: registry
+      level: info
+    storage:
+      cache:
+        blobdescriptor: inmemory
+      filesystem:
+        rootdirectory: /var/lib/registry
+      delete:
+        enabled: true
+    http:
+      addr: :5000
+      headers:
+        X-Content-Type-Options: [nosniff]
+      tls:
+        certificate: /etc/registry-tls/tls.crt
+        key: /etc/registry-tls/tls.key
+    auth:
+      token:
+        realm: http://registry-auth.registry.svc.cluster.local/auth
+        service: docker-registry
+        issuer: registry-token-issuer
+        rootcertbundle: /etc/registry-auth-keys/tls.crt
+    health:
+      storagedriver:
+        enabled: true
+        interval: 10s
+        threshold: 3
+kind: ConfigMap
+metadata:
+  labels:
+    app: registry
+  name: registry-config
+  namespace: registry
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: registry
+  name: registry
+  namespace: registry
+spec:
+  ports:
+  - name: https
+    port: 443
+    protocol: TCP
+    targetPort: 5000
+  selector:
+    app: registry
+  type: ClusterIP
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  labels:
+    app: registry
+  name: registry-storage
+  namespace: registry
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Gi
+  storageClassName: storage-replica-rwm-1
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: registry
+  name: registry
+  namespace: registry
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: registry
+  template:
+    metadata:
+      labels:
+        app: registry
+    spec:
+      containers:
+      - env:
+        - name: REGISTRY_HTTP_SECRET
+          valueFrom:
+            secretKeyRef:
+              key: http-secret
+              name: registry-registry-auth
+        image: registry:3.0.0
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /
+            port: 5000
+            scheme: HTTPS
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 5
+        name: registry
+        ports:
+        - containerPort: 5000
+          name: https
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /
+            port: 5000
+            scheme: HTTPS
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 3
+        resources:
+          limits:
+            cpu: 1000m
+            memory: 512Mi
+          requests:
+            cpu: 100m
+            memory: 128Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 65532
+        volumeMounts:
+        - mountPath: /etc/docker/registry
+          name: registry-config
+          readOnly: true
+        - mountPath: /var/lib/registry
+          name: registry-storage
+        - mountPath: /etc/registry-tls
+          name: registry-tls
+          readOnly: true
+        - mountPath: /etc/registry-auth-keys
+          name: registry-auth-keys
+          readOnly: true
+      initContainers:
+      - command:
+        - sh
+        - -c
+        - |
+          echo "Waiting for registry-registry-auth secret to be created by operator..."
+          until kubectl get secret registry-registry-auth -n registry 2>/dev/null; do
+            echo "Secret not found, waiting 5 seconds..."
+            sleep 5
+          done
+          echo "Secret found! Registry can now start."
+        image: registry.k8s.io/kubectl:v1.31.0
+        name: wait-for-credentials
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 65532
+      serviceAccountName: registry
+      volumes:
+      - configMap:
+          name: registry-config
+        name: registry-config
+      - name: registry-storage
+        persistentVolumeClaim:
+          claimName: registry-storage
+      - name: registry-tls
+        secret:
+          secretName: registry-tls
+      - name: registry-auth-keys
+        secret:
+          items:
+          - key: tls.crt
+            path: tls.crt
+          secretName: registry-auth-keys
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: registry-tls
+  namespace: registry
+spec:
+  commonName: registry.registry.svc.cluster.local
+  dnsNames:
+  - registry.registry.svc.cluster.local
+  - registry.registry.svc
+  - registry.registry
+  - registry
+  duration: 87600h
+  issuerRef:
+    kind: Issuer
+    name: registry-selfsigned-issuer
+  privateKey:
+    algorithm: RSA
+    size: 4096
+  renewBefore: 720h
+  secretName: registry-tls
+  subject:
+    organizations:
+    - kibaship
+  usages:
+  - digital signature
+  - key encipherment
+  - server auth
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: registry-selfsigned-issuer
+  namespace: registry
+spec:
+  selfSigned: {}

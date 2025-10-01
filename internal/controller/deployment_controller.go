@@ -399,6 +399,16 @@ func (r *DeploymentReconciler) createGitRepositoryPipeline(ctx context.Context, 
 					Name:        workspaceName,
 					Description: "Workspace where the cloned source code will be stored",
 				},
+				{
+					Name:        "registry-docker-config",
+					Description: "Docker config for registry authentication",
+					Optional:    true,
+				},
+				{
+					Name:        "registry-ca-cert",
+					Description: "Registry CA certificate for TLS trust",
+					Optional:    true,
+				},
 			},
 			Tasks: []tektonv1.PipelineTask{
 				{
@@ -498,9 +508,12 @@ func (r *DeploymentReconciler) createGitRepositoryPipeline(ctx context.Context, 
 							return gitConfig.RootDirectory
 						}()}},
 						{Name: "railpackFrontendSource", Value: tektonv1.ParamValue{Type: tektonv1.ParamTypeString, StringVal: "ghcr.io/railwayapp/railpack-frontend:v0.7.2"}},
+						{Name: "imageTag", Value: tektonv1.ParamValue{Type: tektonv1.ParamTypeString, StringVal: fmt.Sprintf("registry.registry.svc.cluster.local/%s/%s:%s", deployment.Namespace, deployment.Labels["platform.kibaship.com/application-uuid"], deployment.Labels["platform.kibaship.com/uuid"])}},
 					},
 					Workspaces: []tektonv1.WorkspacePipelineTaskBinding{
 						{Name: "output", Workspace: workspaceName},
+						{Name: "docker-config", Workspace: "registry-docker-config"},
+						{Name: "registry-ca", Workspace: "registry-ca-cert"},
 					},
 				},
 			},
@@ -637,6 +650,18 @@ func (r *DeploymentReconciler) createPipelineRun(ctx context.Context, deployment
 								},
 							},
 						},
+					},
+				},
+				{
+					Name: "registry-docker-config",
+					Secret: &corev1.SecretVolumeSource{
+						SecretName: "registry-docker-config",
+					},
+				},
+				{
+					Name: "registry-ca-cert",
+					Secret: &corev1.SecretVolumeSource{
+						SecretName: "registry-ca-cert",
 					},
 				},
 			},

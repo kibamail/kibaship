@@ -1,44 +1,3 @@
-# # from https://github.com/moby/buildkit/tree/a038b5d98379646995275830a4f778bc707b2356/examples/kubernetes
-# apiVersion: apps/v1
-# kind: Deployment
-# metadata:
-#   name: buildkitd
-#   namespace: buildkit
-#   labels:
-#     app: buildkitd
-# spec:
-#   replicas: 3
-#   selector:
-#     matchLabels:
-#       app: buildkitd
-#   template:
-#     metadata:
-#       labels:
-#         app: buildkitd
-#       annotations:
-#         container.apparmor.security.beta.kubernetes.io/buildkitd: unconfined
-#         container.seccomp.security.alpha.kubernetes.io/buildkitd: unconfined
-#     spec:
-#       containers:
-#         - name: buildkitd
-#           image: moby/buildkit:v0.24.0-rootless
-#           args:
-#             - --addr
-#             - unix:///run/user/1000/buildkit/buildkitd.sock
-#             - --addr
-#             - tcp://0.0.0.0:1234
-#             - --oci-worker-no-process-sandbox
-#           securityContext:
-#             # To change UID/GID, you need to rebuild the image
-#             runAsUser: 1000
-#             runAsGroup: 1000
-#           ports:
-#             - containerPort: 1234
-#           volumeMounts:
-#             - name: certs
-#               readOnly: true
-#               mountPath: /certs
-
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -90,3 +49,20 @@ spec:
             runAsGroup: 1000
           ports:
             - containerPort: 1234
+          volumeMounts:
+            - name: buildkitd-config
+              mountPath: /home/user/.config/buildkit/buildkitd.toml
+              subPath: buildkitd.toml
+              readOnly: true
+            - name: registry-ca-cert
+              readOnly: true
+              mountPath: /usr/local/share/ca-certificates/registry-ca.crt
+              subPath: ca.crt
+      volumes:
+        - name: buildkitd-config
+          configMap:
+            name: buildkitd-config
+        - name: registry-ca-cert
+          secret:
+            secretName: registry-ca-cert
+            optional: true

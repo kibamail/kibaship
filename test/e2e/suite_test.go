@@ -37,11 +37,12 @@ const (
 )
 
 var (
-	projectImage            = "kibaship.com/kibaship-operator:v0.0.1"
-	projectImageAPIServer   = "kibaship.com/kibaship-operator-apiserver:v0.0.1"
-	projectImageCertWebhook = "kibaship.com/kibaship-operator-cert-manager-webhook:v0.0.1"
-	projectImageRailpackCLI = "kibaship.com/kibaship-railpack-cli:v0.0.1"
-	projectImageRailpackBld = "kibaship.com/kibaship-railpack-build:v0.0.1"
+	projectImage             = "kibaship.com/kibaship-operator:v0.0.1"
+	projectImageAPIServer    = "kibaship.com/kibaship-operator-apiserver:v0.0.1"
+	projectImageCertWebhook  = "kibaship.com/kibaship-operator-cert-manager-webhook:v0.0.1"
+	projectImageRailpackCLI  = "kibaship.com/kibaship-railpack-cli:v0.0.1"
+	projectImageRailpackBld  = "kibaship.com/kibaship-railpack-build:v0.0.1"
+	projectImageRegistryAuth = "kibaship.com/kibaship-operator-registry-auth:v0.0.1"
 )
 
 // getKubernetesClient creates a Kubernetes client using the current context
@@ -132,6 +133,15 @@ var _ = BeforeSuite(func() {
 	By("creating storage-replica-1 storage class for test environment")
 	Expect(utils.CreateStorageReplicaStorageClass()).To(Succeed(), "Failed to create storage-replica-1 storage class")
 
+	By("building the registry-auth image")
+	cmd = exec.Command("make", "docker-build-registry-auth", fmt.Sprintf("IMG_REGISTRY_AUTH=%s", projectImageRegistryAuth))
+	_, err = utils.Run(cmd)
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to build the registry-auth image")
+
+	By("loading the registry-auth image on Kind")
+	err = utils.LoadImageToKindClusterWithName(projectImageRegistryAuth)
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to load the registry-auth image into Kind")
+
 	By("deploying test webhook receiver in-cluster")
 	Expect(utils.DeployWebhookReceiver()).To(Succeed(), "Failed to deploy test webhook receiver")
 
@@ -140,8 +150,32 @@ var _ = BeforeSuite(func() {
 	err = os.Setenv("WEBHOOK_TARGET_URL", target)
 	Expect(err).NotTo(HaveOccurred(), "failed to set WEBHOOK_TARGET_URL")
 
-	By("deploying kibaship-operator")
-	Expect(utils.DeployKibashipOperator()).To(Succeed(), "Failed to deploy kibaship-operator")
+	By("creating registry namespace before operator deployment")
+	Expect(utils.CreateRegistryNamespace()).To(Succeed(), "Failed to create registry namespace")
+
+	By("provisioning kibaship-operator")
+	Expect(utils.ProvisionKibashipOperator()).To(Succeed(), "Failed to provision kibaship-operator")
+
+	By("provisioning registry-auth Certificate for JWT signing keys")
+	Expect(utils.ProvisionRegistryAuthCertificate()).To(Succeed(), "Failed to provision registry-auth Certificate")
+
+	By("provisioning Docker Registry v3.0.0")
+	Expect(utils.ProvisionRegistry()).To(Succeed(), "Failed to provision Docker Registry")
+
+	By("waiting for registry-auth Certificate to be ready")
+	Expect(utils.WaitForRegistryAuthCertificate()).To(Succeed(), "Failed to wait for registry-auth Certificate")
+
+	By("waiting for Docker Registry to be ready")
+	Expect(utils.WaitForRegistry()).To(Succeed(), "Failed to wait for Docker Registry")
+
+	By("waiting for kibaship-operator to be ready")
+	Expect(utils.WaitForKibashipOperator()).To(Succeed(), "Failed to wait for kibaship-operator")
+
+	By("verifying registry-auth pods are healthy")
+	Expect(utils.VerifyRegistryAuthHealthy()).To(Succeed(), "registry-auth pods are not healthy")
+
+	By("verifying registry pods are healthy")
+	Expect(utils.VerifyRegistryHealthy()).To(Succeed(), "registry pods are not healthy")
 
 	By("re-applying Tekton custom tasks with local railpack image override (post-operator deploy)")
 	Expect(utils.ApplyTektonResources()).To(Succeed(), "Failed to re-apply Tekton custom tasks after operator deploy")
