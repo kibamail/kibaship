@@ -9,4 +9,5 @@ labels:
 resources:
   - namespace.yaml
   - service.yaml
+  - configmap.yaml
   - deployment.yaml

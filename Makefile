@@ -57,6 +57,9 @@ IMG_APISERVER ?= $(IMAGE_TAG_BASE)-apiserver:v$(VERSION)
 # Cert-manager webhook image URL
 IMG_CERT_MANAGER_WEBHOOK ?= $(IMAGE_TAG_BASE)-cert-manager-webhook:v$(VERSION)
 
+# Registry auth service image URL
+IMG_REGISTRY_AUTH ?= $(IMAGE_TAG_BASE)-registry-auth:v$(VERSION)
+
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
 GOBIN=$(shell go env GOPATH)/bin
@@ -199,6 +202,15 @@ run: manifests generate fmt vet ## Run a controller from your host.
 run-apiserver: fmt vet ## Run API server from your host.
 	go run ./cmd/apiserver/main.go
 
+.PHONY: build-registry-auth
+build-registry-auth: ## Build registry auth service binary.
+	mkdir -p bin
+	go build -o bin/registry-auth ./cmd/registry-auth
+
+.PHONY: run-registry-auth
+run-registry-auth: fmt vet ## Run registry auth service from your host.
+	go run ./cmd/registry-auth/main.go
+
 .PHONY: generate-openapi
 generate-openapi: ## Generate OpenAPI documentation from code annotations.
 	go run github.com/swaggo/swag/cmd/swag@latest init -g cmd/apiserver/main.go -o docs
@@ -240,6 +252,16 @@ docker-build-cert-manager-webhook: ## Build docker image for the Kibaship cert-m
 .PHONY: docker-push-cert-manager-webhook
 docker-push-cert-manager-webhook: ## Push docker image for the Kibaship cert-manager DNS01 webhook.
 	$(CONTAINER_TOOL) push ${IMG_CERT_MANAGER_WEBHOOK}
+
+##@ Registry Auth Service
+
+.PHONY: docker-build-registry-auth
+docker-build-registry-auth: ## Build docker image for the registry auth service.
+	$(CONTAINER_TOOL) build -t ${IMG_REGISTRY_AUTH} -f Dockerfile.registry-auth .
+
+.PHONY: docker-push-registry-auth
+docker-push-registry-auth: ## Push docker image for the registry auth service.
+	$(CONTAINER_TOOL) push ${IMG_REGISTRY_AUTH}
 
 # PLATFORMS defines the target platforms for the manager image be built to provide support to multiple
 # architectures. (i.e. make docker-buildx IMG=myregistry/mypoperator:0.0.1). To use this option you need to:
@@ -292,6 +314,10 @@ build-installer: manifests generate kustomize ## Generate a consolidated YAML wi
 	$(KUSTOMIZE) build config/certificates >> dist/install.yaml
 	echo "---" >> dist/install.yaml
 	$(KUSTOMIZE) build config/ingress-gateway >> dist/install.yaml
+	echo "---" >> dist/install.yaml
+	$(KUSTOMIZE) build config/registry-auth/base >> dist/install.yaml
+	echo "---" >> dist/install.yaml
+	$(KUSTOMIZE) build config/registry/base >> dist/install.yaml
 
 ##@ Deployment
 

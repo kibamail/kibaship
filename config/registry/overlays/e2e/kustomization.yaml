@@ -1,0 +1,27 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+patches:
+  # Reduce replicas to 1 for e2e tests
+  - target:
+      kind: Deployment
+      name: registry
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+
+  # Use storage-replica-1 and reduce storage to 10Gi for e2e tests
+  - target:
+      kind: PersistentVolumeClaim
+      name: registry-storage
+    patch: |-
+      - op: replace
+        path: /spec/storageClassName
+        value: storage-replica-1
+      - op: replace
+        path: /spec/resources/requests/storage
+        value: 10Gi

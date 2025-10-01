@@ -690,7 +690,7 @@ func CleanupStorageReplicaStorageClass() {
 }
 
 // DeployKibashipOperator deploys the kibaship-operator using make deploy
-func DeployKibashipOperator() error {
+func ProvisionKibashipOperator() error {
 	// First install the CRDs
 	cmd := exec.Command("make", "install")
 	if _, err := Run(cmd); err != nil {
@@ -727,6 +727,11 @@ func DeployKibashipOperator() error {
 		}
 	}
 
+	_, _ = fmt.Fprintf(GinkgoWriter, "✅ Operator resources provisioned\n")
+	return nil
+}
+
+func WaitForKibashipOperator() error {
 	// Use enhanced monitoring with longer timeout
 	maxWaitTime := 8 * time.Minute
 	return MonitorOperatorStartup("kibaship-operator", maxWaitTime)
@@ -1055,5 +1060,123 @@ func InstallBuildkitSharedDaemon() error {
 		return err
 	}
 	_, _ = fmt.Fprintf(GinkgoWriter, "✅ buildkitd is ready!\n")
+	return nil
+}
+
+// CreateRegistryNamespace creates the registry namespace.
+func CreateRegistryNamespace() error {
+	cmd := exec.Command("kubectl", "create", "namespace", "registry")
+	_, err := Run(cmd)
+	if err != nil {
+		// Check if it already exists (ignore AlreadyExists error)
+		if !strings.Contains(err.Error(), "AlreadyExists") && !strings.Contains(err.Error(), "already exists") {
+			return err
+		}
+	}
+
+	_, _ = fmt.Fprintf(GinkgoWriter, "✅ registry namespace created\n")
+	return nil
+}
+
+// ProvisionRegistryAuthCertificate applies the registry-auth Certificate resource without waiting
+func ProvisionRegistryAuthCertificate() error {
+	cmd := exec.Command("kubectl", "apply", "-k", "config/registry-auth/overlays/e2e")
+	if _, err := Run(cmd); err != nil {
+		return err
+	}
+
+	_, _ = fmt.Fprintf(GinkgoWriter, "✅ registry-auth-keys Certificate provisioned\n")
+	return nil
+}
+
+// WaitForRegistryAuthCertificate waits for the registry-auth certificate to be ready
+func WaitForRegistryAuthCertificate() error {
+	// Wait for cert-manager to create the Secret
+	wait := exec.Command("kubectl", "-n", "registry", "wait", "--for=condition=Ready", "certificate/registry-auth-keys", "--timeout=2m")
+	if _, err := Run(wait); err != nil {
+		_, _ = fmt.Fprintf(GinkgoWriter, "\n❌ Timeout or error waiting for registry-auth-keys certificate. Certificate describe:\n")
+		desc := exec.Command("kubectl", "-n", "registry", "describe", "certificate", "registry-auth-keys")
+		_, _ = Run(desc)
+		return err
+	}
+
+	_, _ = fmt.Fprintf(GinkgoWriter, "✅ registry-auth-keys Certificate is ready!\n")
+	return nil
+}
+
+// ProvisionRegistry applies the registry deployment without waiting
+func ProvisionRegistry() error {
+	cmd := exec.Command("kubectl", "apply", "-k", "config/registry/overlays/e2e")
+	if _, err := Run(cmd); err != nil {
+		return err
+	}
+
+	_, _ = fmt.Fprintf(GinkgoWriter, "✅ Registry resources provisioned\n")
+	return nil
+}
+
+// WaitForRegistry waits for the registry to be ready
+func WaitForRegistry() error {
+	// Wait for registry TLS certificate
+	waitCert := exec.Command("kubectl", "-n", "registry", "wait", "--for=condition=Ready", "certificate/registry-tls", "--timeout=5m")
+	if _, err := Run(waitCert); err != nil {
+		_, _ = fmt.Fprintf(GinkgoWriter, "\n❌ Timeout waiting for registry-tls certificate\n")
+		desc := exec.Command("kubectl", "-n", "registry", "describe", "certificate", "registry-tls")
+		_, _ = Run(desc)
+		return err
+	}
+
+	// Wait for registry deployment to be ready
+	waitDep := exec.Command("kubectl", "-n", "registry", "wait", "--for=condition=Available", "deployment/registry", "--timeout=5m")
+	if _, err := Run(waitDep); err != nil {
+		_, _ = fmt.Fprintf(GinkgoWriter, "\n❌ Timeout waiting for registry deployment\n")
+		desc := exec.Command("kubectl", "-n", "registry", "describe", "deployment", "registry")
+		_, _ = Run(desc)
+		logs := exec.Command("kubectl", "-n", "registry", "logs", "deployment/registry", "--tail=50", "--all-containers=true")
+		_, _ = Run(logs)
+		return err
+	}
+
+	_, _ = fmt.Fprintf(GinkgoWriter, "✅ Registry is ready!\n")
+	return nil
+}
+
+// VerifyRegistryAuthHealthy checks that registry-auth pods are running and healthy.
+func VerifyRegistryAuthHealthy() error {
+	_, _ = fmt.Fprintf(GinkgoWriter, "\n=== Registry Auth Startup Monitoring ===\n")
+	_, _ = fmt.Fprintf(GinkgoWriter, "Monitoring namespace: registry\n")
+	_, _ = fmt.Fprintf(GinkgoWriter, "Timeout: 5m\n")
+
+	waitCmd := exec.Command("kubectl", "-n", "registry", "rollout", "status", "deploy/registry-auth", "--timeout=5m")
+	if err := WaitWithPodLogging(waitCmd, "registry", 5*time.Minute); err != nil {
+		_, _ = fmt.Fprintf(GinkgoWriter, "\n❌ Timeout reached - performing final diagnostic check\n")
+		desc := exec.Command("kubectl", "-n", "registry", "describe", "deployment", "registry-auth")
+		_, _ = Run(desc)
+		logs := exec.Command("kubectl", "-n", "registry", "logs", "deployment/registry-auth", "--tail=50", "--all-containers=true")
+		_, _ = Run(logs)
+		return fmt.Errorf("timeout waiting for registry-auth to become ready: %w", err)
+	}
+
+	_, _ = fmt.Fprintf(GinkgoWriter, "✅ registry-auth is ready!\n")
+	return nil
+}
+
+// VerifyRegistryHealthy checks that registry pods are running and healthy.
+func VerifyRegistryHealthy() error {
+	_, _ = fmt.Fprintf(GinkgoWriter, "\n=== Registry Startup Monitoring ===\n")
+	_, _ = fmt.Fprintf(GinkgoWriter, "Monitoring namespace: registry\n")
+	_, _ = fmt.Fprintf(GinkgoWriter, "Timeout: 5m\n")
+
+	waitCmd := exec.Command("kubectl", "-n", "registry", "rollout", "status", "deploy/registry", "--timeout=5m")
+	if err := WaitWithPodLogging(waitCmd, "registry", 5*time.Minute); err != nil {
+		_, _ = fmt.Fprintf(GinkgoWriter, "\n❌ Timeout reached - performing final diagnostic check\n")
+		desc := exec.Command("kubectl", "-n", "registry", "describe", "deployment", "registry")
+		_, _ = Run(desc)
+		logs := exec.Command("kubectl", "-n", "registry", "logs", "deployment/registry", "--tail=50", "--all-containers=true")
+		_, _ = Run(logs)
+		return fmt.Errorf("timeout waiting for registry to become ready: %w", err)
+	}
+
+	_, _ = fmt.Fprintf(GinkgoWriter, "✅ registry is ready!\n")
 	return nil
 }
