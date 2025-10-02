@@ -38,6 +38,12 @@ type DeploymentPhase string
 const (
 	// DeploymentPhaseInitializing indicates the deployment is being set up
 	DeploymentPhaseInitializing DeploymentPhase = "Initializing"
+	// DeploymentPhasePreparing indicates the prepare task is running
+	DeploymentPhasePreparing DeploymentPhase = "Preparing"
+	// DeploymentPhaseBuilding indicates the build task is running
+	DeploymentPhaseBuilding DeploymentPhase = "Building"
+	// DeploymentPhaseDeploying indicates the deployment is being deployed
+	DeploymentPhaseDeploying DeploymentPhase = "Deploying"
 	// DeploymentPhaseRunning indicates a pipeline is currently running
 	DeploymentPhaseRunning DeploymentPhase = "Running"
 	// DeploymentPhaseSucceeded indicates the last pipeline run succeeded

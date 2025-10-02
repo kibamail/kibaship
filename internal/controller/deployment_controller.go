@@ -30,6 +30,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -52,6 +53,8 @@ const (
 	RailpackPrepareTaskName = "tekton-task-railpack-prepare-kibaship-com"
 	// RailpackBuildTaskName is the name of the railpack build task in tekton-pipelines namespace
 	RailpackBuildTaskName = "tekton-task-railpack-build-kibaship-com"
+	// eventEmittedValue is the value used to mark events as emitted in annotations
+	eventEmittedValue = "true"
 )
 
 // DeploymentReconciler reconciles a Deployment object
@@ -60,6 +63,7 @@ type DeploymentReconciler struct {
 	Scheme           *runtime.Scheme
 	NamespaceManager *NamespaceManager
 	Notifier         webhooks.Notifier
+	Recorder         record.EventRecorder
 }
 
 // +kubebuilder:rbac:groups=platform.operator.kibaship.com,resources=deployments,verbs=get;list;watch;create;update;patch;delete
@@ -68,8 +72,10 @@ type DeploymentReconciler struct {
 // +kubebuilder:rbac:groups=platform.operator.kibaship.com,resources=applications,verbs=get;list;watch
 // +kubebuilder:rbac:groups=tekton.dev,resources=pipelines,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=tekton.dev,resources=pipelineruns,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=tekton.dev,resources=taskruns,verbs=get;list;watch
 // +kubebuilder:rbac:groups=mysql.oracle.com,resources=innodbclusters,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -131,7 +137,7 @@ func (r *DeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	// Track previous phase before updating status
 	prevPhase := deployment.Status.Phase
 
-	// Update deployment status
+	// Update deployment status and check PipelineRun status
 	if err := r.updateDeploymentStatus(ctx, &deployment); err != nil {
 		log.Error(err, "Failed to update Deployment status")
 		return ctrl.Result{}, err
@@ -139,6 +145,12 @@ func (r *DeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	// Emit webhook on phase transition
 	r.emitDeploymentPhaseChange(ctx, &deployment, string(prevPhase), string(deployment.Status.Phase))
+
+	// Check PipelineRun status and emit webhook if status changed
+	if err := r.checkPipelineRunStatusAndEmitWebhook(ctx, &deployment); err != nil {
+		log.Error(err, "Failed to check PipelineRun status")
+		// Don't return error - this is non-critical
+	}
 
 	log.Info("Successfully reconciled Deployment")
 	return ctrl.Result{}, nil
@@ -681,19 +693,92 @@ func (r *DeploymentReconciler) createPipelineRun(ctx context.Context, deployment
 	return nil
 }
 
-// updateDeploymentStatus updates the Deployment status
+// updateDeploymentStatus updates the Deployment status based on PipelineRun status
 func (r *DeploymentReconciler) updateDeploymentStatus(ctx context.Context, deployment *platformv1alpha1.Deployment) error {
-	// Update Deployment status
+	log := logf.FromContext(ctx)
+
+	// Ensure annotations map exists
+	if deployment.Annotations == nil {
+		deployment.Annotations = make(map[string]string)
+	}
 
 	deployment.Status.ObservedGeneration = deployment.Generation
-	deployment.Status.Phase = platformv1alpha1.DeploymentPhaseInitializing
 
-	condition := metav1.Condition{
-		Type:               "Ready",
-		Status:             metav1.ConditionTrue,
-		LastTransitionTime: metav1.Now(),
-		Reason:             "DeploymentReady",
-		Message:            "Deployment is ready and pipeline created",
+	// Get the PipelineRun for this deployment to determine phase
+	deploymentSlug := deployment.GetSlug()
+	pipelineRunName := fmt.Sprintf("pipeline-run-%s-%d-kibaship-com", deploymentSlug, deployment.Generation)
+	pipelineRun := &tektonv1.PipelineRun{}
+	err := r.Get(ctx, types.NamespacedName{
+		Namespace: deployment.Namespace,
+		Name:      pipelineRunName,
+	}, pipelineRun)
+
+	if err != nil {
+		if errors.IsNotFound(err) {
+			// PipelineRun doesn't exist yet - stay in Initializing
+			deployment.Status.Phase = platformv1alpha1.DeploymentPhaseInitializing
+		} else {
+			return fmt.Errorf("failed to get PipelineRun: %w", err)
+		}
+	} else {
+		// PipelineRun exists - determine phase based on its status
+		deployment.Status.Phase = r.determineDeploymentPhase(ctx, pipelineRun)
+
+		// Emit events for completed TaskRuns (before status update to check current annotations)
+		r.emitTaskRunEvents(ctx, deployment, pipelineRun)
+	}
+
+	// Update conditions based on phase
+	var condition metav1.Condition
+	switch deployment.Status.Phase {
+	case platformv1alpha1.DeploymentPhaseFailed:
+		condition = metav1.Condition{
+			Type:               "Ready",
+			Status:             metav1.ConditionFalse,
+			LastTransitionTime: metav1.Now(),
+			Reason:             "PipelineRunFailed",
+			Message:            "Pipeline run failed",
+		}
+	case platformv1alpha1.DeploymentPhaseSucceeded:
+		condition = metav1.Condition{
+			Type:               "Ready",
+			Status:             metav1.ConditionTrue,
+			LastTransitionTime: metav1.Now(),
+			Reason:             "PipelineRunSucceeded",
+			Message:            "Pipeline run succeeded",
+		}
+	case platformv1alpha1.DeploymentPhaseDeploying:
+		condition = metav1.Condition{
+			Type:               "Ready",
+			Status:             metav1.ConditionUnknown,
+			LastTransitionTime: metav1.Now(),
+			Reason:             "Deploying",
+			Message:            "Deploying application",
+		}
+	case platformv1alpha1.DeploymentPhaseBuilding:
+		condition = metav1.Condition{
+			Type:               "Ready",
+			Status:             metav1.ConditionUnknown,
+			LastTransitionTime: metav1.Now(),
+			Reason:             "Building",
+			Message:            "Building container image",
+		}
+	case platformv1alpha1.DeploymentPhasePreparing:
+		condition = metav1.Condition{
+			Type:               "Ready",
+			Status:             metav1.ConditionUnknown,
+			LastTransitionTime: metav1.Now(),
+			Reason:             "Preparing",
+			Message:            "Preparing deployment",
+		}
+	default:
+		condition = metav1.Condition{
+			Type:               "Ready",
+			Status:             metav1.ConditionUnknown,
+			LastTransitionTime: metav1.Now(),
+			Reason:             "Initializing",
+			Message:            "Deployment is initializing",
+		}
 	}
 
 	updated := false
@@ -712,7 +797,206 @@ func (r *DeploymentReconciler) updateDeploymentStatus(ctx context.Context, deplo
 		return fmt.Errorf("failed to update Deployment status: %w", err)
 	}
 
+	log.Info("Updated deployment status", "phase", deployment.Status.Phase)
+
+	// Emit events for phase changes (this modifies annotations)
+	r.emitPhaseEvent(deployment, deployment.Status.Phase)
+
+	// Update annotations separately after status update
+	if err := r.Update(ctx, deployment); err != nil {
+		log.Error(err, "Failed to update deployment annotations after event emission")
+		// Don't fail the reconcile if annotation update fails
+	}
+
 	return nil
+}
+
+// determineDeploymentPhase determines the deployment phase based on PipelineRun status
+func (r *DeploymentReconciler) determineDeploymentPhase(ctx context.Context, pipelineRun *tektonv1.PipelineRun) platformv1alpha1.DeploymentPhase {
+	// Check if PipelineRun has completed
+	succeededCondition := pipelineRun.Status.GetCondition("Succeeded")
+	if succeededCondition == nil {
+		// No status yet - initializing
+		return platformv1alpha1.DeploymentPhaseInitializing
+	}
+
+	// Check if failed
+	if succeededCondition.Status == corev1.ConditionFalse {
+		return platformv1alpha1.DeploymentPhaseFailed
+	}
+
+	// Check if succeeded
+	if succeededCondition.Status == corev1.ConditionTrue {
+		// Pipeline completed successfully - for now return Deploying
+		// Will transition to Succeeded after actual deployment phase is implemented
+		return platformv1alpha1.DeploymentPhaseDeploying
+	}
+
+	// Pipeline is running - check which task is active using childReferences
+	if len(pipelineRun.Status.ChildReferences) > 0 {
+		prepareCompleted := false
+		prepareRunning := false
+		buildRunning := false
+
+		// Check each child TaskRun
+		for _, childRef := range pipelineRun.Status.ChildReferences {
+			if childRef.Kind != "TaskRun" {
+				continue
+			}
+
+			taskName := childRef.PipelineTaskName
+
+			// Get the actual TaskRun to check its status
+			taskRun := &tektonv1.TaskRun{}
+			err := r.Get(ctx, types.NamespacedName{
+				Namespace: pipelineRun.Namespace,
+				Name:      childRef.Name,
+			}, taskRun)
+
+			if err != nil {
+				continue // Skip if we can't fetch the TaskRun
+			}
+
+			taskCondition := taskRun.Status.GetCondition("Succeeded")
+
+			if taskName == "prepare" {
+				if taskCondition != nil && taskCondition.Status == corev1.ConditionTrue {
+					prepareCompleted = true
+				} else if taskCondition != nil && taskCondition.Status == corev1.ConditionUnknown {
+					prepareRunning = true
+				}
+			}
+
+			if taskName == "build" {
+				if taskCondition != nil && taskCondition.Status == corev1.ConditionUnknown {
+					buildRunning = true
+				}
+			}
+		}
+
+		if buildRunning {
+			return platformv1alpha1.DeploymentPhaseBuilding
+		}
+		if prepareCompleted {
+			// Prepare completed, waiting for build to start
+			return platformv1alpha1.DeploymentPhaseBuilding
+		}
+		if prepareRunning {
+			return platformv1alpha1.DeploymentPhasePreparing
+		}
+		// Pipeline started but no task status yet
+		return platformv1alpha1.DeploymentPhasePreparing
+	}
+
+	// Default to initializing
+	return platformv1alpha1.DeploymentPhaseInitializing
+}
+
+// emitPhaseEvent emits an event for the current deployment phase
+func (r *DeploymentReconciler) emitPhaseEvent(deployment *platformv1alpha1.Deployment, phase platformv1alpha1.DeploymentPhase) {
+	if r.Recorder == nil {
+		return
+	}
+
+	// Track last emitted phase to avoid duplicate events
+	lastPhaseKey := "platform.kibaship.com/last-phase-event"
+	if deployment.Annotations == nil {
+		deployment.Annotations = make(map[string]string)
+	}
+
+	lastPhase := deployment.Annotations[lastPhaseKey]
+	currentPhase := string(phase)
+
+	if lastPhase == currentPhase {
+		return // Already emitted event for this phase
+	}
+
+	switch phase {
+	case platformv1alpha1.DeploymentPhaseInitializing:
+		r.Recorder.Event(deployment, corev1.EventTypeNormal, "deployment.initializing", "Deployment is being initialized")
+	case platformv1alpha1.DeploymentPhasePreparing:
+		r.Recorder.Event(deployment, corev1.EventTypeNormal, "deployment.preparing", "Preparing deployment with railpack")
+	case platformv1alpha1.DeploymentPhaseBuilding:
+		r.Recorder.Event(deployment, corev1.EventTypeNormal, "deployment.building", "Building container image with BuildKit")
+	case platformv1alpha1.DeploymentPhaseDeploying:
+		r.Recorder.Event(deployment, corev1.EventTypeNormal, "deployment.deploying", "Pipeline completed successfully, ready to deploy")
+	case platformv1alpha1.DeploymentPhaseFailed:
+		r.Recorder.Event(deployment, corev1.EventTypeWarning, "deployment.failed", "Deployment pipeline failed")
+	case platformv1alpha1.DeploymentPhaseSucceeded:
+		r.Recorder.Event(deployment, corev1.EventTypeNormal, "deployment.succeeded", "Deployment completed successfully")
+	}
+
+	deployment.Annotations[lastPhaseKey] = currentPhase
+}
+
+// emitTaskRunEvents checks TaskRun statuses and emits detailed events
+func (r *DeploymentReconciler) emitTaskRunEvents(ctx context.Context, deployment *platformv1alpha1.Deployment, pipelineRun *tektonv1.PipelineRun) {
+	if r.Recorder == nil {
+		return
+	}
+
+	// Track which tasks we've already emitted events for using annotations
+	if deployment.Annotations == nil {
+		deployment.Annotations = make(map[string]string)
+	}
+
+	// Check each child TaskRun
+	for _, childRef := range pipelineRun.Status.ChildReferences {
+		if childRef.Kind != "TaskRun" {
+			continue
+		}
+
+		taskName := childRef.PipelineTaskName
+		startedKey := fmt.Sprintf("platform.kibaship.com/taskrun.%s.started", taskName)
+		completedKey := fmt.Sprintf("platform.kibaship.com/taskrun.%s.completed", taskName)
+		failedKey := fmt.Sprintf("platform.kibaship.com/taskrun.%s.failed", taskName)
+
+		// Get the actual TaskRun to check its status
+		taskRun := &tektonv1.TaskRun{}
+		err := r.Get(ctx, types.NamespacedName{
+			Namespace: pipelineRun.Namespace,
+			Name:      childRef.Name,
+		}, taskRun)
+
+		if err != nil {
+			continue
+		}
+
+		// Emit started event if not already emitted
+		if taskRun.Status.StartTime != nil && deployment.Annotations[startedKey] == "" {
+			eventKey := fmt.Sprintf("taskrun.%s.started", taskName)
+			message := fmt.Sprintf("Task '%s' started at %s", taskName, taskRun.Status.StartTime.Format(time.RFC3339))
+			r.Recorder.Event(deployment, corev1.EventTypeNormal, eventKey, message)
+			deployment.Annotations[startedKey] = eventEmittedValue
+		}
+
+		taskCondition := taskRun.Status.GetCondition("Succeeded")
+		if taskCondition == nil {
+			continue
+		}
+
+		// Emit completion or failure events
+		if taskCondition.Status == corev1.ConditionTrue && deployment.Annotations[completedKey] == "" {
+			eventKey := fmt.Sprintf("taskrun.%s.completed", taskName)
+			message := fmt.Sprintf("Task '%s' completed successfully", taskName)
+			if taskRun.Status.CompletionTime != nil && taskRun.Status.StartTime != nil {
+				duration := taskRun.Status.CompletionTime.Sub(taskRun.Status.StartTime.Time)
+				message = fmt.Sprintf("Task '%s' completed in %s", taskName, duration.Round(time.Second))
+			}
+			r.Recorder.Event(deployment, corev1.EventTypeNormal, eventKey, message)
+			deployment.Annotations[completedKey] = eventEmittedValue
+		} else if taskCondition.Status == corev1.ConditionFalse && deployment.Annotations[failedKey] == "" {
+			eventKey := fmt.Sprintf("taskrun.%s.failed", taskName)
+			message := fmt.Sprintf("Task '%s' failed: %s", taskName, taskCondition.Reason)
+			if taskCondition.Message != "" {
+				message = fmt.Sprintf("Task '%s' failed: %s - %s", taskName, taskCondition.Reason, taskCondition.Message)
+			}
+			r.Recorder.Event(deployment, corev1.EventTypeWarning, eventKey, message)
+			deployment.Annotations[failedKey] = eventEmittedValue
+		}
+	}
+
+	// Annotations will be updated by the caller
 }
 
 // truncateLabel truncates a label to 63 characters and adds a hash suffix if needed
@@ -758,6 +1042,67 @@ func (r *DeploymentReconciler) getApplicationSlug(ctx context.Context, appUUID, 
 	return apps.Items[0].GetSlug(), nil
 }
 
+// checkPipelineRunStatusAndEmitWebhook checks the PipelineRun status for this deployment and emits webhook on changes
+func (r *DeploymentReconciler) checkPipelineRunStatusAndEmitWebhook(ctx context.Context, deployment *platformv1alpha1.Deployment) error {
+	if r.Notifier == nil {
+		return nil
+	}
+
+	// Get the PipelineRun for this deployment
+	deploymentSlug := deployment.GetSlug()
+	pipelineRunName := fmt.Sprintf("pipeline-run-%s-%d-kibaship-com", deploymentSlug, deployment.Generation)
+	pipelineRun := &tektonv1.PipelineRun{}
+	err := r.Get(ctx, types.NamespacedName{
+		Namespace: deployment.Namespace,
+		Name:      pipelineRunName,
+	}, pipelineRun)
+
+	if err != nil {
+		if errors.IsNotFound(err) {
+			// PipelineRun doesn't exist yet, nothing to report
+			return nil
+		}
+		return fmt.Errorf("failed to get PipelineRun: %w", err)
+	}
+
+	// Get the status condition
+	succeededCondition := pipelineRun.Status.GetCondition("Succeeded")
+	if succeededCondition == nil {
+		// No status yet
+		return nil
+	}
+
+	// Check if status stored in deployment annotation matches current status
+	currentStatus := string(succeededCondition.Status)
+	previousStatus := deployment.Annotations["platform.kibaship.com/last-pipelinerun-status"]
+
+	// If status hasn't changed, don't emit webhook
+	if currentStatus == previousStatus {
+		return nil
+	}
+
+	// Update the annotation to track this status
+	if deployment.Annotations == nil {
+		deployment.Annotations = make(map[string]string)
+	}
+	deployment.Annotations["platform.kibaship.com/last-pipelinerun-status"] = currentStatus
+	if err := r.Update(ctx, deployment); err != nil {
+		return fmt.Errorf("failed to update deployment annotation: %w", err)
+	}
+
+	// Emit webhook about PipelineRun status change
+	evt := webhooks.DeploymentStatusEvent{
+		Type:          "deployment.pipelinerun.status.changed",
+		PreviousPhase: previousStatus,
+		NewPhase:      currentStatus,
+		Deployment:    *deployment,
+		Timestamp:     time.Now().UTC(),
+	}
+	_ = r.Notifier.NotifyDeploymentStatusChange(ctx, evt)
+
+	return nil
+}
+
 // emitDeploymentPhaseChange sends a webhook if Notifier is configured and the phase actually changed.
 func (r *DeploymentReconciler) emitDeploymentPhaseChange(ctx context.Context, deployment *platformv1alpha1.Deployment, prev, next string) {
 	if r.Notifier == nil {
@@ -780,6 +1125,7 @@ func (r *DeploymentReconciler) emitDeploymentPhaseChange(ctx context.Context, de
 func (r *DeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&platformv1alpha1.Deployment{}).
+		Owns(&tektonv1.PipelineRun{}).
 		Named("deployment").
 		Complete(r)
 }
