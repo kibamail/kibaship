@@ -263,6 +263,7 @@ func main() {
 		Scheme:           mgr.GetScheme(),
 		NamespaceManager: controller.NewNamespaceManager(mgr.GetClient()),
 		Notifier:         n,
+		Recorder:         mgr.GetEventRecorderFor("deployment-controller"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Deployment")
 		os.Exit(1)

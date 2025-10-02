@@ -101,7 +101,7 @@ func (r *ProjectReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	// Validate project labels (always check these)
 	if err := r.Validator.ValidateRequiredLabels(&project); err != nil {
 		log.Error(err, "Project label validation failed")
-		r.updateStatusWithError(ctx, &project, "Failed", err.Error())
+		r.updateStatusWithError(ctx, &project, err.Error())
 		return ctrl.Result{}, err
 	}
 
@@ -128,7 +128,7 @@ func (r *ProjectReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		// Validate uniqueness for new projects (exclude this project)
 		if err := r.Validator.CheckProjectNameUniqueness(ctx, project.Name, &project); err != nil {
 			log.Error(err, "Project name uniqueness validation failed")
-			r.updateStatusWithError(ctx, &project, "Failed", err.Error())
+			r.updateStatusWithError(ctx, &project, err.Error())
 			return ctrl.Result{}, err
 		}
 	}
@@ -137,28 +137,28 @@ func (r *ProjectReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	namespace, err := r.NamespaceManager.CreateProjectNamespace(ctx, &project)
 	if err != nil {
 		log.Error(err, "Failed to create project namespace")
-		r.updateStatusWithError(ctx, &project, "Failed", err.Error())
+		r.updateStatusWithError(ctx, &project, err.Error())
 		return ctrl.Result{}, err
 	}
 
 	// Ensure registry credentials are created for this namespace
 	if err := r.ensureRegistryCredentials(ctx, namespace.Name); err != nil {
 		log.Error(err, "Failed to ensure registry credentials")
-		r.updateStatusWithError(ctx, &project, "Failed", fmt.Sprintf("Failed to create registry credentials: %v", err))
+		r.updateStatusWithError(ctx, &project, fmt.Sprintf("Failed to create registry credentials: %v", err))
 		return ctrl.Result{}, err
 	}
 
 	// Ensure registry CA certificate is copied to this namespace
 	if err := r.ensureRegistryCACertificate(ctx, namespace.Name); err != nil {
 		log.Error(err, "Failed to ensure registry CA certificate")
-		r.updateStatusWithError(ctx, &project, "Failed", fmt.Sprintf("Failed to copy registry CA certificate: %v", err))
+		r.updateStatusWithError(ctx, &project, fmt.Sprintf("Failed to copy registry CA certificate: %v", err))
 		return ctrl.Result{}, err
 	}
 
 	// Ensure Docker config secret is created for registry authentication
 	if err := r.ensureRegistryDockerConfig(ctx, namespace.Name); err != nil {
 		log.Error(err, "Failed to ensure registry Docker config")
-		r.updateStatusWithError(ctx, &project, "Failed", fmt.Sprintf("Failed to create registry Docker config: %v", err))
+		r.updateStatusWithError(ctx, &project, fmt.Sprintf("Failed to create registry Docker config: %v", err))
 		return ctrl.Result{}, err
 	}
 
@@ -213,8 +213,8 @@ func (r *ProjectReconciler) handleProjectDeletion(ctx context.Context, project *
 }
 
 // updateStatusWithError updates the project status with error information
-func (r *ProjectReconciler) updateStatusWithError(ctx context.Context, project *platformv1alpha1.Project, phase, message string) {
-	project.Status.Phase = phase
+func (r *ProjectReconciler) updateStatusWithError(ctx context.Context, project *platformv1alpha1.Project, message string) {
+	project.Status.Phase = "Failed"
 	project.Status.Message = message
 	now := metav1.Now()
 	project.Status.LastReconcileTime = &now
