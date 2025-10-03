@@ -530,8 +530,15 @@ func (r *ApplicationReconciler) createDefaultDomain(ctx context.Context, app *pl
 		return fmt.Errorf("failed to get operator configuration: %v", err)
 	}
 
-	// Generate unique subdomain
-	subdomain, err := GenerateSubdomain(app.Name)
+	// Use the application slug from labels for subdomain generation (not the CR name)
+	// The CR name includes domain suffix which would result in duplicate domains
+	appSlug := app.Labels[validation.LabelResourceSlug]
+	if appSlug == "" {
+		return fmt.Errorf("application missing required label %s", validation.LabelResourceSlug)
+	}
+
+	// Generate unique subdomain based on application slug
+	subdomain, err := GenerateSubdomain(appSlug)
 	if err != nil {
 		return fmt.Errorf("failed to generate subdomain: %v", err)
 	}

@@ -725,7 +725,7 @@ metadata:
   name: kibaship-operator-config
   namespace: kibaship-operator
 data:
-  KIBASHIP_OPERATOR_DOMAIN: "kibaship.com"
+  KIBASHIP_OPERATOR_DOMAIN: "myapps.kibaship.com"
   KIBASHIP_ACME_EMAIL: "acme@kibaship.com"
   WEBHOOK_TARGET_URL: "%s"
 `, webhookURL)
