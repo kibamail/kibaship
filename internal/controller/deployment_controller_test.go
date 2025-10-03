@@ -187,29 +187,33 @@ var _ = Describe("Deployment Controller", func() {
 				Expect(branchParam.Default.StringVal).To(Equal("develop")) // From application config
 
 				By("Verifying task parameters use correct values")
-				Expect(pipeline.Spec.Tasks).To(HaveLen(1))
-				task := pipeline.Spec.Tasks[0]
-				Expect(task.Name).To(Equal("clone-repository"))
+				Expect(pipeline.Spec.Tasks).To(HaveLen(3)) // clone, prepare, build
 
-				// Verify task parameters
-				taskParams := task.Params
-				Expect(taskParams).To(HaveLen(5))
+				// Verify clone task
+				cloneTask := pipeline.Spec.Tasks[0]
+				Expect(cloneTask.Name).To(Equal("clone-repository"))
+				cloneParams := cloneTask.Params
+				Expect(cloneParams).To(HaveLen(5))
 
-				urlParam := findTaskParam(taskParams, "url")
+				urlParam := findTaskParam(cloneParams, "url")
 				Expect(urlParam).NotTo(BeNil())
 				Expect(urlParam.Value.StringVal).To(Equal("https://github.com/user/test-repo"))
 
-				branchTaskParam := findTaskParam(taskParams, "branch")
+				branchTaskParam := findTaskParam(cloneParams, "branch")
 				Expect(branchTaskParam).NotTo(BeNil())
 				Expect(branchTaskParam.Value.StringVal).To(Equal("$(params.git-branch)"))
 
-				commitTaskParam := findTaskParam(taskParams, "commit")
+				commitTaskParam := findTaskParam(cloneParams, "commit")
 				Expect(commitTaskParam).NotTo(BeNil())
 				Expect(commitTaskParam.Value.StringVal).To(Equal("$(params.git-commit)"))
 
-				tokenParam := findTaskParam(taskParams, "token-secret")
+				tokenParam := findTaskParam(cloneParams, "token-secret")
 				Expect(tokenParam).NotTo(BeNil())
 				Expect(tokenParam.Value.StringVal).To(Equal("git-secret"))
+
+				// Verify prepare and build tasks exist
+				Expect(pipeline.Spec.Tasks[1].Name).To(Equal("prepare"))
+				Expect(pipeline.Spec.Tasks[2].Name).To(Equal("build"))
 
 				By("Verifying pipeline has correct labels and annotations")
 				Expect(pipeline.Labels["app.kubernetes.io/name"]).To(Equal("project-test123"))
@@ -435,13 +439,22 @@ var _ = Describe("Deployment Controller", func() {
 			// Verify service account name
 			Expect(pipelineRun.Spec.TaskRunTemplate.ServiceAccountName).To(Equal("project-test123-sa-kibaship-com"))
 
-			// Verify workspace configuration
-			Expect(pipelineRun.Spec.Workspaces).To(HaveLen(1))
-			Expect(pipelineRun.Spec.Workspaces[0].Name).To(Equal("workspace-testdeploy-kibaship-com"))
-			Expect(pipelineRun.Spec.Workspaces[0].VolumeClaimTemplate).NotTo(BeNil())
+			// Verify workspace configuration (includes workspace PVC + registry secrets)
+			Expect(pipelineRun.Spec.Workspaces).To(HaveLen(3))
+
+			// Find workspace PVC (first workspace with VolumeClaimTemplate)
+			var workspacePVC *tektonv1.WorkspaceBinding
+			for i := range pipelineRun.Spec.Workspaces {
+				if pipelineRun.Spec.Workspaces[i].VolumeClaimTemplate != nil {
+					workspacePVC = &pipelineRun.Spec.Workspaces[i]
+					break
+				}
+			}
+			Expect(workspacePVC).NotTo(BeNil())
+			Expect(workspacePVC.Name).To(Equal("workspace-testdeploy-kibaship-com"))
 
 			// Verify PVC storage allocation is 24GB
-			pvc := pipelineRun.Spec.Workspaces[0].VolumeClaimTemplate
+			pvc := workspacePVC.VolumeClaimTemplate
 			storageRequest := pvc.Spec.Resources.Requests["storage"]
 			Expect(storageRequest.String()).To(Equal("24Gi"))
 
@@ -508,12 +521,21 @@ var _ = Describe("Deployment Controller", func() {
 				return k8sClient.Get(ctx, pipelineRunKey, pipelineRun)
 			}, time.Second*10, time.Millisecond*250).Should(Succeed())
 
-			// Verify PVC storage allocation is exactly 24GB
-			Expect(pipelineRun.Spec.Workspaces).To(HaveLen(1))
-			workspace := pipelineRun.Spec.Workspaces[0]
-			Expect(workspace.VolumeClaimTemplate).NotTo(BeNil())
+			// Verify PVC storage allocation is exactly 24GB (includes workspace PVC + registry secrets)
+			Expect(pipelineRun.Spec.Workspaces).To(HaveLen(3))
 
-			pvc := workspace.VolumeClaimTemplate
+			// Find workspace PVC (first workspace with VolumeClaimTemplate)
+			var workspacePVC *tektonv1.WorkspaceBinding
+			for i := range pipelineRun.Spec.Workspaces {
+				if pipelineRun.Spec.Workspaces[i].VolumeClaimTemplate != nil {
+					workspacePVC = &pipelineRun.Spec.Workspaces[i]
+					break
+				}
+			}
+			Expect(workspacePVC).NotTo(BeNil())
+			Expect(workspacePVC.VolumeClaimTemplate).NotTo(BeNil())
+
+			pvc := workspacePVC.VolumeClaimTemplate
 			storageRequest := pvc.Spec.Resources.Requests["storage"]
 			Expect(storageRequest.String()).To(Equal("24Gi"))
 
@@ -583,12 +605,21 @@ var _ = Describe("Deployment Controller", func() {
 				return k8sClient.Get(ctx, pipelineRunKey, pipelineRun)
 			}, time.Second*10, time.Millisecond*250).Should(Succeed())
 
-			// Focus specifically on storage class verification
-			Expect(pipelineRun.Spec.Workspaces).To(HaveLen(1))
-			workspace := pipelineRun.Spec.Workspaces[0]
-			Expect(workspace.VolumeClaimTemplate).NotTo(BeNil())
+			// Focus specifically on storage class verification (includes workspace PVC + registry secrets)
+			Expect(pipelineRun.Spec.Workspaces).To(HaveLen(3))
 
-			pvc := workspace.VolumeClaimTemplate
+			// Find workspace PVC (first workspace with VolumeClaimTemplate)
+			var workspacePVC *tektonv1.WorkspaceBinding
+			for i := range pipelineRun.Spec.Workspaces {
+				if pipelineRun.Spec.Workspaces[i].VolumeClaimTemplate != nil {
+					workspacePVC = &pipelineRun.Spec.Workspaces[i]
+					break
+				}
+			}
+			Expect(workspacePVC).NotTo(BeNil())
+			Expect(workspacePVC.VolumeClaimTemplate).NotTo(BeNil())
+
+			pvc := workspacePVC.VolumeClaimTemplate
 
 			// Primary assertion: storage class must be storage-replica-1
 			Expect(pvc.Spec.StorageClassName).NotTo(BeNil(), "StorageClassName should not be nil")

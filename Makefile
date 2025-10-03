@@ -60,6 +60,12 @@ IMG_CERT_MANAGER_WEBHOOK ?= $(IMAGE_TAG_BASE)-cert-manager-webhook:v$(VERSION)
 # Registry auth service image URL
 IMG_REGISTRY_AUTH ?= $(IMAGE_TAG_BASE)-registry-auth:v$(VERSION)
 
+# Railpack CLI image URL
+IMG_RAILPACK_CLI ?= ghcr.io/kibamail/kibaship-railpack-cli:v$(VERSION)
+
+# Railpack Build image URL
+IMG_RAILPACK_BUILD ?= ghcr.io/kibamail/kibaship-railpack-build:v$(VERSION)
+
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
 GOBIN=$(shell go env GOPATH)/bin
@@ -192,7 +198,7 @@ build-apiserver: ## Build API server docker image.
 	$(CONTAINER_TOOL) build -t ${IMG_APISERVER} -f Dockerfile.apiserver .
 
 .PHONY: build-all
-build-all: build build-apiserver ## Build both manager and API server docker images.
+build-all: build build-apiserver build-cli ## Build manager, API server, and CLI binaries.
 
 .PHONY: run
 run: manifests generate fmt vet ## Run a controller from your host.
@@ -207,9 +213,18 @@ build-registry-auth: ## Build registry auth service binary.
 	mkdir -p bin
 	go build -o bin/registry-auth ./cmd/registry-auth
 
+.PHONY: build-cli
+build-cli: ## Build Kibaship CLI binary.
+	mkdir -p bin
+	go build -o bin/kibaship ./cmd/cli
+
 .PHONY: run-registry-auth
 run-registry-auth: fmt vet ## Run registry auth service from your host.
 	go run ./cmd/registry-auth/main.go
+
+.PHONY: run-cli
+run-cli: fmt vet ## Run Kibaship CLI from your host.
+	go run ./cmd/cli/main.go
 
 .PHONY: generate-openapi
 generate-openapi: ## Generate OpenAPI documentation from code annotations.
@@ -263,6 +278,24 @@ docker-build-registry-auth: ## Build docker image for the registry auth service.
 docker-push-registry-auth: ## Push docker image for the registry auth service.
 	$(CONTAINER_TOOL) push ${IMG_REGISTRY_AUTH}
 
+##@ Railpack Images
+
+.PHONY: docker-build-railpack-cli
+docker-build-railpack-cli: ## Build docker image for the railpack CLI.
+	$(CONTAINER_TOOL) build -t ${IMG_RAILPACK_CLI} -f build/railpack-cli/Dockerfile build/railpack-cli
+
+.PHONY: docker-push-railpack-cli
+docker-push-railpack-cli: ## Push docker image for the railpack CLI.
+	$(CONTAINER_TOOL) push ${IMG_RAILPACK_CLI}
+
+.PHONY: docker-build-railpack-build
+docker-build-railpack-build: ## Build docker image for the railpack build.
+	$(CONTAINER_TOOL) build -t ${IMG_RAILPACK_BUILD} -f build/railpack-build/Dockerfile build/railpack-build
+
+.PHONY: docker-push-railpack-build
+docker-push-railpack-build: ## Push docker image for the railpack build.
+	$(CONTAINER_TOOL) push ${IMG_RAILPACK_BUILD}
+
 # PLATFORMS defines the target platforms for the manager image be built to provide support to multiple
 # architectures. (i.e. make docker-buildx IMG=myregistry/mypoperator:0.0.1). To use this option you need to:
 # - be able to use docker buildx. More info: https://docs.docker.com/build/buildx/
@@ -315,9 +348,12 @@ build-installer: manifests generate kustomize ## Generate a consolidated YAML wi
 	echo "---" >> dist/install.yaml
 	$(KUSTOMIZE) build config/ingress-gateway >> dist/install.yaml
 	echo "---" >> dist/install.yaml
+	cd config/registry-auth/base && $(KUSTOMIZE) edit set image registry-auth=${IMG_REGISTRY_AUTH}
 	$(KUSTOMIZE) build config/registry-auth/base >> dist/install.yaml
 	echo "---" >> dist/install.yaml
 	$(KUSTOMIZE) build config/registry/base >> dist/install.yaml
+	echo "---" >> dist/install.yaml
+	$(KUSTOMIZE) build config/longhorn >> dist/install.yaml
 
 ##@ Deployment
 

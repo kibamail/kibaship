@@ -29,9 +29,11 @@ import (
 )
 
 func TestApplicationDomainCreation(t *testing.T) {
-	// Set up test environment variables
-	t.Setenv("KIBASHIP_OPERATOR_DOMAIN", "test.kibaship.com")
-	t.Setenv("KIBASHIP_OPERATOR_DEFAULT_PORT", "3000")
+	// Set up operator configuration
+	err := SetOperatorConfig("test.kibaship.com")
+	if err != nil {
+		t.Fatalf("Failed to set operator config: %v", err)
+	}
 
 	// Create a fake Kubernetes client
 	scheme := runtime.NewScheme()
@@ -87,7 +89,7 @@ func TestApplicationDomainCreation(t *testing.T) {
 	ctx := context.Background()
 
 	// Test the handleApplicationDomains method
-	err := reconciler.handleApplicationDomains(ctx, testApp)
+	err = reconciler.handleApplicationDomains(ctx, testApp)
 	if err != nil {
 		t.Fatalf("handleApplicationDomains failed: %v", err)
 	}
@@ -173,9 +175,11 @@ func TestApplicationDomainCreation(t *testing.T) {
 }
 
 func TestApplicationDomainSkipsNonGitRepository(t *testing.T) {
-	// Set up test environment variables
-	t.Setenv("KIBASHIP_OPERATOR_DOMAIN", "test.kibaship.com")
-	t.Setenv("KIBASHIP_OPERATOR_DEFAULT_PORT", "3000")
+	// Set up operator configuration
+	err := SetOperatorConfig("test.kibaship.com")
+	if err != nil {
+		t.Fatalf("Failed to set operator config: %v", err)
+	}
 
 	// Create a fake Kubernetes client
 	scheme := runtime.NewScheme()
@@ -210,7 +214,7 @@ func TestApplicationDomainSkipsNonGitRepository(t *testing.T) {
 	ctx := context.Background()
 
 	// Test the handleApplicationDomains method
-	err := reconciler.handleApplicationDomains(ctx, testApp)
+	err = reconciler.handleApplicationDomains(ctx, testApp)
 	if err != nil {
 		t.Fatalf("handleApplicationDomains failed: %v", err)
 	}

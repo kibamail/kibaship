@@ -25,6 +25,8 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -93,6 +95,38 @@ var _ = BeforeSuite(func() {
 	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
 	Expect(err).NotTo(HaveOccurred())
 	Expect(k8sClient).NotTo(BeNil())
+
+	// Set operator configuration for tests
+	err = SetOperatorConfig("kibaship.com")
+	Expect(err).NotTo(HaveOccurred())
+
+	// Seed required bootstrap resources used by controllers (registry TLS, namespaces)
+	// Create the 'registry' namespace if it doesn't exist
+	By("seeding bootstrap resources (namespaces and registry TLS secret)")
+	ensureNamespace := func(name string) {
+		ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: name}}
+		err := k8sClient.Create(ctx, ns)
+		Expect(err).NotTo(HaveOccurred())
+	}
+	ensureNamespace("registry")
+	ensureNamespace("certificates")
+
+	// Create the registry TLS secret with dummy certs if it doesn't exist
+	regTLS := &corev1.Secret{}
+	err = k8sClient.Get(ctx, client.ObjectKey{Namespace: "registry", Name: "registry-tls"}, regTLS)
+	if err != nil {
+		sec := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Namespace: "registry", Name: "registry-tls"},
+			Type:       corev1.SecretTypeTLS,
+			Data: map[string][]byte{
+				"tls.crt": []byte("dummy-tls-cert"),
+				"tls.key": []byte("dummy-tls-key"),
+				"ca.crt":  []byte("dummy-ca-cert"),
+			},
+		}
+		err = k8sClient.Create(ctx, sec)
+		Expect(err).NotTo(HaveOccurred())
+	}
 })
 
 var _ = AfterSuite(func() {

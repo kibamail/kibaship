@@ -117,12 +117,30 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Load operator configuration from ConfigMap
+	setupLog.Info("Loading operator configuration from ConfigMap")
+	opConfig, err := config.LoadConfigFromConfigMap(context.Background(), mgr.GetConfig())
+	if err != nil {
+		setupLog.Error(err, "failed to load operator configuration from ConfigMap")
+		os.Exit(1)
+	}
+	setupLog.Info("Operator configuration loaded successfully",
+		"domain", opConfig.Domain,
+		"webhookURL", opConfig.WebhookURL,
+		"acmeEmail", opConfig.ACMEEmail)
+
+	// Set the global operator configuration
+	if err := controller.SetOperatorConfig(opConfig.Domain); err != nil {
+		setupLog.Error(err, "failed to set operator configuration")
+		os.Exit(1)
+	}
+
 	// Bootstrap: ensure storage classes first, then provision dynamic ingress/cert-manager resources
 	if err := bootstrap.EnsureStorageClasses(context.Background(), uncachedClient); err != nil {
 		setupLog.Error(err, "bootstrap storage classes failed (continuing)")
 	}
-	acmeEmail := os.Getenv("KIBASHIP_ACME_EMAIL")
-	baseDomain := os.Getenv("KIBASHIP_OPERATOR_DOMAIN")
+	acmeEmail := opConfig.ACMEEmail
+	baseDomain := opConfig.Domain
 	if err := bootstrap.ProvisionIngressAndCertificates(
 		context.Background(),
 		uncachedClient,
@@ -147,25 +165,15 @@ func main() {
 		setupLog.Error(err, "bootstrap registry CA certificate in buildkit failed (continuing)")
 	}
 
-	// Webhook configuration: require target URL and ensure signing Secret exists
-	webhookURL, err := config.RequireWebhookTargetURL()
-	if err != nil {
-		setupLog.Error(err, "missing required configuration")
-		os.Exit(1)
-	}
-	// Determine operator namespace
-	operatorNS := os.Getenv("POD_NAMESPACE")
-	if operatorNS == "" {
-		operatorNS = "kibaship-operator"
-	}
-	// Ensure signing secret exists (create if missing)
+	// Webhook configuration: ensure signing Secret exists
+	webhookURL := opConfig.WebhookURL
 	kcs, err := kubernetes.NewForConfig(mgr.GetConfig())
 	if err != nil {
 		setupLog.Error(err, "failed to build clientset")
 		os.Exit(1)
 	}
 	var signingKey []byte
-	secret, err := kcs.CoreV1().Secrets(operatorNS).Get(
+	secret, err := kcs.CoreV1().Secrets(config.OperatorNamespace).Get(
 		context.Background(),
 		config.WebhookSecretName,
 		metav1.GetOptions{},
@@ -179,12 +187,12 @@ func main() {
 		secret = &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      config.WebhookSecretName,
-				Namespace: operatorNS,
+				Namespace: config.OperatorNamespace,
 			},
 			Type: corev1.SecretTypeOpaque,
 			Data: map[string][]byte{config.WebhookSecretKey: buf},
 		}
-		if _, err := kcs.CoreV1().Secrets(operatorNS).Create(
+		if _, err := kcs.CoreV1().Secrets(config.OperatorNamespace).Create(
 			context.Background(),
 			secret,
 			metav1.CreateOptions{},
@@ -208,7 +216,7 @@ func main() {
 				secret.Data = map[string][]byte{}
 			}
 			secret.Data[config.WebhookSecretKey] = buf
-			if _, err := kcs.CoreV1().Secrets(operatorNS).Update(
+			if _, err := kcs.CoreV1().Secrets(config.OperatorNamespace).Update(
 				context.Background(),
 				secret,
 				metav1.UpdateOptions{},

@@ -317,6 +317,101 @@ spec:
                 required:
                 - image
                 type: object
+              environments:
+                description: |-
+                  Environments defines environment-specific configurations
+                  If not specified, a default "production" environment is auto-created by the controller
+                items:
+                  description: ApplicationEnvironment defines environment-specific
+                    configuration
+                  properties:
+                    gitRepository:
+                      description: GitRepository contains environment-specific overrides
+                        for GitRepository applications
+                      properties:
+                        branch:
+                          description: Branch override (defaults to application's
+                            base branch)
+                          type: string
+                        buildCommand:
+                          description: BuildCommand override
+                          type: string
+                        startCommand:
+                          description: StartCommand override
+                          type: string
+                      type: object
+                    name:
+                      description: Name of the environment (production, staging, qa,
+                        etc.)
+                      pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                      type: string
+                    replicas:
+                      description: Replicas for this environment (optional)
+                      format: int32
+                      type: integer
+                    resources:
+                      description: Resources for this environment (optional)
+                      properties:
+                        claims:
+                          description: |-
+                            Claims lists the names of resources, defined in spec.resourceClaims,
+                            that are used by this container.
+
+                            This field depends on the
+                            DynamicResourceAllocation feature gate.
+
+                            This field is immutable. It can only be set for containers.
+                          items:
+                            description: ResourceClaim references one entry in PodSpec.ResourceClaims.
+                            properties:
+                              name:
+                                description: |-
+                                  Name must match the name of one entry in pod.spec.resourceClaims of
+                                  the Pod where this field is used. It makes that resource available
+                                  inside a container.
+                                type: string
+                              request:
+                                description: |-
+                                  Request is the name chosen for a request in the referenced claim.
+                                  If empty, everything from the claim is made available, otherwise
+                                  only the result of this request.
+                                type: string
+                            required:
+                            - name
+                            type: object
+                          type: array
+                          x-kubernetes-list-map-keys:
+                          - name
+                          x-kubernetes-list-type: map
+                        limits:
+                          additionalProperties:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                            x-kubernetes-int-or-string: true
+                          description: |-
+                            Limits describes the maximum amount of compute resources allowed.
+                            More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                          type: object
+                        requests:
+                          additionalProperties:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                            x-kubernetes-int-or-string: true
+                          description: |-
+                            Requests describes the minimum amount of compute resources required.
+                            If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                            otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                            More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                          type: object
+                      type: object
+                  required:
+                  - name
+                  type: object
+                type: array
               gitRepository:
                 description: GitRepository contains configuration for GitRepository
                   applications
@@ -605,6 +700,27 @@ spec:
                   - type
                   type: object
                 type: array
+              environmentStatus:
+                description: EnvironmentStatus tracks the readiness of each environment
+                items:
+                  description: EnvironmentStatus tracks the status of an environment
+                  properties:
+                    lastDeploymentTime:
+                      description: LastDeploymentTime tracks last deployment to this
+                        environment
+                      format: date-time
+                      type: string
+                    name:
+                      description: Name of the environment
+                      type: string
+                    secretReady:
+                      description: SecretReady indicates if environment secret exists
+                      type: boolean
+                  required:
+                  - name
+                  - secretReady
+                  type: object
+                type: array
               message:
                 description: Message provides additional information about the current
                   status
@@ -690,6 +806,12 @@ spec:
                     type: string
                 type: object
                 x-kubernetes-map-type: atomic
+              environmentName:
+                default: production
+                description: |-
+                  EnvironmentName specifies which environment to deploy to
+                  Defaults to "production" if not specified
+                type: string
               gitRepository:
                 description: |-
                   GitRepository contains configuration for GitRepository deployments
@@ -2206,7 +2328,7 @@ kind: Task
 metadata:
   annotations:
     platform.kibaship.com/created-by: kibaship-operator
-    tekton.dev/displayName: Railpack Build
+    tekton.dev/displayName: Railpack Build and Push
   labels:
     app.kubernetes.io/component: tekton-integration
     app.kubernetes.io/managed-by: kibaship-operator
@@ -2217,8 +2339,7 @@ metadata:
 spec:
   description: |
     Build an OCI image using BuildKit gateway with the Railpack frontend, based on the
-    plan generated by the railpack-prepare task. The image is exported as an OCI archive
-    at the provided output path under the shared workspace.
+    plan generated by the railpack-prepare task. The image is pushed to the registry.
   params:
   - default: .
     description: Relative path to the project root within the repo workspace (same
@@ -2229,32 +2350,35 @@ spec:
     description: Railpack frontend gateway source for BuildKit (pin to CLI version)
     name: railpackFrontendSource
     type: string
-  - default: railpack/build/image.oci
-    description: Output OCI archive path relative to workspace root
-    name: outputPath
+  - description: Full image tag to push (e.g., registry.registry.svc.cluster.local/namespace/app-uuid:deployment-uuid)
+    name: imageTag
     type: string
   - default: ghcr.io/kibamail/kibaship-railpack-build:0.1.0
     description: Image for buildctl client (for kustomize override convenience)
     name: buildImage
     type: string
   results:
-  - description: Absolute path to the generated OCI archive
+  - description: Full image tag that was pushed
     name: buildOutput
+  - description: Image digest (SHA256)
+    name: imageDigest
   stepTemplate:
     env:
     - name: BUILDKIT_HOST
       value: tcp://buildkitd.buildkit.svc:1234
+    - name: DOCKER_CONFIG
+      value: /workspace/docker-config
   steps:
   - image: $(params.buildImage)
     name: build
     script: |
       #!/usr/bin/env sh
       set -eu
+
       PLAN_DIR="$(workspaces.output.path)/railpack"
       PLAN="$PLAN_DIR/railpack-plan.json"
       CONTEXT_DIR="$(workspaces.output.path)/repo/$(params.contextPath)"
-      DEST="$(workspaces.output.path)/$(params.outputPath)"
-      mkdir -p "$(dirname "$DEST")"
+
       if [ ! -f "$PLAN" ]; then
         echo "railpack-plan.json not found at $PLAN" >&2
         exit 1
@@ -2263,20 +2387,33 @@ spec:
         echo "context directory not found at $CONTEXT_DIR" >&2
         exit 1
       fi
-      # Use BuildKit gateway with Railpack frontend; provide local context. The frontend looks for railpack-plan in --local dockerfile.
+
+      echo "Building and pushing image to $(params.imageTag)..."
+
+      # Use BuildKit gateway with Railpack frontend; push to registry
       buildctl build \
         --progress=plain \
         --local context="$CONTEXT_DIR" \
         --local dockerfile="$PLAN_DIR" \
         --frontend=gateway.v0 \
         --opt source=$(params.railpackFrontendSource) \
-        --output type=oci,dest="$DEST"
-      # Emit result
-      printf "%s" "$DEST" > "$(results.buildOutput.path)"
+        --output type=image,name=$(params.imageTag),push=true
+
+      # Emit image tag as result
+      printf "%s" "$(params.imageTag)" > "$(results.buildOutput.path)"
+
+      # TODO: Extract and emit image digest
+      echo "" > "$(results.imageDigest.path)"
     workingDir: $(workspaces.output.path)
   workspaces:
   - description: Shared workspace containing the cloned repository and plan
     name: output
+  - description: Docker config for registry authentication
+    name: docker-config
+    optional: true
+  - description: Registry CA certificate for TLS trust
+    name: registry-ca
+    optional: true
 ---
 apiVersion: tekton.dev/v1
 kind: Task
@@ -2355,6 +2492,25 @@ metadata:
   name: buildkit
 ---
 apiVersion: v1
+data:
+  buildkitd.toml: |
+    # BuildKit daemon configuration
+    debug = true
+
+    # Registry-specific TLS configuration
+    [registry."registry.registry.svc.cluster.local"]
+      ca = ["/usr/local/share/ca-certificates/registry-ca.crt"]
+      insecure = true
+kind: ConfigMap
+metadata:
+  labels:
+    app: buildkitd
+    app.kubernetes.io/name: buildkitd
+    app.kubernetes.io/part-of: kibaship-operator
+  name: buildkitd-config
+  namespace: buildkit
+---
+apiVersion: v1
 kind: Service
 metadata:
   labels:
@@ -2428,6 +2584,23 @@ spec:
           runAsUser: 1000
           seccompProfile:
             type: Unconfined
+        volumeMounts:
+        - mountPath: /home/user/.config/buildkit/buildkitd.toml
+          name: buildkitd-config
+          readOnly: true
+          subPath: buildkitd.toml
+        - mountPath: /usr/local/share/ca-certificates/registry-ca.crt
+          name: registry-ca-cert
+          readOnly: true
+          subPath: ca.crt
+      volumes:
+      - configMap:
+          name: buildkitd-config
+        name: buildkitd-config
+      - name: registry-ca-cert
+        secret:
+          optional: true
+          secretName: registry-ca-cert
 ---
 apiVersion: v1
 kind: Namespace
@@ -2717,12 +2890,12 @@ subjects:
 ---
 apiVersion: v1
 data:
-  config.yml: |-
+  config.yml: |
     version: 0.1
     log:
       fields:
         service: registry
-      level: info
+      level: debug
     storage:
       cache:
         blobdescriptor: inmemory
@@ -2743,6 +2916,7 @@ data:
         service: docker-registry
         issuer: registry-token-issuer
         rootcertbundle: /etc/registry-auth-keys/tls.crt
+        jwks: /etc/registry-auth-keys-jwks/jwks.json
     health:
       storagedriver:
         enabled: true
@@ -2852,7 +3026,7 @@ spec:
           runAsNonRoot: true
           runAsUser: 65532
         volumeMounts:
-        - mountPath: /etc/docker/registry
+        - mountPath: /etc/distribution
           name: registry-config
           readOnly: true
         - mountPath: /var/lib/registry
@@ -2863,27 +3037,10 @@ spec:
         - mountPath: /etc/registry-auth-keys
           name: registry-auth-keys
           readOnly: true
-      initContainers:
-      - command:
-        - sh
-        - -c
-        - |
-          echo "Waiting for registry-registry-auth secret to be created by operator..."
-          until kubectl get secret registry-registry-auth -n registry 2>/dev/null; do
-            echo "Secret not found, waiting 5 seconds..."
-            sleep 5
-          done
-          echo "Secret found! Registry can now start."
-        image: registry.k8s.io/kubectl:v1.31.0
-        name: wait-for-credentials
-        securityContext:
-          allowPrivilegeEscalation: false
-          capabilities:
-            drop:
-            - ALL
-          readOnlyRootFilesystem: true
-          runAsNonRoot: true
-          runAsUser: 65532
+        - mountPath: /etc/registry-auth-keys-jwks
+          name: registry-auth-keys-jwks
+          readOnly: true
+      enableServiceLinks: false
       serviceAccountName: registry
       volumes:
       - configMap:
@@ -2901,6 +3058,9 @@ spec:
           - key: tls.crt
             path: tls.crt
           secretName: registry-auth-keys
+      - name: registry-auth-keys-jwks
+        secret:
+          secretName: registry-auth-keys-jwks
 ---
 apiVersion: cert-manager.io/v1
 kind: Certificate
@@ -2938,3 +3098,49 @@ metadata:
   namespace: registry
 spec:
   selfSigned: {}
+---
+allowVolumeExpansion: true
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: storage-replica-1
+parameters:
+  dataLocality: disabled
+  fromBackup: ""
+  fsType: ext4
+  numberOfReplicas: "1"
+  staleReplicaTimeout: "2880"
+provisioner: driver.longhorn.io
+reclaimPolicy: Delete
+volumeBindingMode: Immediate
+---
+allowVolumeExpansion: true
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: storage-replica-2
+parameters:
+  dataLocality: disabled
+  fromBackup: ""
+  fsType: ext4
+  numberOfReplicas: "2"
+  staleReplicaTimeout: "2880"
+provisioner: driver.longhorn.io
+reclaimPolicy: Delete
+volumeBindingMode: Immediate
+---
+allowVolumeExpansion: true
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: storage-replica-rwx
+parameters:
+  dataLocality: disabled
+  fromBackup: ""
+  fsType: ext4
+  migratable: "true"
+  numberOfReplicas: "3"
+  staleReplicaTimeout: "2880"
+provisioner: driver.longhorn.io
+reclaimPolicy: Delete
+volumeBindingMode: Immediate

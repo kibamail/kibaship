@@ -18,9 +18,7 @@ package controller
 
 import (
 	"fmt"
-	"os"
 	"regexp"
-	"strconv"
 	"sync"
 )
 
@@ -28,67 +26,39 @@ import (
 type OperatorConfig struct {
 	// Domain is the base domain for all application subdomains
 	Domain string
-	// DefaultPort is the default port for applications
+	// DefaultPort is the default port for applications (hardcoded to 3000)
 	DefaultPort int32
 }
 
 var (
 	operatorConfig *OperatorConfig
 	configOnce     sync.Once
-	configError    error
 )
 
-// GetOperatorConfig returns the singleton operator configuration
-// The configuration is loaded once from environment variables
-func GetOperatorConfig() (*OperatorConfig, error) {
-	configOnce.Do(func() {
-		operatorConfig, configError = loadOperatorConfig()
-	})
-
-	if configError != nil {
-		return nil, configError
-	}
-
-	return operatorConfig, nil
-}
-
-// loadOperatorConfig loads configuration from environment variables
-func loadOperatorConfig() (*OperatorConfig, error) {
-	domain := os.Getenv("KIBASHIP_OPERATOR_DOMAIN")
-	if domain == "" {
-		return nil, fmt.Errorf("KIBASHIP_OPERATOR_DOMAIN environment variable is required")
-	}
-
+// SetOperatorConfig sets the global operator configuration
+// This should be called once at startup after loading from ConfigMap
+func SetOperatorConfig(domain string) error {
 	// Validate domain format - must be a valid DNS name
 	domainRegex := regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$`)
 	if !domainRegex.MatchString(domain) {
-		return nil, fmt.Errorf("invalid domain format: %s - domain must be a valid DNS name (lowercase, alphanumeric, hyphens, dots)", domain)
+		return fmt.Errorf("invalid domain format: %s - domain must be a valid DNS name (lowercase, alphanumeric, hyphens, dots)", domain)
 	}
 
-	// Load default port with fallback
-	defaultPortStr := os.Getenv("KIBASHIP_DEFAULT_PORT")
-	if defaultPortStr == "" {
-		defaultPortStr = "3000"
-	}
+	configOnce.Do(func() {
+		operatorConfig = &OperatorConfig{
+			Domain:      domain,
+			DefaultPort: 3000, // Hardcoded to 3000
+		}
+	})
 
-	defaultPort, err := strconv.ParseInt(defaultPortStr, 10, 32)
-	if err != nil {
-		return nil, fmt.Errorf("invalid default port: %s - must be a valid integer", defaultPortStr)
-	}
-
-	if defaultPort < 1 || defaultPort > 65535 {
-		return nil, fmt.Errorf("invalid default port: %d - must be between 1 and 65535", defaultPort)
-	}
-
-	return &OperatorConfig{
-		Domain:      domain,
-		DefaultPort: int32(defaultPort),
-	}, nil
+	return nil
 }
 
-// ValidateOperatorConfig validates that the operator configuration is properly set
-// This should be called during operator startup
-func ValidateOperatorConfig() error {
-	_, err := GetOperatorConfig()
-	return err
+// GetOperatorConfig returns the singleton operator configuration
+func GetOperatorConfig() (*OperatorConfig, error) {
+	if operatorConfig == nil {
+		return nil, fmt.Errorf("operator configuration not initialized - call SetOperatorConfig first")
+	}
+
+	return operatorConfig, nil
 }
