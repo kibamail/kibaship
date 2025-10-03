@@ -71,6 +71,12 @@ type DeploymentSpec struct {
 	// +kubebuilder:validation:Required
 	ApplicationRef corev1.LocalObjectReference `json:"applicationRef"`
 
+	// EnvironmentName specifies which environment to deploy to
+	// Defaults to "production" if not specified
+	// +optional
+	// +kubebuilder:default="production"
+	EnvironmentName string `json:"environmentName,omitempty"`
+
 	// GitRepository contains configuration for GitRepository deployments
 	// Required when ApplicationRef points to a GitRepository application
 	// +optional

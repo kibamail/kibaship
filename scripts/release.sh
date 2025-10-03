@@ -138,29 +138,94 @@ if git tag -l | grep -q "^v$NEW_VERSION$"; then
     exit 1
 fi
 
-# Run tests and validation
-log_info "Running test suite..."
-if ! make test > /tmp/release-test.log 2>&1; then
-    log_error "Tests failed. Check /tmp/release-test.log for details"
-    exit 1
-fi
-log_success "All tests passed"
-
-# Run linting
+# Run linting first (fast feedback)
 log_info "Running linting..."
 if ! make lint > /tmp/release-lint.log 2>&1; then
     log_error "Linting failed. Check /tmp/release-lint.log for details"
+    tail -20 /tmp/release-lint.log
     exit 1
 fi
 log_success "Linting passed"
+
+# Run unit tests
+log_info "Running unit tests..."
+if ! make test > /tmp/release-test.log 2>&1; then
+    log_error "Unit tests failed. Check /tmp/release-test.log for details"
+    tail -20 /tmp/release-test.log
+    exit 1
+fi
+log_success "All unit tests passed"
+
+# Run E2E tests
+log_info "Running E2E tests (this may take several minutes)..."
+if ! make test-e2e > /tmp/release-test-e2e.log 2>&1; then
+    log_error "E2E tests failed. Check /tmp/release-test-e2e.log for details"
+    tail -30 /tmp/release-test-e2e.log
+    exit 1
+fi
+log_success "All E2E tests passed"
 
 # Build project
 log_info "Building project..."
 if ! make build > /tmp/release-build.log 2>&1; then
     log_error "Build failed. Check /tmp/release-build.log for details"
+    tail -20 /tmp/release-build.log
     exit 1
 fi
 log_success "Build successful"
+
+# Validate all 6 Docker image builds
+log_info "Validating Docker builds for all 6 images..."
+
+log_info "  [1/6] Building operator image..."
+if ! make docker-build > /tmp/release-docker-build-operator.log 2>&1; then
+    log_error "Operator Docker build validation failed. Check /tmp/release-docker-build-operator.log"
+    tail -20 /tmp/release-docker-build-operator.log
+    exit 1
+fi
+log_success "  [1/6] Operator image build successful"
+
+log_info "  [2/6] Building API server image..."
+if ! make build-apiserver > /tmp/release-docker-build-apiserver.log 2>&1; then
+    log_error "API server Docker build validation failed. Check /tmp/release-docker-build-apiserver.log"
+    tail -20 /tmp/release-docker-build-apiserver.log
+    exit 1
+fi
+log_success "  [2/6] API server image build successful"
+
+log_info "  [3/6] Building cert-manager webhook image..."
+if ! make docker-build-cert-manager-webhook > /tmp/release-docker-build-webhook.log 2>&1; then
+    log_error "Cert-manager webhook Docker build validation failed. Check /tmp/release-docker-build-webhook.log"
+    tail -20 /tmp/release-docker-build-webhook.log
+    exit 1
+fi
+log_success "  [3/6] Cert-manager webhook image build successful"
+
+log_info "  [4/6] Building registry-auth image..."
+if ! make docker-build-registry-auth > /tmp/release-docker-build-registry-auth.log 2>&1; then
+    log_error "Registry-auth Docker build validation failed. Check /tmp/release-docker-build-registry-auth.log"
+    tail -20 /tmp/release-docker-build-registry-auth.log
+    exit 1
+fi
+log_success "  [4/6] Registry-auth image build successful"
+
+log_info "  [5/6] Building railpack-cli image..."
+if ! make docker-build-railpack-cli > /tmp/release-docker-build-railpack-cli.log 2>&1; then
+    log_error "Railpack CLI Docker build validation failed. Check /tmp/release-docker-build-railpack-cli.log"
+    tail -20 /tmp/release-docker-build-railpack-cli.log
+    exit 1
+fi
+log_success "  [5/6] Railpack CLI image build successful"
+
+log_info "  [6/6] Building railpack-build image..."
+if ! make docker-build-railpack-build > /tmp/release-docker-build-railpack-build.log 2>&1; then
+    log_error "Railpack build Docker build validation failed. Check /tmp/release-docker-build-railpack-build.log"
+    tail -20 /tmp/release-docker-build-railpack-build.log
+    exit 1
+fi
+log_success "  [6/6] Railpack build image build successful"
+
+log_success "All 6 Docker image builds validated successfully"
 
 # Update version in files
 log_info "Updating version references..."
@@ -169,22 +234,8 @@ log_info "Updating version references..."
 sed -i.bak "s/^VERSION ?= .*/VERSION ?= $NEW_VERSION/" Makefile
 log_success "Updated Makefile"
 
-# Update Helm Chart appVersion to match operator version
-sed -i.bak "s/appVersion: .*/appVersion: \"$NEW_VERSION\"/" deploy/helm/kibaship-operator/Chart.yaml
-log_success "Updated Helm Chart appVersion to $NEW_VERSION"
-
-# Update Helm Chart version to match operator version (keeping in sync)
-sed -i.bak "s/version: .*/version: $NEW_VERSION/" deploy/helm/kibaship-operator/Chart.yaml
-log_success "Updated Helm Chart version to $NEW_VERSION"
-
-NEW_CHART_VERSION="$NEW_VERSION" # Keep them in sync
-
-# Update Helm values.yaml
-sed -i.bak "s/tag: .*/tag: \"v$NEW_VERSION\"/" deploy/helm/kibaship-operator/values.yaml
-log_success "Updated Helm values.yaml"
-
 # Clean up backup files
-rm -f Makefile.bak deploy/helm/kibaship-operator/Chart.yaml.bak deploy/helm/kibaship-operator/values.yaml.bak
+rm -f Makefile.bak
 
 # Regenerate manifests
 log_info "Regenerating manifests..."
@@ -192,77 +243,28 @@ make manifests
 make build-installer
 log_success "Manifests regenerated"
 
-# Validate Helm chart
-log_info "Validating Helm chart..."
-if ! helm lint deploy/helm/kibaship-operator/ > /tmp/release-helm-lint.log 2>&1; then
-    log_error "Helm chart validation failed. Check /tmp/release-helm-lint.log"
-    exit 1
-fi
-log_success "Helm chart validation passed"
-
-# Test Helm template rendering
-log_info "Testing Helm template rendering..."
-if ! helm template test-release deploy/helm/kibaship-operator/ > /tmp/release-helm-template.log 2>&1; then
-    log_error "Helm template rendering failed. Check /tmp/release-helm-template.log"
-    exit 1
-fi
-log_success "Helm template rendering successful"
-
-# Validate Docker builds (operator, apiserver, cert-manager-webhook)
-log_info "Validating Docker build (operator)..."
-if ! make docker-build > /tmp/release-docker-build-operator.log 2>&1; then
-    log_error "Operator Docker build validation failed. Check /tmp/release-docker-build-operator.log"
-    exit 1
-fi
-log_success "Operator Docker build validation successful"
-
-log_info "Validating Docker build (apiserver)..."
-if ! make build-apiserver > /tmp/release-docker-build-apiserver.log 2>&1; then
-    log_error "API server Docker build validation failed. Check /tmp/release-docker-build-apiserver.log"
-    exit 1
-fi
-log_success "API server Docker build validation successful"
-
-log_info "Validating Docker build (cert-manager-webhook)..."
-if ! make docker-build-cert-manager-webhook > /tmp/release-docker-build-webhook.log 2>&1; then
-    log_error "Cert-manager webhook Docker build validation failed. Check /tmp/release-docker-build-webhook.log"
-    exit 1
-fi
-log_success "Cert-manager webhook Docker build validation successful"
-
-# Validate Docker build for railpack-cli
-log_info "Validating Docker build (railpack-cli)..."
-if ! docker build -f build/railpack-cli/Dockerfile -t kibaship-railpack-cli:validate build/railpack-cli > /tmp/release-docker-build-railpack-cli.log 2>&1; then
-    log_error "Railpack CLI Docker build validation failed. Check /tmp/release-docker-build-railpack-cli.log"
-    exit 1
-fi
-log_success "Railpack CLI Docker build validation successful"
-
-
-log_success "All Docker build validations successful"
-
 # Commit version changes
 log_info "Committing version changes..."
 git add -A
 git commit -m "chore: bump version to v$NEW_VERSION
 
 - Updated operator version to v$NEW_VERSION
-- Updated Helm chart to v$NEW_CHART_VERSION
-- Regenerated manifests and installation files"
+- Regenerated manifests and installation files
+- All tests passing (unit, e2e, lint)
+- All 6 Docker images validated"
 
 # Create and push tag
-log_info "Creating and pushing tag..."
+log_info "Creating release tag..."
 git tag -a "v$NEW_VERSION" -m "Release v$NEW_VERSION
 
 This release includes:
 - Updated version to v$NEW_VERSION
-- All tests passing
-- Updated Helm chart
+- All tests passing (unit, e2e, lint)
+- All 6 container images validated
 - Updated installation manifests
 
 For installation instructions, see:
-- kubectl apply -f https://github.com/kibamail/kibaship-operator/releases/download/v$NEW_VERSION/install.yaml
-- helm install kibaship-operator deploy/helm/kibaship-operator/"
+kubectl apply -f https://github.com/kibamail/kibaship-operator/releases/download/v$NEW_VERSION/install.yaml"
 
 # Push changes first
 log_info "Pushing version changes to remote..."
@@ -273,9 +275,9 @@ log_success "Version changes pushed successfully!"
 echo ""
 log_warning "Ready to create release tag v$NEW_VERSION"
 echo "The tag will trigger CI/CD pipeline for:"
-echo "- Docker image build and push"
-echo "- GitHub release creation"
-echo "- Asset attachment (install.yaml)"
+echo "- Building and pushing all 6 Docker images"
+echo "- Building CLI binaries for all platforms"
+echo "- Creating GitHub release with assets"
 
 read -p "Push tag v$NEW_VERSION to trigger CI/CD release? (y/N): " -n 1 -r
 echo
@@ -287,15 +289,20 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
     log_success "Release tag v$NEW_VERSION pushed successfully!"
     echo ""
     echo "✅ CI/CD pipeline will now:"
-    echo "   1. Build and push Docker images:"
+    echo "   1. Build and push all 6 Docker images:"
     echo "      - ghcr.io/kibamail/kibaship-operator:v$NEW_VERSION"
     echo "      - ghcr.io/kibamail/kibaship-operator-apiserver:v$NEW_VERSION"
     echo "      - ghcr.io/kibamail/kibaship-operator-cert-manager-webhook:v$NEW_VERSION"
+    echo "      - ghcr.io/kibamail/kibaship-operator-registry-auth:v$NEW_VERSION"
     echo "      - ghcr.io/kibamail/kibaship-railpack-cli:v$NEW_VERSION"
-
-    echo "   2. Create GitHub release with dist/install.yaml"
-
-    echo "   3. Run additional release validation"
+    echo "      - ghcr.io/kibamail/kibaship-railpack-build:v$NEW_VERSION"
+    echo ""
+    echo "   2. Build CLI binaries for 5 platforms:"
+    echo "      - Linux (AMD64, ARM64)"
+    echo "      - macOS (Intel, Apple Silicon)"
+    echo "      - Windows (AMD64)"
+    echo ""
+    echo "   3. Create GitHub releases with manifests and binaries"
     echo ""
     echo "🔗 Monitor progress at:"
     echo "   - Actions: https://github.com/kibamail/kibaship-operator/actions"
@@ -308,15 +315,11 @@ fi
 echo ""
 echo "Next steps:"
 echo "1. Monitor CI/CD pipeline execution"
-echo "2. Verify Docker images are available:"
-echo "   - ghcr.io/kibamail/kibaship-operator:v$NEW_VERSION"
-echo "   - ghcr.io/kibamail/kibaship-operator-apiserver:v$NEW_VERSION"
-echo "   - ghcr.io/kibamail/kibaship-operator-cert-manager-webhook:v$NEW_VERSION"
-echo "   - ghcr.io/kibamail/kibaship-railpack-cli:v$NEW_VERSION"
-echo "3. Test installations:"
-echo "   kubectl: kubectl apply -f https://github.com/kibamail/kibaship-operator/releases/download/v$NEW_VERSION/install.yaml"
-echo "   helm: helm install kibaship-operator https://github.com/kibamail/kibaship-operator/releases/download/v$NEW_VERSION/kibaship-operator-$NEW_CHART_VERSION.tgz"
-echo "4. Update documentation if needed"
+echo "2. Verify all 6 Docker images are available at ghcr.io"
+echo "3. Verify CLI binaries are in GitHub release"
+echo "4. Test installation:"
+echo "   kubectl apply -f https://github.com/kibamail/kibaship-operator/releases/download/v$NEW_VERSION/install.yaml"
+echo "5. Update documentation if needed"
 
 echo ""
 echo "GitHub Release Notes Template for v$NEW_VERSION ($RELEASE_TYPE release):"
@@ -370,19 +373,10 @@ echo "\`\`\`bash"
 echo "kubectl apply -f https://github.com/kibamail/kibaship-operator/releases/download/v$NEW_VERSION/install.yaml"
 echo "\`\`\`"
 echo ""
-echo "**Using Helm:**"
-echo "\`\`\`bash"
-echo "# Direct from GitHub release"
-echo "helm install kibaship-operator https://github.com/kibamail/kibaship-operator/releases/download/v$NEW_VERSION/kibaship-operator-$NEW_CHART_VERSION.tgz"
-echo ""
-echo "# Or if using a Helm repository (future)"
-echo "# helm repo add kibaship https://helm.kibaship.com"
-echo "# helm install kibaship-operator kibaship/kibaship-operator --version $NEW_CHART_VERSION"
-echo "\`\`\`"
-echo ""
 echo "### 🔧 Compatibility"
 echo "- Kubernetes: 1.19+"
-echo "- Tekton: v0.47.0+"
+echo "- Tekton: 1.4.0+"
+echo "- Cilium: 1.18.0+"
 echo ""
 if [ "$RELEASE_TYPE" = "major" ]; then
     echo "### ⚠️ Upgrade Notes"

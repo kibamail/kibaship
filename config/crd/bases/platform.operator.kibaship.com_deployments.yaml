@@ -64,6 +64,12 @@ spec:
                     type: string
                 type: object
                 x-kubernetes-map-type: atomic
+              environmentName:
+                default: production
+                description: |-
+                  EnvironmentName specifies which environment to deploy to
+                  Defaults to "production" if not specified
+                type: string
               gitRepository:
                 description: |-
                   GitRepository contains configuration for GitRepository deployments

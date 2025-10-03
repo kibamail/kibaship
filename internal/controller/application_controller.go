@@ -42,6 +42,8 @@ const (
 
 	// DefaultDomainType is the default domain type for ApplicationDomains
 	DefaultDomainType = "default"
+	// DefaultEnvironmentName is the name of the auto-created environment
+	DefaultEnvironmentName = "production"
 )
 
 const applicationPhaseReady = "Ready"
@@ -172,6 +174,30 @@ func (r *ApplicationReconciler) handleApplicationReconcile(ctx context.Context, 
 
 	log.Info("Reconciling Application")
 
+	// Ensure a default environment exists if none are specified
+	requeueNeeded := false
+	if r.ensureDefaultEnvironment(app) {
+		// Persist the spec update but continue to update status/secrets in this loop
+		if err := r.Update(ctx, app); err != nil {
+			log.Error(err, "Failed to persist default environment on Application")
+			return ctrl.Result{}, err
+		}
+		log.Info("Added default environment to Application spec", "environment", DefaultEnvironmentName)
+		requeueNeeded = true
+	}
+
+	// Ensure environment secrets exist and are labeled/owned properly
+	if err := r.reconcileEnvironmentSecrets(ctx, app); err != nil {
+		log.Error(err, "Failed to reconcile environment secrets")
+		return ctrl.Result{}, err
+	}
+
+	// Cleanup any environment secrets that no longer correspond to spec
+	if err := r.cleanupRemovedEnvironmentSecrets(ctx, app); err != nil {
+		log.Error(err, "Failed to cleanup removed environment secrets")
+		return ctrl.Result{}, err
+	}
+
 	// Handle ApplicationDomain creation for GitRepository applications
 	if err := r.handleApplicationDomains(ctx, app); err != nil {
 		log.Error(err, "Failed to handle ApplicationDomains")
@@ -180,6 +206,12 @@ func (r *ApplicationReconciler) handleApplicationReconcile(ctx context.Context, 
 
 	// Track previous phase before updating status
 	prevPhase := app.Status.Phase
+
+	// Update EnvironmentStatus before general status
+	if err := r.updateEnvironmentStatus(ctx, app); err != nil {
+		log.Error(err, "Failed to update environment status")
+		return ctrl.Result{}, err
+	}
 
 	// Update Application status
 	if err := r.updateApplicationStatus(ctx, app); err != nil {
@@ -191,7 +223,7 @@ func (r *ApplicationReconciler) handleApplicationReconcile(ctx context.Context, 
 	r.emitApplicationPhaseChange(ctx, app, prevPhase, app.Status.Phase)
 
 	log.Info("Successfully reconciled Application")
-	return ctrl.Result{}, nil
+	return ctrl.Result{Requeue: requeueNeeded}, nil
 }
 
 // ensureUUIDLabels ensures that the Application has the correct UUID and slug labels
@@ -232,6 +264,162 @@ func (r *ApplicationReconciler) ensureUUIDLabels(ctx context.Context, app *platf
 	}
 
 	return labelsUpdated, nil
+}
+
+// ensureDefaultEnvironment ensures a default environment exists when none are specified.
+// Returns true if the Application spec was modified in-memory (caller should Update the resource).
+func (r *ApplicationReconciler) ensureDefaultEnvironment(app *platformv1alpha1.Application) bool {
+	// Only auto-create when Environments is not set or empty
+	if len(app.Spec.Environments) == 0 {
+		app.Spec.Environments = []platformv1alpha1.ApplicationEnvironment{{
+			Name: DefaultEnvironmentName,
+		}}
+		return true
+	}
+	return false
+}
+
+// getEnvironmentSecretName returns the name of the secret that stores environment variables
+// for a given application environment. Convention: <application-name>-env-<environment-name>
+func getEnvironmentSecretName(app *platformv1alpha1.Application, envName string) string {
+	return fmt.Sprintf("%s-env-%s", app.Name, envName)
+}
+
+// reconcileEnvironmentSecrets ensures an env secret exists for each declared environment.
+func (r *ApplicationReconciler) reconcileEnvironmentSecrets(ctx context.Context, app *platformv1alpha1.Application) error {
+	log := logf.FromContext(ctx)
+
+	appUUID := app.Labels[validation.LabelResourceUUID]
+	projectUUID := app.Labels[validation.LabelProjectUUID]
+
+	for _, env := range app.Spec.Environments {
+		secretName := getEnvironmentSecretName(app, env.Name)
+
+		var existing corev1.Secret
+		err := r.Get(ctx, types.NamespacedName{Namespace: app.Namespace, Name: secretName}, &existing)
+		if err != nil && !errors.IsNotFound(err) {
+			return fmt.Errorf("failed to get env secret %s: %w", secretName, err)
+		}
+
+		desiredLabels := map[string]string{
+			"app.kubernetes.io/managed-by":               "kibaship-operator",
+			validation.LabelProjectUUID:                  projectUUID,
+			validation.LabelApplicationUUID:              appUUID,
+			"platform.operator.kibaship.com/environment": env.Name,
+		}
+
+		if errors.IsNotFound(err) {
+			// Create new empty secret
+			sec := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      secretName,
+					Namespace: app.Namespace,
+					Labels:    desiredLabels,
+				},
+				Type: corev1.SecretTypeOpaque,
+				Data: map[string][]byte{},
+			}
+
+			if err := controllerutil.SetControllerReference(app, sec, r.Scheme); err != nil {
+				return fmt.Errorf("failed to set owner reference on secret %s: %w", secretName, err)
+			}
+			if err := r.Create(ctx, sec); err != nil {
+				return fmt.Errorf("failed to create env secret %s: %w", secretName, err)
+			}
+			log.Info("Created environment secret", "secret", secretName, "environment", env.Name)
+			continue
+		}
+
+		// Ensure labels contain desired set
+		if existing.Labels == nil {
+			existing.Labels = map[string]string{}
+		}
+		changed := false
+		for k, v := range desiredLabels {
+			if existing.Labels[k] != v {
+				existing.Labels[k] = v
+				changed = true
+			}
+		}
+		if changed {
+			if err := r.Update(ctx, &existing); err != nil {
+				return fmt.Errorf("failed to update labels on env secret %s: %w", secretName, err)
+			}
+			log.Info("Updated environment secret labels", "secret", secretName)
+		}
+	}
+
+	return nil
+}
+
+// cleanupRemovedEnvironmentSecrets deletes env secrets managed by this operator for this app that
+// no longer correspond to an environment in spec.
+func (r *ApplicationReconciler) cleanupRemovedEnvironmentSecrets(ctx context.Context, app *platformv1alpha1.Application) error {
+	log := logf.FromContext(ctx)
+
+	appUUID := app.Labels[validation.LabelResourceUUID]
+
+	// Build desired names set
+	desired := make(map[string]struct{}, len(app.Spec.Environments))
+	for _, env := range app.Spec.Environments {
+		desired[getEnvironmentSecretName(app, env.Name)] = struct{}{}
+	}
+
+	// List secrets for this application that we manage
+	var secretList corev1.SecretList
+	if err := r.List(ctx, &secretList,
+		client.InNamespace(app.Namespace),
+		client.MatchingLabels(map[string]string{
+			"app.kubernetes.io/managed-by":  "kibaship-operator",
+			validation.LabelApplicationUUID: appUUID,
+		})); err != nil {
+		return fmt.Errorf("failed to list env secrets: %w", err)
+	}
+
+	for i := range secretList.Items {
+		sec := &secretList.Items[i]
+		if _, ok := desired[sec.Name]; ok {
+			continue
+		}
+		// Delete orphaned secret
+		if err := r.Delete(ctx, sec); err != nil && !errors.IsNotFound(err) {
+			return fmt.Errorf("failed to delete orphan env secret %s: %w", sec.Name, err)
+		}
+		log.Info("Deleted orphaned environment secret", "secret", sec.Name)
+	}
+	return nil
+}
+
+// updateEnvironmentStatus updates Application.status.environmentStatus to reflect secret readiness.
+func (r *ApplicationReconciler) updateEnvironmentStatus(ctx context.Context, app *platformv1alpha1.Application) error {
+	// Build a map from existing statuses to preserve LastDeploymentTime
+	prev := make(map[string]platformv1alpha1.EnvironmentStatus, len(app.Status.EnvironmentStatus))
+	for _, st := range app.Status.EnvironmentStatus {
+		prev[st.Name] = st
+	}
+
+	statuses := make([]platformv1alpha1.EnvironmentStatus, 0, len(app.Spec.Environments))
+	for _, env := range app.Spec.Environments {
+		secretName := getEnvironmentSecretName(app, env.Name)
+		var sec corev1.Secret
+		err := r.Get(ctx, types.NamespacedName{Namespace: app.Namespace, Name: secretName}, &sec)
+		ready := err == nil
+
+		st := platformv1alpha1.EnvironmentStatus{
+			Name:        env.Name,
+			SecretReady: ready,
+		}
+		if p, ok := prev[env.Name]; ok {
+			st.LastDeploymentTime = p.LastDeploymentTime
+		}
+		statuses = append(statuses, st)
+	}
+
+	app.Status.EnvironmentStatus = statuses
+	if err := r.Status().Update(ctx, app); err != nil {
+		return fmt.Errorf("failed to update Application environment status: %w", err)
+	}
+	return nil
 }
 
 // getProjectUUID retrieves the UUID of the referenced project

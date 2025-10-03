@@ -713,18 +713,33 @@ func ProvisionKibashipOperator() error {
 
 	}
 
+	// Create the operator ConfigMap with configuration
+	webhookURL := os.Getenv("WEBHOOK_TARGET_URL")
+	if webhookURL == "" {
+		webhookURL = "http://webhook-receiver.kibaship-operator.svc.cluster.local:8080/webhook"
+	}
+
+	configMapYAML := fmt.Sprintf(`apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kibaship-operator-config
+  namespace: kibaship-operator
+data:
+  KIBASHIP_OPERATOR_DOMAIN: "kibaship.com"
+  KIBASHIP_ACME_EMAIL: "acme@kibaship.com"
+  WEBHOOK_TARGET_URL: "%s"
+`, webhookURL)
+
+	createConfigMap := exec.Command("kubectl", "apply", "-f", "-")
+	createConfigMap.Stdin = strings.NewReader(configMapYAML)
+	if _, err := Run(createConfigMap); err != nil {
+		return err
+	}
+
 	// Then deploy the operator
 	cmd = exec.Command("make", "deploy", "IMG=kibaship.com/kibaship-operator:v0.0.1")
 	if _, err := Run(cmd); err != nil {
 		return err
-	}
-
-	// If the test process provided a WEBHOOK_TARGET_URL, set it on the deployment before waiting
-	if tgt := os.Getenv("WEBHOOK_TARGET_URL"); tgt != "" {
-		setEnv := exec.Command("kubectl", "-n", "kibaship-operator", "set", "env", "deployment/kibaship-operator-controller-manager", "WEBHOOK_TARGET_URL="+tgt)
-		if _, err := Run(setEnv); err != nil {
-			return err
-		}
 	}
 
 	_, _ = fmt.Fprintf(GinkgoWriter, "✅ Operator resources provisioned\n")

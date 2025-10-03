@@ -1,0 +1,97 @@
+name: Release Operator
+
+on:
+  push:
+    tags:
+      - "v*"
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: kibamail/kibaship-operator
+  IMAGE_NAME_APISERVER: kibamail/kibaship-operator-apiserver
+  IMAGE_NAME_CERT_MANAGER_WEBHOOK: kibamail/kibaship-operator-cert-manager-webhook
+  IMAGE_NAME_REGISTRY_AUTH: kibamail/kibaship-operator-registry-auth
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Derive tag name and version
+        id: version
+        run: |
+          TAG_NAME=${GITHUB_REF#refs/tags/}
+          VERSION=${TAG_NAME#v}
+          echo "tag_name=${TAG_NAME}" >> $GITHUB_OUTPUT
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Generate deployment manifests
+        run: |
+          make build-installer \
+            IMG=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:v${{ steps.version.outputs.version }} \
+            IMG_APISERVER=${{ env.REGISTRY }}/${{ env.IMAGE_NAME_APISERVER }}:v${{ steps.version.outputs.version }} \
+            IMG_CERT_MANAGER_WEBHOOK=${{ env.REGISTRY }}/${{ env.IMAGE_NAME_CERT_MANAGER_WEBHOOK }}:v${{ steps.version.outputs.version }} \
+            IMG_REGISTRY_AUTH=${{ env.REGISTRY }}/${{ env.IMAGE_NAME_REGISTRY_AUTH }}:v${{ steps.version.outputs.version }}
+
+      - name: Upload deployment manifests
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-manifests
+          path: dist/install.yaml
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.version.outputs.tag_name }}
+          files: |
+            dist/install.yaml
+          body: |
+            ## KibaShip Operator ${{ steps.version.outputs.tag_name }}
+
+            ### Installation
+
+            Deploy the operator to your Kubernetes cluster:
+
+            ```bash
+            kubectl apply -f https://github.com/kibamail/kibaship-operator/releases/download/${{ steps.version.outputs.tag_name }}/install.yaml
+            ```
+
+            ### Configuration
+
+            Create the required ConfigMap with your configuration:
+
+            ```bash
+            kubectl create configmap kibaship-operator-config \
+              -n kibaship-operator \
+              --from-literal=KIBASHIP_OPERATOR_DOMAIN=your-domain.com \
+              --from-literal=KIBASHIP_ACME_EMAIL=acme@your-domain.com \
+              --from-literal=WEBHOOK_TARGET_URL=https://webhook.your-domain.com
+            ```
+
+            ### Container Images
+
+            The following container images are available for this release:
+            - `ghcr.io/kibamail/kibaship-operator:${{ steps.version.outputs.tag_name }}`
+            - `ghcr.io/kibamail/kibaship-operator-apiserver:${{ steps.version.outputs.tag_name }}`
+            - `ghcr.io/kibamail/kibaship-operator-cert-manager-webhook:${{ steps.version.outputs.tag_name }}`
+            - `ghcr.io/kibamail/kibaship-operator-registry-auth:${{ steps.version.outputs.tag_name }}`
+            - `ghcr.io/kibamail/kibaship-railpack-cli:${{ steps.version.outputs.tag_name }}`
+            - `ghcr.io/kibamail/kibaship-railpack-build:${{ steps.version.outputs.tag_name }}`
+
+            ### CLI Tool
+
+            Download the KibaShip CLI for local cluster management from the [CLI release page](https://github.com/kibamail/kibaship-operator/releases/tag/${{ steps.version.outputs.tag_name }}).
+          generate_release_notes: true

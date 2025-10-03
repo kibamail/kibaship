@@ -616,5 +616,138 @@ var _ = Describe("Application Controller", func() {
 			}()
 		})
 
+		Context("Environment management", func() {
+			ctx := context.Background()
+
+			It("auto-creates a default production environment when none specified", func() {
+				// Ensure a test project exists
+				testProject := &platformv1alpha1.Project{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "env-test-project",
+						Namespace: "default",
+						Labels: map[string]string{
+							validation.LabelResourceUUID: "550e8400-e29b-41d4-a716-446655449000",
+							validation.LabelResourceSlug: "env-test-project",
+						},
+					},
+					Spec: platformv1alpha1.ProjectSpec{},
+				}
+				err := k8sClient.Get(ctx, types.NamespacedName{Name: testProject.Name, Namespace: testProject.Namespace}, &platformv1alpha1.Project{})
+				if errors.IsNotFound(err) {
+					Expect(k8sClient.Create(ctx, testProject)).To(Succeed())
+				}
+
+				app := &platformv1alpha1.Application{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "application-envtest-kibaship-com",
+						Namespace: "default",
+						Labels: map[string]string{
+							validation.LabelResourceUUID: "550e8400-e29b-41d4-a716-446655449100",
+							validation.LabelResourceSlug: "envtest",
+							validation.LabelProjectUUID:  "550e8400-e29b-41d4-a716-446655449000",
+						},
+					},
+					Spec: platformv1alpha1.ApplicationSpec{
+						ProjectRef: corev1.LocalObjectReference{Name: testProject.Name},
+						Type:       platformv1alpha1.ApplicationTypeDockerImage,
+						DockerImage: &platformv1alpha1.DockerImageConfig{
+							Image: "nginx:latest",
+						},
+					},
+				}
+				Expect(k8sClient.Create(ctx, app)).To(Succeed())
+
+				reconciler := &ApplicationReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
+
+				// 1st reconcile: add finalizer/labels
+				_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Namespace: app.Namespace, Name: app.Name}})
+				Expect(err).NotTo(HaveOccurred())
+				// 2nd reconcile: ensure default environment and persist
+				_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Namespace: app.Namespace, Name: app.Name}})
+				Expect(err).NotTo(HaveOccurred())
+
+				// Verify default environment added
+				var fetched platformv1alpha1.Application
+				Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: app.Namespace, Name: app.Name}, &fetched)).To(Succeed())
+				Expect(fetched.Spec.Environments).ToNot(BeNil())
+				Expect(fetched.Spec.Environments).To(HaveLen(1))
+				Expect(fetched.Spec.Environments[0].Name).To(Equal("production"))
+			})
+
+			It("creates env secret and updates environment status readiness", func() {
+				// Ensure a test project exists
+				testProject := &platformv1alpha1.Project{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "env-test-project-2",
+						Namespace: "default",
+						Labels: map[string]string{
+							validation.LabelResourceUUID: "550e8400-e29b-41d4-a716-446655449200",
+							validation.LabelResourceSlug: "env-test-project-2",
+						},
+					},
+					Spec: platformv1alpha1.ProjectSpec{},
+				}
+				err := k8sClient.Get(ctx, types.NamespacedName{Name: testProject.Name, Namespace: testProject.Namespace}, &platformv1alpha1.Project{})
+				if errors.IsNotFound(err) {
+					Expect(k8sClient.Create(ctx, testProject)).To(Succeed())
+				}
+
+				app := &platformv1alpha1.Application{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "application-envtest2-kibaship-com",
+						Namespace: "default",
+						Labels: map[string]string{
+							validation.LabelResourceUUID: "550e8400-e29b-41d4-a716-446655449210",
+							validation.LabelResourceSlug: "envtest2",
+							validation.LabelProjectUUID:  "550e8400-e29b-41d4-a716-446655449200",
+						},
+					},
+					Spec: platformv1alpha1.ApplicationSpec{
+						ProjectRef: corev1.LocalObjectReference{Name: testProject.Name},
+						Type:       platformv1alpha1.ApplicationTypeDockerImage,
+						DockerImage: &platformv1alpha1.DockerImageConfig{
+							Image: "nginx:latest",
+						},
+					},
+				}
+				Expect(k8sClient.Create(ctx, app)).To(Succeed())
+
+				reconciler := &ApplicationReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
+
+				// Reconcile cycles to progress through: finalizer, default env, secret creation/status
+				_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Namespace: app.Namespace, Name: app.Name}})
+				Expect(err).NotTo(HaveOccurred())
+				_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Namespace: app.Namespace, Name: app.Name}})
+				Expect(err).NotTo(HaveOccurred())
+				_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Namespace: app.Namespace, Name: app.Name}})
+				Expect(err).NotTo(HaveOccurred())
+
+				// Verify secret exists
+				secretName := "application-envtest2-kibaship-com-env-production"
+				var sec corev1.Secret
+				Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: app.Namespace, Name: secretName}, &sec)).To(Succeed())
+				Expect(sec.Labels).To(HaveKeyWithValue("app.kubernetes.io/managed-by", "kibaship-operator"))
+				Expect(sec.Labels).To(HaveKeyWithValue("platform.kibaship.com/application-uuid", "550e8400-e29b-41d4-a716-446655449210"))
+				Expect(sec.Labels).To(HaveKeyWithValue("platform.kibaship.com/project-uuid", "550e8400-e29b-41d4-a716-446655449200"))
+				Expect(sec.Labels).To(HaveKeyWithValue("platform.operator.kibaship.com/environment", "production"))
+
+				// Verify owner reference is set to the Application
+				Expect(sec.OwnerReferences).ToNot(BeEmpty())
+				Expect(sec.OwnerReferences[0].Kind).To(Equal("Application"))
+
+				// Verify environment status shows SecretReady
+				var fetched platformv1alpha1.Application
+				Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: app.Namespace, Name: app.Name}, &fetched)).To(Succeed())
+				Eventually(func() bool {
+					_ = k8sClient.Get(ctx, types.NamespacedName{Namespace: app.Namespace, Name: app.Name}, &fetched)
+					for _, st := range fetched.Status.EnvironmentStatus {
+						if st.Name == "production" {
+							return st.SecretReady
+						}
+					}
+					return false
+				}).Should(BeTrue())
+			})
+		})
 	})
 })
