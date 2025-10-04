@@ -37,7 +37,7 @@ func DefaultCertManagerConfig() CertManagerConfig {
 }
 
 // InstallCertManager installs cert-manager using Helm with the specified configuration
-func InstallCertManager(clusterName string, config CertManagerConfig) error {
+func InstallCertManager(clusterName string, config CertManagerConfig, printProgress, printInfo func(string)) error {
 	fullClusterName := GetKibashipClusterName(clusterName)
 	contextName := fmt.Sprintf("kind-%s", fullClusterName)
 
@@ -56,10 +56,8 @@ func InstallCertManager(clusterName string, config CertManagerConfig) error {
 		return fmt.Errorf("failed to install cert-manager: %w", err)
 	}
 
-	// Wait for cert-manager deployments to be ready
-	if err := waitForCertManagerDeployments(contextName); err != nil {
-		return fmt.Errorf("cert-manager deployments not ready: %w", err)
-	}
+	// Monitor cert-manager pods for 2 minutes with 25-second intervals
+	MonitorComponentInstallation(clusterName, CertManagerNamespace, "cert-manager", printProgress, printInfo)
 
 	// Verify cert-manager webhook is functional
 	if err := verifyCertManagerWebhook(contextName); err != nil {

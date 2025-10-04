@@ -34,7 +34,7 @@ func InstallGatewayAPI(clusterName string) error {
 }
 
 // InstallCilium installs Cilium CNI via Helm with Gateway API support
-func InstallCilium(clusterName, version string) error {
+func InstallCilium(clusterName, version string, printProgress, printInfo func(string)) error {
 	fullClusterName := GetKibashipClusterName(clusterName)
 	contextName := fmt.Sprintf("kind-%s", fullClusterName)
 
@@ -78,15 +78,8 @@ func InstallCilium(clusterName, version string) error {
 		return fmt.Errorf("failed to install Cilium: %w", err)
 	}
 
-	// Wait for Cilium DaemonSet to be ready
-	if err := waitForDaemonSet("cilium", "kube-system", contextName, 5*time.Minute); err != nil {
-		return fmt.Errorf("cilium DaemonSet not ready: %w", err)
-	}
-
-	// Wait for Cilium operator deployment to be ready
-	if err := waitForDeployment("cilium-operator", "kube-system", contextName); err != nil {
-		return fmt.Errorf("cilium operator not ready: %w", err)
-	}
+	// Monitor Cilium nodes and pods for 2 minutes with 25-second intervals
+	MonitorCiliumInstallation(clusterName, "Cilium", printProgress, printInfo)
 
 	return nil
 }

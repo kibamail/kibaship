@@ -236,13 +236,25 @@ func init() {
 	createClusterCmd := &cobra.Command{
 		Use:   "create [cluster-name]",
 		Short: "Create a new Kind cluster",
-		Long: `Create a new Kind cluster with Kibaship operator infrastructure (Phase 1-4)
+		Long: `Create a new Kind cluster with Kibaship operator infrastructure (Complete)
+
+Required for full installation:
+  --operator-domain: Base domain for applications (e.g., myapps.kibaship.com)
+  --operator-webhook-url: Webhook URL for notifications (e.g., https://webhook.example.com/kibaship)
 
 Examples:
-  kibaship clusters create                                    # Create cluster with defaults
-  kibaship clusters create my-cluster                        # Create cluster with custom name
-  kibaship clusters create --worker-nodes=2                  # Create with 2 worker nodes
-  kibaship clusters create --control-plane-nodes=3 --worker-nodes=3 ha-cluster  # HA cluster`,
+  # Create with full infrastructure
+  kibaship clusters create my-cluster \
+    --operator-domain myapps.kibaship.com \
+    --operator-webhook-url https://webhook.example.com/kibaship
+
+  # Create with custom configuration
+  kibaship clusters create my-cluster -c 3 -w 2 \
+    --operator-domain myapps.kibaship.com \
+    --operator-webhook-url https://webhook.example.com/kibaship
+
+  # Basic cluster only (no infrastructure)
+  kibaship clusters create my-cluster --skip-infrastructure`,
 		Args: cobra.MaximumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
 			// Determine cluster name
@@ -256,6 +268,9 @@ Examples:
 			workerNodes, _ := cmd.Flags().GetInt("worker-nodes")
 			ciliumVersion, _ := cmd.Flags().GetString("cilium-version")
 			skipInfrastructure, _ := cmd.Flags().GetBool("skip-infrastructure")
+			operatorDomain, _ := cmd.Flags().GetString("operator-domain")
+			operatorACMEEmail, _ := cmd.Flags().GetString("operator-acme-email")
+			operatorWebhookURL, _ := cmd.Flags().GetString("operator-webhook-url")
 
 			// Create options
 			opts := clusters.CreateOptions{
@@ -264,6 +279,24 @@ Examples:
 				WorkerNodes:        workerNodes,
 				CiliumVersion:      ciliumVersion,
 				SkipInfrastructure: skipInfrastructure,
+				OperatorDomain:     operatorDomain,
+				OperatorACMEEmail:  operatorACMEEmail,
+				OperatorWebhookURL: operatorWebhookURL,
+				Version:            version,
+			}
+
+			// Additional validation for operator configuration when not skipping infrastructure
+			if !skipInfrastructure {
+				if operatorDomain == "" {
+					printError("--operator-domain is required when installing full infrastructure")
+					printInfo("Example: --operator-domain myapps.kibaship.com")
+					return
+				}
+				if operatorWebhookURL == "" {
+					printError("--operator-webhook-url is required when installing full infrastructure")
+					printInfo("Example: --operator-webhook-url https://webhook.example.com/kibaship")
+					return
+				}
 			}
 
 			// Validate options
@@ -301,6 +334,13 @@ Examples:
 	createClusterCmd.Flags().IntP("worker-nodes", "w", 0, "Number of worker nodes (max: 10)")
 	createClusterCmd.Flags().String("cilium-version", "1.18.0", "Cilium version to install")
 	createClusterCmd.Flags().Bool("skip-infrastructure", false, "Skip infrastructure installation")
+
+	// Operator configuration flags (required for full installation)
+	createClusterCmd.Flags().String("operator-domain", "", "Base domain for applications (required, e.g., myapps.kibaship.com)")
+	createClusterCmd.Flags().String("operator-acme-email", "", "Email for ACME certificate registration (optional)")
+	createClusterCmd.Flags().String("operator-webhook-url", "", "Webhook URL for notifications (required, e.g., https://webhook.example.com/kibaship)")
+
+	// Note: operator flags are validated conditionally in the command logic
 
 	listClustersCmd := &cobra.Command{
 		Use:   "list",

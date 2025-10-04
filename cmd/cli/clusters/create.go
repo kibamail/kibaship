@@ -13,6 +13,12 @@ type CreateOptions struct {
 	WorkerNodes        int
 	CiliumVersion      string
 	SkipInfrastructure bool
+	// Operator configuration (required for full installation)
+	OperatorDomain     string
+	OperatorACMEEmail  string
+	OperatorWebhookURL string
+	// Version for operator installation
+	Version string
 }
 
 // DefaultCreateOptions returns default options for cluster creation
@@ -109,7 +115,7 @@ func CreateCluster(
 
 	printStep(7, fmt.Sprintf("Installing Cilium CNI (v%s)...", opts.CiliumVersion))
 	printProgress("This may take several minutes...")
-	if err := InstallCilium(opts.Name, opts.CiliumVersion); err != nil {
+	if err := InstallCilium(opts.Name, opts.CiliumVersion, printProgress, printInfo); err != nil {
 		printError(fmt.Sprintf("Failed to install Cilium: %v", err))
 		return err
 	}
@@ -122,19 +128,27 @@ func CreateCluster(
 	}
 	printSuccess("All nodes labeled for ingress")
 
-	// Phase 3: Certificate Management
+	// Phase 3: Storage & Certificate Management
 	printStep(9, fmt.Sprintf("Installing cert-manager (%s)...", CertManagerVersion))
 	printProgress("This may take several minutes...")
 
 	certManagerConfig := DefaultCertManagerConfig()
-	if err := InstallCertManager(opts.Name, certManagerConfig); err != nil {
+	if err := InstallCertManager(opts.Name, certManagerConfig, printProgress, printInfo); err != nil {
 		printError(fmt.Sprintf("Failed to install cert-manager: %v", err))
 		return err
 	}
 	printSuccess("cert-manager installed successfully")
 
+	printStep(10, fmt.Sprintf("Installing Longhorn storage (%s)...", LonghornVersion))
+	printProgress("Installing distributed block storage...")
+	if err := InstallLonghorn(opts.Name, printProgress, printInfo); err != nil {
+		printError(fmt.Sprintf("Failed to install Longhorn: %v", err))
+		return err
+	}
+	printSuccess("Longhorn storage installed successfully")
+
 	// Phase 4: Build & CI/CD Infrastructure
-	printStep(10, fmt.Sprintf("Installing Tekton Pipelines (%s)...", TektonVersion))
+	printStep(11, fmt.Sprintf("Installing Tekton Pipelines (%s)...", TektonVersion))
 	printProgress("Installing 75 Tekton manifests...")
 	if err := InstallTekton(opts.Name); err != nil {
 		printError(fmt.Sprintf("Failed to install Tekton: %v", err))
@@ -142,13 +156,37 @@ func CreateCluster(
 	}
 	printSuccess("Tekton Pipelines installed successfully")
 
-	printStep(11, "Installing Valkey Operator (v0.0.59)...")
+	printStep(12, "Installing Valkey Operator (v0.0.59)...")
 	printProgress("Installing Valkey operator manifests...")
-	if err := InstallValkey(opts.Name); err != nil {
+	if err := InstallValkey(opts.Name, printProgress, printInfo); err != nil {
 		printError(fmt.Sprintf("Failed to install Valkey: %v", err))
 		return err
 	}
 	printSuccess("Valkey Operator installed successfully")
+
+	// Phase 5: Operator Configuration & Installation
+	printStep(13, "Installing Kibaship operator configuration...")
+	printProgress("Creating operator namespace and ConfigMap...")
+
+	operatorConfig := OperatorConfig{
+		Domain:     opts.OperatorDomain,
+		ACMEEmail:  opts.OperatorACMEEmail,
+		WebhookURL: opts.OperatorWebhookURL,
+	}
+
+	if err := InstallOperatorConfiguration(opts.Name, operatorConfig); err != nil {
+		printError(fmt.Sprintf("Failed to install operator configuration: %v", err))
+		return err
+	}
+	printSuccess("Operator configuration installed successfully")
+
+	printStep(14, fmt.Sprintf("Installing Kibaship operator (%s)...", opts.Version))
+	printProgress("Applying operator manifests...")
+	if err := InstallKibashipOperator(opts.Name, opts.Version, printProgress, printInfo); err != nil {
+		printError(fmt.Sprintf("Failed to install Kibaship operator: %v", err))
+		return err
+	}
+	printSuccess("Kibaship operator installed successfully")
 
 	// Final verification
 	printProgress("Verifying installation...")
@@ -169,6 +207,11 @@ func CreateCluster(
 		return err
 	}
 
+	if err := VerifyLonghorn(opts.Name); err != nil {
+		printError(fmt.Sprintf("Longhorn verification failed: %v", err))
+		return err
+	}
+
 	if err := VerifyTekton(opts.Name); err != nil {
 		printError(fmt.Sprintf("Tekton verification failed: %v", err))
 		return err
@@ -176,6 +219,16 @@ func CreateCluster(
 
 	if err := VerifyValkey(opts.Name); err != nil {
 		printError(fmt.Sprintf("Valkey verification failed: %v", err))
+		return err
+	}
+
+	if err := VerifyOperatorConfiguration(opts.Name); err != nil {
+		printError(fmt.Sprintf("Operator configuration verification failed: %v", err))
+		return err
+	}
+
+	if err := VerifyKibashipOperator(opts.Name); err != nil {
+		printError(fmt.Sprintf("Kibaship operator verification failed: %v", err))
 		return err
 	}
 
@@ -193,6 +246,14 @@ func CreateCluster(
 		printInfo(fmt.Sprintf("cert-manager CA Injector: %s", certManagerStatus["cert-manager-cainjector"]))
 	}
 
+	longhornStatus, err := GetLonghornStatus(opts.Name)
+	if err == nil {
+		printInfo(fmt.Sprintf("Longhorn Manager: %s", longhornStatus["longhorn-manager"]))
+		printInfo(fmt.Sprintf("Longhorn UI: %s", longhornStatus["longhorn-ui"]))
+		printInfo(fmt.Sprintf("Longhorn Driver: %s", longhornStatus["longhorn-driver-deployer"]))
+		printInfo(fmt.Sprintf("Longhorn DaemonSet: %s", longhornStatus["longhorn-manager-ds"]))
+	}
+
 	tektonStatus, err := GetTektonStatus(opts.Name)
 	if err == nil {
 		printInfo(fmt.Sprintf("Tekton Controller: %s", tektonStatus["controller"]))
@@ -206,6 +267,17 @@ func CreateCluster(
 		printInfo(fmt.Sprintf("Valkey Operator: %s", valkeyStatus["operator"]))
 	}
 
+	operatorStatus, err := GetOperatorConfigurationStatus(opts.Name)
+	if err == nil {
+		printInfo(fmt.Sprintf("Operator Namespace: %s", operatorStatus["namespace"]))
+		printInfo(fmt.Sprintf("Operator ConfigMap: %s", operatorStatus["configmap"]))
+	}
+
+	kibashipOperatorStatus, err := GetKibashipOperatorStatus(opts.Name)
+	if err == nil {
+		printInfo(fmt.Sprintf("Kibaship Operator: %s", kibashipOperatorStatus["operator"]))
+	}
+
 	printSuccess("🎉 Cluster creation complete!")
 	printInfo("Your Kibaship cluster is ready with:")
 	printInfo("  ✓ Kind cluster with custom networking")
@@ -213,8 +285,16 @@ func CreateCluster(
 	printInfo("  ✓ Cilium CNI with Gateway API support")
 	printInfo("  ✓ All nodes labeled for ingress")
 	printInfo(fmt.Sprintf("  ✓ cert-manager (%s) with HA configuration", CertManagerVersion))
+	printInfo(fmt.Sprintf("  ✓ Longhorn storage (%s) - distributed block storage", LonghornVersion))
 	printInfo(fmt.Sprintf("  ✓ Tekton Pipelines (%s) for CI/CD", TektonVersion))
 	printInfo("  ✓ Valkey Operator (v0.0.59) for Redis-compatible databases")
+	printInfo("  ✓ Kibaship operator configuration ready")
+	printInfo(fmt.Sprintf("  ✓ Kibaship operator (%s) running", opts.Version))
+	printInfo(fmt.Sprintf("  ✓ Domain configured: %s", opts.OperatorDomain))
+	if opts.OperatorACMEEmail != "" {
+		printInfo(fmt.Sprintf("  ✓ ACME email: %s", opts.OperatorACMEEmail))
+	}
+	printInfo(fmt.Sprintf("  ✓ Webhook URL: %s", opts.OperatorWebhookURL))
 	printInfo("")
 	printInfo("Next steps:")
 	fullClusterName := GetKibashipClusterName(opts.Name)
@@ -256,6 +336,18 @@ func ValidateCreateOptions(opts CreateOptions) error {
 
 	if opts.CiliumVersion == "" {
 		return fmt.Errorf("cilium version cannot be empty")
+	}
+
+	// Validate operator configuration if not skipping infrastructure
+	if !opts.SkipInfrastructure {
+		operatorConfig := OperatorConfig{
+			Domain:     opts.OperatorDomain,
+			ACMEEmail:  opts.OperatorACMEEmail,
+			WebhookURL: opts.OperatorWebhookURL,
+		}
+		if err := ValidateOperatorConfig(operatorConfig); err != nil {
+			return fmt.Errorf("invalid operator configuration: %w", err)
+		}
 	}
 
 	return nil
