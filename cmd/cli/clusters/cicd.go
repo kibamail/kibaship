@@ -152,7 +152,7 @@ func applyCRDFile(url, contextName string) error {
 }
 
 // InstallValkey installs Valkey Operator using the custom CRD files
-func InstallValkey(clusterName string) error {
+func InstallValkey(clusterName string, printProgress, printInfo func(string)) error {
 	fullClusterName := GetKibashipClusterName(clusterName)
 	contextName := fmt.Sprintf("kind-%s", fullClusterName)
 
@@ -170,10 +170,8 @@ func InstallValkey(clusterName string) error {
 		}
 	}
 
-	// Wait for Valkey operator deployment to be ready
-	if err := waitForDeployment("valkey-operator-controller-manager", "valkey-operator-system", contextName); err != nil {
-		return fmt.Errorf("valkey operator deployment not ready: %w", err)
-	}
+	// Monitor Valkey operator pods for 2 minutes with 25-second intervals
+	MonitorComponentInstallation(clusterName, "valkey-operator-system", "Valkey Operator", printProgress, printInfo)
 
 	return nil
 }

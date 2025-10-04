@@ -36,18 +36,41 @@ The cluster creation process involves 9 major phases with 32 detailed steps, mir
    - Wait for DaemonSet and operator to be ready
 8. **Label all nodes** with `"ingress.kibaship.com/ready=true"`
 
-### Phase 3: Certificate Management
-9. **Install cert-manager** (if not present):
-   - Apply cert-manager CRDs and components
-   - Wait for deployments to be ready
-   - Verify webhook is functional
+### Phase 3: Storage & Certificate Management
+9. **Install cert-manager** (v1.18.2):
+   - Helm-based installation with HA configuration
+   - 3 controller replicas, 2 webhook replicas
+   - Prometheus monitoring enabled
+   - Automatic CRD installation
+
+10. **Install Longhorn Storage** (v1.10.0):
+    - Distributed block storage for Kubernetes
+    - Automatic StorageClass creation
+    - Volume snapshots and backup support
+    - Web UI for management
 
 ### Phase 4: Build & CI/CD Infrastructure
-10. **Install Prometheus Operator**:
-    - Apply prometheus-operator manifests
 11. **Install Tekton Pipelines** (v1.4.0):
-    - Apply tekton-pipelines manifests
-    - Wait for controller and webhook deployments
+    - Apply 75 Tekton manifests in order
+    - Wait for controller, webhook, events, and resolvers deployments
+    - Verify all CRDs are established
+
+12. **Install Valkey Operator** (v0.0.59):
+    - Apply Valkey operator manifests
+    - Wait for controller manager deployment
+    - Verify CRDs are established
+
+### Phase 5: Operator Configuration & Installation
+13. **Install Kibaship Operator Configuration**:
+    - Create kibaship-operator namespace
+    - Create operator ConfigMap with required environment variables
+    - Validate configuration parameters
+
+14. **Install Kibaship Operator** (matches CLI version):
+    - Apply operator manifests from official release (version matches CLI)
+    - For development builds: Uses `KIBASHIP_VERSION` env var or defaults to v0.1.3
+    - Wait for controller manager deployment
+    - Verify operator is running and ready
 12. **Install BuildKit shared daemon**:
     - Create buildkit namespace
     - Deploy BuildKit daemon (3 replicas)
@@ -154,10 +177,10 @@ helm upgrade --install cilium cilium/cilium \
 - **Gateway API**: v1.3.0 (Custom Kibaship CRDs)
 - **Cilium**: v1.18.0
 - **cert-manager**: v1.18.2
+- **Longhorn**: v1.10.0
 - **Tekton Pipelines**: v1.4.0
 - **Valkey Operator**: v0.0.59
-- **BuildKit**: v0.24.0-rootless (Phase 5 - Not yet implemented)
-- **Docker Registry**: v3.0.0 (Phase 6 - Not yet implemented)
+- **Kibaship Operator**: Automatically matches CLI version
 
 ## Implementation Notes
 
