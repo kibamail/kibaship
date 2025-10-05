@@ -322,7 +322,7 @@ func (s *EnvironmentService) convertToEnvironmentCRD(env *models.Environment) *v
 	}
 
 	// Add variables if present
-	if env.Variables != nil && len(env.Variables) > 0 {
+	if len(env.Variables) > 0 {
 		crd.Spec.Variables = env.Variables
 	}
 

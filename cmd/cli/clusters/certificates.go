@@ -112,23 +112,6 @@ func installCertManagerWithHelm(contextName string, config CertManagerConfig) er
 	return nil
 }
 
-// waitForCertManagerDeployments waits for all cert-manager deployments to be ready
-func waitForCertManagerDeployments(contextName string) error {
-	deployments := []string{
-		"cert-manager",
-		"cert-manager-cainjector",
-		"cert-manager-webhook",
-	}
-
-	for _, deployment := range deployments {
-		if err := waitForDeployment(deployment, CertManagerNamespace, contextName); err != nil {
-			return fmt.Errorf("deployment %s not ready: %w", deployment, err)
-		}
-	}
-
-	return nil
-}
-
 // verifyCertManagerWebhook verifies that the cert-manager webhook is functional
 func verifyCertManagerWebhook(contextName string) error {
 	// Test webhook by creating a test ClusterIssuer

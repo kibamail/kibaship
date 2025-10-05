@@ -14,7 +14,8 @@ const (
 	// OperatorConfigMapName is the name of the ConfigMap in the operator namespace
 	OperatorConfigMapName = "kibaship-operator-config"
 	// OperatorInstallURLTemplate is the template for the operator install URL
-	OperatorInstallURLTemplate = "https://raw.githubusercontent.com/kibamail/kibaship-operator/refs/tags/%s/dist/install.yaml"
+	OperatorInstallURLTemplate = "https://raw.githubusercontent.com/kibamail/" +
+		"kibaship-operator/refs/tags/%s/dist/install.yaml"
 )
 
 // OperatorConfig holds the configuration needed by the Kibaship operator
@@ -40,7 +41,9 @@ func ValidateOperatorConfig(config OperatorConfig) error {
 	// Validate domain format - must be a valid DNS name
 	domainRegex := regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$`)
 	if !domainRegex.MatchString(config.Domain) {
-		return fmt.Errorf("invalid domain format: %s - domain must be a valid DNS name (lowercase, alphanumeric, hyphens, dots)", config.Domain)
+		return fmt.Errorf(
+			"invalid domain format: %s - domain must be a valid DNS name "+
+				"(lowercase, alphanumeric, hyphens, dots)", config.Domain)
 	}
 
 	// Validate webhook URL format (basic validation)
@@ -173,17 +176,6 @@ func InstallKibashipOperator(clusterName, version string, printProgress, printIn
 	return nil
 }
 
-// waitForOperatorDeployment waits for the operator deployment to be ready
-func waitForOperatorDeployment(contextName string) error {
-	// The operator deployment is typically named "kibaship-operator-controller-manager"
-	// We'll wait for it to be ready
-	if err := waitForDeployment("kibaship-operator-controller-manager", OperatorNamespace, contextName); err != nil {
-		return fmt.Errorf("operator controller manager deployment not ready: %w", err)
-	}
-
-	return nil
-}
-
 // VerifyOperatorConfiguration verifies that the operator configuration is properly installed
 func VerifyOperatorConfiguration(clusterName string) error {
 	fullClusterName := GetKibashipClusterName(clusterName)
@@ -196,14 +188,15 @@ func VerifyOperatorConfiguration(clusterName string) error {
 	}
 
 	// Check if operator ConfigMap exists
-	cmd = exec.Command("kubectl", "get", "configmap", OperatorConfigMapName, "-n", OperatorNamespace, "--context", contextName)
+	cmd = exec.Command("kubectl", "get", "configmap", OperatorConfigMapName, "-n",
+		OperatorNamespace, "--context", contextName)
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("operator ConfigMap not found: %w", err)
 	}
 
 	// Verify required keys exist in ConfigMap
-	cmd = exec.Command("kubectl", "get", "configmap", OperatorConfigMapName, "-n", OperatorNamespace,
-		"--context", contextName, "-o", "jsonpath={.data}")
+	cmd = exec.Command("kubectl", "get", "configmap", OperatorConfigMapName, "-n",
+		OperatorNamespace, "--context", contextName, "-o", "jsonpath={.data}")
 	output, err := cmd.Output()
 	if err != nil {
 		return fmt.Errorf("failed to get ConfigMap data: %w", err)
@@ -335,7 +328,8 @@ func UninstallOperatorConfiguration(clusterName string) error {
 	contextName := fmt.Sprintf("kind-%s", fullClusterName)
 
 	// Delete ConfigMap
-	cmd := exec.Command("kubectl", "delete", "configmap", OperatorConfigMapName, "-n", OperatorNamespace, "--context", contextName)
+	cmd := exec.Command("kubectl", "delete", "configmap", OperatorConfigMapName, "-n",
+		OperatorNamespace, "--context", contextName)
 	if err := cmd.Run(); err != nil {
 		// Don't fail if ConfigMap doesn't exist
 		fmt.Printf("Warning: failed to delete operator ConfigMap: %v\n", err)

@@ -110,13 +110,6 @@ func waitForCRD(crdName, context string) error {
 	return cmd.Run()
 }
 
-// waitForDaemonSet waits for a DaemonSet to be ready
-func waitForDaemonSet(name, namespace, context string, timeout time.Duration) error {
-	cmd := exec.Command("kubectl", "-n", namespace, "rollout", "status", fmt.Sprintf("ds/%s", name),
-		fmt.Sprintf("--timeout=%s", timeout), "--context", context)
-	return cmd.Run()
-}
-
 // waitForDeployment waits for a Deployment to be ready
 func waitForDeployment(name, namespace, context string) error {
 	timeout := 10 * time.Minute
