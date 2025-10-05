@@ -34,206 +34,202 @@ import (
 )
 
 var _ = Describe("Deployment Integration", func() {
-	var ctx context.Context
-	var apiKey string
-	var router http.Handler
+	It("creates GitRepository deployment successfully", NodeTimeout(30*time.Second), func(ctx SpecContext) {
+		apiKey := generateTestAPIKey()
+		router := setupIntegrationTestRouter(apiKey)
 
-	BeforeEach(func() {
-		ctx = context.Background()
-		apiKey = generateTestAPIKey()
-		router = setupIntegrationTestRouter(apiKey)
+		// Create project
+		projectPayload := models.ProjectCreateRequest{
+			Name:          "Test Project for Deployment",
+			WorkspaceUUID: "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+		}
+
+		jsonData, err := json.Marshal(projectPayload)
+		Expect(err).NotTo(HaveOccurred())
+
+		req, err := http.NewRequest("POST", "/projects", bytes.NewBuffer(jsonData))
+		Expect(err).NotTo(HaveOccurred())
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		Expect(w.Code).To(Equal(http.StatusCreated))
+
+		var createdProject models.ProjectResponse
+		err = json.Unmarshal(w.Body.Bytes(), &createdProject)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Create environment via API
+		envPayload := models.EnvironmentCreateRequest{
+			Name:        "production",
+			Description: "Production environment",
+		}
+		jsonData, err = json.Marshal(envPayload)
+		Expect(err).NotTo(HaveOccurred())
+
+		req, err = http.NewRequest("POST", "/projects/"+createdProject.Slug+"/environments", bytes.NewBuffer(jsonData))
+		Expect(err).NotTo(HaveOccurred())
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+
+		w = httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		Expect(w.Code).To(Equal(http.StatusCreated))
+
+		var createdEnvironment models.EnvironmentResponse
+		err = json.Unmarshal(w.Body.Bytes(), &createdEnvironment)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Create application using environment slug
+		applicationPayload := models.ApplicationCreateRequest{
+			Name: "My Git App",
+			Type: models.ApplicationTypeGitRepository,
+			GitRepository: &models.GitRepositoryConfig{
+				Provider:     models.GitProviderGitHub,
+				Repository:   "myorg/myapp",
+				Branch:       "main",
+				PublicAccess: true,
+			},
+		}
+
+		jsonData, err = json.Marshal(applicationPayload)
+		Expect(err).NotTo(HaveOccurred())
+
+		req, err = http.NewRequest("POST", "/environments/"+createdEnvironment.Slug+"/applications", bytes.NewBuffer(jsonData))
+		Expect(err).NotTo(HaveOccurred())
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+
+		w = httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		Expect(w.Code).To(Equal(http.StatusCreated))
+
+		var createdApplication models.ApplicationResponse
+		err = json.Unmarshal(w.Body.Bytes(), &createdApplication)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Create deployment
+		payload := models.DeploymentCreateRequest{
+			ApplicationSlug: createdApplication.Slug,
+			GitRepository: &models.GitRepositoryDeploymentConfig{
+				CommitSHA: "abc123def456",
+				Branch:    "main",
+			},
+		}
+
+		jsonData, err = json.Marshal(payload)
+		Expect(err).NotTo(HaveOccurred())
+
+		req, err = http.NewRequest("POST", "/applications/"+createdApplication.Slug+"/deployments", bytes.NewBuffer(jsonData))
+		Expect(err).NotTo(HaveOccurred())
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+
+		w = httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		Expect(w.Code).To(Equal(http.StatusCreated))
+
+		var response models.DeploymentResponse
+		err = json.Unmarshal(w.Body.Bytes(), &response)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Validate response
+		Expect(response.UUID).NotTo(BeEmpty())
+		Expect(response.Slug).NotTo(BeEmpty())
+		Expect(response.Slug).To(HaveLen(8))
+		Expect(response.ApplicationSlug).To(Equal(createdApplication.Slug))
+		Expect(response.Phase).To(Equal(models.DeploymentPhaseInitializing))
+		Expect(response.GitRepository).NotTo(BeNil())
+		Expect(response.GitRepository.CommitSHA).To(Equal("abc123def456"))
+		Expect(response.GitRepository.Branch).To(Equal("main"))
+
+		// Verify CRD
+		var deployment v1alpha1.Deployment
+		err = k8sClient.Get(ctx, client.ObjectKey{
+			Name:      "deployment-" + response.Slug + "-kibaship-com",
+			Namespace: "default",
+		}, &deployment)
+		Expect(err).NotTo(HaveOccurred())
+
+		labels := deployment.GetLabels()
+		Expect(labels[validation.LabelResourceUUID]).To(Equal(response.UUID))
+		Expect(labels[validation.LabelResourceSlug]).To(Equal(response.Slug))
+		Expect(labels[validation.LabelProjectUUID]).To(Equal(response.ProjectUUID))
+		Expect(labels[validation.LabelApplicationUUID]).To(Equal(response.ApplicationUUID))
+
+		Expect(deployment.Spec.GitRepository).NotTo(BeNil())
+		Expect(deployment.Spec.GitRepository.CommitSHA).To(Equal("abc123def456"))
+		Expect(deployment.Spec.GitRepository.Branch).To(Equal("main"))
+
+		// Cleanup
+		_ = k8sClient.Delete(ctx, &deployment)
+		var application v1alpha1.Application
+		err = k8sClient.Get(ctx, client.ObjectKey{
+			Name:      "application-" + createdApplication.Slug + "-kibaship-com",
+			Namespace: "default",
+		}, &application)
+		if err == nil {
+			_ = k8sClient.Delete(ctx, &application)
+		}
+		var project v1alpha1.Project
+		err = k8sClient.Get(ctx, client.ObjectKey{
+			Name: "project-" + createdProject.Slug + "-kibaship-com",
+		}, &project)
+		if err == nil {
+			_ = k8sClient.Delete(ctx, &project)
+		}
 	})
 
-	Describe("Deployment Creation", func() {
-		var createdProject *models.ProjectResponse
-		var createdApplication *models.ApplicationResponse
+	It("retrieves deployment by slug", NodeTimeout(30*time.Second), func(ctx SpecContext) {
+		apiKey := generateTestAPIKey()
+		router := setupIntegrationTestRouter(apiKey)
 
-		BeforeEach(func() {
-			// Create a project
-			projectPayload := models.ProjectCreateRequest{
-				Name:          "Test Project for Deployments",
-				WorkspaceUUID: "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
-			}
+		createdProject, createdApplication, createdDeployment := createTestDeployment(router, apiKey)
 
-			jsonData, err := json.Marshal(projectPayload)
-			Expect(err).NotTo(HaveOccurred())
+		req, err := http.NewRequest("GET", "/deployments/"+createdDeployment.Slug, nil)
+		Expect(err).NotTo(HaveOccurred())
+		req.Header.Set("Authorization", "Bearer "+apiKey)
 
-			req, err := http.NewRequest("POST", "/projects", bytes.NewBuffer(jsonData))
-			Expect(err).NotTo(HaveOccurred())
-			req.Header.Set("Content-Type", "application/json")
-			req.Header.Set("Authorization", "Bearer "+apiKey)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		Expect(w.Code).To(Equal(http.StatusOK))
 
-			w := httptest.NewRecorder()
-			router.ServeHTTP(w, req)
-			Expect(w.Code).To(Equal(http.StatusCreated))
+		var response models.DeploymentResponse
+		err = json.Unmarshal(w.Body.Bytes(), &response)
+		Expect(err).NotTo(HaveOccurred())
 
-			err = json.Unmarshal(w.Body.Bytes(), &createdProject)
-			Expect(err).NotTo(HaveOccurred())
+		Expect(response.UUID).To(Equal(createdDeployment.UUID))
+		Expect(response.Slug).To(Equal(createdDeployment.Slug))
+		Expect(response.ApplicationUUID).To(Equal(createdApplication.UUID))
 
-			// Create a GitRepository application
-			applicationPayload := models.ApplicationCreateRequest{
-				Name:        "My Git App",
-				ProjectSlug: createdProject.Slug,
-				Type:        models.ApplicationTypeGitRepository,
-				GitRepository: &models.GitRepositoryConfig{
-					Provider:     models.GitProviderGitHub,
-					Repository:   "myorg/myapp",
-					Branch:       "main",
-					PublicAccess: true,
-				},
-			}
-
-			jsonData, err = json.Marshal(applicationPayload)
-			Expect(err).NotTo(HaveOccurred())
-
-			req, err = http.NewRequest("POST", "/projects/"+createdProject.Slug+"/applications", bytes.NewBuffer(jsonData))
-			Expect(err).NotTo(HaveOccurred())
-			req.Header.Set("Content-Type", "application/json")
-			req.Header.Set("Authorization", "Bearer "+apiKey)
-
-			w = httptest.NewRecorder()
-			router.ServeHTTP(w, req)
-			Expect(w.Code).To(Equal(http.StatusCreated))
-
-			err = json.Unmarshal(w.Body.Bytes(), &createdApplication)
-			Expect(err).NotTo(HaveOccurred())
-		})
-
-		AfterEach(func() {
-			// Clean up created application and project
-			var application v1alpha1.Application
-			err := k8sClient.Get(ctx, client.ObjectKey{
-				Name:      "application-" + createdApplication.Slug + "-kibaship-com",
-				Namespace: "default",
-			}, &application)
-			if err == nil {
-				_ = k8sClient.Delete(ctx, &application)
-			}
-
-			var project v1alpha1.Project
-			err = k8sClient.Get(ctx, client.ObjectKey{
-				Name:      "project-" + createdProject.Slug + "-kibaship-com",
-				Namespace: "default",
-			}, &project)
-			if err == nil {
-				_ = k8sClient.Delete(ctx, &project)
-			}
-		})
-
-		It("creates GitRepository deployment successfully", NodeTimeout(30*time.Second), func(ctx SpecContext) {
-			payload := models.DeploymentCreateRequest{
-				ApplicationSlug: createdApplication.Slug,
-				GitRepository: &models.GitRepositoryDeploymentConfig{
-					CommitSHA: "abc123def456",
-					Branch:    "main",
-				},
-			}
-
-			// Prepare request
-			jsonData, err := json.Marshal(payload)
-			Expect(err).NotTo(HaveOccurred())
-
-			req, err := http.NewRequest("POST", "/applications/"+createdApplication.Slug+"/deployments", bytes.NewBuffer(jsonData))
-			Expect(err).NotTo(HaveOccurred())
-			req.Header.Set("Content-Type", "application/json")
-			req.Header.Set("Authorization", "Bearer "+apiKey)
-
-			// Perform request
-			w := httptest.NewRecorder()
-			router.ServeHTTP(w, req)
-
-			// Assert status code
-			Expect(w.Code).To(Equal(http.StatusCreated))
-
-			// Parse response
-			var response models.DeploymentResponse
-			err = json.Unmarshal(w.Body.Bytes(), &response)
-			Expect(err).NotTo(HaveOccurred())
-
-			// Validate response
-			Expect(response.UUID).NotTo(BeEmpty())
-			Expect(response.Slug).NotTo(BeEmpty())
-			Expect(response.Slug).To(HaveLen(8))
-			Expect(response.ApplicationSlug).To(Equal(createdApplication.Slug))
-			Expect(response.Phase).To(Equal(models.DeploymentPhaseInitializing))
-			Expect(response.GitRepository).NotTo(BeNil())
-			Expect(response.GitRepository.CommitSHA).To(Equal("abc123def456"))
-			Expect(response.GitRepository.Branch).To(Equal("main"))
-
-			// Verify Deployment CRD was actually created in Kubernetes
-			var deployment v1alpha1.Deployment
-			err = k8sClient.Get(ctx, client.ObjectKey{
-				Name:      "deployment-" + response.Slug + "-kibaship-com",
-				Namespace: "default",
-			}, &deployment)
-			Expect(err).NotTo(HaveOccurred(), "Deployment CRD should exist in Kubernetes")
-
-			// Verify CRD labels
-			labels := deployment.GetLabels()
-			Expect(labels[validation.LabelResourceUUID]).To(Equal(response.UUID))
-			Expect(labels[validation.LabelResourceSlug]).To(Equal(response.Slug))
-			Expect(labels[validation.LabelProjectUUID]).To(Equal(response.ProjectUUID))
-			Expect(labels[validation.LabelApplicationUUID]).To(Equal(response.ApplicationUUID))
-
-			// Verify GitRepository config
-			Expect(deployment.Spec.GitRepository).NotTo(BeNil())
-			Expect(deployment.Spec.GitRepository.CommitSHA).To(Equal("abc123def456"))
-			Expect(deployment.Spec.GitRepository.Branch).To(Equal("main"))
-
-			// Clean up the created deployment
-			_ = k8sClient.Delete(ctx, &deployment)
-		})
+		// Cleanup
+		cleanupTestDeployment(ctx, createdProject, createdApplication, createdDeployment)
 	})
 
-	Describe("Deployment Retrieval", func() {
-		var createdProject *models.ProjectResponse
-		var createdApplication *models.ApplicationResponse
-		var createdDeployment *models.DeploymentResponse
+	It("retrieves deployments by application", NodeTimeout(30*time.Second), func(ctx SpecContext) {
+		apiKey := generateTestAPIKey()
+		router := setupIntegrationTestRouter(apiKey)
 
-		BeforeEach(func() {
-			// Create project, application and deployment
-			createdProject, createdApplication, createdDeployment = createTestDeployment(router, apiKey)
-		})
+		createdProject, createdApplication, createdDeployment := createTestDeployment(router, apiKey)
 
-		AfterEach(func() {
-			// Clean up
-			cleanupTestDeployment(ctx, createdProject, createdApplication, createdDeployment)
-		})
+		req, err := http.NewRequest("GET", "/applications/"+createdApplication.Slug+"/deployments", nil)
+		Expect(err).NotTo(HaveOccurred())
+		req.Header.Set("Authorization", "Bearer "+apiKey)
 
-		It("retrieves deployment by slug", NodeTimeout(30*time.Second), func(ctx SpecContext) {
-			req, err := http.NewRequest("GET", "/deployments/"+createdDeployment.Slug, nil)
-			Expect(err).NotTo(HaveOccurred())
-			req.Header.Set("Authorization", "Bearer "+apiKey)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		Expect(w.Code).To(Equal(http.StatusOK))
 
-			w := httptest.NewRecorder()
-			router.ServeHTTP(w, req)
-			Expect(w.Code).To(Equal(http.StatusOK))
+		var response []models.DeploymentResponse
+		err = json.Unmarshal(w.Body.Bytes(), &response)
+		Expect(err).NotTo(HaveOccurred())
 
-			var response models.DeploymentResponse
-			err = json.Unmarshal(w.Body.Bytes(), &response)
-			Expect(err).NotTo(HaveOccurred())
+		Expect(response).To(HaveLen(1))
+		Expect(response[0].UUID).To(Equal(createdDeployment.UUID))
 
-			Expect(response.UUID).To(Equal(createdDeployment.UUID))
-			Expect(response.Slug).To(Equal(createdDeployment.Slug))
-			Expect(response.ApplicationUUID).To(Equal(createdApplication.UUID))
-		})
-
-		It("retrieves deployments by application", NodeTimeout(30*time.Second), func(ctx SpecContext) {
-			req, err := http.NewRequest("GET", "/applications/"+createdApplication.Slug+"/deployments", nil)
-			Expect(err).NotTo(HaveOccurred())
-			req.Header.Set("Authorization", "Bearer "+apiKey)
-
-			w := httptest.NewRecorder()
-			router.ServeHTTP(w, req)
-			Expect(w.Code).To(Equal(http.StatusOK))
-
-			var response []models.DeploymentResponse
-			err = json.Unmarshal(w.Body.Bytes(), &response)
-			Expect(err).NotTo(HaveOccurred())
-
-			Expect(response).To(HaveLen(1))
-			Expect(response[0].UUID).To(Equal(createdDeployment.UUID))
-		})
+		// Cleanup
+		cleanupTestDeployment(ctx, createdProject, createdApplication, createdDeployment)
 	})
 })
 
@@ -261,11 +257,31 @@ func createTestDeployment(router http.Handler, apiKey string) (*models.ProjectRe
 	err = json.Unmarshal(w.Body.Bytes(), &createdProject)
 	Expect(err).NotTo(HaveOccurred())
 
-	// Create application
+	// Create environment via API
+	envPayload := models.EnvironmentCreateRequest{
+		Name:        "production",
+		Description: "Production environment for testing",
+	}
+	jsonData, err = json.Marshal(envPayload)
+	Expect(err).NotTo(HaveOccurred())
+
+	req, err = http.NewRequest("POST", "/projects/"+createdProject.Slug+"/environments", bytes.NewBuffer(jsonData))
+	Expect(err).NotTo(HaveOccurred())
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	Expect(w.Code).To(Equal(http.StatusCreated))
+
+	var createdEnvironment models.EnvironmentResponse
+	err = json.Unmarshal(w.Body.Bytes(), &createdEnvironment)
+	Expect(err).NotTo(HaveOccurred())
+
+	// Create application using environment slug
 	applicationPayload := models.ApplicationCreateRequest{
-		Name:        "Test Git App",
-		ProjectSlug: createdProject.Slug,
-		Type:        models.ApplicationTypeGitRepository,
+		Name: "Test Git App",
+		Type: models.ApplicationTypeGitRepository,
 		GitRepository: &models.GitRepositoryConfig{
 			Provider:     models.GitProviderGitHub,
 			Repository:   "test/repo",
@@ -277,7 +293,7 @@ func createTestDeployment(router http.Handler, apiKey string) (*models.ProjectRe
 	jsonData, err = json.Marshal(applicationPayload)
 	Expect(err).NotTo(HaveOccurred())
 
-	req, err = http.NewRequest("POST", "/projects/"+createdProject.Slug+"/applications", bytes.NewBuffer(jsonData))
+	req, err = http.NewRequest("POST", "/environments/"+createdEnvironment.Slug+"/applications", bytes.NewBuffer(jsonData))
 	Expect(err).NotTo(HaveOccurred())
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+apiKey)

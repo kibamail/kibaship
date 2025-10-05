@@ -201,59 +201,11 @@ type PostgresClusterConfig struct {
 	SecretRef *corev1.LocalObjectReference `json:"secretRef,omitempty"`
 }
 
-// GitRepositoryEnvironmentConfig allows per-environment overrides for GitRepository applications
-type GitRepositoryEnvironmentConfig struct {
-	// Branch override (defaults to application's base branch)
-	// +optional
-	Branch string `json:"branch,omitempty"`
-
-	// BuildCommand override
-	// +optional
-	BuildCommand string `json:"buildCommand,omitempty"`
-
-	// StartCommand override
-	// +optional
-	StartCommand string `json:"startCommand,omitempty"`
-}
-
-// ApplicationEnvironment defines environment-specific configuration
-type ApplicationEnvironment struct {
-	// Name of the environment (production, staging, qa, etc.)
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
-	Name string `json:"name"`
-
-	// GitRepository contains environment-specific overrides for GitRepository applications
-	// +optional
-	GitRepository *GitRepositoryEnvironmentConfig `json:"gitRepository,omitempty"`
-
-	// Resources for this environment (optional)
-	// +optional
-	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
-
-	// Replicas for this environment (optional)
-	// +optional
-	Replicas *int32 `json:"replicas,omitempty"`
-}
-
-// EnvironmentStatus tracks the status of an environment
-type EnvironmentStatus struct {
-	// Name of the environment
-	Name string `json:"name"`
-
-	// SecretReady indicates if environment secret exists
-	SecretReady bool `json:"secretReady"`
-
-	// LastDeploymentTime tracks last deployment to this environment
-	// +optional
-	LastDeploymentTime *metav1.Time `json:"lastDeploymentTime,omitempty"`
-}
-
 // ApplicationSpec defines the desired state of Application.
 type ApplicationSpec struct {
-	// ProjectRef references the Project this application belongs to
+	// EnvironmentRef references the Environment this application belongs to
 	// +kubebuilder:validation:Required
-	ProjectRef corev1.LocalObjectReference `json:"projectRef"`
+	EnvironmentRef corev1.LocalObjectReference `json:"environmentRef"`
 
 	// Type defines the type of application
 	// +kubebuilder:validation:Required
@@ -282,11 +234,6 @@ type ApplicationSpec struct {
 	// PostgresCluster contains configuration for PostgresCluster applications
 	// +optional
 	PostgresCluster *PostgresClusterConfig `json:"postgresCluster,omitempty"`
-
-	// Environments defines environment-specific configurations
-	// If not specified, a default "production" environment is auto-created by the controller
-	// +optional
-	Environments []ApplicationEnvironment `json:"environments,omitempty"`
 }
 
 // ApplicationStatus defines the observed state of Application.
@@ -303,10 +250,6 @@ type ApplicationStatus struct {
 	// +optional
 	Message string `json:"message,omitempty"`
 
-	// EnvironmentStatus tracks the readiness of each environment
-	// +optional
-	EnvironmentStatus []EnvironmentStatus `json:"environmentStatus,omitempty"`
-
 	// ObservedGeneration reflects the generation of the most recently observed Application
 	// +optional
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
@@ -315,7 +258,7 @@ type ApplicationStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Type",type="string",JSONPath=".spec.type"
-// +kubebuilder:printcolumn:name="Project",type="string",JSONPath=".spec.projectRef.name"
+// +kubebuilder:printcolumn:name="Environment",type="string",JSONPath=".spec.environmentRef.name"
 // +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 // +kubebuilder:webhook:path=/validate-platform-operator-kibaship-com-v1alpha1-application,mutating=false,failurePolicy=fail,sideEffects=None,groups=platform.operator.kibaship.com,resources=applications,verbs=create;update,versions=v1alpha1,name=vapplication.kb.io,admissionReviewVersions=v1
@@ -417,6 +360,13 @@ func (r *Application) validateApplication(ctx context.Context) error {
 			errors = append(errors, fmt.Sprintf("application must have label %s", validation.LabelProjectUUID))
 		} else if !validation.ValidateUUID(projectUUID) {
 			errors = append(errors, fmt.Sprintf("project UUID must be valid: %s", projectUUID))
+		}
+
+		// Validate Environment UUID
+		if environmentUUID, exists := labels[validation.LabelEnvironmentUUID]; !exists {
+			errors = append(errors, fmt.Sprintf("application must have label %s", validation.LabelEnvironmentUUID))
+		} else if !validation.ValidateUUID(environmentUUID) {
+			errors = append(errors, fmt.Sprintf("environment UUID must be valid: %s", environmentUUID))
 		}
 	}
 

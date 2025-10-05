@@ -35,6 +35,7 @@ import (
 
 	platformv1alpha1 "github.com/kibamail/kibaship-operator/api/v1alpha1"
 	"github.com/kibamail/kibaship-operator/pkg/config"
+	"github.com/kibamail/kibaship-operator/pkg/validation"
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 )
 
@@ -50,6 +51,7 @@ var _ = Describe("Deployment Controller", func() {
 		deploymentReconciler *DeploymentReconciler
 		testNamespace        *corev1.Namespace
 		testProject          *platformv1alpha1.Project
+		testEnvironment      *platformv1alpha1.Environment
 		testApplication      *platformv1alpha1.Application
 		testDeployment       *platformv1alpha1.Deployment
 	)
@@ -84,6 +86,23 @@ var _ = Describe("Deployment Controller", func() {
 			Spec: platformv1alpha1.ProjectSpec{},
 		}
 		Expect(k8sClient.Create(ctx, testProject)).To(Succeed())
+
+		// Create test environment
+		testEnvironment = &platformv1alpha1.Environment{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "environment-production-kibaship-com",
+				Namespace: namespaceName,
+				Labels: map[string]string{
+					validation.LabelResourceUUID: "env-uuid-production-test",
+					validation.LabelResourceSlug: "production",
+					validation.LabelProjectUUID:  "550e8400-e29b-41d4-a716-446655440000",
+				},
+			},
+			Spec: platformv1alpha1.EnvironmentSpec{
+				ProjectRef: corev1.LocalObjectReference{Name: testProject.Name},
+			},
+		}
+		Expect(k8sClient.Create(ctx, testEnvironment)).To(Succeed())
 	})
 
 	AfterEach(func() {
@@ -93,6 +112,9 @@ var _ = Describe("Deployment Controller", func() {
 		}
 		if testApplication != nil {
 			_ = k8sClient.Delete(ctx, testApplication)
+		}
+		if testEnvironment != nil {
+			_ = k8sClient.Delete(ctx, testEnvironment)
 		}
 		if testProject != nil {
 			_ = k8sClient.Delete(ctx, testProject)
@@ -111,14 +133,15 @@ var _ = Describe("Deployment Controller", func() {
 						Name:      "project-test123-app-myapp-kibaship-com",
 						Namespace: testNamespace.Name,
 						Labels: map[string]string{
-							"platform.kibaship.com/uuid":         "app-uuid-123",
-							"platform.kibaship.com/slug":         "myapp",
-							"platform.kibaship.com/project-uuid": "550e8400-e29b-41d4-a716-446655440000",
+							"platform.kibaship.com/uuid":             "app-uuid-123",
+							"platform.kibaship.com/slug":             "myapp",
+							"platform.kibaship.com/environment-uuid": "env-uuid-production-test",
+							"platform.kibaship.com/project-uuid":     "550e8400-e29b-41d4-a716-446655440000",
 						},
 					},
 					Spec: platformv1alpha1.ApplicationSpec{
-						ProjectRef: corev1.LocalObjectReference{Name: testProject.Name},
-						Type:       platformv1alpha1.ApplicationTypeGitRepository,
+						EnvironmentRef: corev1.LocalObjectReference{Name: "environment-production-kibaship-com"},
+						Type:           platformv1alpha1.ApplicationTypeGitRepository,
 						GitRepository: &platformv1alpha1.GitRepositoryConfig{
 							Provider:   platformv1alpha1.GitProviderGitHub,
 							Repository: "user/test-repo",
@@ -136,6 +159,7 @@ var _ = Describe("Deployment Controller", func() {
 						Labels: map[string]string{
 							"platform.kibaship.com/uuid":             "deployment-uuid-123",
 							"platform.kibaship.com/slug":             "web",
+							"platform.kibaship.com/environment-uuid": "env-uuid-production-test",
 							"platform.kibaship.com/project-uuid":     "550e8400-e29b-41d4-a716-446655440000",
 							"platform.kibaship.com/application-uuid": "app-uuid-123",
 						},
@@ -308,14 +332,15 @@ var _ = Describe("Deployment Controller", func() {
 						Name:      "project-test123-app-dockerapp-kibaship-com",
 						Namespace: testNamespace.Name,
 						Labels: map[string]string{
-							"platform.kibaship.com/uuid":         "app-uuid-456",
-							"platform.kibaship.com/slug":         "dockerapp",
-							"platform.kibaship.com/project-uuid": "550e8400-e29b-41d4-a716-446655440000",
+							"platform.kibaship.com/uuid":             "app-uuid-456",
+							"platform.kibaship.com/slug":             "dockerapp",
+							"platform.kibaship.com/environment-uuid": "env-uuid-production-test",
+							"platform.kibaship.com/project-uuid":     "550e8400-e29b-41d4-a716-446655440000",
 						},
 					},
 					Spec: platformv1alpha1.ApplicationSpec{
-						ProjectRef: corev1.LocalObjectReference{Name: testProject.Name},
-						Type:       platformv1alpha1.ApplicationTypeDockerImage,
+						EnvironmentRef: corev1.LocalObjectReference{Name: "environment-production-kibaship-com"},
+						Type:           platformv1alpha1.ApplicationTypeDockerImage,
 						DockerImage: &platformv1alpha1.DockerImageConfig{
 							Image: "nginx:latest",
 						},
@@ -330,6 +355,7 @@ var _ = Describe("Deployment Controller", func() {
 						Labels: map[string]string{
 							"platform.kibaship.com/uuid":             "deployment-uuid-456",
 							"platform.kibaship.com/slug":             "web",
+							"platform.kibaship.com/environment-uuid": "env-uuid-production-test",
 							"platform.kibaship.com/project-uuid":     "550e8400-e29b-41d4-a716-446655440000",
 							"platform.kibaship.com/application-uuid": "app-uuid-456",
 						},
@@ -363,14 +389,15 @@ var _ = Describe("Deployment Controller", func() {
 					Name:      "project-testproj-app-testapp-kibaship-com",
 					Namespace: testNamespace.Name,
 					Labels: map[string]string{
-						"platform.kibaship.com/uuid":         "app-uuid-testproj-testapp",
-						"platform.kibaship.com/slug":         "testapp",
-						"platform.kibaship.com/project-uuid": "550e8400-e29b-41d4-a716-446655440000",
+						"platform.kibaship.com/uuid":             "app-uuid-testproj-testapp",
+						"platform.kibaship.com/slug":             "testapp",
+						"platform.kibaship.com/environment-uuid": "env-uuid-production-test",
+						"platform.kibaship.com/project-uuid":     "550e8400-e29b-41d4-a716-446655440000",
 					},
 				},
 				Spec: platformv1alpha1.ApplicationSpec{
-					ProjectRef: corev1.LocalObjectReference{Name: testProject.Name},
-					Type:       platformv1alpha1.ApplicationTypeGitRepository,
+					EnvironmentRef: corev1.LocalObjectReference{Name: "environment-production-kibaship-com"},
+					Type:           platformv1alpha1.ApplicationTypeGitRepository,
 					GitRepository: &platformv1alpha1.GitRepositoryConfig{
 						Provider:     platformv1alpha1.GitProviderGitHub,
 						Repository:   "user/test-repo",
@@ -389,6 +416,7 @@ var _ = Describe("Deployment Controller", func() {
 					Labels: map[string]string{
 						"platform.kibaship.com/uuid":             "deployment-uuid-testproj-testdeploy",
 						"platform.kibaship.com/slug":             "testdeploy",
+						"platform.kibaship.com/environment-uuid": "env-uuid-production-test",
 						"platform.kibaship.com/project-uuid":     "550e8400-e29b-41d4-a716-446655440000",
 						"platform.kibaship.com/application-uuid": "app-uuid-testproj-testapp",
 					},
@@ -470,14 +498,15 @@ var _ = Describe("Deployment Controller", func() {
 					Name:      "project-teststorage-app-testapp-kibaship-com",
 					Namespace: testNamespace.Name,
 					Labels: map[string]string{
-						"platform.kibaship.com/uuid":         "app-uuid-teststorage-testapp",
-						"platform.kibaship.com/slug":         "testapp",
-						"platform.kibaship.com/project-uuid": "550e8400-e29b-41d4-a716-446655440000",
+						"platform.kibaship.com/uuid":             "app-uuid-teststorage-testapp",
+						"platform.kibaship.com/slug":             "testapp",
+						"platform.kibaship.com/environment-uuid": "env-uuid-production-test",
+						"platform.kibaship.com/project-uuid":     "550e8400-e29b-41d4-a716-446655440000",
 					},
 				},
 				Spec: platformv1alpha1.ApplicationSpec{
-					ProjectRef: corev1.LocalObjectReference{Name: testProject.Name},
-					Type:       platformv1alpha1.ApplicationTypeGitRepository,
+					EnvironmentRef: corev1.LocalObjectReference{Name: "environment-production-kibaship-com"},
+					Type:           platformv1alpha1.ApplicationTypeGitRepository,
 					GitRepository: &platformv1alpha1.GitRepositoryConfig{
 						Provider:     platformv1alpha1.GitProviderGitHub,
 						Repository:   "user/test-repo",
@@ -496,6 +525,7 @@ var _ = Describe("Deployment Controller", func() {
 					Labels: map[string]string{
 						"platform.kibaship.com/uuid":             "deployment-uuid-teststorage-storage",
 						"platform.kibaship.com/slug":             "storage",
+						"platform.kibaship.com/environment-uuid": "env-uuid-production-test",
 						"platform.kibaship.com/project-uuid":     "550e8400-e29b-41d4-a716-446655440000",
 						"platform.kibaship.com/application-uuid": "app-uuid-teststorage-testapp",
 					},
@@ -554,14 +584,15 @@ var _ = Describe("Deployment Controller", func() {
 					Name:      "project-teststorageclass-app-testapp-kibaship-com",
 					Namespace: testNamespace.Name,
 					Labels: map[string]string{
-						"platform.kibaship.com/uuid":         "app-uuid-teststorageclass-testapp",
-						"platform.kibaship.com/slug":         "testapp",
-						"platform.kibaship.com/project-uuid": "550e8400-e29b-41d4-a716-446655440000",
+						"platform.kibaship.com/uuid":             "app-uuid-teststorageclass-testapp",
+						"platform.kibaship.com/slug":             "testapp",
+						"platform.kibaship.com/environment-uuid": "env-uuid-production-test",
+						"platform.kibaship.com/project-uuid":     "550e8400-e29b-41d4-a716-446655440000",
 					},
 				},
 				Spec: platformv1alpha1.ApplicationSpec{
-					ProjectRef: corev1.LocalObjectReference{Name: testProject.Name},
-					Type:       platformv1alpha1.ApplicationTypeGitRepository,
+					EnvironmentRef: corev1.LocalObjectReference{Name: "environment-production-kibaship-com"},
+					Type:           platformv1alpha1.ApplicationTypeGitRepository,
 					GitRepository: &platformv1alpha1.GitRepositoryConfig{
 						Provider:     platformv1alpha1.GitProviderGitHub,
 						Repository:   "user/test-repo",
@@ -580,6 +611,7 @@ var _ = Describe("Deployment Controller", func() {
 					Labels: map[string]string{
 						"platform.kibaship.com/uuid":             "deployment-uuid-teststorageclass-storageclass",
 						"platform.kibaship.com/slug":             "storageclass",
+						"platform.kibaship.com/environment-uuid": "env-uuid-production-test",
 						"platform.kibaship.com/project-uuid":     "550e8400-e29b-41d4-a716-446655440000",
 						"platform.kibaship.com/application-uuid": "app-uuid-teststorageclass-testapp",
 					},
@@ -633,14 +665,15 @@ var _ = Describe("Deployment Controller", func() {
 					Name:      "project-testbranch-app-testapp-kibaship-com",
 					Namespace: testNamespace.Name,
 					Labels: map[string]string{
-						"platform.kibaship.com/uuid":         "app-uuid-testbranch-testapp",
-						"platform.kibaship.com/slug":         "testapp",
-						"platform.kibaship.com/project-uuid": "550e8400-e29b-41d4-a716-446655440000",
+						"platform.kibaship.com/uuid":             "app-uuid-testbranch-testapp",
+						"platform.kibaship.com/slug":             "testapp",
+						"platform.kibaship.com/environment-uuid": "env-uuid-production-test",
+						"platform.kibaship.com/project-uuid":     "550e8400-e29b-41d4-a716-446655440000",
 					},
 				},
 				Spec: platformv1alpha1.ApplicationSpec{
-					ProjectRef: corev1.LocalObjectReference{Name: testProject.Name},
-					Type:       platformv1alpha1.ApplicationTypeGitRepository,
+					EnvironmentRef: corev1.LocalObjectReference{Name: "environment-production-kibaship-com"},
+					Type:           platformv1alpha1.ApplicationTypeGitRepository,
 					GitRepository: &platformv1alpha1.GitRepositoryConfig{
 						Provider:     platformv1alpha1.GitProviderGitHub,
 						Repository:   "user/test-repo",
@@ -659,6 +692,7 @@ var _ = Describe("Deployment Controller", func() {
 					Labels: map[string]string{
 						"platform.kibaship.com/uuid":             "deployment-uuid-testbranch-testbranch",
 						"platform.kibaship.com/slug":             "testbranch",
+						"platform.kibaship.com/environment-uuid": "env-uuid-production-test",
 						"platform.kibaship.com/project-uuid":     "550e8400-e29b-41d4-a716-446655440000",
 						"platform.kibaship.com/application-uuid": "app-uuid-testbranch-testapp",
 					},
@@ -704,14 +738,15 @@ var _ = Describe("Deployment Controller", func() {
 					Name:      "project-testdup-app-testapp-kibaship-com",
 					Namespace: testNamespace.Name,
 					Labels: map[string]string{
-						"platform.kibaship.com/uuid":         "app-uuid-testdup-testapp",
-						"platform.kibaship.com/slug":         "testapp",
-						"platform.kibaship.com/project-uuid": "550e8400-e29b-41d4-a716-446655440000",
+						"platform.kibaship.com/uuid":             "app-uuid-testdup-testapp",
+						"platform.kibaship.com/slug":             "testapp",
+						"platform.kibaship.com/environment-uuid": "env-uuid-production-test",
+						"platform.kibaship.com/project-uuid":     "550e8400-e29b-41d4-a716-446655440000",
 					},
 				},
 				Spec: platformv1alpha1.ApplicationSpec{
-					ProjectRef: corev1.LocalObjectReference{Name: testProject.Name},
-					Type:       platformv1alpha1.ApplicationTypeGitRepository,
+					EnvironmentRef: corev1.LocalObjectReference{Name: "environment-production-kibaship-com"},
+					Type:           platformv1alpha1.ApplicationTypeGitRepository,
 					GitRepository: &platformv1alpha1.GitRepositoryConfig{
 						Provider:     platformv1alpha1.GitProviderGitHub,
 						Repository:   "user/test-repo",
@@ -730,6 +765,7 @@ var _ = Describe("Deployment Controller", func() {
 					Labels: map[string]string{
 						"platform.kibaship.com/uuid":             "deployment-uuid-testdup-testdup",
 						"platform.kibaship.com/slug":             "testdup",
+						"platform.kibaship.com/environment-uuid": "env-uuid-production-test",
 						"platform.kibaship.com/project-uuid":     "550e8400-e29b-41d4-a716-446655440000",
 						"platform.kibaship.com/application-uuid": "app-uuid-testdup-testapp",
 					},
@@ -779,14 +815,15 @@ var _ = Describe("Deployment Controller", func() {
 					Name:      "project-testrequired-app-testapp-kibaship-com",
 					Namespace: testNamespace.Name,
 					Labels: map[string]string{
-						"platform.kibaship.com/uuid":         "app-uuid-testrequired-testapp",
-						"platform.kibaship.com/slug":         "testapp",
-						"platform.kibaship.com/project-uuid": "550e8400-e29b-41d4-a716-446655440000",
+						"platform.kibaship.com/uuid":             "app-uuid-testrequired-testapp",
+						"platform.kibaship.com/slug":             "testapp",
+						"platform.kibaship.com/environment-uuid": "env-uuid-production-test",
+						"platform.kibaship.com/project-uuid":     "550e8400-e29b-41d4-a716-446655440000",
 					},
 				},
 				Spec: platformv1alpha1.ApplicationSpec{
-					ProjectRef: corev1.LocalObjectReference{Name: testProject.Name},
-					Type:       platformv1alpha1.ApplicationTypeGitRepository,
+					EnvironmentRef: corev1.LocalObjectReference{Name: "environment-production-kibaship-com"},
+					Type:           platformv1alpha1.ApplicationTypeGitRepository,
 					GitRepository: &platformv1alpha1.GitRepositoryConfig{
 						Provider:     platformv1alpha1.GitProviderGitHub,
 						Repository:   "user/test-repo",
@@ -805,6 +842,7 @@ var _ = Describe("Deployment Controller", func() {
 					Labels: map[string]string{
 						"platform.kibaship.com/uuid":             "deployment-uuid-testrequired-testrequired",
 						"platform.kibaship.com/slug":             "testrequired",
+						"platform.kibaship.com/environment-uuid": "env-uuid-production-test",
 						"platform.kibaship.com/project-uuid":     "550e8400-e29b-41d4-a716-446655440000",
 						"platform.kibaship.com/application-uuid": "app-uuid-testrequired-testapp",
 					},
@@ -857,14 +895,15 @@ var _ = Describe("Deployment Controller", func() {
 							Name:      fmt.Sprintf("project-test123-app-provider%d-kibaship-com", i),
 							Namespace: testNamespace.Name,
 							Labels: map[string]string{
-								"platform.kibaship.com/uuid":         fmt.Sprintf("app-uuid-provider%d", i),
-								"platform.kibaship.com/slug":         fmt.Sprintf("provider%d", i),
-								"platform.kibaship.com/project-uuid": "550e8400-e29b-41d4-a716-446655440000",
+								"platform.kibaship.com/uuid":             fmt.Sprintf("app-uuid-provider%d", i),
+								"platform.kibaship.com/slug":             fmt.Sprintf("provider%d", i),
+								"platform.kibaship.com/environment-uuid": "env-uuid-production-test",
+								"platform.kibaship.com/project-uuid":     "550e8400-e29b-41d4-a716-446655440000",
 							},
 						},
 						Spec: platformv1alpha1.ApplicationSpec{
-							ProjectRef: corev1.LocalObjectReference{Name: testProject.Name},
-							Type:       platformv1alpha1.ApplicationTypeGitRepository,
+							EnvironmentRef: corev1.LocalObjectReference{Name: "environment-production-kibaship-com"},
+							Type:           platformv1alpha1.ApplicationTypeGitRepository,
 							GitRepository: &platformv1alpha1.GitRepositoryConfig{
 								Provider:   tc.provider,
 								Repository: tc.repository,
@@ -881,6 +920,7 @@ var _ = Describe("Deployment Controller", func() {
 							Labels: map[string]string{
 								"platform.kibaship.com/uuid":             fmt.Sprintf("deployment-uuid-provider%d", i),
 								"platform.kibaship.com/slug":             fmt.Sprintf("web%d", i),
+								"platform.kibaship.com/environment-uuid": "env-uuid-production-test",
 								"platform.kibaship.com/project-uuid":     "550e8400-e29b-41d4-a716-446655440000",
 								"platform.kibaship.com/application-uuid": fmt.Sprintf("app-uuid-provider%d", i),
 							},
@@ -932,14 +972,15 @@ var _ = Describe("Deployment Controller", func() {
 						Name:      "project-test123-app-mysqlapp-kibaship-com",
 						Namespace: testNamespace.Name,
 						Labels: map[string]string{
-							"platform.kibaship.com/uuid":         "app-uuid-mysql-mysqlapp",
-							"platform.kibaship.com/slug":         "mysqlapp",
-							"platform.kibaship.com/project-uuid": "550e8400-e29b-41d4-a716-446655440000",
+							"platform.kibaship.com/uuid":             "app-uuid-mysql-mysqlapp",
+							"platform.kibaship.com/slug":             "mysqlapp",
+							"platform.kibaship.com/environment-uuid": "env-uuid-production-test",
+							"platform.kibaship.com/project-uuid":     "550e8400-e29b-41d4-a716-446655440000",
 						},
 					},
 					Spec: platformv1alpha1.ApplicationSpec{
-						ProjectRef: corev1.LocalObjectReference{Name: testProject.Name},
-						Type:       platformv1alpha1.ApplicationTypeMySQL,
+						EnvironmentRef: corev1.LocalObjectReference{Name: "environment-production-kibaship-com"},
+						Type:           platformv1alpha1.ApplicationTypeMySQL,
 						MySQL: &platformv1alpha1.MySQLConfig{
 							Version: "8.0.28",
 						},
@@ -963,6 +1004,7 @@ var _ = Describe("Deployment Controller", func() {
 						Labels: map[string]string{
 							"platform.kibaship.com/uuid":             "deployment-uuid-mysql-deploy1",
 							"platform.kibaship.com/slug":             "deploy1",
+							"platform.kibaship.com/environment-uuid": "env-uuid-production-test",
 							"platform.kibaship.com/project-uuid":     "550e8400-e29b-41d4-a716-446655440000",
 							"platform.kibaship.com/application-uuid": "app-uuid-mysql-mysqlapp",
 						},
@@ -1053,6 +1095,7 @@ var _ = Describe("Deployment Controller", func() {
 						Labels: map[string]string{
 							"platform.kibaship.com/uuid":             "deployment-uuid-mysql-first-deploy1",
 							"platform.kibaship.com/slug":             "deploy1",
+							"platform.kibaship.com/environment-uuid": "env-uuid-production-test",
 							"platform.kibaship.com/project-uuid":     "550e8400-e29b-41d4-a716-446655440000",
 							"platform.kibaship.com/application-uuid": "app-uuid-mysql-mysqlapp",
 						},
@@ -1095,6 +1138,7 @@ var _ = Describe("Deployment Controller", func() {
 						Labels: map[string]string{
 							"platform.kibaship.com/uuid":             "deployment-uuid-mysql-deploy2",
 							"platform.kibaship.com/slug":             "deploy2",
+							"platform.kibaship.com/environment-uuid": "env-uuid-production-test",
 							"platform.kibaship.com/project-uuid":     "550e8400-e29b-41d4-a716-446655440000",
 							"platform.kibaship.com/application-uuid": "app-uuid-mysql-mysqlapp",
 						},
@@ -1141,15 +1185,16 @@ var _ = Describe("Deployment Controller", func() {
 						Name:      "project-test123-app-mysql-no-version-kibaship-com",
 						Namespace: testNamespace.Name,
 						Labels: map[string]string{
-							"platform.kibaship.com/uuid":         "app-uuid-mysql-no-version",
-							"platform.kibaship.com/slug":         "mysql-no-version",
-							"platform.kibaship.com/project-uuid": "550e8400-e29b-41d4-a716-446655440000",
+							"platform.kibaship.com/uuid":             "app-uuid-mysql-no-version",
+							"platform.kibaship.com/slug":             "mysql-no-version",
+							"platform.kibaship.com/environment-uuid": "env-uuid-production-test",
+							"platform.kibaship.com/project-uuid":     "550e8400-e29b-41d4-a716-446655440000",
 						},
 					},
 					Spec: platformv1alpha1.ApplicationSpec{
-						ProjectRef: corev1.LocalObjectReference{Name: testProject.Name},
-						Type:       platformv1alpha1.ApplicationTypeMySQL,
-						MySQL:      &platformv1alpha1.MySQLConfig{}, // No version specified
+						EnvironmentRef: corev1.LocalObjectReference{Name: "environment-production-kibaship-com"},
+						Type:           platformv1alpha1.ApplicationTypeMySQL,
+						MySQL:          &platformv1alpha1.MySQLConfig{}, // No version specified
 					},
 				}
 				Expect(k8sClient.Create(ctx, appWithoutVersion)).To(Succeed())
@@ -1163,6 +1208,7 @@ var _ = Describe("Deployment Controller", func() {
 						Labels: map[string]string{
 							"platform.kibaship.com/uuid":             "deployment-uuid-mysql-no-version-deploy1",
 							"platform.kibaship.com/slug":             "deploy1",
+							"platform.kibaship.com/environment-uuid": "env-uuid-production-test",
 							"platform.kibaship.com/project-uuid":     "550e8400-e29b-41d4-a716-446655440000",
 							"platform.kibaship.com/application-uuid": "app-uuid-mysql-no-version",
 						},
@@ -1204,14 +1250,15 @@ var _ = Describe("Deployment Controller", func() {
 						Name:      "project-test123-app-mysql-no-config-kibaship-com",
 						Namespace: testNamespace.Name,
 						Labels: map[string]string{
-							"platform.kibaship.com/uuid":         "app-uuid-mysql-no-config",
-							"platform.kibaship.com/slug":         "mysql-no-config",
-							"platform.kibaship.com/project-uuid": "550e8400-e29b-41d4-a716-446655440000",
+							"platform.kibaship.com/uuid":             "app-uuid-mysql-no-config",
+							"platform.kibaship.com/slug":             "mysql-no-config",
+							"platform.kibaship.com/environment-uuid": "env-uuid-production-test",
+							"platform.kibaship.com/project-uuid":     "550e8400-e29b-41d4-a716-446655440000",
 						},
 					},
 					Spec: platformv1alpha1.ApplicationSpec{
-						ProjectRef: corev1.LocalObjectReference{Name: testProject.Name},
-						Type:       platformv1alpha1.ApplicationTypeMySQL,
+						EnvironmentRef: corev1.LocalObjectReference{Name: "environment-production-kibaship-com"},
+						Type:           platformv1alpha1.ApplicationTypeMySQL,
 						// MySQL config is nil
 					},
 				}
@@ -1226,6 +1273,7 @@ var _ = Describe("Deployment Controller", func() {
 						Labels: map[string]string{
 							"platform.kibaship.com/uuid":             "deployment-uuid-mysql-no-config-deploy1",
 							"platform.kibaship.com/slug":             "deploy1",
+							"platform.kibaship.com/environment-uuid": "env-uuid-production-test",
 							"platform.kibaship.com/project-uuid":     "550e8400-e29b-41d4-a716-446655440000",
 							"platform.kibaship.com/application-uuid": "app-uuid-mysql-no-config",
 						},
@@ -1270,14 +1318,15 @@ var _ = Describe("Deployment Controller", func() {
 						Name:      "project-test123-app-mysqlapp-kibaship-com",
 						Namespace: testNamespace.Name,
 						Labels: map[string]string{
-							"platform.kibaship.com/uuid":         "app-uuid-mysql-error-handling",
-							"platform.kibaship.com/slug":         "mysqlapp",
-							"platform.kibaship.com/project-uuid": "550e8400-e29b-41d4-a716-446655440000",
+							"platform.kibaship.com/uuid":             "app-uuid-mysql-error-handling",
+							"platform.kibaship.com/slug":             "mysqlapp",
+							"platform.kibaship.com/environment-uuid": "env-uuid-production-test",
+							"platform.kibaship.com/project-uuid":     "550e8400-e29b-41d4-a716-446655440000",
 						},
 					},
 					Spec: platformv1alpha1.ApplicationSpec{
-						ProjectRef: corev1.LocalObjectReference{Name: testProject.Name},
-						Type:       platformv1alpha1.ApplicationTypeMySQL,
+						EnvironmentRef: corev1.LocalObjectReference{Name: "environment-production-kibaship-com"},
+						Type:           platformv1alpha1.ApplicationTypeMySQL,
 					},
 				}
 				Expect(k8sClient.Create(ctx, testMySQLApp)).To(Succeed())
@@ -1291,6 +1340,7 @@ var _ = Describe("Deployment Controller", func() {
 						Labels: map[string]string{
 							"platform.kibaship.com/uuid":             "deployment-uuid-invalid-name",
 							"platform.kibaship.com/slug":             "invalid",
+							"platform.kibaship.com/environment-uuid": "env-uuid-production-test",
 							"platform.kibaship.com/project-uuid":     "550e8400-e29b-41d4-a716-446655440000",
 							"platform.kibaship.com/application-uuid": "app-uuid-mysql-error-handling",
 						},

@@ -141,59 +141,6 @@
             }
         },
         "/applications/{applicationSlug}/domains": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Retrieve all domains for a specific application",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "application-domains"
-                ],
-                "summary": "Get application domains by application",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Application slug (8-character identifier)",
-                        "name": "applicationSlug",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "List of application domains",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/models.ApplicationDomainResponse"
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Authentication required",
-                        "schema": {
-                            "$ref": "#/definitions/auth.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Application not found",
-                        "schema": {
-                            "$ref": "#/definitions/auth.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/auth.ErrorResponse"
-                        }
-                    }
-                }
-            },
             "post": {
                 "security": [
                     {
@@ -575,6 +522,293 @@
                 }
             }
         },
+        "/environments/{environmentSlug}/applications": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieve all applications for a specific environment",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "applications"
+                ],
+                "summary": "Get applications by environment",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Environment slug (8-character identifier)",
+                        "name": "environmentSlug",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "List of applications",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.ApplicationResponse"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Environment not found",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Create a new application within an environment with type-specific configuration",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "applications"
+                ],
+                "summary": "Create a new application",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Environment slug (8-character identifier)",
+                        "name": "environmentSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Application creation data",
+                        "name": "application",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.ApplicationCreateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Application created successfully",
+                        "schema": {
+                            "$ref": "#/definitions/models.ApplicationResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Validation errors in request data",
+                        "schema": {
+                            "$ref": "#/definitions/models.ValidationErrors"
+                        }
+                    },
+                    "401": {
+                        "description": "Authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Environment not found",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/environments/{slug}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieve an environment by its unique slug identifier",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "environments"
+                ],
+                "summary": "Get environment by slug",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Environment slug (8-character identifier)",
+                        "name": "slug",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Environment details",
+                        "schema": {
+                            "$ref": "#/definitions/models.EnvironmentResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Environment not found",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Delete an environment by its unique slug identifier",
+                "tags": [
+                    "environments"
+                ],
+                "summary": "Delete environment by slug",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Environment slug (8-character identifier)",
+                        "name": "slug",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "Environment deleted successfully"
+                    },
+                    "401": {
+                        "description": "Authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Environment not found",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Update an environment by its unique slug identifier with partial updates",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "environments"
+                ],
+                "summary": "Update environment by slug",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Environment slug (8-character identifier)",
+                        "name": "slug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Environment update data",
+                        "name": "environment",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.EnvironmentUpdateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Updated environment details",
+                        "schema": {
+                            "$ref": "#/definitions/models.EnvironmentResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Validation errors in request data",
+                        "schema": {
+                            "$ref": "#/definitions/models.ValidationErrors"
+                        }
+                    },
+                    "401": {
+                        "description": "Authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Environment not found",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/healthz": {
             "get": {
                 "description": "Check if the API server is healthy",
@@ -590,6 +824,26 @@
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/main.HealthResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/openapi.yaml": {
+            "get": {
+                "description": "Get the OpenAPI specification in YAML format",
+                "produces": [
+                    "text/plain"
+                ],
+                "tags": [
+                    "documentation"
+                ],
+                "summary": "Get OpenAPI specification",
+                "responses": {
+                    "200": {
+                        "description": "OpenAPI YAML specification",
+                        "schema": {
+                            "type": "string"
                         }
                     }
                 }
@@ -705,6 +959,61 @@
                         }
                     }
                 }
+            }
+        },
+        "/projects/{projectSlug}/environments": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieve all environments for a specific project",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "environments"
+                ],
+                "summary": "List environments for a project",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Project slug (8-character identifier)",
+                        "name": "projectSlug",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "List of environments",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.EnvironmentResponse"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Project not found",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    }
+                }
             },
             "post": {
                 "security": [
@@ -712,7 +1021,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Create a new application within a project with type-specific configuration",
+                "description": "Create a new environment within a project. The environment will be assigned a random 8-character slug.",
                 "consumes": [
                     "application/json"
                 ],
@@ -720,9 +1029,9 @@
                     "application/json"
                 ],
                 "tags": [
-                    "applications"
+                    "environments"
                 ],
-                "summary": "Create a new application",
+                "summary": "Create a new environment",
                 "parameters": [
                     {
                         "type": "string",
@@ -732,20 +1041,20 @@
                         "required": true
                     },
                     {
-                        "description": "Application creation data",
-                        "name": "application",
+                        "description": "Environment creation data",
+                        "name": "environment",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/models.ApplicationCreateRequest"
+                            "$ref": "#/definitions/models.EnvironmentCreateRequest"
                         }
                     }
                 ],
                 "responses": {
                     "201": {
-                        "description": "Application created successfully",
+                        "description": "Environment created successfully",
                         "schema": {
-                            "$ref": "#/definitions/models.ApplicationResponse"
+                            "$ref": "#/definitions/models.EnvironmentResponse"
                         }
                     },
                     "400": {
@@ -998,6 +1307,10 @@
                 "dockerImage": {
                     "$ref": "#/definitions/models.DockerImageConfig"
                 },
+                "environmentSlug": {
+                    "type": "string",
+                    "example": "abc123de"
+                },
                 "gitRepository": {
                     "$ref": "#/definitions/models.GitRepositoryConfig"
                 },
@@ -1016,10 +1329,6 @@
                 },
                 "postgresCluster": {
                     "$ref": "#/definitions/models.PostgresClusterConfig"
-                },
-                "projectSlug": {
-                    "type": "string",
-                    "example": "abc123de"
                 },
                 "type": {
                     "allOf": [
@@ -1182,8 +1491,17 @@
                 "dockerImage": {
                     "$ref": "#/definitions/models.DockerImageConfig"
                 },
+                "domains": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.ApplicationDomainResponse"
+                    }
+                },
                 "gitRepository": {
                     "$ref": "#/definitions/models.GitRepositoryConfig"
+                },
+                "latestDeployment": {
+                    "$ref": "#/definitions/models.DeploymentResponse"
                 },
                 "mysql": {
                     "$ref": "#/definitions/models.MySQLConfig"
@@ -1428,6 +1746,91 @@
                 "tag": {
                     "type": "string",
                     "example": "v1.0.0"
+                }
+            }
+        },
+        "models.EnvironmentCreateRequest": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string",
+                    "example": "Production environment"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "production"
+                },
+                "projectSlug": {
+                    "type": "string",
+                    "example": "abc123de"
+                },
+                "variables": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "models.EnvironmentResponse": {
+            "type": "object",
+            "properties": {
+                "applicationCount": {
+                    "type": "integer",
+                    "example": 5
+                },
+                "createdAt": {
+                    "type": "string",
+                    "example": "2023-01-01T00:00:00Z"
+                },
+                "description": {
+                    "type": "string",
+                    "example": "Production environment"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "production"
+                },
+                "projectSlug": {
+                    "type": "string",
+                    "example": "xyz789ab"
+                },
+                "projectUuid": {
+                    "type": "string",
+                    "example": "123e4567-e89b-12d3-a456-426614174001"
+                },
+                "slug": {
+                    "type": "string",
+                    "example": "abc123de"
+                },
+                "updatedAt": {
+                    "type": "string",
+                    "example": "2023-01-01T00:00:00Z"
+                },
+                "uuid": {
+                    "type": "string",
+                    "example": "123e4567-e89b-12d3-a456-426614174000"
+                },
+                "variables": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "models.EnvironmentUpdateRequest": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string",
+                    "example": "Updated production environment"
+                },
+                "variables": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
                 }
             }
         },

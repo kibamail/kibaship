@@ -34,21 +34,23 @@ import (
 
 // ApplicationService handles CRUD operations for applications
 type ApplicationService struct {
-	client            client.Client
-	scheme            *runtime.Scheme
-	projectService    *ProjectService
-	domainService     *ApplicationDomainService
-	deploymentService *DeploymentService
+	client             client.Client
+	scheme             *runtime.Scheme
+	projectService     *ProjectService
+	environmentService *EnvironmentService
+	domainService      *ApplicationDomainService
+	deploymentService  *DeploymentService
 }
 
 // NewApplicationService creates a new ApplicationService
-func NewApplicationService(k8sClient client.Client, scheme *runtime.Scheme, projectService *ProjectService) *ApplicationService {
+func NewApplicationService(k8sClient client.Client, scheme *runtime.Scheme, projectService *ProjectService, environmentService *EnvironmentService) *ApplicationService {
 	return &ApplicationService{
-		client:            k8sClient,
-		scheme:            scheme,
-		projectService:    projectService,
-		domainService:     nil, // Will be set later to avoid circular dependency
-		deploymentService: nil, // Will be set later to avoid circular dependency
+		client:             k8sClient,
+		scheme:             scheme,
+		projectService:     projectService,
+		environmentService: environmentService,
+		domainService:      nil, // Will be set later to avoid circular dependency
+		deploymentService:  nil, // Will be set later to avoid circular dependency
 	}
 }
 
@@ -64,15 +66,21 @@ func (s *ApplicationService) SetDeploymentService(deploymentService *DeploymentS
 
 // CreateApplication creates a new application
 func (s *ApplicationService) CreateApplication(ctx context.Context, req *models.ApplicationCreateRequest) (*models.Application, error) {
-	// First, verify the project exists and get its details
-	project, err := s.projectService.GetProject(ctx, req.ProjectSlug)
+	// First, verify the environment exists and get its details
+	environment, err := s.environmentService.GetEnvironment(ctx, req.EnvironmentSlug)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get environment: %w", err)
+	}
+
+	// Get the project to check application type enablement
+	project, err := s.projectService.GetProject(ctx, environment.ProjectSlug)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get project: %w", err)
 	}
 
 	// Check if the application type is enabled for this project
 	if !s.isApplicationTypeEnabled(project, req.Type) {
-		return nil, fmt.Errorf("application type '%s' is not enabled for project '%s'", req.Type, req.ProjectSlug)
+		return nil, fmt.Errorf("application type '%s' is not enabled for project '%s'", req.Type, environment.ProjectSlug)
 	}
 
 	// Generate random slug
@@ -118,7 +126,7 @@ func (s *ApplicationService) CreateApplication(ctx context.Context, req *models.
 	s.setApplicationConfiguration(application, req)
 
 	// Create Kubernetes Application CRD
-	crd := s.convertToApplicationCRD(application, project)
+	crd := s.convertToApplicationCRD(application, environment)
 
 	err = s.client.Create(ctx, crd)
 	if err != nil {
@@ -260,6 +268,51 @@ func (s *ApplicationService) GetApplicationsByProject(ctx context.Context, proje
 	var applicationList v1alpha1.ApplicationList
 	err = s.client.List(ctx, &applicationList, client.MatchingLabels{
 		validation.LabelProjectUUID: project.UUID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list applications: %w", err)
+	}
+
+	applications := make([]*models.Application, 0, len(applicationList.Items))
+	for _, item := range applicationList.Items {
+		app := s.convertFromApplicationCRD(&item)
+		applications = append(applications, app)
+	}
+
+	// Batch-load domains and latest deployments for all applications
+	if len(applications) > 0 {
+		// Load domains if domain service is available
+		if s.domainService != nil {
+			err = s.batchLoadDomains(ctx, applications)
+			if err != nil {
+				return nil, fmt.Errorf("failed to batch load domains: %w", err)
+			}
+		}
+
+		// Load latest deployments if deployment service is available
+		if s.deploymentService != nil {
+			err = s.batchLoadLatestDeployments(ctx, applications)
+			if err != nil {
+				return nil, fmt.Errorf("failed to batch load latest deployments: %w", err)
+			}
+		}
+	}
+
+	return applications, nil
+}
+
+// GetApplicationsByEnvironment retrieves all applications for an environment with domains batch-loaded
+func (s *ApplicationService) GetApplicationsByEnvironment(ctx context.Context, environmentSlug string) ([]*models.Application, error) {
+	// First get the environment to get its UUID
+	environment, err := s.environmentService.GetEnvironment(ctx, environmentSlug)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get environment: %w", err)
+	}
+
+	// List all applications for this environment
+	var applicationList v1alpha1.ApplicationList
+	err = s.client.List(ctx, &applicationList, client.MatchingLabels{
+		validation.LabelEnvironmentUUID: environment.UUID,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list applications: %w", err)
@@ -442,7 +495,7 @@ func (s *ApplicationService) slugExists(ctx context.Context, slug string) (bool,
 }
 
 // convertToApplicationCRD converts internal application model to Kubernetes Application CRD
-func (s *ApplicationService) convertToApplicationCRD(app *models.Application, project *models.Project) *v1alpha1.Application {
+func (s *ApplicationService) convertToApplicationCRD(app *models.Application, environment *models.Environment) *v1alpha1.Application {
 	return &v1alpha1.Application{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "platform.operator.kibaship.com/v1alpha1",
@@ -455,6 +508,7 @@ func (s *ApplicationService) convertToApplicationCRD(app *models.Application, pr
 				validation.LabelResourceUUID:    app.UUID,
 				validation.LabelResourceSlug:    app.Slug,
 				validation.LabelProjectUUID:     app.ProjectUUID,
+				validation.LabelEnvironmentUUID: environment.UUID,
 				validation.LabelApplicationUUID: app.UUID,
 			},
 			Annotations: map[string]string{
@@ -462,8 +516,8 @@ func (s *ApplicationService) convertToApplicationCRD(app *models.Application, pr
 			},
 		},
 		Spec: v1alpha1.ApplicationSpec{
-			ProjectRef: corev1.LocalObjectReference{
-				Name: fmt.Sprintf("project-%s", project.Slug),
+			EnvironmentRef: corev1.LocalObjectReference{
+				Name: fmt.Sprintf("environment-%s-kibaship-com", environment.Slug),
 			},
 			Type:            s.convertApplicationType(app.Type),
 			GitRepository:   s.convertGitRepositoryConfig(app.GitRepository),
@@ -488,14 +542,10 @@ func (s *ApplicationService) convertFromApplicationCRD(crd *v1alpha1.Application
 		annotations = make(map[string]string)
 	}
 
-	// Get project slug from project reference
+	// Get project slug from project UUID label (stored on the application)
 	projectSlug := ""
-	if crd.Spec.ProjectRef.Name != "" {
-		// Extract slug from project name: project-<slug>
-		if len(crd.Spec.ProjectRef.Name) > 8 {
-			projectSlug = crd.Spec.ProjectRef.Name[8:] // Remove "project-" prefix
-		}
-	}
+	// Note: ProjectSlug is derived from labels, not from a direct reference anymore
+	// The actual project relationship is maintained through the project-uuid label
 
 	return &models.Application{
 		UUID:            labels[validation.LabelResourceUUID],
@@ -503,6 +553,7 @@ func (s *ApplicationService) convertFromApplicationCRD(crd *v1alpha1.Application
 		Slug:            labels[validation.LabelResourceSlug],
 		ProjectUUID:     labels[validation.LabelProjectUUID],
 		ProjectSlug:     projectSlug,
+		EnvironmentUUID: labels[validation.LabelEnvironmentUUID],
 		Type:            s.convertApplicationTypeFromCRD(crd.Spec.Type),
 		GitRepository:   s.convertGitRepositoryConfigFromCRD(crd.Spec.GitRepository),
 		DockerImage:     s.convertDockerImageConfigFromCRD(crd.Spec.DockerImage),

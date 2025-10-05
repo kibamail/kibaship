@@ -71,12 +71,6 @@ type DeploymentSpec struct {
 	// +kubebuilder:validation:Required
 	ApplicationRef corev1.LocalObjectReference `json:"applicationRef"`
 
-	// EnvironmentName specifies which environment to deploy to
-	// Defaults to "production" if not specified
-	// +optional
-	// +kubebuilder:default="production"
-	EnvironmentName string `json:"environmentName,omitempty"`
-
 	// GitRepository contains configuration for GitRepository deployments
 	// Required when ApplicationRef points to a GitRepository application
 	// +optional
@@ -210,6 +204,13 @@ func (r *Deployment) validateDeployment(ctx context.Context) error {
 		} else if !validation.ValidateUUID(applicationUUID) {
 			errors = append(errors, fmt.Sprintf("application UUID must be valid: %s", applicationUUID))
 		}
+
+		// Validate Environment UUID
+		if environmentUUID, exists := labels[validation.LabelEnvironmentUUID]; !exists {
+			errors = append(errors, fmt.Sprintf("deployment must have label %s", validation.LabelEnvironmentUUID))
+		} else if !validation.ValidateUUID(environmentUUID) {
+			errors = append(errors, fmt.Sprintf("environment UUID must be valid: %s", environmentUUID))
+		}
 	}
 
 	// Validate deployment name format: deployment-<slug>-kibaship-com
@@ -258,6 +259,14 @@ func (r *Deployment) GetApplicationUUID() string {
 		return ""
 	}
 	return r.Labels[validation.LabelApplicationUUID]
+}
+
+// GetEnvironmentUUID returns the environment UUID from labels
+func (r *Deployment) GetEnvironmentUUID() string {
+	if r.Labels == nil {
+		return ""
+	}
+	return r.Labels[validation.LabelEnvironmentUUID]
 }
 
 // SetupWebhookWithManager will setup the manager to manage the webhooks

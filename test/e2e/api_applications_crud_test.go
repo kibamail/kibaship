@@ -65,7 +65,30 @@ var _ = Describe("API Server Application CRUD", func() {
 		_ = json.NewDecoder(respProj.Body).Decode(&projResp)
 		Expect(projResp.Slug).NotTo(BeEmpty())
 
-		By("creating an application via POST /projects/{slug}/applications (GitRepository)")
+		By("creating an environment via POST /projects/{slug}/environments")
+		envReqBody := map[string]any{
+			"name":        "production",
+			"description": "Production environment",
+		}
+		envBytes, _ := json.Marshal(envReqBody)
+		reqEnv, _ := http.NewRequest("POST", fmt.Sprintf("http://127.0.0.1:18080/projects/%s/environments", projResp.Slug), bytes.NewReader(envBytes))
+		reqEnv.Header.Set("Content-Type", "application/json")
+		reqEnv.Header.Set("Authorization", "Bearer "+apiKey)
+		respEnv, err := httpClient.Do(reqEnv)
+		Expect(err).NotTo(HaveOccurred())
+		defer func() { _ = respEnv.Body.Close() }()
+		if respEnv.StatusCode != http.StatusCreated {
+			bodyBytes, _ := io.ReadAll(respEnv.Body)
+			_, _ = fmt.Fprintf(GinkgoWriter, "Environment creation failed. Status: %d, Body: %s\n", respEnv.StatusCode, string(bodyBytes))
+		}
+		Expect(respEnv.StatusCode).To(Equal(http.StatusCreated))
+		var envResp struct {
+			Slug string `json:"slug"`
+		}
+		_ = json.NewDecoder(respEnv.Body).Decode(&envResp)
+		Expect(envResp.Slug).NotTo(BeEmpty())
+
+		By("creating an application via POST /environments/{slug}/applications (GitRepository)")
 		appReqBody := map[string]any{
 			"name": "app-crud-e2e",
 			"type": "GitRepository",
@@ -78,7 +101,7 @@ var _ = Describe("API Server Application CRUD", func() {
 			},
 		}
 		appBytes, _ := json.Marshal(appReqBody)
-		reqApp, _ := http.NewRequest("POST", fmt.Sprintf("http://127.0.0.1:18080/projects/%s/applications", projResp.Slug), bytes.NewReader(appBytes))
+		reqApp, _ := http.NewRequest("POST", fmt.Sprintf("http://127.0.0.1:18080/environments/%s/applications", envResp.Slug), bytes.NewReader(appBytes))
 		reqApp.Header.Set("Content-Type", "application/json")
 		reqApp.Header.Set("Authorization", "Bearer "+apiKey)
 		respApp, err := httpClient.Do(reqApp)
@@ -123,9 +146,9 @@ var _ = Describe("API Server Application CRUD", func() {
 		_ = json.NewDecoder(respPatch.Body).Decode(&patched)
 		Expect(patched.Name).To(Equal(newName))
 
-		By("GET /projects/{slug}/applications lists the application")
+		By("GET /environments/{slug}/applications lists the application")
 		Eventually(func() bool {
-			reqList, _ := http.NewRequest("GET", fmt.Sprintf("http://127.0.0.1:18080/projects/%s/applications", projResp.Slug), nil)
+			reqList, _ := http.NewRequest("GET", fmt.Sprintf("http://127.0.0.1:18080/environments/%s/applications", envResp.Slug), nil)
 			reqList.Header.Set("Authorization", "Bearer "+apiKey)
 			respList, err := httpClient.Do(reqList)
 			if err != nil {

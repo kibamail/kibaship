@@ -265,6 +265,7 @@ func (s *DeploymentService) convertToDeploymentCRD(deployment *models.Deployment
 				validation.LabelResourceSlug:    deployment.Slug,
 				validation.LabelProjectUUID:     deployment.ProjectUUID,
 				validation.LabelApplicationUUID: deployment.ApplicationUUID,
+				validation.LabelEnvironmentUUID: application.EnvironmentUUID,
 			},
 			Annotations: map[string]string{
 				validation.AnnotationResourceName: fmt.Sprintf("Deployment for %s", application.Name),

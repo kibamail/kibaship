@@ -27,6 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -54,6 +55,7 @@ type ProjectReconciler struct {
 // +kubebuilder:rbac:groups=platform.operator.kibaship.com,resources=projects,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=platform.operator.kibaship.com,resources=projects/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=platform.operator.kibaship.com,resources=projects/finalizers,verbs=update
+// +kubebuilder:rbac:groups=platform.operator.kibaship.com,resources=environments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=namespaces,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="*",resources="*",verbs="*"
@@ -159,6 +161,13 @@ func (r *ProjectReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	if err := r.ensureRegistryDockerConfig(ctx, namespace.Name); err != nil {
 		log.Error(err, "Failed to ensure registry Docker config")
 		r.updateStatusWithError(ctx, &project, fmt.Sprintf("Failed to create registry Docker config: %v", err))
+		return ctrl.Result{}, err
+	}
+
+	// Ensure default production environment exists
+	if err := r.ensureDefaultEnvironment(ctx, &project, namespace.Name); err != nil {
+		log.Error(err, "Failed to create default environment")
+		r.updateStatusWithError(ctx, &project, fmt.Sprintf("Failed to create default environment: %v", err))
 		return ctrl.Result{}, err
 	}
 
@@ -441,6 +450,56 @@ func (r *ProjectReconciler) ensureRegistryDockerConfig(ctx context.Context, name
 	log.Info("Created registry Docker config secret",
 		"namespace", namespaceName,
 		"secret", dockerConfigSecretName)
+	return nil
+}
+
+// ensureDefaultEnvironment ensures a default production environment exists for the project
+func (r *ProjectReconciler) ensureDefaultEnvironment(ctx context.Context, project *platformv1alpha1.Project, namespace string) error {
+	log := logf.FromContext(ctx)
+
+	productionEnvName := "environment-production-kibaship-com"
+	existingEnv := &platformv1alpha1.Environment{}
+	err := r.Get(ctx, types.NamespacedName{
+		Name:      productionEnvName,
+		Namespace: namespace,
+	}, existingEnv)
+
+	if err == nil {
+		log.Info("Production environment already exists")
+		return nil
+	}
+
+	if !errors.IsNotFound(err) {
+		return fmt.Errorf("failed to check for production environment: %w", err)
+	}
+
+	// Create production environment
+	projectUUID := project.Labels[validation.LabelResourceUUID]
+	productionEnv := &platformv1alpha1.Environment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      productionEnvName,
+			Namespace: namespace,
+			Labels: map[string]string{
+				validation.LabelResourceUUID: validation.GenerateUUID(),
+				validation.LabelResourceSlug: "production",
+				validation.LabelProjectUUID:  projectUUID,
+			},
+		},
+		Spec: platformv1alpha1.EnvironmentSpec{
+			ProjectRef:  corev1.LocalObjectReference{Name: project.Name},
+			Description: "Default production environment",
+		},
+	}
+
+	if err := controllerutil.SetControllerReference(project, productionEnv, r.Scheme); err != nil {
+		return fmt.Errorf("failed to set controller reference: %w", err)
+	}
+
+	if err := r.Create(ctx, productionEnv); err != nil {
+		return fmt.Errorf("failed to create production environment: %w", err)
+	}
+
+	log.Info("Created default production environment", "environment", productionEnvName)
 	return nil
 }
 

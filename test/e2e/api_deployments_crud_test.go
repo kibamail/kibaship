@@ -65,7 +65,26 @@ var _ = Describe("API Server Deployment CRUD", func() {
 		_ = json.NewDecoder(respProj.Body).Decode(&projResp)
 		Expect(projResp.Slug).NotTo(BeEmpty())
 
-		By("creating an application via POST /projects/{slug}/applications (GitRepository)")
+		By("creating an environment via POST /projects/{slug}/environments")
+		envReqBody := map[string]any{
+			"name":        "production",
+			"description": "Production environment",
+		}
+		envBytes, _ := json.Marshal(envReqBody)
+		reqEnv, _ := http.NewRequest("POST", fmt.Sprintf("http://127.0.0.1:18080/projects/%s/environments", projResp.Slug), bytes.NewReader(envBytes))
+		reqEnv.Header.Set("Content-Type", "application/json")
+		reqEnv.Header.Set("Authorization", "Bearer "+apiKey)
+		respEnv, err := httpClient.Do(reqEnv)
+		Expect(err).NotTo(HaveOccurred())
+		defer func() { _ = respEnv.Body.Close() }()
+		Expect(respEnv.StatusCode).To(Equal(http.StatusCreated))
+		var envResp struct {
+			Slug string `json:"slug"`
+		}
+		_ = json.NewDecoder(respEnv.Body).Decode(&envResp)
+		Expect(envResp.Slug).NotTo(BeEmpty())
+
+		By("creating an application via POST /environments/{slug}/applications (GitRepository)")
 		appReqBody := map[string]any{
 			"name": "app-for-deploy-crud-e2e",
 			"type": "GitRepository",
@@ -78,7 +97,7 @@ var _ = Describe("API Server Deployment CRUD", func() {
 			},
 		}
 		appBytes, _ := json.Marshal(appReqBody)
-		reqApp, _ := http.NewRequest("POST", fmt.Sprintf("http://127.0.0.1:18080/projects/%s/applications", projResp.Slug), bytes.NewReader(appBytes))
+		reqApp, _ := http.NewRequest("POST", fmt.Sprintf("http://127.0.0.1:18080/environments/%s/applications", envResp.Slug), bytes.NewReader(appBytes))
 		reqApp.Header.Set("Content-Type", "application/json")
 		reqApp.Header.Set("Authorization", "Bearer "+apiKey)
 		respApp, err := httpClient.Do(reqApp)
@@ -105,6 +124,10 @@ var _ = Describe("API Server Deployment CRUD", func() {
 		respDep, err := httpClient.Do(reqDep)
 		Expect(err).NotTo(HaveOccurred())
 		defer func() { _ = respDep.Body.Close() }()
+		if respDep.StatusCode != http.StatusCreated {
+			bodyBytes, _ := io.ReadAll(respDep.Body)
+			_, _ = fmt.Fprintf(GinkgoWriter, "Deployment creation failed. Status: %d, Body: %s\n", respDep.StatusCode, string(bodyBytes))
+		}
 		Expect(respDep.StatusCode).To(Equal(http.StatusCreated))
 		var depResp struct {
 			Slug string `json:"slug"`
@@ -158,8 +181,8 @@ var _ = Describe("API Server Deployment CRUD", func() {
 		defer func() { _ = respGet.Body.Close() }()
 		Expect(respGet.StatusCode).To(Equal(http.StatusOK))
 
-		By("GET /projects/{slug}/applications shows LatestDeployment populated")
-		reqProjApps, _ := http.NewRequest("GET", fmt.Sprintf("http://127.0.0.1:18080/projects/%s/applications", projResp.Slug), nil)
+		By("GET /environments/{slug}/applications shows LatestDeployment populated")
+		reqProjApps, _ := http.NewRequest("GET", fmt.Sprintf("http://127.0.0.1:18080/environments/%s/applications", envResp.Slug), nil)
 		reqProjApps.Header.Set("Authorization", "Bearer "+apiKey)
 		Eventually(func() bool {
 			resp, err := httpClient.Do(reqProjApps)

@@ -19,6 +19,7 @@ import (
 // Notifier defines the interface for sending webhook events.
 type Notifier interface {
 	NotifyProjectStatusChange(ctx context.Context, evt ProjectStatusEvent) error
+	NotifyEnvironmentStatusChange(ctx context.Context, evt EnvironmentStatusEvent) error
 	NotifyApplicationStatusChange(ctx context.Context, evt ApplicationStatusEvent) error
 	NotifyApplicationDomainStatusChange(ctx context.Context, evt ApplicationDomainStatusEvent) error
 	NotifyDeploymentStatusChange(ctx context.Context, evt DeploymentStatusEvent) error
@@ -31,6 +32,15 @@ type ProjectStatusEvent struct {
 	NewPhase      string                   `json:"newPhase"`
 	Project       platformv1alpha1.Project `json:"project"`
 	Timestamp     time.Time                `json:"timestamp"`
+}
+
+// EnvironmentStatusEvent is the payload for environment status change notifications.
+type EnvironmentStatusEvent struct {
+	Type          string                       `json:"type"`
+	PreviousPhase string                       `json:"previousPhase"`
+	NewPhase      string                       `json:"newPhase"`
+	Environment   platformv1alpha1.Environment `json:"environment"`
+	Timestamp     time.Time                    `json:"timestamp"`
 }
 
 // ApplicationStatusEvent is the payload for application status change notifications.
@@ -68,6 +78,9 @@ type DeploymentStatusEvent struct {
 type NoopNotifier struct{}
 
 func (n NoopNotifier) NotifyProjectStatusChange(ctx context.Context, evt ProjectStatusEvent) error {
+	return nil
+}
+func (n NoopNotifier) NotifyEnvironmentStatusChange(ctx context.Context, evt EnvironmentStatusEvent) error {
 	return nil
 }
 func (n NoopNotifier) NotifyApplicationStatusChange(ctx context.Context, evt ApplicationStatusEvent) error {
@@ -133,6 +146,10 @@ func (n *HTTPNotifier) postSigned(ctx context.Context, payload any) error {
 }
 
 func (n *HTTPNotifier) NotifyProjectStatusChange(ctx context.Context, evt ProjectStatusEvent) error {
+	return n.postSigned(ctx, evt)
+}
+
+func (n *HTTPNotifier) NotifyEnvironmentStatusChange(ctx context.Context, evt EnvironmentStatusEvent) error {
 	return n.postSigned(ctx, evt)
 }
 

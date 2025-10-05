@@ -53,21 +53,38 @@ func TestApplicationDomainCreation(t *testing.T) {
 		Spec: platformv1alpha1.ProjectSpec{},
 	}
 
+	// Create test environment
+	testEnvironment := &platformv1alpha1.Environment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "environment-production-kibaship-com",
+			Namespace: "test-namespace",
+			Labels: map[string]string{
+				validation.LabelResourceUUID: "env-550e8400-e29b-41d4-a716-446655440000",
+				validation.LabelResourceSlug: "production",
+				validation.LabelProjectUUID:  "550e8400-e29b-41d4-a716-446655440000",
+			},
+		},
+		Spec: platformv1alpha1.EnvironmentSpec{
+			ProjectRef: corev1.LocalObjectReference{Name: "test-project"},
+		},
+	}
+
 	// Create test GitRepository application
 	testApp := &platformv1alpha1.Application{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "project-test-project-app-frontend-kibaship-com",
 			Namespace: "test-namespace",
 			Labels: map[string]string{
-				validation.LabelResourceUUID: "550e8400-e29b-41d4-a716-446655440001",
-				validation.LabelResourceSlug: "frontend",
-				validation.LabelProjectUUID:  "550e8400-e29b-41d4-a716-446655440000",
+				validation.LabelResourceUUID:    "550e8400-e29b-41d4-a716-446655440001",
+				validation.LabelResourceSlug:    "frontend",
+				validation.LabelProjectUUID:     "550e8400-e29b-41d4-a716-446655440000",
+				validation.LabelEnvironmentUUID: "env-550e8400-e29b-41d4-a716-446655440000",
 			},
 		},
 		Spec: platformv1alpha1.ApplicationSpec{
 			Type: platformv1alpha1.ApplicationTypeGitRepository,
-			ProjectRef: corev1.LocalObjectReference{
-				Name: "test-project",
+			EnvironmentRef: corev1.LocalObjectReference{
+				Name: "environment-production-kibaship-com",
 			},
 			GitRepository: &platformv1alpha1.GitRepositoryConfig{
 				Repository: "https://github.com/test/frontend",
@@ -77,7 +94,7 @@ func TestApplicationDomainCreation(t *testing.T) {
 
 	client := fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithObjects(testProject, testApp).
+		WithObjects(testProject, testEnvironment, testApp).
 		Build()
 
 	// Create the reconciler

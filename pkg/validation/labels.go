@@ -29,8 +29,10 @@ const (
 	LabelResourceSlug = "platform.kibaship.com/slug"
 	// LabelWorkspaceUUID is the label key for workspace UUID (for Projects)
 	LabelWorkspaceUUID = "platform.kibaship.com/workspace-uuid"
-	// LabelProjectUUID is the label key for project UUID (for Applications, Deployments, ApplicationDomains)
+	// LabelProjectUUID is the label key for project UUID (for Environments, Applications, Deployments, ApplicationDomains)
 	LabelProjectUUID = "platform.kibaship.com/project-uuid"
+	// LabelEnvironmentUUID is the label key for environment UUID (for Applications, Deployments, ApplicationDomains)
+	LabelEnvironmentUUID = "platform.kibaship.com/environment-uuid"
 	// LabelApplicationUUID is the label key for application UUID (for Deployments, ApplicationDomains)
 	LabelApplicationUUID = "platform.kibaship.com/application-uuid"
 	// LabelDeploymentUUID is the label key for deployment UUID (for ApplicationDomains)

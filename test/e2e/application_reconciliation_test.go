@@ -1,6 +1,8 @@
 package e2e
 
 import (
+	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 
@@ -23,6 +25,7 @@ var _ = Describe("Application Reconciliation", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Waiting for project to be ready")
+			projectNamespace := "project-test-project-application-e2e-kibaship-com"
 			Eventually(func() bool {
 				cmd := exec.Command("kubectl", "get", "project", "test-project-application-e2e", "-o", "jsonpath={.status.phase}")
 				output, err := cmd.CombinedOutput()
@@ -30,15 +33,46 @@ var _ = Describe("Application Reconciliation", func() {
 					return false
 				}
 				return strings.TrimSpace(string(output)) == readyPhase
-			}, "2m", "5s").Should(BeTrue(), "Project should be Ready before creating Application")
+			}, "2m", "5s").Should(BeTrue(), "Project should be Ready")
 
-			By("Applying the test application YAML")
-			cmd = exec.Command("kubectl", "apply", "-f", "test/e2e/application-reconciliation/test-application.yaml")
+			By("Waiting for default production environment to be ready")
+			var envUUID string
+			Eventually(func() bool {
+				cmd := exec.Command("kubectl", "get", "environment", "environment-production-kibaship-com", "-n", projectNamespace, "-o", "jsonpath={.status.phase}")
+				output, err := cmd.CombinedOutput()
+				if err != nil {
+					return false
+				}
+				return strings.TrimSpace(string(output)) == readyPhase
+			}, "2m", "5s").Should(BeTrue(), "Default production environment should be Ready before creating Application")
+
+			By("Fetching the environment UUID")
+			cmd = exec.Command("kubectl", "get", "environment", "environment-production-kibaship-com", "-n", projectNamespace, "-o", "jsonpath={.metadata.labels.platform\\.kibaship\\.com/uuid}")
+			output, err := cmd.CombinedOutput()
+			Expect(err).NotTo(HaveOccurred())
+			envUUID = strings.TrimSpace(string(output))
+			Expect(envUUID).NotTo(BeEmpty(), "Environment should have UUID label")
+
+			By("Patching the application YAML with environment UUID and applying it")
+			// Read the YAML file
+			yamlBytes, err := os.ReadFile("test/e2e/application-reconciliation/test-application.yaml")
+			Expect(err).NotTo(HaveOccurred())
+			// Add the environment-uuid label by appending to the labels section
+			yamlStr := string(yamlBytes)
+			yamlStr = strings.Replace(yamlStr,
+				"platform.kibaship.com/workspace-uuid: \"6ba7b810-9dad-11d1-80b4-00c04fd430c8\"",
+				fmt.Sprintf("platform.kibaship.com/workspace-uuid: \"6ba7b810-9dad-11d1-80b4-00c04fd430c8\"\n    platform.kibaship.com/environment-uuid: \"%s\"", envUUID),
+				1)
+			// Write to temp file and apply
+			tmpFile := "/tmp/test-application-with-env-uuid.yaml"
+			err = os.WriteFile(tmpFile, []byte(yamlStr), 0644)
+			Expect(err).NotTo(HaveOccurred())
+			cmd = exec.Command("kubectl", "apply", "-f", tmpFile)
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Verifying Application resource exists and passes validation")
-			appNamespace := "project-test-project-application-e2e-kibaship-com"
+			appNamespace := projectNamespace
 			appName := "application-myapp-application-e2e-kibaship-com"
 			Eventually(func() bool {
 				cmd := exec.Command("kubectl", "get", "application", appName, "-n", appNamespace)
@@ -111,19 +145,19 @@ var _ = Describe("Application Reconciliation", func() {
 				return strings.TrimSpace(string(output)) == "kibamail/kibamail"
 			}, "30s", "2s").Should(BeTrue(), "Application should have valid repository reference")
 
-			By("Verifying Application exists in the correct project namespace")
-			Expect(appNamespace).To(Equal("project-test-project-application-e2e-kibaship-com"),
+			By("Verifying Application exists in the project namespace")
+			Expect(appNamespace).To(Equal(projectNamespace),
 				"Application should be created in the project namespace")
 
-			By("Verifying Application projectRef points to the correct project")
+			By("Verifying Application environmentRef points to the production environment")
 			Eventually(func() bool {
-				cmd := exec.Command("kubectl", "get", "application", appName, "-n", appNamespace, "-o", projectRefPath)
+				cmd := exec.Command("kubectl", "get", "application", appName, "-n", appNamespace, "-o", "jsonpath={.spec.environmentRef.name}")
 				output, err := cmd.CombinedOutput()
 				if err != nil {
 					return false
 				}
-				return strings.TrimSpace(string(output)) == "test-project-application-e2e"
-			}, "30s", "2s").Should(BeTrue(), "Application should reference the correct project")
+				return strings.TrimSpace(string(output)) == "environment-production-kibaship-com"
+			}, "30s", "2s").Should(BeTrue(), "Application should reference the production environment")
 
 			By("Verifying Application webhook validation passed")
 			// If we got this far, webhook validation passed since the Application was created successfully
