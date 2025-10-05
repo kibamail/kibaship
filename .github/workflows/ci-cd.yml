@@ -74,11 +74,12 @@ jobs:
           go mod tidy
           make test-e2e
 
-  # Phase 2: Build all images in parallel WITHOUT pushing (only if all tests pass)
+  # Phase 2: Build and push all images to prerelease tags (if all tests pass)
   build-images:
     name: Build Images
     runs-on: ubuntu-latest
     needs: [lint, test, test-e2e]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
     permissions:
       contents: read
       packages: write
@@ -104,8 +105,6 @@ jobs:
           - name: kibaship-railpack-build
             context: build/railpack-build
             file: build/railpack-build/Dockerfile
-    outputs:
-      image-digests: ${{ steps.build.outputs.digest }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -122,47 +121,35 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata
+      - name: Extract metadata for prerelease tags
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/kibamail/${{ matrix.image.name }}
           tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-            type=sha,format=short,prefix=sha-
+            type=ref,event=branch,suffix=-prerelease
+            type=ref,event=pr,suffix=-prerelease
+            type=semver,pattern={{version}},suffix=-prerelease
+            type=semver,pattern={{major}}.{{minor}},suffix=-prerelease
+            type=semver,pattern={{major}},suffix=-prerelease
+            type=sha,format=short,prefix=sha-,suffix=-prerelease
 
-      - name: Build Docker image
+      - name: Build and push to prerelease tags
         id: build
         uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.image.context }}
           file: ${{ matrix.image.file }}
           platforms: linux/amd64,linux/arm64
-          push: false
+          push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          outputs: type=image,name=${{ env.REGISTRY }}/kibamail/${{ matrix.image.name }},push-by-digest=true,name-canonical=true,push=false
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Export image to tarball
-        run: |
-          mkdir -p /tmp/images
-          docker save ${{ env.REGISTRY }}/kibamail/${{ matrix.image.name }}@${{ steps.build.outputs.digest }} -o /tmp/images/${{ matrix.image.name }}.tar
-
-      - name: Upload image artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: image-${{ matrix.image.name }}
-          path: /tmp/images/${{ matrix.image.name }}.tar
-          retention-days: 1
-
-  push-images:
-    name: Push All Images
+  # Phase 3: Promote prerelease tags to final tags (only if ALL builds succeeded)
+  promote-images:
+    name: Promote Images to Release
     runs-on: ubuntu-latest
     needs: [build-images]
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
@@ -185,47 +172,60 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Download all image artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: /tmp/images
-          pattern: image-*
-
-      - name: Load and push operator image
+      - name: Promote all images from prerelease to release
+        env:
+          IMAGES: |
+            kibaship-operator
+            kibaship-operator-apiserver
+            kibaship-operator-cert-manager-webhook
+            kibaship-operator-registry-auth
+            kibaship-railpack-cli
+            kibaship-railpack-build
         run: |
-          docker load -i /tmp/images/image-kibaship-operator/kibaship-operator.tar
-          docker images | grep kibaship-operator
-          docker push --all-tags ${{ env.REGISTRY }}/kibamail/kibaship-operator
+          # Determine source and target tags based on trigger
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            VERSION="${{ github.ref_name }}"
+            VERSION_NO_V="${VERSION#v}"
+            MAJOR=$(echo "$VERSION_NO_V" | cut -d. -f1)
+            MINOR=$(echo "$VERSION_NO_V" | cut -d. -f1-2)
 
-      - name: Load and push apiserver image
-        run: |
-          docker load -i /tmp/images/image-kibaship-operator-apiserver/kibaship-operator-apiserver.tar
-          docker images | grep kibaship-operator-apiserver
-          docker push --all-tags ${{ env.REGISTRY }}/kibamail/kibaship-operator-apiserver
+            PRERELEASE_TAGS=(
+              "${VERSION}-prerelease"
+              "${MAJOR}.${MINOR}-prerelease"
+              "${MAJOR}-prerelease"
+            )
+            RELEASE_TAGS=(
+              "${VERSION}"
+              "${MAJOR}.${MINOR}"
+              "${MAJOR}"
+              "latest"
+            )
+          else
+            BRANCH_NAME="${{ github.ref_name }}"
+            PRERELEASE_TAGS=("${BRANCH_NAME}-prerelease")
+            RELEASE_TAGS=("${BRANCH_NAME}")
+          fi
 
-      - name: Load and push cert-manager-webhook image
-        run: |
-          docker load -i /tmp/images/image-kibaship-operator-cert-manager-webhook/kibaship-operator-cert-manager-webhook.tar
-          docker images | grep cert-manager-webhook
-          docker push --all-tags ${{ env.REGISTRY }}/kibamail/kibaship-operator-cert-manager-webhook
+          # Promote each image
+          for image_name in $IMAGES; do
+            echo "===> Promoting $image_name"
 
-      - name: Load and push registry-auth image
-        run: |
-          docker load -i /tmp/images/image-kibaship-operator-registry-auth/kibaship-operator-registry-auth.tar
-          docker images | grep registry-auth
-          docker push --all-tags ${{ env.REGISTRY }}/kibamail/kibaship-operator-registry-auth
+            SOURCE_TAG="${PRERELEASE_TAGS[0]}"
+            SOURCE_IMAGE="${{ env.REGISTRY }}/kibamail/${image_name}:${SOURCE_TAG}"
 
-      - name: Load and push railpack-cli image
-        run: |
-          docker load -i /tmp/images/image-kibaship-railpack-cli/kibaship-railpack-cli.tar
-          docker images | grep railpack-cli
-          docker push --all-tags ${{ env.REGISTRY }}/kibamail/kibaship-railpack-cli
+            echo "Pulling source: $SOURCE_IMAGE"
+            docker pull "$SOURCE_IMAGE"
 
-      - name: Load and push railpack-build image
-        run: |
-          docker load -i /tmp/images/image-kibaship-railpack-build/kibaship-railpack-build.tar
-          docker images | grep railpack-build
-          docker push --all-tags ${{ env.REGISTRY }}/kibamail/kibaship-railpack-build
+            # Tag and push all release versions
+            for release_tag in "${RELEASE_TAGS[@]}"; do
+              TARGET_IMAGE="${{ env.REGISTRY }}/kibamail/${image_name}:${release_tag}"
+              echo "Tagging as: $TARGET_IMAGE"
+              docker tag "$SOURCE_IMAGE" "$TARGET_IMAGE"
+              docker push "$TARGET_IMAGE"
+            done
+
+            echo "Successfully promoted $image_name"
+          done
 
   # Phase 4: Release jobs (only on version tags, after successful push)
   release-cli:
@@ -283,7 +283,7 @@ jobs:
     name: Release Operator Manifests
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [push-images]
+    needs: [promote-images]
     permissions:
       contents: write
       packages: write
