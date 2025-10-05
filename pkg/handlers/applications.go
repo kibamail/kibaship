@@ -37,28 +37,28 @@ func NewApplicationHandler(applicationService *services.ApplicationService) *App
 	}
 }
 
-// CreateApplication handles POST /projects/{projectSlug}/applications
+// CreateApplication handles POST /environments/{environmentSlug}/applications
 // @Summary Create a new application
-// @Description Create a new application within a project with type-specific configuration
+// @Description Create a new application within an environment with type-specific configuration
 // @Tags applications
 // @Accept json
 // @Produce json
-// @Param projectSlug path string true "Project slug (8-character identifier)"
+// @Param environmentSlug path string true "Environment slug (8-character identifier)"
 // @Param application body models.ApplicationCreateRequest true "Application creation data"
 // @Success 201 {object} models.ApplicationResponse "Application created successfully"
 // @Failure 400 {object} models.ValidationErrors "Validation errors in request data"
 // @Failure 401 {object} auth.ErrorResponse "Authentication required"
-// @Failure 404 {object} auth.ErrorResponse "Project not found"
+// @Failure 404 {object} auth.ErrorResponse "Environment not found"
 // @Failure 500 {object} auth.ErrorResponse "Internal server error"
 // @Security BearerAuth
-// @Router /projects/{projectSlug}/applications [post]
+// @Router /environments/{environmentSlug}/applications [post]
 func (h *ApplicationHandler) CreateApplication(c *gin.Context) {
-	projectSlug := c.Param("projectSlug")
+	environmentSlug := c.Param("slug")
 
-	if projectSlug == "" {
+	if environmentSlug == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error":   "Bad Request",
-			"message": "Project slug is required",
+			"message": "Environment slug is required",
 		})
 		return
 	}
@@ -72,8 +72,8 @@ func (h *ApplicationHandler) CreateApplication(c *gin.Context) {
 		return
 	}
 
-	// Set the project slug from the URL
-	req.ProjectSlug = projectSlug
+	// Set the environment slug from the URL
+	req.EnvironmentSlug = environmentSlug
 
 	// Validate the request
 	if validationErr := req.Validate(); validationErr != nil {
@@ -83,10 +83,10 @@ func (h *ApplicationHandler) CreateApplication(c *gin.Context) {
 
 	application, err := h.applicationService.CreateApplication(c.Request.Context(), &req)
 	if err != nil {
-		if err.Error() == "failed to get project: project with slug "+projectSlug+" not found" {
+		if err.Error() == "failed to get environment: environment with slug "+environmentSlug+" not found" {
 			c.JSON(http.StatusNotFound, gin.H{
 				"error":   "Not Found",
-				"message": "Project with slug '" + projectSlug + "' was not found",
+				"message": "Environment with slug '" + environmentSlug + "' was not found",
 			})
 			return
 		}
@@ -276,6 +276,55 @@ func (h *ApplicationHandler) GetApplicationsByProject(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{
 				"error":   "Not Found",
 				"message": "Project with slug '" + projectSlug + "' was not found",
+			})
+			return
+		}
+
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "Internal Server Error",
+			"message": "Failed to retrieve applications: " + err.Error(),
+		})
+		return
+	}
+
+	// Convert to response format
+	responses := make([]models.ApplicationResponse, 0, len(applications))
+	for _, app := range applications {
+		responses = append(responses, app.ToResponse())
+	}
+
+	c.JSON(http.StatusOK, responses)
+}
+
+// GetApplicationsByEnvironment handles GET /environments/{environmentSlug}/applications
+// @Summary Get applications by environment
+// @Description Retrieve all applications for a specific environment
+// @Tags applications
+// @Produce json
+// @Param environmentSlug path string true "Environment slug (8-character identifier)"
+// @Success 200 {array} models.ApplicationResponse "List of applications"
+// @Failure 401 {object} auth.ErrorResponse "Authentication required"
+// @Failure 404 {object} auth.ErrorResponse "Environment not found"
+// @Failure 500 {object} auth.ErrorResponse "Internal server error"
+// @Security BearerAuth
+// @Router /environments/{environmentSlug}/applications [get]
+func (h *ApplicationHandler) GetApplicationsByEnvironment(c *gin.Context) {
+	environmentSlug := c.Param("slug")
+
+	if environmentSlug == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "Bad Request",
+			"message": "Environment slug is required",
+		})
+		return
+	}
+
+	applications, err := h.applicationService.GetApplicationsByEnvironment(c.Request.Context(), environmentSlug)
+	if err != nil {
+		if err.Error() == "failed to get environment: environment with slug "+environmentSlug+" not found" {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error":   "Not Found",
+				"message": "Environment with slug '" + environmentSlug + "' was not found",
 			})
 			return
 		}

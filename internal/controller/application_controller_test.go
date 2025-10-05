@@ -65,6 +65,26 @@ var _ = Describe("Application Controller", func() {
 				Expect(k8sClient.Create(ctx, testProject)).To(Succeed())
 			}
 
+			By("creating a test environment")
+			testEnvironment := &platformv1alpha1.Environment{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "environment-production-kibaship-com",
+					Namespace: "default",
+					Labels: map[string]string{
+						validation.LabelResourceUUID: "env-uuid-production",
+						validation.LabelResourceSlug: "production",
+						validation.LabelProjectUUID:  "550e8400-e29b-41d4-a716-446655440000",
+					},
+				},
+				Spec: platformv1alpha1.EnvironmentSpec{
+					ProjectRef: corev1.LocalObjectReference{Name: "test-project"},
+				},
+			}
+			err = k8sClient.Get(ctx, types.NamespacedName{Name: "environment-production-kibaship-com", Namespace: "default"}, &platformv1alpha1.Environment{})
+			if errors.IsNotFound(err) {
+				Expect(k8sClient.Create(ctx, testEnvironment)).To(Succeed())
+			}
+
 			By("creating the custom resource for the Kind Application")
 			err = k8sClient.Get(ctx, typeNamespacedName, application)
 			if err != nil && errors.IsNotFound(err) {
@@ -73,14 +93,15 @@ var _ = Describe("Application Controller", func() {
 						Name:      resourceName,
 						Namespace: "default",
 						Labels: map[string]string{
-							validation.LabelResourceUUID: "550e8400-e29b-41d4-a716-446655440001",
-							validation.LabelResourceSlug: "myapp",
-							validation.LabelProjectUUID:  "550e8400-e29b-41d4-a716-446655440000",
+							validation.LabelResourceUUID:    "550e8400-e29b-41d4-a716-446655440001",
+							validation.LabelResourceSlug:    "myapp",
+							validation.LabelEnvironmentUUID: "env-uuid-production",
+							validation.LabelProjectUUID:     "550e8400-e29b-41d4-a716-446655440000",
 						},
 					},
 					Spec: platformv1alpha1.ApplicationSpec{
-						ProjectRef: corev1.LocalObjectReference{
-							Name: "test-project",
+						EnvironmentRef: corev1.LocalObjectReference{
+							Name: "environment-production-kibaship-com",
 						},
 						Type: platformv1alpha1.ApplicationTypeDockerImage,
 						DockerImage: &platformv1alpha1.DockerImageConfig{
@@ -125,8 +146,8 @@ var _ = Describe("Application Controller", func() {
 			Expect(k8sClient.Get(ctx, typeNamespacedName, &updatedApp)).To(Succeed())
 			Expect(updatedApp.Finalizers).To(ContainElement("platform.operator.kibaship.com/application-finalizer"))
 
-			By("Verifying the Application has the project UUID label")
-			Expect(updatedApp.Labels).To(HaveKeyWithValue("platform.kibaship.com/project-uuid", "550e8400-e29b-41d4-a716-446655440000"))
+			By("Verifying the Application has the environment UUID label")
+			Expect(updatedApp.Labels).To(HaveKeyWithValue("platform.kibaship.com/environment-uuid", "env-uuid-production"))
 
 			By("Verifying the Application status is updated")
 			Eventually(func() []metav1.Condition {
@@ -151,14 +172,15 @@ var _ = Describe("Application Controller", func() {
 					Name:      "project-myproject-app-gitapp-kibaship-com",
 					Namespace: "default",
 					Labels: map[string]string{
-						validation.LabelResourceUUID: "550e8400-e29b-41d4-a716-446655440010",
-						validation.LabelResourceSlug: "gitapp",
-						validation.LabelProjectUUID:  "550e8400-e29b-41d4-a716-446655440000",
+						validation.LabelResourceUUID:    "550e8400-e29b-41d4-a716-446655440010",
+						validation.LabelResourceSlug:    "gitapp",
+						validation.LabelEnvironmentUUID: "env-uuid-production",
+						validation.LabelProjectUUID:     "550e8400-e29b-41d4-a716-446655440000",
 					},
 				},
 				Spec: platformv1alpha1.ApplicationSpec{
-					ProjectRef: corev1.LocalObjectReference{
-						Name: "test-project",
+					EnvironmentRef: corev1.LocalObjectReference{
+						Name: "environment-production-kibaship-com",
 					},
 					Type: platformv1alpha1.ApplicationTypeGitRepository,
 					GitRepository: &platformv1alpha1.GitRepositoryConfig{
@@ -194,12 +216,14 @@ var _ = Describe("Application Controller", func() {
 					Name:      "project-myproject-app-mysqlapp-kibaship-com",
 					Namespace: "default",
 					Labels: map[string]string{
-						validation.LabelResourceUUID: "550e8400-e29b-41d4-a716-446655440011",
+						validation.LabelResourceUUID:    "550e8400-e29b-41d4-a716-446655440011",
+						validation.LabelEnvironmentUUID: "env-uuid-production",
+						validation.LabelProjectUUID:     "550e8400-e29b-41d4-a716-446655440000",
 					},
 				},
 				Spec: platformv1alpha1.ApplicationSpec{
-					ProjectRef: corev1.LocalObjectReference{
-						Name: "test-project",
+					EnvironmentRef: corev1.LocalObjectReference{
+						Name: "environment-production-kibaship-com",
 					},
 					Type: platformv1alpha1.ApplicationTypeMySQL,
 					MySQL: &platformv1alpha1.MySQLConfig{
@@ -226,12 +250,14 @@ var _ = Describe("Application Controller", func() {
 					Name:      "project-myproject-app-invalidgitapp-kibaship-com",
 					Namespace: "default",
 					Labels: map[string]string{
-						validation.LabelResourceUUID: "550e8400-e29b-41d4-a716-446655440012",
+						validation.LabelResourceUUID:    "550e8400-e29b-41d4-a716-446655440012",
+						validation.LabelEnvironmentUUID: "env-uuid-production",
+						validation.LabelProjectUUID:     "550e8400-e29b-41d4-a716-446655440000",
 					},
 				},
 				Spec: platformv1alpha1.ApplicationSpec{
-					ProjectRef: corev1.LocalObjectReference{
-						Name: "test-project",
+					EnvironmentRef: corev1.LocalObjectReference{
+						Name: "environment-production-kibaship-com",
 					},
 					Type: platformv1alpha1.ApplicationTypeGitRepository,
 					GitRepository: &platformv1alpha1.GitRepositoryConfig{
@@ -254,12 +280,14 @@ var _ = Describe("Application Controller", func() {
 					Name:      "project-myproject-app-validapp-kibaship-com",
 					Namespace: "default",
 					Labels: map[string]string{
-						validation.LabelResourceUUID: "550e8400-e29b-41d4-a716-446655440013",
+						validation.LabelResourceUUID:    "550e8400-e29b-41d4-a716-446655440013",
+						validation.LabelEnvironmentUUID: "env-uuid-production",
+						validation.LabelProjectUUID:     "550e8400-e29b-41d4-a716-446655440000",
 					},
 				},
 				Spec: platformv1alpha1.ApplicationSpec{
-					ProjectRef: corev1.LocalObjectReference{
-						Name: "test-project",
+					EnvironmentRef: corev1.LocalObjectReference{
+						Name: "environment-production-kibaship-com",
 					},
 					Type: platformv1alpha1.ApplicationTypeDockerImage,
 					DockerImage: &platformv1alpha1.DockerImageConfig{
@@ -283,12 +311,14 @@ var _ = Describe("Application Controller", func() {
 					Name:      "project-myproject-app-minimalgitapp-kibaship-com",
 					Namespace: "default",
 					Labels: map[string]string{
-						validation.LabelResourceUUID: "550e8400-e29b-41d4-a716-446655440014",
+						validation.LabelResourceUUID:    "550e8400-e29b-41d4-a716-446655440014",
+						validation.LabelEnvironmentUUID: "env-uuid-production",
+						validation.LabelProjectUUID:     "550e8400-e29b-41d4-a716-446655440000",
 					},
 				},
 				Spec: platformv1alpha1.ApplicationSpec{
-					ProjectRef: corev1.LocalObjectReference{
-						Name: "test-project",
+					EnvironmentRef: corev1.LocalObjectReference{
+						Name: "environment-production-kibaship-com",
 					},
 					Type: platformv1alpha1.ApplicationTypeGitRepository,
 					GitRepository: &platformv1alpha1.GitRepositoryConfig{
@@ -318,12 +348,14 @@ var _ = Describe("Application Controller", func() {
 					Name:      "project-myproject-app-spagitapp-kibaship-com",
 					Namespace: "default",
 					Labels: map[string]string{
-						validation.LabelResourceUUID: "550e8400-e29b-41d4-a716-446655440015",
+						validation.LabelResourceUUID:    "550e8400-e29b-41d4-a716-446655440015",
+						validation.LabelEnvironmentUUID: "env-uuid-production",
+						validation.LabelProjectUUID:     "550e8400-e29b-41d4-a716-446655440000",
 					},
 				},
 				Spec: platformv1alpha1.ApplicationSpec{
-					ProjectRef: corev1.LocalObjectReference{
-						Name: "test-project",
+					EnvironmentRef: corev1.LocalObjectReference{
+						Name: "environment-production-kibaship-com",
 					},
 					Type: platformv1alpha1.ApplicationTypeGitRepository,
 					GitRepository: &platformv1alpha1.GitRepositoryConfig{
@@ -347,21 +379,22 @@ var _ = Describe("Application Controller", func() {
 			}()
 		})
 
-		It("should set project UUID label when reconciling Application", func() {
-			By("Creating an Application with only PaaS UUID")
+		It("should set environment UUID label when reconciling Application", func() {
+			By("Creating an Application with UUID labels")
 			testApp := &platformv1alpha1.Application{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "project-myproject-app-uuidtest-kibaship-com",
 					Namespace: "default",
 					Labels: map[string]string{
-						validation.LabelResourceUUID: "550e8400-e29b-41d4-a716-446655440100",
-						validation.LabelResourceSlug: "uuidtest",
-						validation.LabelProjectUUID:  "550e8400-e29b-41d4-a716-446655440000",
+						validation.LabelResourceUUID:    "550e8400-e29b-41d4-a716-446655440100",
+						validation.LabelResourceSlug:    "uuidtest",
+						validation.LabelEnvironmentUUID: "env-uuid-production",
+						validation.LabelProjectUUID:     "550e8400-e29b-41d4-a716-446655440000",
 					},
 				},
 				Spec: platformv1alpha1.ApplicationSpec{
-					ProjectRef: corev1.LocalObjectReference{
-						Name: "test-project",
+					EnvironmentRef: corev1.LocalObjectReference{
+						Name: "environment-production-kibaship-com",
 					},
 					Type: platformv1alpha1.ApplicationTypeDockerImage,
 					DockerImage: &platformv1alpha1.DockerImageConfig{
@@ -386,7 +419,7 @@ var _ = Describe("Application Controller", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			By("Verifying the Application has both UUID labels")
+			By("Verifying the Application has all UUID labels")
 			var updatedApp platformv1alpha1.Application
 			Expect(k8sClient.Get(ctx, types.NamespacedName{
 				Name:      testApp.Name,
@@ -394,6 +427,7 @@ var _ = Describe("Application Controller", func() {
 			}, &updatedApp)).To(Succeed())
 
 			Expect(updatedApp.Labels).To(HaveKeyWithValue(validation.LabelResourceUUID, "550e8400-e29b-41d4-a716-446655440100"))
+			Expect(updatedApp.Labels).To(HaveKeyWithValue(validation.LabelEnvironmentUUID, "env-uuid-production"))
 			Expect(updatedApp.Labels).To(HaveKeyWithValue(validation.LabelProjectUUID, "550e8400-e29b-41d4-a716-446655440000"))
 
 			// Cleanup
@@ -411,8 +445,8 @@ var _ = Describe("Application Controller", func() {
 					// No platform.kibaship.com/uuid label
 				},
 				Spec: platformv1alpha1.ApplicationSpec{
-					ProjectRef: corev1.LocalObjectReference{
-						Name: "test-project",
+					EnvironmentRef: corev1.LocalObjectReference{
+						Name: "environment-production-kibaship-com",
 					},
 					Type: platformv1alpha1.ApplicationTypeDockerImage,
 					DockerImage: &platformv1alpha1.DockerImageConfig{
@@ -450,12 +484,14 @@ var _ = Describe("Application Controller", func() {
 					Name:      "project-myproject-app-publicgitapp-kibaship-com",
 					Namespace: "default",
 					Labels: map[string]string{
-						validation.LabelResourceUUID: "550e8400-e29b-41d4-a716-446655440020",
+						validation.LabelResourceUUID:    "550e8400-e29b-41d4-a716-446655440020",
+						validation.LabelEnvironmentUUID: "env-uuid-production",
+						validation.LabelProjectUUID:     "550e8400-e29b-41d4-a716-446655440000",
 					},
 				},
 				Spec: platformv1alpha1.ApplicationSpec{
-					ProjectRef: corev1.LocalObjectReference{
-						Name: "test-project",
+					EnvironmentRef: corev1.LocalObjectReference{
+						Name: "environment-production-kibaship-com",
 					},
 					Type: platformv1alpha1.ApplicationTypeGitRepository,
 					GitRepository: &platformv1alpha1.GitRepositoryConfig{
@@ -482,12 +518,14 @@ var _ = Describe("Application Controller", func() {
 					Name:      "project-myproject-app-publicwithsecret-kibaship-com",
 					Namespace: "default",
 					Labels: map[string]string{
-						validation.LabelResourceUUID: "550e8400-e29b-41d4-a716-446655440021",
+						validation.LabelResourceUUID:    "550e8400-e29b-41d4-a716-446655440021",
+						validation.LabelEnvironmentUUID: "env-uuid-production",
+						validation.LabelProjectUUID:     "550e8400-e29b-41d4-a716-446655440000",
 					},
 				},
 				Spec: platformv1alpha1.ApplicationSpec{
-					ProjectRef: corev1.LocalObjectReference{
-						Name: "test-project",
+					EnvironmentRef: corev1.LocalObjectReference{
+						Name: "environment-production-kibaship-com",
 					},
 					Type: platformv1alpha1.ApplicationTypeGitRepository,
 					GitRepository: &platformv1alpha1.GitRepositoryConfig{
@@ -516,12 +554,14 @@ var _ = Describe("Application Controller", func() {
 					Name:      "project-myproject-app-privategitapp-kibaship-com",
 					Namespace: "default",
 					Labels: map[string]string{
-						validation.LabelResourceUUID: "550e8400-e29b-41d4-a716-446655440022",
+						validation.LabelResourceUUID:    "550e8400-e29b-41d4-a716-446655440022",
+						validation.LabelEnvironmentUUID: "env-uuid-production",
+						validation.LabelProjectUUID:     "550e8400-e29b-41d4-a716-446655440000",
 					},
 				},
 				Spec: platformv1alpha1.ApplicationSpec{
-					ProjectRef: corev1.LocalObjectReference{
-						Name: "test-project",
+					EnvironmentRef: corev1.LocalObjectReference{
+						Name: "environment-production-kibaship-com",
 					},
 					Type: platformv1alpha1.ApplicationTypeGitRepository,
 					GitRepository: &platformv1alpha1.GitRepositoryConfig{
@@ -550,12 +590,14 @@ var _ = Describe("Application Controller", func() {
 					Name:      "project-myproject-app-invalidprivate-kibaship-com",
 					Namespace: "default",
 					Labels: map[string]string{
-						validation.LabelResourceUUID: "550e8400-e29b-41d4-a716-446655440023",
+						validation.LabelResourceUUID:    "550e8400-e29b-41d4-a716-446655440023",
+						validation.LabelEnvironmentUUID: "env-uuid-production",
+						validation.LabelProjectUUID:     "550e8400-e29b-41d4-a716-446655440000",
 					},
 				},
 				Spec: platformv1alpha1.ApplicationSpec{
-					ProjectRef: corev1.LocalObjectReference{
-						Name: "test-project",
+					EnvironmentRef: corev1.LocalObjectReference{
+						Name: "environment-production-kibaship-com",
 					},
 					Type: platformv1alpha1.ApplicationTypeGitRepository,
 					GitRepository: &platformv1alpha1.GitRepositoryConfig{
@@ -580,12 +622,14 @@ var _ = Describe("Application Controller", func() {
 					Name:      "project-myproject-app-defaultaccess-kibaship-com",
 					Namespace: "default",
 					Labels: map[string]string{
-						validation.LabelResourceUUID: "550e8400-e29b-41d4-a716-446655440024",
+						validation.LabelResourceUUID:    "550e8400-e29b-41d4-a716-446655440024",
+						validation.LabelEnvironmentUUID: "env-uuid-production",
+						validation.LabelProjectUUID:     "550e8400-e29b-41d4-a716-446655440000",
 					},
 				},
 				Spec: platformv1alpha1.ApplicationSpec{
-					ProjectRef: corev1.LocalObjectReference{
-						Name: "test-project",
+					EnvironmentRef: corev1.LocalObjectReference{
+						Name: "environment-production-kibaship-com",
 					},
 					Type: platformv1alpha1.ApplicationTypeGitRepository,
 					GitRepository: &platformv1alpha1.GitRepositoryConfig{
@@ -614,140 +658,6 @@ var _ = Describe("Application Controller", func() {
 			defer func() {
 				Expect(k8sClient.Delete(ctx, &createdApp)).To(Succeed())
 			}()
-		})
-
-		Context("Environment management", func() {
-			ctx := context.Background()
-
-			It("auto-creates a default production environment when none specified", func() {
-				// Ensure a test project exists
-				testProject := &platformv1alpha1.Project{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "env-test-project",
-						Namespace: "default",
-						Labels: map[string]string{
-							validation.LabelResourceUUID: "550e8400-e29b-41d4-a716-446655449000",
-							validation.LabelResourceSlug: "env-test-project",
-						},
-					},
-					Spec: platformv1alpha1.ProjectSpec{},
-				}
-				err := k8sClient.Get(ctx, types.NamespacedName{Name: testProject.Name, Namespace: testProject.Namespace}, &platformv1alpha1.Project{})
-				if errors.IsNotFound(err) {
-					Expect(k8sClient.Create(ctx, testProject)).To(Succeed())
-				}
-
-				app := &platformv1alpha1.Application{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "application-envtest-kibaship-com",
-						Namespace: "default",
-						Labels: map[string]string{
-							validation.LabelResourceUUID: "550e8400-e29b-41d4-a716-446655449100",
-							validation.LabelResourceSlug: "envtest",
-							validation.LabelProjectUUID:  "550e8400-e29b-41d4-a716-446655449000",
-						},
-					},
-					Spec: platformv1alpha1.ApplicationSpec{
-						ProjectRef: corev1.LocalObjectReference{Name: testProject.Name},
-						Type:       platformv1alpha1.ApplicationTypeDockerImage,
-						DockerImage: &platformv1alpha1.DockerImageConfig{
-							Image: "nginx:latest",
-						},
-					},
-				}
-				Expect(k8sClient.Create(ctx, app)).To(Succeed())
-
-				reconciler := &ApplicationReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
-
-				// 1st reconcile: add finalizer/labels
-				_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Namespace: app.Namespace, Name: app.Name}})
-				Expect(err).NotTo(HaveOccurred())
-				// 2nd reconcile: ensure default environment and persist
-				_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Namespace: app.Namespace, Name: app.Name}})
-				Expect(err).NotTo(HaveOccurred())
-
-				// Verify default environment added
-				var fetched platformv1alpha1.Application
-				Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: app.Namespace, Name: app.Name}, &fetched)).To(Succeed())
-				Expect(fetched.Spec.Environments).ToNot(BeNil())
-				Expect(fetched.Spec.Environments).To(HaveLen(1))
-				Expect(fetched.Spec.Environments[0].Name).To(Equal("production"))
-			})
-
-			It("creates env secret and updates environment status readiness", func() {
-				// Ensure a test project exists
-				testProject := &platformv1alpha1.Project{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "env-test-project-2",
-						Namespace: "default",
-						Labels: map[string]string{
-							validation.LabelResourceUUID: "550e8400-e29b-41d4-a716-446655449200",
-							validation.LabelResourceSlug: "env-test-project-2",
-						},
-					},
-					Spec: platformv1alpha1.ProjectSpec{},
-				}
-				err := k8sClient.Get(ctx, types.NamespacedName{Name: testProject.Name, Namespace: testProject.Namespace}, &platformv1alpha1.Project{})
-				if errors.IsNotFound(err) {
-					Expect(k8sClient.Create(ctx, testProject)).To(Succeed())
-				}
-
-				app := &platformv1alpha1.Application{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "application-envtest2-kibaship-com",
-						Namespace: "default",
-						Labels: map[string]string{
-							validation.LabelResourceUUID: "550e8400-e29b-41d4-a716-446655449210",
-							validation.LabelResourceSlug: "envtest2",
-							validation.LabelProjectUUID:  "550e8400-e29b-41d4-a716-446655449200",
-						},
-					},
-					Spec: platformv1alpha1.ApplicationSpec{
-						ProjectRef: corev1.LocalObjectReference{Name: testProject.Name},
-						Type:       platformv1alpha1.ApplicationTypeDockerImage,
-						DockerImage: &platformv1alpha1.DockerImageConfig{
-							Image: "nginx:latest",
-						},
-					},
-				}
-				Expect(k8sClient.Create(ctx, app)).To(Succeed())
-
-				reconciler := &ApplicationReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
-
-				// Reconcile cycles to progress through: finalizer, default env, secret creation/status
-				_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Namespace: app.Namespace, Name: app.Name}})
-				Expect(err).NotTo(HaveOccurred())
-				_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Namespace: app.Namespace, Name: app.Name}})
-				Expect(err).NotTo(HaveOccurred())
-				_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Namespace: app.Namespace, Name: app.Name}})
-				Expect(err).NotTo(HaveOccurred())
-
-				// Verify secret exists
-				secretName := "application-envtest2-kibaship-com-env-production"
-				var sec corev1.Secret
-				Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: app.Namespace, Name: secretName}, &sec)).To(Succeed())
-				Expect(sec.Labels).To(HaveKeyWithValue("app.kubernetes.io/managed-by", "kibaship-operator"))
-				Expect(sec.Labels).To(HaveKeyWithValue("platform.kibaship.com/application-uuid", "550e8400-e29b-41d4-a716-446655449210"))
-				Expect(sec.Labels).To(HaveKeyWithValue("platform.kibaship.com/project-uuid", "550e8400-e29b-41d4-a716-446655449200"))
-				Expect(sec.Labels).To(HaveKeyWithValue("platform.operator.kibaship.com/environment", "production"))
-
-				// Verify owner reference is set to the Application
-				Expect(sec.OwnerReferences).ToNot(BeEmpty())
-				Expect(sec.OwnerReferences[0].Kind).To(Equal("Application"))
-
-				// Verify environment status shows SecretReady
-				var fetched platformv1alpha1.Application
-				Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: app.Namespace, Name: app.Name}, &fetched)).To(Succeed())
-				Eventually(func() bool {
-					_ = k8sClient.Get(ctx, types.NamespacedName{Namespace: app.Namespace, Name: app.Name}, &fetched)
-					for _, st := range fetched.Status.EnvironmentStatus {
-						if st.Name == "production" {
-							return st.SecretReady
-						}
-					}
-					return false
-				}).Should(BeTrue())
-			})
 		})
 	})
 })

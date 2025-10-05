@@ -10,8 +10,8 @@ metadata:
     platform.kibaship.com/workspace-uuid: "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
 spec:
   type: GitRepository
-  projectRef:
-    name: test-project-application-e2e
+  environmentRef:
+    name: environment-production-kibaship-com
   gitRepository:
     provider: github.com
     repository: kibamail/kibamail

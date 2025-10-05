@@ -102,7 +102,7 @@ type PostgresClusterConfig struct {
 // ApplicationCreateRequest represents a request to create an application
 type ApplicationCreateRequest struct {
 	Name            string                 `json:"name" example:"my-web-app"`
-	ProjectSlug     string                 `json:"projectSlug" example:"abc123de"`
+	EnvironmentSlug string                 `json:"environmentSlug" example:"abc123de"`
 	Type            ApplicationType        `json:"type" example:"DockerImage"`
 	GitRepository   *GitRepositoryConfig   `json:"gitRepository,omitempty"`
 	DockerImage     *DockerImageConfig     `json:"dockerImage,omitempty"`
@@ -130,6 +130,7 @@ type Application struct {
 	Slug             string                 `json:"slug"`
 	ProjectUUID      string                 `json:"projectUuid"`
 	ProjectSlug      string                 `json:"projectSlug"`
+	EnvironmentUUID  string                 `json:"environmentUuid"`
 	Type             ApplicationType        `json:"type"`
 	GitRepository    *GitRepositoryConfig   `json:"gitRepository,omitempty"`
 	DockerImage      *DockerImageConfig     `json:"dockerImage,omitempty"`
@@ -199,17 +200,17 @@ func (req *ApplicationCreateRequest) Validate() *ValidationErrors {
 		})
 	}
 
-	// Validate project slug
-	if strings.TrimSpace(req.ProjectSlug) == "" {
+	// Validate environment slug
+	if strings.TrimSpace(req.EnvironmentSlug) == "" {
 		errors = append(errors, ValidationError{
-			Field:   "projectSlug",
-			Message: "Project slug is required",
+			Field:   "environmentSlug",
+			Message: "Environment slug is required",
 		})
 	}
-	if !isValidSlug(req.ProjectSlug) {
+	if !isValidSlug(req.EnvironmentSlug) {
 		errors = append(errors, ValidationError{
-			Field:   "projectSlug",
-			Message: "Project slug must be a valid 8-character alphanumeric string",
+			Field:   "environmentSlug",
+			Message: "Environment slug must be a valid 8-character alphanumeric string",
 		})
 	}
 

@@ -18,8 +18,8 @@ spec:
     - jsonPath: .spec.type
       name: Type
       type: string
-    - jsonPath: .spec.projectRef.name
-      name: Project
+    - jsonPath: .spec.environmentRef.name
+      name: Environment
       type: string
     - jsonPath: .status.phase
       name: Phase
@@ -81,101 +81,21 @@ spec:
                 required:
                 - image
                 type: object
-              environments:
-                description: |-
-                  Environments defines environment-specific configurations
-                  If not specified, a default "production" environment is auto-created by the controller
-                items:
-                  description: ApplicationEnvironment defines environment-specific
-                    configuration
-                  properties:
-                    gitRepository:
-                      description: GitRepository contains environment-specific overrides
-                        for GitRepository applications
-                      properties:
-                        branch:
-                          description: Branch override (defaults to application's
-                            base branch)
-                          type: string
-                        buildCommand:
-                          description: BuildCommand override
-                          type: string
-                        startCommand:
-                          description: StartCommand override
-                          type: string
-                      type: object
-                    name:
-                      description: Name of the environment (production, staging, qa,
-                        etc.)
-                      pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
-                      type: string
-                    replicas:
-                      description: Replicas for this environment (optional)
-                      format: int32
-                      type: integer
-                    resources:
-                      description: Resources for this environment (optional)
-                      properties:
-                        claims:
-                          description: |-
-                            Claims lists the names of resources, defined in spec.resourceClaims,
-                            that are used by this container.
-
-                            This field depends on the
-                            DynamicResourceAllocation feature gate.
-
-                            This field is immutable. It can only be set for containers.
-                          items:
-                            description: ResourceClaim references one entry in PodSpec.ResourceClaims.
-                            properties:
-                              name:
-                                description: |-
-                                  Name must match the name of one entry in pod.spec.resourceClaims of
-                                  the Pod where this field is used. It makes that resource available
-                                  inside a container.
-                                type: string
-                              request:
-                                description: |-
-                                  Request is the name chosen for a request in the referenced claim.
-                                  If empty, everything from the claim is made available, otherwise
-                                  only the result of this request.
-                                type: string
-                            required:
-                            - name
-                            type: object
-                          type: array
-                          x-kubernetes-list-map-keys:
-                          - name
-                          x-kubernetes-list-type: map
-                        limits:
-                          additionalProperties:
-                            anyOf:
-                            - type: integer
-                            - type: string
-                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                            x-kubernetes-int-or-string: true
-                          description: |-
-                            Limits describes the maximum amount of compute resources allowed.
-                            More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
-                          type: object
-                        requests:
-                          additionalProperties:
-                            anyOf:
-                            - type: integer
-                            - type: string
-                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                            x-kubernetes-int-or-string: true
-                          description: |-
-                            Requests describes the minimum amount of compute resources required.
-                            If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
-                            otherwise to an implementation-defined value. Requests cannot exceed Limits.
-                            More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
-                          type: object
-                      type: object
-                  required:
-                  - name
-                  type: object
-                type: array
+              environmentRef:
+                description: EnvironmentRef references the Environment this application
+                  belongs to
+                properties:
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
               gitRepository:
                 description: GitRepository contains configuration for GitRepository
                   applications
@@ -374,21 +294,6 @@ spec:
                     description: Version is the PostgreSQL version to deploy
                     type: string
                 type: object
-              projectRef:
-                description: ProjectRef references the Project this application belongs
-                  to
-                properties:
-                  name:
-                    default: ""
-                    description: |-
-                      Name of the referent.
-                      This field is effectively required, but due to backwards compatibility is
-                      allowed to be empty. Instances of this type with an empty value here are
-                      almost certainly wrong.
-                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                    type: string
-                type: object
-                x-kubernetes-map-type: atomic
               type:
                 description: Type defines the type of application
                 enum:
@@ -400,7 +305,7 @@ spec:
                 - GitRepository
                 type: string
             required:
-            - projectRef
+            - environmentRef
             - type
             type: object
           status:
@@ -462,27 +367,6 @@ spec:
                   - reason
                   - status
                   - type
-                  type: object
-                type: array
-              environmentStatus:
-                description: EnvironmentStatus tracks the readiness of each environment
-                items:
-                  description: EnvironmentStatus tracks the status of an environment
-                  properties:
-                    lastDeploymentTime:
-                      description: LastDeploymentTime tracks last deployment to this
-                        environment
-                      format: date-time
-                      type: string
-                    name:
-                      description: Name of the environment
-                      type: string
-                    secretReady:
-                      description: SecretReady indicates if environment secret exists
-                      type: boolean
-                  required:
-                  - name
-                  - secretReady
                   type: object
                 type: array
               message:

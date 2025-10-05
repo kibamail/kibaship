@@ -3,6 +3,7 @@
 # It should be run by config/default
 resources:
 - bases/platform.operator.kibaship.com_projects.yaml
+- bases/platform.operator.kibaship.com_environments.yaml
 - bases/platform.operator.kibaship.com_applications.yaml
 - bases/platform.operator.kibaship.com_deployments.yaml
 - bases/platform.operator.kibaship.com_applicationdomains.yaml

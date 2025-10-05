@@ -2,6 +2,7 @@ package e2e
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 
@@ -24,6 +25,7 @@ var _ = Describe("Deployment Reconciliation", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Waiting for project to be ready")
+			projectNamespace := "project-test-project-deployment-e2e-kibaship-com"
 			Eventually(func() bool {
 				cmd := exec.Command("kubectl", "get", "project", "test-project-deployment-e2e", "-o", "jsonpath={.status.phase}")
 				output, err := cmd.CombinedOutput()
@@ -31,15 +33,45 @@ var _ = Describe("Deployment Reconciliation", func() {
 					return false
 				}
 				return strings.TrimSpace(string(output)) == readyPhase
-			}, "2m", "5s").Should(BeTrue(), "Project should be Ready before creating Application")
+			}, "2m", "5s").Should(BeTrue(), "Project should be Ready")
+
+			By("Waiting for default production environment to be ready")
+			var envUUID string
+			Eventually(func() bool {
+				cmd := exec.Command("kubectl", "get", "environment", "environment-production-kibaship-com", "-n", projectNamespace, "-o", "jsonpath={.status.phase}")
+				output, err := cmd.CombinedOutput()
+				if err != nil {
+					return false
+				}
+				return strings.TrimSpace(string(output)) == readyPhase
+			}, "2m", "5s").Should(BeTrue(), "Default production environment should be Ready before creating Application")
+
+			By("Fetching the environment UUID")
+			cmd = exec.Command("kubectl", "get", "environment", "environment-production-kibaship-com", "-n", projectNamespace, "-o", "jsonpath={.metadata.labels.platform\\.kibaship\\.com/uuid}")
+			output, err := cmd.CombinedOutput()
+			Expect(err).NotTo(HaveOccurred())
+			envUUID = strings.TrimSpace(string(output))
+			Expect(envUUID).NotTo(BeEmpty(), "Environment should have UUID label")
+
+			By("Patching the application YAML with environment UUID and applying it")
+			yamlBytes, err := os.ReadFile("test/e2e/deployment-reconciliation/test-application.yaml")
+			Expect(err).NotTo(HaveOccurred())
+			yamlStr := string(yamlBytes)
+			yamlStr = strings.Replace(yamlStr,
+				"platform.kibaship.com/workspace-uuid: \"6ba7b810-9dad-11d1-80b4-00c04fd430c8\"",
+				fmt.Sprintf("platform.kibaship.com/workspace-uuid: \"6ba7b810-9dad-11d1-80b4-00c04fd430c8\"\n    platform.kibaship.com/environment-uuid: \"%s\"", envUUID),
+				1)
+			tmpFile := "/tmp/test-application-deployment-with-env-uuid.yaml"
+			err = os.WriteFile(tmpFile, []byte(yamlStr), 0644)
+			Expect(err).NotTo(HaveOccurred())
 
 			By("Creating the test application")
-			cmd = exec.Command("kubectl", "apply", "-f", "test/e2e/deployment-reconciliation/test-application.yaml")
+			cmd = exec.Command("kubectl", "apply", "-f", tmpFile)
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Waiting for application to be ready")
-			appNamespace := "project-test-project-deployment-e2e-kibaship-com"
+			appNamespace := projectNamespace
 			appName := "application-myapp-deployment-e2e-kibaship-com"
 			Eventually(func() bool {
 				cmd := exec.Command("kubectl", "get", "application", appName, "-n", appNamespace, "-o", "jsonpath={.status.phase}")
@@ -50,13 +82,25 @@ var _ = Describe("Deployment Reconciliation", func() {
 				return strings.TrimSpace(string(output)) == readyPhase
 			}, "2m", "5s").Should(BeTrue(), "Application should be Ready before creating Deployment")
 
+			By("Patching the deployment YAML with environment UUID and applying it")
+			depYamlBytes, err := os.ReadFile("test/e2e/deployment-reconciliation/test-deployment.yaml")
+			Expect(err).NotTo(HaveOccurred())
+			depYamlStr := string(depYamlBytes)
+			depYamlStr = strings.Replace(depYamlStr,
+				"platform.kibaship.com/application-uuid: \"123e4567-e89b-12d3-a456-426614174003\"",
+				fmt.Sprintf("platform.kibaship.com/application-uuid: \"123e4567-e89b-12d3-a456-426614174003\"\n    platform.kibaship.com/environment-uuid: \"%s\"", envUUID),
+				1)
+			tmpDepFile := "/tmp/test-deployment-with-env-uuid.yaml"
+			err = os.WriteFile(tmpDepFile, []byte(depYamlStr), 0644)
+			Expect(err).NotTo(HaveOccurred())
+
 			By("Applying the test deployment YAML")
-			cmd = exec.Command("kubectl", "apply", "-f", "test/e2e/deployment-reconciliation/test-deployment.yaml")
+			cmd = exec.Command("kubectl", "apply", "-f", tmpDepFile)
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Verifying Deployment resource exists and passes validation")
-			deploymentNamespace := "project-test-project-deployment-e2e-kibaship-com"
+			deploymentNamespace := projectNamespace
 			deploymentName := "deployment-test-deploy-deployment-e2e-kibaship-com"
 			Eventually(func() bool {
 				cmd := exec.Command("kubectl", "get", deploymentResourceType, deploymentName, "-n", deploymentNamespace)
@@ -132,8 +176,8 @@ var _ = Describe("Deployment Reconciliation", func() {
 				return strings.TrimSpace(string(output)) == "main"
 			}, "30s", "2s").Should(BeTrue(), "Deployment should have valid GitRepository branch")
 
-			By("Verifying Deployment exists in the correct project namespace")
-			Expect(deploymentNamespace).To(Equal("project-test-project-deployment-e2e-kibaship-com"),
+			By("Verifying Deployment exists in the project namespace")
+			Expect(deploymentNamespace).To(Equal(projectNamespace),
 				"Deployment should be created in the project namespace")
 
 			By("Verifying Deployment webhook validation passed")

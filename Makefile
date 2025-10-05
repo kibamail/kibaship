@@ -208,6 +208,14 @@ run: manifests generate fmt vet ## Run a controller from your host.
 run-apiserver: fmt vet ## Run API server from your host.
 	go run ./cmd/apiserver/main.go
 
+.PHONY: dev-api
+dev-api: generate-openapi ## Run API server in dev mode with swagger docs (http://localhost:8080/swagger/index.html)
+	@echo "Starting API server in dev mode..."
+	@echo "Swagger UI available at: http://localhost:8080/swagger/index.html"
+	@echo "OpenAPI YAML available at: http://localhost:8080/openapi.yaml"
+	@echo ""
+	@go run ./cmd/apiserver/main.go
+
 .PHONY: build-registry-auth
 build-registry-auth: ## Build registry auth service binary.
 	mkdir -p bin

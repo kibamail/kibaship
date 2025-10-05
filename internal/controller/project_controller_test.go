@@ -110,6 +110,23 @@ var _ = Describe("Project Controller", func() {
 			Expect(namespace.Annotations["platform.kibaship.com/created-by"]).To(Equal("kibaship-operator"))
 			Expect(namespace.Annotations["platform.kibaship.com/project"]).To(Equal(resourceName))
 
+			By("Verifying production environment was auto-created")
+			expectedNamespace := NamespacePrefix + resourceName + NamespaceSuffix
+			productionEnv := &platformv1alpha1.Environment{}
+			err = k8sClient.Get(ctx, types.NamespacedName{
+				Name:      "environment-production-kibaship-com",
+				Namespace: expectedNamespace,
+			}, productionEnv)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Verifying environment has correct labels")
+			Expect(productionEnv.Labels[validation.LabelResourceSlug]).To(Equal("production"))
+			Expect(productionEnv.Labels[validation.LabelProjectUUID]).To(Equal("550e8400-e29b-41d4-a716-446655440000"))
+
+			By("Verifying environment references project correctly")
+			Expect(productionEnv.Spec.ProjectRef.Name).To(Equal(resourceName))
+			Expect(productionEnv.Spec.Description).To(Equal("Default production environment"))
+
 			By("Cleaning up the created namespace")
 			Expect(k8sClient.Delete(ctx, namespace)).To(Succeed())
 		})

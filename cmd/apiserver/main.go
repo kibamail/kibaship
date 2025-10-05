@@ -99,6 +99,7 @@ func main() {
 
 	// Create services
 	projectService := services.NewProjectService(k8sClient, scheme)
+	environmentService := services.NewEnvironmentService(k8sClient, scheme, projectService)
 
 	// Create authenticator
 	authenticator := auth.NewAPIKeyAuthenticator(apiKey)
@@ -110,8 +111,9 @@ func main() {
 	router.Use(gin.Logger())
 	router.Use(gin.Recovery())
 
-	// Swagger documentation endpoint
+	// Swagger documentation endpoints
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+	router.GET("/openapi.yaml", serveSwaggerYAML)
 
 	// Health check endpoints (public)
 	router.GET("/healthz", healthzHandler)
@@ -123,7 +125,8 @@ func main() {
 	{
 		// Initialize services with dependency injection
 		projectHandler := handlers.NewProjectHandler(projectService)
-		applicationService := services.NewApplicationService(k8sClient, scheme, projectService)
+		environmentHandler := handlers.NewEnvironmentHandler(environmentService)
+		applicationService := services.NewApplicationService(k8sClient, scheme, projectService, environmentService)
 		deploymentService := services.NewDeploymentService(k8sClient, scheme, applicationService)
 		applicationDomainService := services.NewApplicationDomainService(k8sClient, scheme, applicationService)
 
@@ -142,8 +145,16 @@ func main() {
 		protected.PATCH("/project/:slug", projectHandler.UpdateProject)
 		protected.DELETE("/project/:slug", projectHandler.DeleteProject)
 
+		// Environment endpoints
+		protected.POST("/projects/:projectSlug/environments", environmentHandler.CreateEnvironment)
+		protected.GET("/projects/:projectSlug/environments", environmentHandler.GetEnvironmentsByProject)
+		protected.GET("/environments/:slug", environmentHandler.GetEnvironment)
+		protected.PATCH("/environments/:slug", environmentHandler.UpdateEnvironment)
+		protected.DELETE("/environments/:slug", environmentHandler.DeleteEnvironment)
+
 		// Application endpoints
-		protected.POST("/projects/:projectSlug/applications", applicationHandler.CreateApplication)
+		protected.POST("/environments/:slug/applications", applicationHandler.CreateApplication)
+		protected.GET("/environments/:slug/applications", applicationHandler.GetApplicationsByEnvironment)
 		protected.GET("/projects/:projectSlug/applications", applicationHandler.GetApplicationsByProject)
 		protected.GET("/application/:slug", applicationHandler.GetApplication)
 		protected.PATCH("/application/:slug", applicationHandler.UpdateApplication)
@@ -233,4 +244,15 @@ func readyzHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"status": "ready",
 	})
+}
+
+// serveSwaggerYAML serves the OpenAPI YAML file
+// @Summary Get OpenAPI specification
+// @Description Get the OpenAPI specification in YAML format
+// @Tags documentation
+// @Produce text/plain
+// @Success 200 {string} string "OpenAPI YAML specification"
+// @Router /openapi.yaml [get]
+func serveSwaggerYAML(c *gin.Context) {
+	c.File("docs/swagger.yaml")
 }

@@ -25,6 +25,9 @@ definitions:
     properties:
       dockerImage:
         $ref: '#/definitions/models.DockerImageConfig'
+      environmentSlug:
+        example: abc123de
+        type: string
       gitRepository:
         $ref: '#/definitions/models.GitRepositoryConfig'
       mysql:
@@ -38,9 +41,6 @@ definitions:
         $ref: '#/definitions/models.PostgresConfig'
       postgresCluster:
         $ref: '#/definitions/models.PostgresClusterConfig'
-      projectSlug:
-        example: abc123de
-        type: string
       type:
         allOf:
         - $ref: '#/definitions/models.ApplicationType'
@@ -152,8 +152,14 @@ definitions:
         type: string
       dockerImage:
         $ref: '#/definitions/models.DockerImageConfig'
+      domains:
+        items:
+          $ref: '#/definitions/models.ApplicationDomainResponse'
+        type: array
       gitRepository:
         $ref: '#/definitions/models.GitRepositoryConfig'
+      latestDeployment:
+        $ref: '#/definitions/models.DeploymentResponse'
       mysql:
         $ref: '#/definitions/models.MySQLConfig'
       mysqlCluster:
@@ -326,6 +332,66 @@ definitions:
       tag:
         example: v1.0.0
         type: string
+    type: object
+  models.EnvironmentCreateRequest:
+    properties:
+      description:
+        example: Production environment
+        type: string
+      name:
+        example: production
+        type: string
+      projectSlug:
+        example: abc123de
+        type: string
+      variables:
+        additionalProperties:
+          type: string
+        type: object
+    type: object
+  models.EnvironmentResponse:
+    properties:
+      applicationCount:
+        example: 5
+        type: integer
+      createdAt:
+        example: "2023-01-01T00:00:00Z"
+        type: string
+      description:
+        example: Production environment
+        type: string
+      name:
+        example: production
+        type: string
+      projectSlug:
+        example: xyz789ab
+        type: string
+      projectUuid:
+        example: 123e4567-e89b-12d3-a456-426614174001
+        type: string
+      slug:
+        example: abc123de
+        type: string
+      updatedAt:
+        example: "2023-01-01T00:00:00Z"
+        type: string
+      uuid:
+        example: 123e4567-e89b-12d3-a456-426614174000
+        type: string
+      variables:
+        additionalProperties:
+          type: string
+        type: object
+    type: object
+  models.EnvironmentUpdateRequest:
+    properties:
+      description:
+        example: Updated production environment
+        type: string
+      variables:
+        additionalProperties:
+          type: string
+        type: object
     type: object
   models.GitProvider:
     enum:
@@ -660,40 +726,6 @@ paths:
       tags:
       - deployments
   /applications/{applicationSlug}/domains:
-    get:
-      description: Retrieve all domains for a specific application
-      parameters:
-      - description: Application slug (8-character identifier)
-        in: path
-        name: applicationSlug
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: List of application domains
-          schema:
-            items:
-              $ref: '#/definitions/models.ApplicationDomainResponse'
-            type: array
-        "401":
-          description: Authentication required
-          schema:
-            $ref: '#/definitions/auth.ErrorResponse'
-        "404":
-          description: Application not found
-          schema:
-            $ref: '#/definitions/auth.ErrorResponse'
-        "500":
-          description: Internal server error
-          schema:
-            $ref: '#/definitions/auth.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Get application domains by application
-      tags:
-      - application-domains
     post:
       consumes:
       - application/json
@@ -938,6 +970,192 @@ paths:
       summary: Get application domain by slug
       tags:
       - application-domains
+  /environments/{environmentSlug}/applications:
+    get:
+      description: Retrieve all applications for a specific environment
+      parameters:
+      - description: Environment slug (8-character identifier)
+        in: path
+        name: environmentSlug
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of applications
+          schema:
+            items:
+              $ref: '#/definitions/models.ApplicationResponse'
+            type: array
+        "401":
+          description: Authentication required
+          schema:
+            $ref: '#/definitions/auth.ErrorResponse'
+        "404":
+          description: Environment not found
+          schema:
+            $ref: '#/definitions/auth.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/auth.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get applications by environment
+      tags:
+      - applications
+    post:
+      consumes:
+      - application/json
+      description: Create a new application within an environment with type-specific
+        configuration
+      parameters:
+      - description: Environment slug (8-character identifier)
+        in: path
+        name: environmentSlug
+        required: true
+        type: string
+      - description: Application creation data
+        in: body
+        name: application
+        required: true
+        schema:
+          $ref: '#/definitions/models.ApplicationCreateRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Application created successfully
+          schema:
+            $ref: '#/definitions/models.ApplicationResponse'
+        "400":
+          description: Validation errors in request data
+          schema:
+            $ref: '#/definitions/models.ValidationErrors'
+        "401":
+          description: Authentication required
+          schema:
+            $ref: '#/definitions/auth.ErrorResponse'
+        "404":
+          description: Environment not found
+          schema:
+            $ref: '#/definitions/auth.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/auth.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create a new application
+      tags:
+      - applications
+  /environments/{slug}:
+    delete:
+      description: Delete an environment by its unique slug identifier
+      parameters:
+      - description: Environment slug (8-character identifier)
+        in: path
+        name: slug
+        required: true
+        type: string
+      responses:
+        "204":
+          description: Environment deleted successfully
+        "401":
+          description: Authentication required
+          schema:
+            $ref: '#/definitions/auth.ErrorResponse'
+        "404":
+          description: Environment not found
+          schema:
+            $ref: '#/definitions/auth.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/auth.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete environment by slug
+      tags:
+      - environments
+    get:
+      description: Retrieve an environment by its unique slug identifier
+      parameters:
+      - description: Environment slug (8-character identifier)
+        in: path
+        name: slug
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Environment details
+          schema:
+            $ref: '#/definitions/models.EnvironmentResponse'
+        "401":
+          description: Authentication required
+          schema:
+            $ref: '#/definitions/auth.ErrorResponse'
+        "404":
+          description: Environment not found
+          schema:
+            $ref: '#/definitions/auth.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/auth.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get environment by slug
+      tags:
+      - environments
+    patch:
+      consumes:
+      - application/json
+      description: Update an environment by its unique slug identifier with partial
+        updates
+      parameters:
+      - description: Environment slug (8-character identifier)
+        in: path
+        name: slug
+        required: true
+        type: string
+      - description: Environment update data
+        in: body
+        name: environment
+        required: true
+        schema:
+          $ref: '#/definitions/models.EnvironmentUpdateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Updated environment details
+          schema:
+            $ref: '#/definitions/models.EnvironmentResponse'
+        "400":
+          description: Validation errors in request data
+          schema:
+            $ref: '#/definitions/models.ValidationErrors'
+        "401":
+          description: Authentication required
+          schema:
+            $ref: '#/definitions/auth.ErrorResponse'
+        "404":
+          description: Environment not found
+          schema:
+            $ref: '#/definitions/auth.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/auth.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update environment by slug
+      tags:
+      - environments
   /healthz:
     get:
       description: Check if the API server is healthy
@@ -951,6 +1169,19 @@ paths:
       summary: Health check
       tags:
       - health
+  /openapi.yaml:
+    get:
+      description: Get the OpenAPI specification in YAML format
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: OpenAPI YAML specification
+          schema:
+            type: string
+      summary: Get OpenAPI specification
+      tags:
+      - documentation
   /projects:
     post:
       consumes:
@@ -1024,29 +1255,65 @@ paths:
       summary: Get applications by project
       tags:
       - applications
-    post:
-      consumes:
-      - application/json
-      description: Create a new application within a project with type-specific configuration
+  /projects/{projectSlug}/environments:
+    get:
+      description: Retrieve all environments for a specific project
       parameters:
       - description: Project slug (8-character identifier)
         in: path
         name: projectSlug
         required: true
         type: string
-      - description: Application creation data
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of environments
+          schema:
+            items:
+              $ref: '#/definitions/models.EnvironmentResponse'
+            type: array
+        "401":
+          description: Authentication required
+          schema:
+            $ref: '#/definitions/auth.ErrorResponse'
+        "404":
+          description: Project not found
+          schema:
+            $ref: '#/definitions/auth.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/auth.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List environments for a project
+      tags:
+      - environments
+    post:
+      consumes:
+      - application/json
+      description: Create a new environment within a project. The environment will
+        be assigned a random 8-character slug.
+      parameters:
+      - description: Project slug (8-character identifier)
+        in: path
+        name: projectSlug
+        required: true
+        type: string
+      - description: Environment creation data
         in: body
-        name: application
+        name: environment
         required: true
         schema:
-          $ref: '#/definitions/models.ApplicationCreateRequest'
+          $ref: '#/definitions/models.EnvironmentCreateRequest'
       produces:
       - application/json
       responses:
         "201":
-          description: Application created successfully
+          description: Environment created successfully
           schema:
-            $ref: '#/definitions/models.ApplicationResponse'
+            $ref: '#/definitions/models.EnvironmentResponse'
         "400":
           description: Validation errors in request data
           schema:
@@ -1065,9 +1332,9 @@ paths:
             $ref: '#/definitions/auth.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: Create a new application
+      summary: Create a new environment
       tags:
-      - applications
+      - environments
   /projects/{slug}:
     delete:
       description: Delete a project by its unique slug identifier

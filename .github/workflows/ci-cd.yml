@@ -1,0 +1,429 @@
+name: CI/CD
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  pull_request:
+
+env:
+  REGISTRY: ghcr.io
+  CLI_NAME: kibaship
+
+jobs:
+  # Phase 1: Run tests in parallel
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Run linter
+        uses: golangci/golangci-lint-action@v7
+        with:
+          version: v2.1.0
+
+  test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Run unit tests
+        run: |
+          go mod tidy
+          make test
+
+  test-e2e:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install Kind
+        run: |
+          curl -Lo ./kind https://kind.sigs.k8s.io/dl/latest/kind-linux-amd64
+          chmod +x ./kind
+          sudo mv ./kind /usr/local/bin/kind
+
+      - name: Verify Kind installation
+        run: kind version
+
+      - name: Run E2E tests
+        run: |
+          go mod tidy
+          make test-e2e
+
+  # Phase 2: Build all images in parallel WITHOUT pushing (only if all tests pass)
+  build-images:
+    name: Build Images
+    runs-on: ubuntu-latest
+    needs: [lint, test, test-e2e]
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: true
+      matrix:
+        image:
+          - name: kibaship-operator
+            context: .
+            file: Dockerfile
+          - name: kibaship-operator-apiserver
+            context: .
+            file: Dockerfile.apiserver
+          - name: kibaship-operator-cert-manager-webhook
+            context: webhooks/cert-manager-kibaship-webhook
+            file: webhooks/cert-manager-kibaship-webhook/Dockerfile
+          - name: kibaship-operator-registry-auth
+            context: .
+            file: Dockerfile.registry-auth
+          - name: kibaship-railpack-cli
+            context: build/railpack-cli
+            file: build/railpack-cli/Dockerfile
+          - name: kibaship-railpack-build
+            context: build/railpack-build
+            file: build/railpack-build/Dockerfile
+    outputs:
+      image-digests: ${{ steps.build.outputs.digest }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/kibamail/${{ matrix.image.name }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha,format=short,prefix=sha-
+
+      - name: Build Docker image
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.image.context }}
+          file: ${{ matrix.image.file }}
+          platforms: linux/amd64,linux/arm64
+          push: false
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          outputs: type=image,name=${{ env.REGISTRY }}/kibamail/${{ matrix.image.name }},push-by-digest=true,name-canonical=true,push=false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Export image to tarball
+        run: |
+          mkdir -p /tmp/images
+          docker save ${{ env.REGISTRY }}/kibamail/${{ matrix.image.name }}@${{ steps.build.outputs.digest }} -o /tmp/images/${{ matrix.image.name }}.tar
+
+      - name: Upload image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-${{ matrix.image.name }}
+          path: /tmp/images/${{ matrix.image.name }}.tar
+          retention-days: 1
+
+  push-images:
+    name: Push All Images
+    runs-on: ubuntu-latest
+    needs: [build-images]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download all image artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/images
+          pattern: image-*
+
+      - name: Load and push operator image
+        run: |
+          docker load -i /tmp/images/image-kibaship-operator/kibaship-operator.tar
+          docker images | grep kibaship-operator
+          docker push --all-tags ${{ env.REGISTRY }}/kibamail/kibaship-operator
+
+      - name: Load and push apiserver image
+        run: |
+          docker load -i /tmp/images/image-kibaship-operator-apiserver/kibaship-operator-apiserver.tar
+          docker images | grep kibaship-operator-apiserver
+          docker push --all-tags ${{ env.REGISTRY }}/kibamail/kibaship-operator-apiserver
+
+      - name: Load and push cert-manager-webhook image
+        run: |
+          docker load -i /tmp/images/image-kibaship-operator-cert-manager-webhook/kibaship-operator-cert-manager-webhook.tar
+          docker images | grep cert-manager-webhook
+          docker push --all-tags ${{ env.REGISTRY }}/kibamail/kibaship-operator-cert-manager-webhook
+
+      - name: Load and push registry-auth image
+        run: |
+          docker load -i /tmp/images/image-kibaship-operator-registry-auth/kibaship-operator-registry-auth.tar
+          docker images | grep registry-auth
+          docker push --all-tags ${{ env.REGISTRY }}/kibamail/kibaship-operator-registry-auth
+
+      - name: Load and push railpack-cli image
+        run: |
+          docker load -i /tmp/images/image-kibaship-railpack-cli/kibaship-railpack-cli.tar
+          docker images | grep railpack-cli
+          docker push --all-tags ${{ env.REGISTRY }}/kibamail/kibaship-railpack-cli
+
+      - name: Load and push railpack-build image
+        run: |
+          docker load -i /tmp/images/image-kibaship-railpack-build/kibaship-railpack-build.tar
+          docker images | grep railpack-build
+          docker push --all-tags ${{ env.REGISTRY }}/kibamail/kibaship-railpack-build
+
+  # Phase 4: Release jobs (only on version tags, after successful push)
+  release-cli:
+    name: Release CLI Binaries
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [lint, test, test-e2e]
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Derive tag name and version
+        id: version
+        run: |
+          TAG_NAME=${GITHUB_REF#refs/tags/}
+          VERSION=${TAG_NAME#v}
+          echo "tag_name=${TAG_NAME}" >> $GITHUB_OUTPUT
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Build CLI binaries for multiple platforms
+        run: |
+          mkdir -p dist
+          GOOS=linux GOARCH=amd64 go build -ldflags "-X main.version=${{ steps.version.outputs.version }}" -o dist/${{ env.CLI_NAME }}-linux-amd64 ./cmd/cli
+          GOOS=linux GOARCH=arm64 go build -ldflags "-X main.version=${{ steps.version.outputs.version }}" -o dist/${{ env.CLI_NAME }}-linux-arm64 ./cmd/cli
+          GOOS=darwin GOARCH=amd64 go build -ldflags "-X main.version=${{ steps.version.outputs.version }}" -o dist/${{ env.CLI_NAME }}-darwin-amd64 ./cmd/cli
+          GOOS=darwin GOARCH=arm64 go build -ldflags "-X main.version=${{ steps.version.outputs.version }}" -o dist/${{ env.CLI_NAME }}-darwin-arm64 ./cmd/cli
+          GOOS=windows GOARCH=amd64 go build -ldflags "-X main.version=${{ steps.version.outputs.version }}" -o dist/${{ env.CLI_NAME }}-windows-amd64.exe ./cmd/cli
+          chmod +x dist/${{ env.CLI_NAME }}-*
+
+      - name: Generate checksums
+        run: |
+          cd dist
+          sha256sum ${{ env.CLI_NAME }}-* > checksums.txt
+          cat checksums.txt
+
+      - name: Upload CLI artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli-binaries
+          path: |
+            dist/${{ env.CLI_NAME }}-*
+            dist/checksums.txt
+
+  release-operator:
+    name: Release Operator Manifests
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [push-images]
+    permissions:
+      contents: write
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Derive tag name and version
+        id: version
+        run: |
+          TAG_NAME=${GITHUB_REF#refs/tags/}
+          VERSION=${TAG_NAME#v}
+          echo "tag_name=${TAG_NAME}" >> $GITHUB_OUTPUT
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Generate deployment manifests
+        run: |
+          make build-installer \
+            IMG=${{ env.REGISTRY }}/kibamail/kibaship-operator:v${{ steps.version.outputs.version }} \
+            IMG_APISERVER=${{ env.REGISTRY }}/kibamail/kibaship-operator-apiserver:v${{ steps.version.outputs.version }} \
+            IMG_CERT_MANAGER_WEBHOOK=${{ env.REGISTRY }}/kibamail/kibaship-operator-cert-manager-webhook:v${{ steps.version.outputs.version }} \
+            IMG_REGISTRY_AUTH=${{ env.REGISTRY }}/kibamail/kibaship-operator-registry-auth:v${{ steps.version.outputs.version }}
+
+      - name: Upload deployment manifests
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-manifests
+          path: dist/install.yaml
+
+      - name: Download CLI artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: cli-binaries
+          path: dist/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.version.outputs.tag_name }}
+          name: KibaShip ${{ steps.version.outputs.tag_name }}
+          files: |
+            dist/install.yaml
+            dist/${{ env.CLI_NAME }}-linux-amd64
+            dist/${{ env.CLI_NAME }}-linux-arm64
+            dist/${{ env.CLI_NAME }}-darwin-amd64
+            dist/${{ env.CLI_NAME }}-darwin-arm64
+            dist/${{ env.CLI_NAME }}-windows-amd64.exe
+            dist/checksums.txt
+          body: |
+            ## KibaShip ${{ steps.version.outputs.tag_name }}
+
+            ### Operator Installation
+
+            Deploy the operator to your Kubernetes cluster:
+
+            ```bash
+            kubectl apply -f https://github.com/kibamail/kibaship-operator/releases/download/${{ steps.version.outputs.tag_name }}/install.yaml
+            ```
+
+            ### Configuration
+
+            Create the required ConfigMap with your configuration:
+
+            ```bash
+            kubectl create configmap kibaship-operator-config \
+              -n kibaship-operator \
+              --from-literal=KIBASHIP_OPERATOR_DOMAIN=your-domain.com \
+              --from-literal=KIBASHIP_ACME_EMAIL=acme@your-domain.com \
+              --from-literal=WEBHOOK_TARGET_URL=https://webhook.your-domain.com
+            ```
+
+            ### Container Images
+
+            The following container images are available for this release:
+            - `ghcr.io/kibamail/kibaship-operator:${{ steps.version.outputs.tag_name }}`
+            - `ghcr.io/kibamail/kibaship-operator-apiserver:${{ steps.version.outputs.tag_name }}`
+            - `ghcr.io/kibamail/kibaship-operator-cert-manager-webhook:${{ steps.version.outputs.tag_name }}`
+            - `ghcr.io/kibamail/kibaship-operator-registry-auth:${{ steps.version.outputs.tag_name }}`
+            - `ghcr.io/kibamail/kibaship-railpack-cli:${{ steps.version.outputs.tag_name }}`
+            - `ghcr.io/kibamail/kibaship-railpack-build:${{ steps.version.outputs.tag_name }}`
+
+            ### CLI Tool
+
+            Download the KibaShip CLI for local cluster management:
+
+            **Linux (AMD64)**
+            ```bash
+            curl -L -o kibaship https://github.com/kibamail/kibaship-operator/releases/download/${{ steps.version.outputs.tag_name }}/kibaship-linux-amd64
+            chmod +x kibaship
+            sudo mv kibaship /usr/local/bin/
+            ```
+
+            **Linux (ARM64)**
+            ```bash
+            curl -L -o kibaship https://github.com/kibamail/kibaship-operator/releases/download/${{ steps.version.outputs.tag_name }}/kibaship-linux-arm64
+            chmod +x kibaship
+            sudo mv kibaship /usr/local/bin/
+            ```
+
+            **macOS (Intel)**
+            ```bash
+            curl -L -o kibaship https://github.com/kibamail/kibaship-operator/releases/download/${{ steps.version.outputs.tag_name }}/kibaship-darwin-amd64
+            chmod +x kibaship
+            sudo mv kibaship /usr/local/bin/
+            ```
+
+            **macOS (Apple Silicon)**
+            ```bash
+            curl -L -o kibaship https://github.com/kibamail/kibaship-operator/releases/download/${{ steps.version.outputs.tag_name }}/kibaship-darwin-arm64
+            chmod +x kibaship
+            sudo mv kibaship /usr/local/bin/
+            ```
+
+            **Windows (AMD64)**
+            ```powershell
+            curl -L -o kibaship.exe https://github.com/kibamail/kibaship-operator/releases/download/${{ steps.version.outputs.tag_name }}/kibaship-windows-amd64.exe
+            ```
+
+            ### Verification
+
+            Verify the downloaded CLI binary with checksums:
+            ```bash
+            curl -L -o checksums.txt https://github.com/kibamail/kibaship-operator/releases/download/${{ steps.version.outputs.tag_name }}/checksums.txt
+            sha256sum -c checksums.txt --ignore-missing
+            ```
+
+            ### What's in this release
+
+            **CLI Tool:**
+            - Create and destroy development clusters
+            - Install required infrastructure (Cilium, Cert-Manager, Tekton, etc.)
+            - Manage cluster lifecycle
+
+            Version: `${{ steps.version.outputs.version }}`
+          generate_release_notes: true

@@ -5,6 +5,16 @@ resources:
   - ../../base
 
 images:
-  - name: registry-auth
+  - name: ghcr.io/kibamail/kibaship-operator-registry-auth
     newName: kibaship.com/kibaship-operator-registry-auth
     newTag: v0.0.1
+
+patches:
+  # Reduce replicas to 1 for e2e tests
+  - target:
+      kind: Deployment
+      name: registry-auth
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1

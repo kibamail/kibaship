@@ -110,7 +110,7 @@ var _ = AfterSuite(func() {
 var _ = Describe("Project Creation Integration", func() {
 	var ctx context.Context
 	var apiKey string
-	var router *gin.Engine
+	var router http.Handler
 
 	BeforeEach(func() {
 		ctx = context.Background()
@@ -257,7 +257,7 @@ var _ = Describe("Project Creation Integration", func() {
 var _ = Describe("Project Retrieval Integration", func() {
 	var ctx context.Context
 	var apiKey string
-	var router *gin.Engine
+	var router http.Handler
 	var createdProject *models.ProjectResponse
 
 	BeforeEach(func() {
@@ -336,7 +336,7 @@ var _ = Describe("Project Retrieval Integration", func() {
 var _ = Describe("Project Slug Uniqueness Integration", func() {
 	var ctx context.Context
 	var apiKey string
-	var router *gin.Engine
+	var router http.Handler
 	var createdSlugs []string
 
 	BeforeEach(func() {
@@ -401,7 +401,7 @@ var _ = Describe("Project Slug Uniqueness Integration", func() {
 	})
 })
 
-func setupIntegrationTestRouter(apiKey string) *gin.Engine {
+func setupIntegrationTestRouter(apiKey string) http.Handler {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 
@@ -410,8 +410,10 @@ func setupIntegrationTestRouter(apiKey string) *gin.Engine {
 
 	// Create real services with Kubernetes client and dependency injection
 	projectService := services.NewProjectService(k8sClient, scheme)
+	environmentService := services.NewEnvironmentService(k8sClient, scheme, projectService)
 	projectHandler := handlers.NewProjectHandler(projectService)
-	applicationService := services.NewApplicationService(k8sClient, scheme, projectService)
+	environmentHandler := handlers.NewEnvironmentHandler(environmentService)
+	applicationService := services.NewApplicationService(k8sClient, scheme, projectService, environmentService)
 	deploymentService := services.NewDeploymentService(k8sClient, scheme, applicationService)
 	applicationDomainService := services.NewApplicationDomainService(k8sClient, scheme, applicationService)
 
@@ -439,7 +441,19 @@ func setupIntegrationTestRouter(apiKey string) *gin.Engine {
 		protected.PATCH("/project/:slug", projectHandler.UpdateProject)
 		protected.DELETE("/project/:slug", projectHandler.DeleteProject)
 
-		// Application endpoints
+		// Environment endpoints
+		protected.POST("/projects/:projectSlug/environments", environmentHandler.CreateEnvironment)
+		protected.GET("/projects/:projectSlug/environments", environmentHandler.GetEnvironmentsByProject)
+
+		// Application endpoints (environment-based) - MUST use same param name as environment routes
+		protected.POST("/environments/:slug/applications", applicationHandler.CreateApplication)
+		protected.GET("/environments/:slug/applications", applicationHandler.GetApplicationsByEnvironment)
+
+		// Environment detail endpoints - registered after more specific routes
+		protected.GET("/environments/:slug", environmentHandler.GetEnvironment)
+		protected.PATCH("/environments/:slug", environmentHandler.UpdateEnvironment)
+		protected.DELETE("/environments/:slug", environmentHandler.DeleteEnvironment)
+		// Keep legacy project-based route for backward compatibility in tests
 		protected.POST("/projects/:projectSlug/applications", applicationHandler.CreateApplication)
 		protected.GET("/projects/:projectSlug/applications", applicationHandler.GetApplicationsByProject)
 		protected.GET("/application/:slug", applicationHandler.GetApplication)
@@ -475,7 +489,7 @@ func resourceProfilePtr(profile models.ResourceProfile) *models.ResourceProfile 
 var _ = Describe("Project Update Integration", func() {
 	var ctx context.Context
 	var apiKey string
-	var router *gin.Engine
+	var router http.Handler
 	var createdProject *models.ProjectResponse
 
 	BeforeEach(func() {
@@ -619,7 +633,7 @@ var _ = Describe("Project Update Integration", func() {
 var _ = Describe("Project Delete Integration", func() {
 	var ctx context.Context
 	var apiKey string
-	var router *gin.Engine
+	var router http.Handler
 	var createdProject *models.ProjectResponse
 
 	BeforeEach(func() {

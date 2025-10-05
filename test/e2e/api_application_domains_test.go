@@ -63,7 +63,26 @@ var _ = Describe("API Server Application Domains Auto-Loading", func() {
 		_ = json.NewDecoder(respProj.Body).Decode(&projResp)
 		Expect(projResp.Slug).NotTo(BeEmpty(), "project slug should be present")
 
-		By("creating an application via POST /projects/{slug}/applications (type: GitRepository)")
+		By("creating an environment via POST /projects/{slug}/environments")
+		envReqBody := map[string]any{
+			"name":        "production",
+			"description": "Production environment",
+		}
+		envBytes, _ := json.Marshal(envReqBody)
+		reqEnv, _ := http.NewRequest("POST", fmt.Sprintf("http://127.0.0.1:18080/projects/%s/environments", projResp.Slug), bytes.NewReader(envBytes))
+		reqEnv.Header.Set("Content-Type", "application/json")
+		reqEnv.Header.Set("Authorization", "Bearer "+apiKey)
+		respEnv, err := httpClient.Do(reqEnv)
+		Expect(err).NotTo(HaveOccurred())
+		defer func() { _ = respEnv.Body.Close() }()
+		Expect(respEnv.StatusCode).To(Equal(http.StatusCreated))
+		var envResp struct {
+			Slug string `json:"slug"`
+		}
+		_ = json.NewDecoder(respEnv.Body).Decode(&envResp)
+		Expect(envResp.Slug).NotTo(BeEmpty())
+
+		By("creating an application via POST /environments/{slug}/applications (type: GitRepository)")
 		appReqBody := map[string]any{
 			"name": "my-web-app-e2e",
 			"type": "GitRepository",
@@ -76,7 +95,7 @@ var _ = Describe("API Server Application Domains Auto-Loading", func() {
 			},
 		}
 		appBytes, _ := json.Marshal(appReqBody)
-		reqApp, _ := http.NewRequest("POST", fmt.Sprintf("http://127.0.0.1:18080/projects/%s/applications", projResp.Slug), bytes.NewReader(appBytes))
+		reqApp, _ := http.NewRequest("POST", fmt.Sprintf("http://127.0.0.1:18080/environments/%s/applications", envResp.Slug), bytes.NewReader(appBytes))
 		reqApp.Header.Set("Content-Type", "application/json")
 		reqApp.Header.Set("Authorization", "Bearer "+apiKey)
 		respApp, err := httpClient.Do(reqApp)

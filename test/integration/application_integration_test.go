@@ -18,13 +18,11 @@ package integration
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -34,20 +32,14 @@ import (
 	"github.com/kibamail/kibaship-operator/pkg/validation"
 )
 
-var _ = Describe("Application Creation Integration", func() {
-	var ctx context.Context
-	var apiKey string
-	var router *gin.Engine
-	var createdProject *models.ProjectResponse
+var _ = Describe("Application Integration", func() {
+	It("creates DockerImage application successfully", NodeTimeout(30*time.Second), func(ctx SpecContext) {
+		apiKey := generateTestAPIKey()
+		router := setupIntegrationTestRouter(apiKey)
 
-	BeforeEach(func() {
-		ctx = context.Background()
-		apiKey = generateTestAPIKey()
-		router = setupIntegrationTestRouter(apiKey)
-
-		// Create a project for applications
+		// Create project
 		projectPayload := models.ProjectCreateRequest{
-			Name:          "Test Project for Apps",
+			Name:          "Test Project for Docker App",
 			WorkspaceUUID: "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
 		}
 
@@ -63,209 +55,108 @@ var _ = Describe("Application Creation Integration", func() {
 		router.ServeHTTP(w, req)
 		Expect(w.Code).To(Equal(http.StatusCreated))
 
-		var project models.ProjectResponse
-		err = json.Unmarshal(w.Body.Bytes(), &project)
+		var createdProject models.ProjectResponse
+		err = json.Unmarshal(w.Body.Bytes(), &createdProject)
 		Expect(err).NotTo(HaveOccurred())
-		createdProject = &project
-	})
 
-	AfterEach(func() {
-		// Clean up project
+		// Create production environment via API
+		envPayload := models.EnvironmentCreateRequest{
+			Name:        "production",
+			Description: "Production environment",
+		}
+
+		jsonData, err = json.Marshal(envPayload)
+		Expect(err).NotTo(HaveOccurred())
+
+		req, err = http.NewRequest("POST", "/projects/"+createdProject.Slug+"/environments", bytes.NewBuffer(jsonData))
+		Expect(err).NotTo(HaveOccurred())
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+
+		w = httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		Expect(w.Code).To(Equal(http.StatusCreated))
+
+		var createdEnvironment models.EnvironmentResponse
+		err = json.Unmarshal(w.Body.Bytes(), &createdEnvironment)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Create application
+		payload := models.ApplicationCreateRequest{
+			Name: "My Web App",
+			Type: models.ApplicationTypeDockerImage,
+			DockerImage: &models.DockerImageConfig{
+				Image: "nginx:latest",
+				Tag:   "v1.0.0",
+			},
+		}
+
+		jsonData, err = json.Marshal(payload)
+		Expect(err).NotTo(HaveOccurred())
+
+		req, err = http.NewRequest("POST", "/environments/"+createdEnvironment.Slug+"/applications", bytes.NewBuffer(jsonData))
+		Expect(err).NotTo(HaveOccurred())
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+
+		w = httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		Expect(w.Code).To(Equal(http.StatusCreated), "Response: %s", w.Body.String())
+
+		var response models.ApplicationResponse
+		err = json.Unmarshal(w.Body.Bytes(), &response)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Verify response
+		Expect(response.UUID).NotTo(BeEmpty())
+		Expect(response.Slug).NotTo(BeEmpty())
+		Expect(response.Slug).To(HaveLen(8))
+		Expect(response.Name).To(Equal("My Web App"))
+		Expect(response.ProjectUUID).To(Equal(createdProject.UUID))
+		Expect(response.ProjectSlug).To(Equal(createdProject.Slug))
+		Expect(response.Type).To(Equal(models.ApplicationTypeDockerImage))
+		Expect(response.Status).To(Equal("Pending"))
+		Expect(response.DockerImage).NotTo(BeNil())
+		Expect(response.DockerImage.Image).To(Equal("nginx:latest"))
+		Expect(response.DockerImage.Tag).To(Equal("v1.0.0"))
+
+		// Verify CRD
+		var application v1alpha1.Application
+		err = k8sClient.Get(ctx, client.ObjectKey{
+			Name:      "application-" + response.Slug + "-kibaship-com",
+			Namespace: "default",
+		}, &application)
+		Expect(err).NotTo(HaveOccurred())
+
+		labels := application.GetLabels()
+		Expect(labels[validation.LabelResourceUUID]).To(Equal(response.UUID))
+		Expect(labels[validation.LabelResourceSlug]).To(Equal(response.Slug))
+		Expect(labels[validation.LabelProjectUUID]).To(Equal(response.ProjectUUID))
+
+		annotations := application.GetAnnotations()
+		Expect(annotations[validation.AnnotationResourceName]).To(Equal(response.Name))
+
+		Expect(application.Spec.Type).To(Equal(v1alpha1.ApplicationTypeDockerImage))
+		Expect(application.Spec.DockerImage).NotTo(BeNil())
+		Expect(application.Spec.DockerImage.Image).To(Equal("nginx:latest"))
+		Expect(application.Spec.DockerImage.Tag).To(Equal("v1.0.0"))
+
+		// Cleanup
+		_ = k8sClient.Delete(ctx, &application)
 		var project v1alpha1.Project
-		err := k8sClient.Get(ctx, client.ObjectKey{
-			Name: "project-" + createdProject.Slug,
-		}, &project)
+		err = k8sClient.Get(ctx, client.ObjectKey{Name: "project-" + createdProject.Slug}, &project)
 		if err == nil {
 			_ = k8sClient.Delete(ctx, &project)
 		}
 	})
 
-	DescribeTable("application creation scenarios",
-		func(payload models.ApplicationCreateRequest, expectedStatus int, validateFunc func(*models.ApplicationResponse)) {
-			// Prepare request
-			jsonData, err := json.Marshal(payload)
-			Expect(err).NotTo(HaveOccurred())
+	It("creates GitRepository application successfully", NodeTimeout(30*time.Second), func(ctx SpecContext) {
+		apiKey := generateTestAPIKey()
+		router := setupIntegrationTestRouter(apiKey)
 
-			req, err := http.NewRequest("POST", "/projects/"+createdProject.Slug+"/applications", bytes.NewBuffer(jsonData))
-			Expect(err).NotTo(HaveOccurred())
-			req.Header.Set("Content-Type", "application/json")
-			req.Header.Set("Authorization", "Bearer "+apiKey)
-
-			// Perform request
-			w := httptest.NewRecorder()
-			router.ServeHTTP(w, req)
-
-			// Assert status code
-			Expect(w.Code).To(Equal(expectedStatus), "Response: %s", w.Body.String())
-
-			if expectedStatus == http.StatusCreated {
-				// Parse response
-				var response models.ApplicationResponse
-				err = json.Unmarshal(w.Body.Bytes(), &response)
-				Expect(err).NotTo(HaveOccurred(), "Failed to parse application response: %s", w.Body.String())
-
-				// Run custom validation
-				validateFunc(&response)
-			}
-		},
-		Entry("Create DockerImage application",
-			models.ApplicationCreateRequest{
-				Name: "My Web App",
-				Type: models.ApplicationTypeDockerImage,
-				DockerImage: &models.DockerImageConfig{
-					Image: "nginx:latest",
-					Tag:   "v1.0.0",
-				},
-			},
-			http.StatusCreated,
-			func(resp *models.ApplicationResponse) {
-				// Verify response structure
-				Expect(resp.UUID).NotTo(BeEmpty())
-				Expect(resp.Slug).NotTo(BeEmpty())
-				Expect(resp.Slug).To(HaveLen(8))
-				Expect(resp.Name).To(Equal("My Web App"))
-				Expect(resp.ProjectUUID).To(Equal(createdProject.UUID))
-				Expect(resp.ProjectSlug).To(Equal(createdProject.Slug))
-				Expect(resp.Type).To(Equal(models.ApplicationTypeDockerImage))
-				Expect(resp.Status).To(Equal("Pending"))
-				Expect(resp.CreatedAt).NotTo(BeZero())
-
-				// Verify DockerImage configuration
-				Expect(resp.DockerImage).NotTo(BeNil())
-				Expect(resp.DockerImage.Image).To(Equal("nginx:latest"))
-				Expect(resp.DockerImage.Tag).To(Equal("v1.0.0"))
-
-				// Verify Application CRD was actually created in Kubernetes
-				var application v1alpha1.Application
-				err := k8sClient.Get(ctx, client.ObjectKey{
-					Name:      "application-" + resp.Slug + "-kibaship-com",
-					Namespace: "default",
-				}, &application)
-				Expect(err).NotTo(HaveOccurred(), "Application CRD should exist in Kubernetes")
-
-				// Verify CRD labels
-				labels := application.GetLabels()
-				Expect(labels[validation.LabelResourceUUID]).To(Equal(resp.UUID))
-				Expect(labels[validation.LabelResourceSlug]).To(Equal(resp.Slug))
-				Expect(labels[validation.LabelProjectUUID]).To(Equal(resp.ProjectUUID))
-
-				// Verify CRD annotations
-				annotations := application.GetAnnotations()
-				Expect(annotations[validation.AnnotationResourceName]).To(Equal(resp.Name))
-
-				// Verify CRD spec
-				Expect(application.Spec.Type).To(Equal(v1alpha1.ApplicationTypeDockerImage))
-				Expect(application.Spec.DockerImage).NotTo(BeNil())
-				Expect(application.Spec.DockerImage.Image).To(Equal("nginx:latest"))
-				Expect(application.Spec.DockerImage.Tag).To(Equal("v1.0.0"))
-
-				// Clean up - delete the created application
-				err = k8sClient.Delete(ctx, &application)
-				Expect(err).NotTo(HaveOccurred())
-			},
-		),
-		Entry("Create GitRepository application",
-			models.ApplicationCreateRequest{
-				Name: "My Node App",
-				Type: models.ApplicationTypeGitRepository,
-				GitRepository: &models.GitRepositoryConfig{
-					Provider:           models.GitProviderGitHub,
-					Repository:         "myorg/myapp",
-					PublicAccess:       true,
-					Branch:             "main",
-					BuildCommand:       "npm run build",
-					StartCommand:       "npm start",
-					RootDirectory:      "./",
-					SpaOutputDirectory: "dist",
-				},
-			},
-			http.StatusCreated,
-			func(resp *models.ApplicationResponse) {
-				Expect(resp.Name).To(Equal("My Node App"))
-				Expect(resp.Type).To(Equal(models.ApplicationTypeGitRepository))
-
-				// Verify GitRepository configuration
-				Expect(resp.GitRepository).NotTo(BeNil())
-				Expect(resp.GitRepository.Provider).To(Equal(models.GitProviderGitHub))
-				Expect(resp.GitRepository.Repository).To(Equal("myorg/myapp"))
-				Expect(resp.GitRepository.PublicAccess).To(BeTrue())
-				Expect(resp.GitRepository.Branch).To(Equal("main"))
-				Expect(resp.GitRepository.BuildCommand).To(Equal("npm run build"))
-				Expect(resp.GitRepository.StartCommand).To(Equal("npm start"))
-
-				// Verify in Kubernetes
-				var application v1alpha1.Application
-				err := k8sClient.Get(ctx, client.ObjectKey{
-					Name:      "application-" + resp.Slug + "-kibaship-com",
-					Namespace: "default",
-				}, &application)
-				Expect(err).NotTo(HaveOccurred())
-
-				Expect(application.Spec.Type).To(Equal(v1alpha1.ApplicationTypeGitRepository))
-				Expect(application.Spec.GitRepository).NotTo(BeNil())
-				Expect(application.Spec.GitRepository.Provider).To(Equal(v1alpha1.GitProviderGitHub))
-				Expect(application.Spec.GitRepository.Repository).To(Equal("myorg/myapp"))
-
-				// Clean up
-				err = k8sClient.Delete(ctx, &application)
-				Expect(err).NotTo(HaveOccurred())
-			},
-		),
-		Entry("Create MySQL application",
-			models.ApplicationCreateRequest{
-				Name: "My Database",
-				Type: models.ApplicationTypeMySQL,
-				MySQL: &models.MySQLConfig{
-					Version:  "8.0",
-					Database: "myapp",
-				},
-			},
-			http.StatusCreated,
-			func(resp *models.ApplicationResponse) {
-				Expect(resp.Name).To(Equal("My Database"))
-				Expect(resp.Type).To(Equal(models.ApplicationTypeMySQL))
-
-				// Verify MySQL configuration
-				Expect(resp.MySQL).NotTo(BeNil())
-				Expect(resp.MySQL.Version).To(Equal("8.0"))
-				Expect(resp.MySQL.Database).To(Equal("myapp"))
-
-				// Verify in Kubernetes
-				var application v1alpha1.Application
-				err := k8sClient.Get(ctx, client.ObjectKey{
-					Name:      "application-" + resp.Slug + "-kibaship-com",
-					Namespace: "default",
-				}, &application)
-				Expect(err).NotTo(HaveOccurred())
-
-				Expect(application.Spec.Type).To(Equal(v1alpha1.ApplicationTypeMySQL))
-				Expect(application.Spec.MySQL).NotTo(BeNil())
-				Expect(application.Spec.MySQL.Version).To(Equal("8.0"))
-				Expect(application.Spec.MySQL.Database).To(Equal("myapp"))
-
-				// Clean up
-				err = k8sClient.Delete(ctx, &application)
-				Expect(err).NotTo(HaveOccurred())
-			},
-		),
-	)
-})
-
-var _ = Describe("Application Retrieval Integration", func() {
-	var ctx context.Context
-	var apiKey string
-	var router *gin.Engine
-	var createdProject *models.ProjectResponse
-	var createdApplication *models.ApplicationResponse
-
-	BeforeEach(func() {
-		ctx = context.Background()
-		apiKey = generateTestAPIKey()
-		router = setupIntegrationTestRouter(apiKey)
-
-		// Create a project first
+		// Create project
 		projectPayload := models.ProjectCreateRequest{
-			Name:          "Test Project for Retrieval",
+			Name:          "Test Project for Git App",
 			WorkspaceUUID: "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
 		}
 
@@ -281,12 +172,249 @@ var _ = Describe("Application Retrieval Integration", func() {
 		router.ServeHTTP(w, req)
 		Expect(w.Code).To(Equal(http.StatusCreated))
 
-		var project models.ProjectResponse
-		err = json.Unmarshal(w.Body.Bytes(), &project)
+		var createdProject models.ProjectResponse
+		err = json.Unmarshal(w.Body.Bytes(), &createdProject)
 		Expect(err).NotTo(HaveOccurred())
-		createdProject = &project
 
-		// Create an application
+		// Create production environment via API
+		envPayload := models.EnvironmentCreateRequest{
+			Name:        "production",
+			Description: "Production environment",
+		}
+
+		jsonData, err = json.Marshal(envPayload)
+		Expect(err).NotTo(HaveOccurred())
+
+		req, err = http.NewRequest("POST", "/projects/"+createdProject.Slug+"/environments", bytes.NewBuffer(jsonData))
+		Expect(err).NotTo(HaveOccurred())
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+
+		w = httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		Expect(w.Code).To(Equal(http.StatusCreated))
+
+		var createdEnvironment models.EnvironmentResponse
+		err = json.Unmarshal(w.Body.Bytes(), &createdEnvironment)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Create application
+		payload := models.ApplicationCreateRequest{
+			Name: "My Node App",
+			Type: models.ApplicationTypeGitRepository,
+			GitRepository: &models.GitRepositoryConfig{
+				Provider:           models.GitProviderGitHub,
+				Repository:         "myorg/myapp",
+				PublicAccess:       true,
+				Branch:             "main",
+				BuildCommand:       "npm run build",
+				StartCommand:       "npm start",
+				RootDirectory:      "./",
+				SpaOutputDirectory: "dist",
+			},
+		}
+
+		jsonData, err = json.Marshal(payload)
+		Expect(err).NotTo(HaveOccurred())
+
+		req, err = http.NewRequest("POST", "/environments/"+createdEnvironment.Slug+"/applications", bytes.NewBuffer(jsonData))
+		Expect(err).NotTo(HaveOccurred())
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+
+		w = httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		Expect(w.Code).To(Equal(http.StatusCreated))
+
+		var response models.ApplicationResponse
+		err = json.Unmarshal(w.Body.Bytes(), &response)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Verify response
+		Expect(response.Name).To(Equal("My Node App"))
+		Expect(response.Type).To(Equal(models.ApplicationTypeGitRepository))
+		Expect(response.GitRepository).NotTo(BeNil())
+		Expect(response.GitRepository.Provider).To(Equal(models.GitProviderGitHub))
+		Expect(response.GitRepository.Repository).To(Equal("myorg/myapp"))
+		Expect(response.GitRepository.PublicAccess).To(BeTrue())
+		Expect(response.GitRepository.Branch).To(Equal("main"))
+		Expect(response.GitRepository.BuildCommand).To(Equal("npm run build"))
+		Expect(response.GitRepository.StartCommand).To(Equal("npm start"))
+
+		// Verify CRD
+		var application v1alpha1.Application
+		err = k8sClient.Get(ctx, client.ObjectKey{
+			Name:      "application-" + response.Slug + "-kibaship-com",
+			Namespace: "default",
+		}, &application)
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(application.Spec.Type).To(Equal(v1alpha1.ApplicationTypeGitRepository))
+		Expect(application.Spec.GitRepository).NotTo(BeNil())
+		Expect(application.Spec.GitRepository.Provider).To(Equal(v1alpha1.GitProviderGitHub))
+		Expect(application.Spec.GitRepository.Repository).To(Equal("myorg/myapp"))
+
+		// Cleanup
+		_ = k8sClient.Delete(ctx, &application)
+		var project v1alpha1.Project
+		err = k8sClient.Get(ctx, client.ObjectKey{Name: "project-" + createdProject.Slug}, &project)
+		if err == nil {
+			_ = k8sClient.Delete(ctx, &project)
+		}
+	})
+
+	It("creates MySQL application successfully", NodeTimeout(30*time.Second), func(ctx SpecContext) {
+		apiKey := generateTestAPIKey()
+		router := setupIntegrationTestRouter(apiKey)
+
+		// Create project
+		projectPayload := models.ProjectCreateRequest{
+			Name:          "Test Project for MySQL App",
+			WorkspaceUUID: "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+		}
+
+		jsonData, err := json.Marshal(projectPayload)
+		Expect(err).NotTo(HaveOccurred())
+
+		req, err := http.NewRequest("POST", "/projects", bytes.NewBuffer(jsonData))
+		Expect(err).NotTo(HaveOccurred())
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		Expect(w.Code).To(Equal(http.StatusCreated))
+
+		var createdProject models.ProjectResponse
+		err = json.Unmarshal(w.Body.Bytes(), &createdProject)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Create production environment via API
+		envPayload := models.EnvironmentCreateRequest{
+			Name:        "production",
+			Description: "Production environment",
+		}
+
+		jsonData, err = json.Marshal(envPayload)
+		Expect(err).NotTo(HaveOccurred())
+
+		req, err = http.NewRequest("POST", "/projects/"+createdProject.Slug+"/environments", bytes.NewBuffer(jsonData))
+		Expect(err).NotTo(HaveOccurred())
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+
+		w = httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		Expect(w.Code).To(Equal(http.StatusCreated))
+
+		var createdEnvironment models.EnvironmentResponse
+		err = json.Unmarshal(w.Body.Bytes(), &createdEnvironment)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Create application
+		payload := models.ApplicationCreateRequest{
+			Name: "My Database",
+			Type: models.ApplicationTypeMySQL,
+			MySQL: &models.MySQLConfig{
+				Version:  "8.0",
+				Database: "myapp",
+			},
+		}
+
+		jsonData, err = json.Marshal(payload)
+		Expect(err).NotTo(HaveOccurred())
+
+		req, err = http.NewRequest("POST", "/environments/"+createdEnvironment.Slug+"/applications", bytes.NewBuffer(jsonData))
+		Expect(err).NotTo(HaveOccurred())
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+
+		w = httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		Expect(w.Code).To(Equal(http.StatusCreated))
+
+		var response models.ApplicationResponse
+		err = json.Unmarshal(w.Body.Bytes(), &response)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Verify response
+		Expect(response.Name).To(Equal("My Database"))
+		Expect(response.Type).To(Equal(models.ApplicationTypeMySQL))
+		Expect(response.MySQL).NotTo(BeNil())
+		Expect(response.MySQL.Version).To(Equal("8.0"))
+		Expect(response.MySQL.Database).To(Equal("myapp"))
+
+		// Verify CRD
+		var application v1alpha1.Application
+		err = k8sClient.Get(ctx, client.ObjectKey{
+			Name:      "application-" + response.Slug + "-kibaship-com",
+			Namespace: "default",
+		}, &application)
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(application.Spec.Type).To(Equal(v1alpha1.ApplicationTypeMySQL))
+		Expect(application.Spec.MySQL).NotTo(BeNil())
+		Expect(application.Spec.MySQL.Version).To(Equal("8.0"))
+		Expect(application.Spec.MySQL.Database).To(Equal("myapp"))
+
+		// Cleanup
+		_ = k8sClient.Delete(ctx, &application)
+		var project v1alpha1.Project
+		err = k8sClient.Get(ctx, client.ObjectKey{Name: "project-" + createdProject.Slug}, &project)
+		if err == nil {
+			_ = k8sClient.Delete(ctx, &project)
+		}
+	})
+
+	It("retrieves application by slug", NodeTimeout(30*time.Second), func(ctx SpecContext) {
+		apiKey := generateTestAPIKey()
+		router := setupIntegrationTestRouter(apiKey)
+
+		// Create project
+		projectPayload := models.ProjectCreateRequest{
+			Name:          "Test Project for App Retrieval",
+			WorkspaceUUID: "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+		}
+
+		jsonData, err := json.Marshal(projectPayload)
+		Expect(err).NotTo(HaveOccurred())
+
+		req, err := http.NewRequest("POST", "/projects", bytes.NewBuffer(jsonData))
+		Expect(err).NotTo(HaveOccurred())
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		Expect(w.Code).To(Equal(http.StatusCreated))
+
+		var createdProject models.ProjectResponse
+		err = json.Unmarshal(w.Body.Bytes(), &createdProject)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Create production environment via API
+		envPayload := models.EnvironmentCreateRequest{
+			Name:        "production",
+			Description: "Production environment",
+		}
+
+		jsonData, err = json.Marshal(envPayload)
+		Expect(err).NotTo(HaveOccurred())
+
+		req, err = http.NewRequest("POST", "/projects/"+createdProject.Slug+"/environments", bytes.NewBuffer(jsonData))
+		Expect(err).NotTo(HaveOccurred())
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+
+		w = httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		Expect(w.Code).To(Equal(http.StatusCreated))
+
+		var createdEnvironment models.EnvironmentResponse
+		err = json.Unmarshal(w.Body.Bytes(), &createdEnvironment)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Create application
 		appPayload := models.ApplicationCreateRequest{
 			Name: "Test App for Retrieval",
 			Type: models.ApplicationTypeDockerImage,
@@ -298,7 +426,7 @@ var _ = Describe("Application Retrieval Integration", func() {
 		jsonData, err = json.Marshal(appPayload)
 		Expect(err).NotTo(HaveOccurred())
 
-		req, err = http.NewRequest("POST", "/projects/"+createdProject.Slug+"/applications", bytes.NewBuffer(jsonData))
+		req, err = http.NewRequest("POST", "/environments/"+createdEnvironment.Slug+"/applications", bytes.NewBuffer(jsonData))
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+apiKey)
@@ -307,88 +435,52 @@ var _ = Describe("Application Retrieval Integration", func() {
 		router.ServeHTTP(w, req)
 		Expect(w.Code).To(Equal(http.StatusCreated))
 
-		var application models.ApplicationResponse
-		err = json.Unmarshal(w.Body.Bytes(), &application)
+		var createdApplication models.ApplicationResponse
+		err = json.Unmarshal(w.Body.Bytes(), &createdApplication)
 		Expect(err).NotTo(HaveOccurred())
-		createdApplication = &application
-	})
 
-	AfterEach(func() {
-		// Clean up application
-		var application v1alpha1.Application
-		err := k8sClient.Get(ctx, client.ObjectKey{
-			Name:      "application-" + createdApplication.Slug + "-kibaship-com",
-			Namespace: "default",
-		}, &application)
-		if err == nil {
-			_ = k8sClient.Delete(ctx, &application)
-		}
-
-		// Clean up project
-		var project v1alpha1.Project
-		err = k8sClient.Get(ctx, client.ObjectKey{
-			Name: "project-" + createdProject.Slug,
-		}, &project)
-		if err == nil {
-			_ = k8sClient.Delete(ctx, &project)
-		}
-	})
-
-	It("retrieves application by slug", NodeTimeout(30*time.Second), func(ctx SpecContext) {
-		req, err := http.NewRequest("GET", "/application/"+createdApplication.Slug, nil)
+		// Retrieve application
+		req, err = http.NewRequest("GET", "/application/"+createdApplication.Slug, nil)
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 
-		w := httptest.NewRecorder()
+		w = httptest.NewRecorder()
 		router.ServeHTTP(w, req)
-
 		Expect(w.Code).To(Equal(http.StatusOK))
 
 		var retrievedApplication models.ApplicationResponse
 		err = json.Unmarshal(w.Body.Bytes(), &retrievedApplication)
 		Expect(err).NotTo(HaveOccurred())
 
-		// Verify retrieved application matches created application
+		// Verify
 		Expect(retrievedApplication.UUID).To(Equal(createdApplication.UUID))
 		Expect(retrievedApplication.Slug).To(Equal(createdApplication.Slug))
 		Expect(retrievedApplication.Name).To(Equal(createdApplication.Name))
 		Expect(retrievedApplication.Type).To(Equal(createdApplication.Type))
+
+		// Cleanup
+		var application v1alpha1.Application
+		err = k8sClient.Get(ctx, client.ObjectKey{
+			Name:      "application-" + createdApplication.Slug + "-kibaship-com",
+			Namespace: "default",
+		}, &application)
+		if err == nil {
+			_ = k8sClient.Delete(ctx, &application)
+		}
+		var project v1alpha1.Project
+		err = k8sClient.Get(ctx, client.ObjectKey{Name: "project-" + createdProject.Slug}, &project)
+		if err == nil {
+			_ = k8sClient.Delete(ctx, &project)
+		}
 	})
 
-	It("retrieves applications by project", NodeTimeout(30*time.Second), func(ctx SpecContext) {
-		req, err := http.NewRequest("GET", "/projects/"+createdProject.Slug+"/applications", nil)
-		Expect(err).NotTo(HaveOccurred())
-		req.Header.Set("Authorization", "Bearer "+apiKey)
+	It("retrieves applications by environment", NodeTimeout(30*time.Second), func(ctx SpecContext) {
+		apiKey := generateTestAPIKey()
+		router := setupIntegrationTestRouter(apiKey)
 
-		w := httptest.NewRecorder()
-		router.ServeHTTP(w, req)
-
-		Expect(w.Code).To(Equal(http.StatusOK))
-
-		var applications []models.ApplicationResponse
-		err = json.Unmarshal(w.Body.Bytes(), &applications)
-		Expect(err).NotTo(HaveOccurred())
-
-		Expect(applications).To(HaveLen(1))
-		Expect(applications[0].UUID).To(Equal(createdApplication.UUID))
-	})
-})
-
-var _ = Describe("Application Update Integration", func() {
-	var ctx context.Context
-	var apiKey string
-	var router *gin.Engine
-	var createdProject *models.ProjectResponse
-	var createdApplication *models.ApplicationResponse
-
-	BeforeEach(func() {
-		ctx = context.Background()
-		apiKey = generateTestAPIKey()
-		router = setupIntegrationTestRouter(apiKey)
-
-		// Create project and application
+		// Create project
 		projectPayload := models.ProjectCreateRequest{
-			Name:          "Test Project for Update",
+			Name:          "Test Project for Apps List",
 			WorkspaceUUID: "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
 		}
 
@@ -404,10 +496,136 @@ var _ = Describe("Application Update Integration", func() {
 		router.ServeHTTP(w, req)
 		Expect(w.Code).To(Equal(http.StatusCreated))
 
-		var project models.ProjectResponse
-		err = json.Unmarshal(w.Body.Bytes(), &project)
+		var createdProject models.ProjectResponse
+		err = json.Unmarshal(w.Body.Bytes(), &createdProject)
 		Expect(err).NotTo(HaveOccurred())
-		createdProject = &project
+
+		// Create production environment via API
+		envPayload := models.EnvironmentCreateRequest{
+			Name:        "production",
+			Description: "Production environment",
+		}
+
+		jsonData, err = json.Marshal(envPayload)
+		Expect(err).NotTo(HaveOccurred())
+
+		req, err = http.NewRequest("POST", "/projects/"+createdProject.Slug+"/environments", bytes.NewBuffer(jsonData))
+		Expect(err).NotTo(HaveOccurred())
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+
+		w = httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		Expect(w.Code).To(Equal(http.StatusCreated))
+
+		var createdEnvironment models.EnvironmentResponse
+		err = json.Unmarshal(w.Body.Bytes(), &createdEnvironment)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Create application
+		appPayload := models.ApplicationCreateRequest{
+			Name: "Test App for List",
+			Type: models.ApplicationTypeDockerImage,
+			DockerImage: &models.DockerImageConfig{
+				Image: "redis:latest",
+			},
+		}
+
+		jsonData, err = json.Marshal(appPayload)
+		Expect(err).NotTo(HaveOccurred())
+
+		req, err = http.NewRequest("POST", "/environments/"+createdEnvironment.Slug+"/applications", bytes.NewBuffer(jsonData))
+		Expect(err).NotTo(HaveOccurred())
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+
+		w = httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		Expect(w.Code).To(Equal(http.StatusCreated))
+
+		var createdApplication models.ApplicationResponse
+		err = json.Unmarshal(w.Body.Bytes(), &createdApplication)
+		Expect(err).NotTo(HaveOccurred())
+
+		// List applications
+		req, err = http.NewRequest("GET", "/environments/"+createdEnvironment.Slug+"/applications", nil)
+		Expect(err).NotTo(HaveOccurred())
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+
+		w = httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		Expect(w.Code).To(Equal(http.StatusOK))
+
+		var applications []models.ApplicationResponse
+		err = json.Unmarshal(w.Body.Bytes(), &applications)
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(applications).To(HaveLen(1))
+		Expect(applications[0].UUID).To(Equal(createdApplication.UUID))
+
+		// Cleanup
+		var application v1alpha1.Application
+		err = k8sClient.Get(ctx, client.ObjectKey{
+			Name:      "application-" + createdApplication.Slug + "-kibaship-com",
+			Namespace: "default",
+		}, &application)
+		if err == nil {
+			_ = k8sClient.Delete(ctx, &application)
+		}
+		var project v1alpha1.Project
+		err = k8sClient.Get(ctx, client.ObjectKey{Name: "project-" + createdProject.Slug}, &project)
+		if err == nil {
+			_ = k8sClient.Delete(ctx, &project)
+		}
+	})
+
+	It("updates application name and Docker image", NodeTimeout(30*time.Second), func(ctx SpecContext) {
+		apiKey := generateTestAPIKey()
+		router := setupIntegrationTestRouter(apiKey)
+
+		// Create project
+		projectPayload := models.ProjectCreateRequest{
+			Name:          "Test Project for App Update",
+			WorkspaceUUID: "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+		}
+
+		jsonData, err := json.Marshal(projectPayload)
+		Expect(err).NotTo(HaveOccurred())
+
+		req, err := http.NewRequest("POST", "/projects", bytes.NewBuffer(jsonData))
+		Expect(err).NotTo(HaveOccurred())
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		Expect(w.Code).To(Equal(http.StatusCreated))
+
+		var createdProject models.ProjectResponse
+		err = json.Unmarshal(w.Body.Bytes(), &createdProject)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Create production environment via API
+		envPayload := models.EnvironmentCreateRequest{
+			Name:        "production",
+			Description: "Production environment",
+		}
+
+		jsonData, err = json.Marshal(envPayload)
+		Expect(err).NotTo(HaveOccurred())
+
+		req, err = http.NewRequest("POST", "/projects/"+createdProject.Slug+"/environments", bytes.NewBuffer(jsonData))
+		Expect(err).NotTo(HaveOccurred())
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+
+		w = httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		Expect(w.Code).To(Equal(http.StatusCreated))
+
+		var createdEnvironment models.EnvironmentResponse
+		err = json.Unmarshal(w.Body.Bytes(), &createdEnvironment)
+		Expect(err).NotTo(HaveOccurred())
 
 		// Create application
 		appPayload := models.ApplicationCreateRequest{
@@ -421,7 +639,7 @@ var _ = Describe("Application Update Integration", func() {
 		jsonData, err = json.Marshal(appPayload)
 		Expect(err).NotTo(HaveOccurred())
 
-		req, err = http.NewRequest("POST", "/projects/"+createdProject.Slug+"/applications", bytes.NewBuffer(jsonData))
+		req, err = http.NewRequest("POST", "/environments/"+createdEnvironment.Slug+"/applications", bytes.NewBuffer(jsonData))
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+apiKey)
@@ -430,34 +648,11 @@ var _ = Describe("Application Update Integration", func() {
 		router.ServeHTTP(w, req)
 		Expect(w.Code).To(Equal(http.StatusCreated))
 
-		var application models.ApplicationResponse
-		err = json.Unmarshal(w.Body.Bytes(), &application)
+		var createdApplication models.ApplicationResponse
+		err = json.Unmarshal(w.Body.Bytes(), &createdApplication)
 		Expect(err).NotTo(HaveOccurred())
-		createdApplication = &application
-	})
 
-	AfterEach(func() {
-		// Clean up application
-		var application v1alpha1.Application
-		err := k8sClient.Get(ctx, client.ObjectKey{
-			Name:      "application-" + createdApplication.Slug + "-kibaship-com",
-			Namespace: "default",
-		}, &application)
-		if err == nil {
-			_ = k8sClient.Delete(ctx, &application)
-		}
-
-		// Clean up project
-		var project v1alpha1.Project
-		err = k8sClient.Get(ctx, client.ObjectKey{
-			Name: "project-" + createdProject.Slug,
-		}, &project)
-		if err == nil {
-			_ = k8sClient.Delete(ctx, &project)
-		}
-	})
-
-	It("updates application name and Docker image", NodeTimeout(30*time.Second), func(ctx SpecContext) {
+		// Update application
 		updateReq := models.ApplicationUpdateRequest{
 			Name: stringPtr("Updated App Name"),
 			DockerImage: &models.DockerImageConfig{
@@ -466,17 +661,16 @@ var _ = Describe("Application Update Integration", func() {
 			},
 		}
 
-		jsonData, err := json.Marshal(updateReq)
+		jsonData, err = json.Marshal(updateReq)
 		Expect(err).NotTo(HaveOccurred())
 
-		req, err := http.NewRequest("PATCH", "/application/"+createdApplication.Slug, bytes.NewBuffer(jsonData))
+		req, err = http.NewRequest("PATCH", "/application/"+createdApplication.Slug, bytes.NewBuffer(jsonData))
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 
-		w := httptest.NewRecorder()
+		w = httptest.NewRecorder()
 		router.ServeHTTP(w, req)
-
 		Expect(w.Code).To(Equal(http.StatusOK))
 
 		var updatedApplication models.ApplicationResponse
@@ -499,24 +693,23 @@ var _ = Describe("Application Update Integration", func() {
 		Expect(annotations[validation.AnnotationResourceName]).To(Equal("Updated App Name"))
 		Expect(application.Spec.DockerImage.Image).To(Equal("nginx:2.0"))
 		Expect(application.Spec.DockerImage.Tag).To(Equal("latest"))
+
+		// Cleanup
+		_ = k8sClient.Delete(ctx, &application)
+		var project v1alpha1.Project
+		err = k8sClient.Get(ctx, client.ObjectKey{Name: "project-" + createdProject.Slug}, &project)
+		if err == nil {
+			_ = k8sClient.Delete(ctx, &project)
+		}
 	})
-})
 
-var _ = Describe("Application Delete Integration", func() {
-	var ctx context.Context
-	var apiKey string
-	var router *gin.Engine
-	var createdProject *models.ProjectResponse
-	var createdApplication *models.ApplicationResponse
+	It("deletes existing application", NodeTimeout(30*time.Second), func(ctx SpecContext) {
+		apiKey := generateTestAPIKey()
+		router := setupIntegrationTestRouter(apiKey)
 
-	BeforeEach(func() {
-		ctx = context.Background()
-		apiKey = generateTestAPIKey()
-		router = setupIntegrationTestRouter(apiKey)
-
-		// Create project and application
+		// Create project
 		projectPayload := models.ProjectCreateRequest{
-			Name:          "Test Project for Delete",
+			Name:          "Test Project for App Delete",
 			WorkspaceUUID: "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
 		}
 
@@ -532,12 +725,33 @@ var _ = Describe("Application Delete Integration", func() {
 		router.ServeHTTP(w, req)
 		Expect(w.Code).To(Equal(http.StatusCreated))
 
-		var project models.ProjectResponse
-		err = json.Unmarshal(w.Body.Bytes(), &project)
+		var createdProject models.ProjectResponse
+		err = json.Unmarshal(w.Body.Bytes(), &createdProject)
 		Expect(err).NotTo(HaveOccurred())
-		createdProject = &project
 
-		// Create application to delete
+		// Create production environment via API
+		envPayload := models.EnvironmentCreateRequest{
+			Name:        "production",
+			Description: "Production environment",
+		}
+
+		jsonData, err = json.Marshal(envPayload)
+		Expect(err).NotTo(HaveOccurred())
+
+		req, err = http.NewRequest("POST", "/projects/"+createdProject.Slug+"/environments", bytes.NewBuffer(jsonData))
+		Expect(err).NotTo(HaveOccurred())
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+
+		w = httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		Expect(w.Code).To(Equal(http.StatusCreated))
+
+		var createdEnvironment models.EnvironmentResponse
+		err = json.Unmarshal(w.Body.Bytes(), &createdEnvironment)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Create application
 		appPayload := models.ApplicationCreateRequest{
 			Name: "App to Delete",
 			Type: models.ApplicationTypeDockerImage,
@@ -549,7 +763,7 @@ var _ = Describe("Application Delete Integration", func() {
 		jsonData, err = json.Marshal(appPayload)
 		Expect(err).NotTo(HaveOccurred())
 
-		req, err = http.NewRequest("POST", "/projects/"+createdProject.Slug+"/applications", bytes.NewBuffer(jsonData))
+		req, err = http.NewRequest("POST", "/environments/"+createdEnvironment.Slug+"/applications", bytes.NewBuffer(jsonData))
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+apiKey)
@@ -558,65 +772,48 @@ var _ = Describe("Application Delete Integration", func() {
 		router.ServeHTTP(w, req)
 		Expect(w.Code).To(Equal(http.StatusCreated))
 
-		var application models.ApplicationResponse
-		err = json.Unmarshal(w.Body.Bytes(), &application)
+		var createdApplication models.ApplicationResponse
+		err = json.Unmarshal(w.Body.Bytes(), &createdApplication)
 		Expect(err).NotTo(HaveOccurred())
-		createdApplication = &application
 
-		// Verify application exists in Kubernetes
+		// Verify exists
 		var k8sApplication v1alpha1.Application
 		err = k8sClient.Get(ctx, client.ObjectKey{
 			Name:      "application-" + createdApplication.Slug + "-kibaship-com",
 			Namespace: "default",
 		}, &k8sApplication)
-		Expect(err).NotTo(HaveOccurred(), "Application should exist before deletion")
-	})
+		Expect(err).NotTo(HaveOccurred())
 
-	AfterEach(func() {
-		// Clean up project
-		var project v1alpha1.Project
-		err := k8sClient.Get(ctx, client.ObjectKey{
-			Name: "project-" + createdProject.Slug,
-		}, &project)
-		if err == nil {
-			_ = k8sClient.Delete(ctx, &project)
-		}
-	})
-
-	It("deletes existing application", NodeTimeout(30*time.Second), func(ctx SpecContext) {
-		req, err := http.NewRequest("DELETE", "/application/"+createdApplication.Slug, nil)
+		// Delete application
+		req, err = http.NewRequest("DELETE", "/application/"+createdApplication.Slug, nil)
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 
-		w := httptest.NewRecorder()
+		w = httptest.NewRecorder()
 		router.ServeHTTP(w, req)
-
 		Expect(w.Code).To(Equal(http.StatusNoContent))
 
-		// Verify application no longer exists in Kubernetes
+		// Verify deleted
 		var application v1alpha1.Application
 		err = k8sClient.Get(ctx, client.ObjectKey{
 			Name:      "application-" + createdApplication.Slug + "-kibaship-com",
 			Namespace: "default",
 		}, &application)
-		Expect(err).To(HaveOccurred(), "Application should not exist after deletion")
+		Expect(err).To(HaveOccurred())
+
+		// Cleanup
+		var project v1alpha1.Project
+		err = k8sClient.Get(ctx, client.ObjectKey{Name: "project-" + createdProject.Slug}, &project)
+		if err == nil {
+			_ = k8sClient.Delete(ctx, &project)
+		}
 	})
-})
 
-var _ = Describe("Application Domain Auto Loading Integration", func() {
-	var ctx context.Context
-	var apiKey string
-	var router *gin.Engine
-	var createdProject *models.ProjectResponse
-	var createdApplication *models.ApplicationResponse
-	var createdDomains []models.ApplicationDomainResponse
+	It("retrieves single application with auto-loaded domains", NodeTimeout(30*time.Second), func(ctx SpecContext) {
+		apiKey := generateTestAPIKey()
+		router := setupIntegrationTestRouter(apiKey)
 
-	BeforeEach(func() {
-		ctx = context.Background()
-		apiKey = generateTestAPIKey()
-		router = setupIntegrationTestRouter(apiKey)
-
-		// Create project first
+		// Create project
 		projectPayload := models.ProjectCreateRequest{
 			Name:          "Test Project for Domain Loading",
 			WorkspaceUUID: "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
@@ -634,10 +831,31 @@ var _ = Describe("Application Domain Auto Loading Integration", func() {
 		router.ServeHTTP(w, req)
 		Expect(w.Code).To(Equal(http.StatusCreated))
 
-		var project models.ProjectResponse
-		err = json.Unmarshal(w.Body.Bytes(), &project)
+		var createdProject models.ProjectResponse
+		err = json.Unmarshal(w.Body.Bytes(), &createdProject)
 		Expect(err).NotTo(HaveOccurred())
-		createdProject = &project
+
+		// Create production environment via API
+		envPayload := models.EnvironmentCreateRequest{
+			Name:        "production",
+			Description: "Production environment",
+		}
+
+		jsonData, err = json.Marshal(envPayload)
+		Expect(err).NotTo(HaveOccurred())
+
+		req, err = http.NewRequest("POST", "/projects/"+createdProject.Slug+"/environments", bytes.NewBuffer(jsonData))
+		Expect(err).NotTo(HaveOccurred())
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+
+		w = httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		Expect(w.Code).To(Equal(http.StatusCreated))
+
+		var createdEnvironment models.EnvironmentResponse
+		err = json.Unmarshal(w.Body.Bytes(), &createdEnvironment)
+		Expect(err).NotTo(HaveOccurred())
 
 		// Create application
 		appPayload := models.ApplicationCreateRequest{
@@ -651,7 +869,7 @@ var _ = Describe("Application Domain Auto Loading Integration", func() {
 		jsonData, err = json.Marshal(appPayload)
 		Expect(err).NotTo(HaveOccurred())
 
-		req, err = http.NewRequest("POST", "/projects/"+createdProject.Slug+"/applications", bytes.NewBuffer(jsonData))
+		req, err = http.NewRequest("POST", "/environments/"+createdEnvironment.Slug+"/applications", bytes.NewBuffer(jsonData))
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+apiKey)
@@ -660,12 +878,11 @@ var _ = Describe("Application Domain Auto Loading Integration", func() {
 		router.ServeHTTP(w, req)
 		Expect(w.Code).To(Equal(http.StatusCreated))
 
-		var application models.ApplicationResponse
-		err = json.Unmarshal(w.Body.Bytes(), &application)
+		var createdApplication models.ApplicationResponse
+		err = json.Unmarshal(w.Body.Bytes(), &createdApplication)
 		Expect(err).NotTo(HaveOccurred())
-		createdApplication = &application
 
-		// Create domains for the application
+		// Create domains
 		domainPayloads := []models.ApplicationDomainCreateRequest{
 			{
 				ApplicationSlug: createdApplication.Slug,
@@ -685,7 +902,7 @@ var _ = Describe("Application Domain Auto Loading Integration", func() {
 			},
 		}
 
-		createdDomains = []models.ApplicationDomainResponse{}
+		createdDomains := []models.ApplicationDomainResponse{}
 		for _, domainPayload := range domainPayloads {
 			jsonData, err = json.Marshal(domainPayload)
 			Expect(err).NotTo(HaveOccurred())
@@ -704,10 +921,44 @@ var _ = Describe("Application Domain Auto Loading Integration", func() {
 			Expect(err).NotTo(HaveOccurred())
 			createdDomains = append(createdDomains, createdDomain)
 		}
-	})
 
-	AfterEach(func() {
-		// Clean up domains
+		// Retrieve application
+		req, err = http.NewRequest("GET", "/application/"+createdApplication.Slug, nil)
+		Expect(err).NotTo(HaveOccurred())
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+
+		w = httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		Expect(w.Code).To(Equal(http.StatusOK))
+
+		var retrievedApplication models.ApplicationResponse
+		err = json.Unmarshal(w.Body.Bytes(), &retrievedApplication)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Verify
+		Expect(retrievedApplication.UUID).To(Equal(createdApplication.UUID))
+		Expect(retrievedApplication.Domains).To(HaveLen(2))
+
+		domainsByDomain := make(map[string]models.ApplicationDomainResponse)
+		for _, domain := range retrievedApplication.Domains {
+			domainsByDomain[domain.Domain] = domain
+		}
+
+		defaultDomain, exists := domainsByDomain["app.example.com"]
+		Expect(exists).To(BeTrue())
+		Expect(defaultDomain.Port).To(Equal(int32(3000)))
+		Expect(defaultDomain.Type).To(Equal(models.ApplicationDomainTypeDefault))
+		Expect(defaultDomain.Default).To(BeTrue())
+		Expect(defaultDomain.TLSEnabled).To(BeTrue())
+
+		customDomain, exists := domainsByDomain["custom.example.com"]
+		Expect(exists).To(BeTrue())
+		Expect(customDomain.Port).To(Equal(int32(8080)))
+		Expect(customDomain.Type).To(Equal(models.ApplicationDomainTypeCustom))
+		Expect(customDomain.Default).To(BeFalse())
+		Expect(customDomain.TLSEnabled).To(BeFalse())
+
+		// Cleanup
 		for _, domain := range createdDomains {
 			var applicationDomain v1alpha1.ApplicationDomain
 			err := k8sClient.Get(ctx, client.ObjectKey{
@@ -718,86 +969,35 @@ var _ = Describe("Application Domain Auto Loading Integration", func() {
 				_ = k8sClient.Delete(ctx, &applicationDomain)
 			}
 		}
-
-		// Clean up application
 		var application v1alpha1.Application
-		err := k8sClient.Get(ctx, client.ObjectKey{
+		err = k8sClient.Get(ctx, client.ObjectKey{
 			Name:      "application-" + createdApplication.Slug + "-kibaship-com",
 			Namespace: "default",
 		}, &application)
 		if err == nil {
 			_ = k8sClient.Delete(ctx, &application)
 		}
-
-		// Clean up project
 		var project v1alpha1.Project
-		err = k8sClient.Get(ctx, client.ObjectKey{
-			Name: "project-" + createdProject.Slug,
-		}, &project)
+		err = k8sClient.Get(ctx, client.ObjectKey{Name: "project-" + createdProject.Slug}, &project)
 		if err == nil {
 			_ = k8sClient.Delete(ctx, &project)
 		}
 	})
 
-	It("retrieves single application with auto-loaded domains", NodeTimeout(30*time.Second), func(ctx SpecContext) {
-		req, err := http.NewRequest("GET", "/application/"+createdApplication.Slug, nil)
-		Expect(err).NotTo(HaveOccurred())
-		req.Header.Set("Authorization", "Bearer "+apiKey)
+	It("retrieves applications by environment with batch-loaded domains and deployments", NodeTimeout(30*time.Second), func(ctx SpecContext) {
+		apiKey := generateTestAPIKey()
+		router := setupIntegrationTestRouter(apiKey)
 
-		w := httptest.NewRecorder()
-		router.ServeHTTP(w, req)
-
-		Expect(w.Code).To(Equal(http.StatusOK))
-
-		var retrievedApplication models.ApplicationResponse
-		err = json.Unmarshal(w.Body.Bytes(), &retrievedApplication)
-		Expect(err).NotTo(HaveOccurred())
-
-		// Verify application details
-		Expect(retrievedApplication.UUID).To(Equal(createdApplication.UUID))
-		Expect(retrievedApplication.Slug).To(Equal(createdApplication.Slug))
-		Expect(retrievedApplication.Name).To(Equal(createdApplication.Name))
-
-		// Verify domains are auto-loaded
-		Expect(retrievedApplication.Domains).To(HaveLen(2), "Application should have 2 domains auto-loaded")
-
-		// Verify domain details
-		domainsByDomain := make(map[string]models.ApplicationDomainResponse)
-		for _, domain := range retrievedApplication.Domains {
-			domainsByDomain[domain.Domain] = domain
+		// Create project
+		projectPayload := models.ProjectCreateRequest{
+			Name:          "Test Project for Batch Loading",
+			WorkspaceUUID: "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
 		}
 
-		// Check default domain
-		defaultDomain, exists := domainsByDomain["app.example.com"]
-		Expect(exists).To(BeTrue(), "Default domain should exist")
-		Expect(defaultDomain.Port).To(Equal(int32(3000)))
-		Expect(defaultDomain.Type).To(Equal(models.ApplicationDomainTypeDefault))
-		Expect(defaultDomain.Default).To(BeTrue())
-		Expect(defaultDomain.TLSEnabled).To(BeTrue())
-
-		// Check custom domain
-		customDomain, exists := domainsByDomain["custom.example.com"]
-		Expect(exists).To(BeTrue(), "Custom domain should exist")
-		Expect(customDomain.Port).To(Equal(int32(8080)))
-		Expect(customDomain.Type).To(Equal(models.ApplicationDomainTypeCustom))
-		Expect(customDomain.Default).To(BeFalse())
-		Expect(customDomain.TLSEnabled).To(BeFalse())
-	})
-
-	It("retrieves applications by project with batch-loaded domains and deployments", NodeTimeout(30*time.Second), func(ctx SpecContext) {
-		// First create a deployment for the application
-		deploymentPayload := models.DeploymentCreateRequest{
-			ApplicationSlug: createdApplication.Slug,
-			GitRepository: &models.GitRepositoryDeploymentConfig{
-				CommitSHA: "abc123def456",
-				Branch:    "main",
-			},
-		}
-
-		jsonData, err := json.Marshal(deploymentPayload)
+		jsonData, err := json.Marshal(projectPayload)
 		Expect(err).NotTo(HaveOccurred())
 
-		req, err := http.NewRequest("POST", "/applications/"+createdApplication.Slug+"/deployments", bytes.NewBuffer(jsonData))
+		req, err := http.NewRequest("POST", "/projects", bytes.NewBuffer(jsonData))
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+apiKey)
@@ -806,32 +1006,135 @@ var _ = Describe("Application Domain Auto Loading Integration", func() {
 		router.ServeHTTP(w, req)
 		Expect(w.Code).To(Equal(http.StatusCreated))
 
+		var createdProject models.ProjectResponse
+		err = json.Unmarshal(w.Body.Bytes(), &createdProject)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Create production environment via API
+		envPayload := models.EnvironmentCreateRequest{
+			Name:        "production",
+			Description: "Production environment",
+		}
+
+		jsonData, err = json.Marshal(envPayload)
+		Expect(err).NotTo(HaveOccurred())
+
+		req, err = http.NewRequest("POST", "/projects/"+createdProject.Slug+"/environments", bytes.NewBuffer(jsonData))
+		Expect(err).NotTo(HaveOccurred())
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+
+		w = httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		Expect(w.Code).To(Equal(http.StatusCreated))
+
+		var createdEnvironment models.EnvironmentResponse
+		err = json.Unmarshal(w.Body.Bytes(), &createdEnvironment)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Create application
+		appPayload := models.ApplicationCreateRequest{
+			Name: "App with Batch Data",
+			Type: models.ApplicationTypeDockerImage,
+			DockerImage: &models.DockerImageConfig{
+				Image: "nginx:latest",
+			},
+		}
+
+		jsonData, err = json.Marshal(appPayload)
+		Expect(err).NotTo(HaveOccurred())
+
+		req, err = http.NewRequest("POST", "/environments/"+createdEnvironment.Slug+"/applications", bytes.NewBuffer(jsonData))
+		Expect(err).NotTo(HaveOccurred())
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+
+		w = httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		Expect(w.Code).To(Equal(http.StatusCreated))
+
+		var createdApplication models.ApplicationResponse
+		err = json.Unmarshal(w.Body.Bytes(), &createdApplication)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Create domains
+		domainPayloads := []models.ApplicationDomainCreateRequest{
+			{
+				ApplicationSlug: createdApplication.Slug,
+				Domain:          "app.example.com",
+				Port:            3000,
+				Type:            models.ApplicationDomainTypeDefault,
+				Default:         true,
+				TLSEnabled:      true,
+			},
+			{
+				ApplicationSlug: createdApplication.Slug,
+				Domain:          "custom.example.com",
+				Port:            8080,
+				Type:            models.ApplicationDomainTypeCustom,
+				Default:         false,
+				TLSEnabled:      false,
+			},
+		}
+
+		for _, domainPayload := range domainPayloads {
+			jsonData, err = json.Marshal(domainPayload)
+			Expect(err).NotTo(HaveOccurred())
+
+			req, err = http.NewRequest("POST", "/applications/"+createdApplication.Slug+"/domains", bytes.NewBuffer(jsonData))
+			Expect(err).NotTo(HaveOccurred())
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Authorization", "Bearer "+apiKey)
+
+			w = httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+			Expect(w.Code).To(Equal(http.StatusCreated))
+		}
+
+		// Create deployment
+		deploymentPayload := models.DeploymentCreateRequest{
+			ApplicationSlug: createdApplication.Slug,
+			GitRepository: &models.GitRepositoryDeploymentConfig{
+				CommitSHA: "abc123def456",
+				Branch:    "main",
+			},
+		}
+
+		jsonData, err = json.Marshal(deploymentPayload)
+		Expect(err).NotTo(HaveOccurred())
+
+		req, err = http.NewRequest("POST", "/applications/"+createdApplication.Slug+"/deployments", bytes.NewBuffer(jsonData))
+		Expect(err).NotTo(HaveOccurred())
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+
+		w = httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		Expect(w.Code).To(Equal(http.StatusCreated))
+
 		var createdDeployment models.DeploymentResponse
 		err = json.Unmarshal(w.Body.Bytes(), &createdDeployment)
 		Expect(err).NotTo(HaveOccurred())
 
-		// Now test the applications endpoint
-		req, err = http.NewRequest("GET", "/projects/"+createdProject.Slug+"/applications", nil)
+		// List applications
+		req, err = http.NewRequest("GET", "/environments/"+createdEnvironment.Slug+"/applications", nil)
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 
 		w = httptest.NewRecorder()
 		router.ServeHTTP(w, req)
-
 		Expect(w.Code).To(Equal(http.StatusOK))
 
 		var applications []models.ApplicationResponse
 		err = json.Unmarshal(w.Body.Bytes(), &applications)
 		Expect(err).NotTo(HaveOccurred())
 
-		Expect(applications).To(HaveLen(1), "Should have 1 application")
+		Expect(applications).To(HaveLen(1))
 
-		// Verify the application has domains and latest deployment batch-loaded
 		app := applications[0]
 		Expect(app.UUID).To(Equal(createdApplication.UUID))
-		Expect(app.Domains).To(HaveLen(2), "Application should have 2 domains batch-loaded")
+		Expect(app.Domains).To(HaveLen(2))
 
-		// Verify domain details are correct
 		domainsByDomain := make(map[string]models.ApplicationDomainResponse)
 		for _, domain := range app.Domains {
 			domainsByDomain[domain.Domain] = domain
@@ -840,14 +1143,13 @@ var _ = Describe("Application Domain Auto Loading Integration", func() {
 		Expect(domainsByDomain).To(HaveKey("app.example.com"))
 		Expect(domainsByDomain).To(HaveKey("custom.example.com"))
 
-		// Verify latest deployment is loaded
-		Expect(app.LatestDeployment).NotTo(BeNil(), "Application should have latest deployment loaded")
+		Expect(app.LatestDeployment).NotTo(BeNil())
 		Expect(app.LatestDeployment.UUID).To(Equal(createdDeployment.UUID))
 		Expect(app.LatestDeployment.Slug).To(Equal(createdDeployment.Slug))
 		Expect(app.LatestDeployment.GitRepository.CommitSHA).To(Equal("abc123def456"))
 		Expect(app.LatestDeployment.GitRepository.Branch).To(Equal("main"))
 
-		// Clean up deployment
+		// Cleanup
 		var deployment v1alpha1.Deployment
 		err = k8sClient.Get(ctx, client.ObjectKey{
 			Name:      "deployment-" + createdDeployment.Slug + "-kibaship-com",
@@ -855,6 +1157,31 @@ var _ = Describe("Application Domain Auto Loading Integration", func() {
 		}, &deployment)
 		if err == nil {
 			_ = k8sClient.Delete(ctx, &deployment)
+		}
+
+		var domainList v1alpha1.ApplicationDomainList
+		err = k8sClient.List(ctx, &domainList, client.MatchingLabels{
+			validation.LabelApplicationUUID: createdApplication.UUID,
+		})
+		if err == nil {
+			for _, domain := range domainList.Items {
+				_ = k8sClient.Delete(ctx, &domain)
+			}
+		}
+
+		var application v1alpha1.Application
+		err = k8sClient.Get(ctx, client.ObjectKey{
+			Name:      "application-" + createdApplication.Slug + "-kibaship-com",
+			Namespace: "default",
+		}, &application)
+		if err == nil {
+			_ = k8sClient.Delete(ctx, &application)
+		}
+
+		var project v1alpha1.Project
+		err = k8sClient.Get(ctx, client.ObjectKey{Name: "project-" + createdProject.Slug}, &project)
+		if err == nil {
+			_ = k8sClient.Delete(ctx, &project)
 		}
 	})
 })

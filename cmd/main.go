@@ -248,6 +248,20 @@ func main() {
 		setupLog.Error(err, "unable to create webhook", "webhook", "Project")
 		os.Exit(1)
 	}
+	// Register Environment controller
+	if err := (&controller.EnvironmentReconciler{
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Notifier: n,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Environment")
+		os.Exit(1)
+	}
+	// Register Environment webhook
+	if err := (&platformv1alpha1.Environment{}).SetupWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "Environment")
+		os.Exit(1)
+	}
 	// Register Application webhook
 	if err := (&platformv1alpha1.Application{}).SetupWebhookWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create webhook", "webhook", "Application")

@@ -11,6 +11,8 @@ rules:
     resources: [
       "projects",
       "projects/status",
+      "environments",
+      "environments/status",
       "applications",
       "applications/status",
       "deployments",

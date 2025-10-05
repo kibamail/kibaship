@@ -1,0 +1,19 @@
+apiVersion: platform.operator.kibaship.com/v1alpha1
+kind: Environment
+metadata:
+  name: environment-testenv-application-e2e-kibaship-com
+  namespace: default
+  labels:
+    platform.kibaship.com/uuid: "env-123e4567-e89b-12d3-a456-426614174002"
+    platform.kibaship.com/slug: "testenv-application-e2e"
+    platform.kibaship.com/project-uuid: "550e8400-e29b-41d4-a716-446655440002"
+  annotations:
+    platform.kibaship.com/name: "Test Environment for Application E2E"
+    platform.kibaship.com/description: "Production-like environment for testing"
+spec:
+  projectRef:
+    name: test-project-application-e2e
+  description: "Production-like environment for testing"
+  variables:
+    NODE_ENV: "production"
+    LOG_LEVEL: "info"

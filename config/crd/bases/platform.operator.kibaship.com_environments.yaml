@@ -4,30 +4,33 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.19.0
-  name: deployments.platform.operator.kibaship.com
+  name: environments.platform.operator.kibaship.com
 spec:
   group: platform.operator.kibaship.com
   names:
-    kind: Deployment
-    listKind: DeploymentList
-    plural: deployments
-    singular: deployment
+    kind: Environment
+    listKind: EnvironmentList
+    plural: environments
+    singular: environment
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .spec.applicationRef.name
-      name: Application
+    - jsonPath: .spec.projectRef.name
+      name: Project
       type: string
     - jsonPath: .status.phase
       name: Phase
       type: string
+    - jsonPath: .status.applicationCount
+      name: Applications
+      type: integer
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: Deployment is the Schema for the deployments API.
+        description: Environment is the Schema for the environments API
         properties:
           apiVersion:
             description: |-
@@ -47,11 +50,14 @@ spec:
           metadata:
             type: object
           spec:
-            description: DeploymentSpec defines the desired state of Deployment.
+            description: EnvironmentSpec defines the desired state of Environment
             properties:
-              applicationRef:
-                description: ApplicationRef references the Application this deployment
-                  belongs to
+              description:
+                description: Description of the environment (optional)
+                type: string
+              projectRef:
+                description: ProjectRef references the Project this environment belongs
+                  to
                 properties:
                   name:
                     default: ""
@@ -64,30 +70,25 @@ spec:
                     type: string
                 type: object
                 x-kubernetes-map-type: atomic
-              gitRepository:
-                description: |-
-                  GitRepository contains configuration for GitRepository deployments
-                  Required when ApplicationRef points to a GitRepository application
-                properties:
-                  branch:
-                    description: Branch is the git branch to use (optional, defaults
-                      to application branch)
-                    type: string
-                  commitSHA:
-                    description: CommitSHA is the specific commit hash to deploy
-                    type: string
-                required:
-                - commitSHA
+              variables:
+                additionalProperties:
+                  type: string
+                description: Variables contains environment-specific configuration
+                  variables
                 type: object
             required:
-            - applicationRef
+            - projectRef
             type: object
           status:
-            description: DeploymentStatus defines the observed state of Deployment.
+            description: EnvironmentStatus defines the observed state of Environment
             properties:
+              applicationCount:
+                description: ApplicationCount tracks number of applications in this
+                  environment
+                format: int32
+                type: integer
               conditions:
                 description: Conditions represent the latest available observations
-                  of the deployment's state
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -143,14 +144,25 @@ spec:
                   - type
                   type: object
                 type: array
-              observedGeneration:
-                description: ObservedGeneration reflects the generation of the most
-                  recently observed Deployment
-                format: int64
-                type: integer
-              phase:
-                description: Current phase of the deployment
+              lastReconcileTime:
+                description: LastReconcileTime is the timestamp of the last successful
+                  reconciliation
+                format: date-time
                 type: string
+              message:
+                description: Message provides additional information about the current
+                  status
+                type: string
+              phase:
+                description: Phase represents the current phase of the environment
+                enum:
+                - Pending
+                - Ready
+                - Failed
+                type: string
+              secretReady:
+                description: SecretReady indicates if environment secret exists
+                type: boolean
             type: object
         type: object
     served: true
