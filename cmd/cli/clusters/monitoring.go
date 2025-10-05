@@ -11,6 +11,13 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+const (
+	// StatusReady represents a ready condition status
+	StatusReady = "Ready"
+	// ConditionTrue represents a true condition status
+	ConditionTrue = "True"
+)
+
 // PodInfo represents information about a Kubernetes pod
 type PodInfo struct {
 	Name     string
@@ -96,7 +103,7 @@ func GetPodsInNamespace(namespace, contextName string) ([]PodInfo, error) {
 		return nil, fmt.Errorf("failed to parse pod JSON: %w", err)
 	}
 
-	var pods []PodInfo
+	pods := make([]PodInfo, 0, len(podList.Items))
 	for _, item := range podList.Items {
 		pod := PodInfo{
 			Name:   item.Metadata.Name,
@@ -167,7 +174,7 @@ func GetNodesInCluster(contextName string) ([]NodeInfo, error) {
 		return nil, fmt.Errorf("failed to parse node JSON: %w", err)
 	}
 
-	var nodes []NodeInfo
+	nodes := make([]NodeInfo, 0, len(nodeList.Items))
 	for _, item := range nodeList.Items {
 		node := NodeInfo{
 			Name:    item.Metadata.Name,
@@ -185,8 +192,8 @@ func GetNodesInCluster(contextName string) ([]NodeInfo, error) {
 		// Determine node status
 		node.Status = "NotReady"
 		for _, condition := range item.Status.Conditions {
-			if condition.Type == "Ready" && condition.Status == "True" {
-				node.Status = "Ready"
+			if condition.Type == StatusReady && condition.Status == ConditionTrue {
+				node.Status = StatusReady
 				break
 			}
 		}
@@ -259,8 +266,10 @@ func PrintPodTableWithSpinner(pods []PodInfo, componentName, spinnerText string)
 	for _, pod := range pods {
 		// Choose style based on status
 		var statusStyle lipgloss.Style
+		readyParts := strings.Split(pod.Ready, "/")
+		isReady := len(readyParts) == 2 && readyParts[0] == readyParts[1]
 		switch {
-		case pod.Status == "Running" && strings.HasSuffix(pod.Ready, "/"+strings.Split(pod.Ready, "/")[1]) && strings.Split(pod.Ready, "/")[0] == strings.Split(pod.Ready, "/")[1]:
+		case pod.Status == "Running" && isReady:
 			statusStyle = readyStyle
 		case pod.Status == "Pending" || pod.Status == "ContainerCreating":
 			statusStyle = notReadyStyle
@@ -437,7 +446,9 @@ func MonitorCiliumInstallation(clusterName, componentName string, printProgress,
 	checkInterval := 10 * time.Second
 	spinnerInterval := 200 * time.Millisecond
 
-	printProgress(fmt.Sprintf("Monitoring %s nodes and pods (will check every %v for %v)...", componentName, checkInterval, timeout))
+	msg := fmt.Sprintf("Monitoring %s nodes and pods (will check every %v for %v)...",
+		componentName, checkInterval, timeout)
+	printProgress(msg)
 
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()

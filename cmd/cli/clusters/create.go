@@ -32,6 +32,8 @@ func DefaultCreateOptions() CreateOptions {
 }
 
 // CreateCluster creates a complete Kibaship cluster with Phase 1 and 2 components
+//
+//nolint:gocyclo // This is a sequential workflow orchestrator function
 func CreateCluster(
 	opts CreateOptions,
 	printStep func(int, string),

@@ -336,9 +336,12 @@ Examples:
 	createClusterCmd.Flags().Bool("skip-infrastructure", false, "Skip infrastructure installation")
 
 	// Operator configuration flags (required for full installation)
-	createClusterCmd.Flags().String("operator-domain", "", "Base domain for applications (required, e.g., myapps.kibaship.com)")
-	createClusterCmd.Flags().String("operator-acme-email", "", "Email for ACME certificate registration (optional)")
-	createClusterCmd.Flags().String("operator-webhook-url", "", "Webhook URL for notifications (required, e.g., https://webhook.example.com/kibaship)")
+	createClusterCmd.Flags().String("operator-domain", "",
+		"Base domain for applications (required, e.g., myapps.kibaship.com)")
+	createClusterCmd.Flags().String("operator-acme-email", "",
+		"Email for ACME certificate registration (optional)")
+	createClusterCmd.Flags().String("operator-webhook-url", "",
+		"Webhook URL for notifications (required, e.g., https://webhook.example.com/kibaship)")
 
 	// Note: operator flags are validated conditionally in the command logic
 

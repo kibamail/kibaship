@@ -58,7 +58,7 @@ func ListClusters(
 	// Display summary
 	runningCount := 0
 	for _, cluster := range clusters {
-		if cluster.Status == "Running" {
+		if cluster.Status == StatusRunning {
 			runningCount++
 		}
 	}

@@ -37,47 +37,6 @@ func InstallLonghorn(clusterName string, printProgress, printInfo func(string)) 
 	return nil
 }
 
-// waitForLonghornDeployments waits for all Longhorn deployments to be ready
-func waitForLonghornDeployments(contextName string) error {
-	deployments := []string{
-		"longhorn-ui",
-		"longhorn-manager",
-		"longhorn-driver-deployer",
-	}
-
-	for _, deployment := range deployments {
-		if err := waitForDeployment(deployment, LonghornNamespace, contextName); err != nil {
-			return fmt.Errorf("deployment %s not ready: %w", deployment, err)
-		}
-	}
-
-	return nil
-}
-
-// waitForLonghornDaemonSets waits for all Longhorn DaemonSets to be ready
-func waitForLonghornDaemonSets(contextName string) error {
-	// Wait for longhorn-manager DaemonSet
-	if err := waitForDaemonSet("longhorn-manager", LonghornNamespace, contextName, 10*time.Minute); err != nil {
-		return fmt.Errorf("longhorn-manager DaemonSet not ready: %w", err)
-	}
-
-	// Wait for engine image DaemonSets (they have dynamic names)
-	// We'll check if at least one engine image DaemonSet is ready
-	cmd := exec.Command("kubectl", "get", "daemonsets", "-n", LonghornNamespace,
-		"--context", contextName, "-o", "name")
-	output, err := cmd.Output()
-	if err != nil {
-		return fmt.Errorf("failed to list DaemonSets: %w", err)
-	}
-
-	// Check if we have engine image DaemonSets
-	if len(output) == 0 {
-		return fmt.Errorf("no DaemonSets found in longhorn-system namespace")
-	}
-
-	return nil
-}
-
 // VerifyLonghorn checks if Longhorn is properly installed and running
 func VerifyLonghorn(clusterName string) error {
 	fullClusterName := GetKibashipClusterName(clusterName)
@@ -99,7 +58,8 @@ func VerifyLonghorn(clusterName string) error {
 	}
 
 	// Check if Longhorn manager DaemonSet exists
-	cmd = exec.Command("kubectl", "get", "daemonset", "longhorn-manager", "-n", LonghornNamespace, "--context", contextName)
+	cmd = exec.Command("kubectl", "get", "daemonset", "longhorn-manager", "-n",
+		LonghornNamespace, "--context", contextName)
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("longhorn-manager DaemonSet not found: %w", err)
 	}
