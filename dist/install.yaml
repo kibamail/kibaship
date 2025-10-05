@@ -254,8 +254,8 @@ spec:
     - jsonPath: .spec.type
       name: Type
       type: string
-    - jsonPath: .spec.projectRef.name
-      name: Project
+    - jsonPath: .spec.environmentRef.name
+      name: Environment
       type: string
     - jsonPath: .status.phase
       name: Phase
@@ -317,101 +317,21 @@ spec:
                 required:
                 - image
                 type: object
-              environments:
-                description: |-
-                  Environments defines environment-specific configurations
-                  If not specified, a default "production" environment is auto-created by the controller
-                items:
-                  description: ApplicationEnvironment defines environment-specific
-                    configuration
-                  properties:
-                    gitRepository:
-                      description: GitRepository contains environment-specific overrides
-                        for GitRepository applications
-                      properties:
-                        branch:
-                          description: Branch override (defaults to application's
-                            base branch)
-                          type: string
-                        buildCommand:
-                          description: BuildCommand override
-                          type: string
-                        startCommand:
-                          description: StartCommand override
-                          type: string
-                      type: object
-                    name:
-                      description: Name of the environment (production, staging, qa,
-                        etc.)
-                      pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
-                      type: string
-                    replicas:
-                      description: Replicas for this environment (optional)
-                      format: int32
-                      type: integer
-                    resources:
-                      description: Resources for this environment (optional)
-                      properties:
-                        claims:
-                          description: |-
-                            Claims lists the names of resources, defined in spec.resourceClaims,
-                            that are used by this container.
-
-                            This field depends on the
-                            DynamicResourceAllocation feature gate.
-
-                            This field is immutable. It can only be set for containers.
-                          items:
-                            description: ResourceClaim references one entry in PodSpec.ResourceClaims.
-                            properties:
-                              name:
-                                description: |-
-                                  Name must match the name of one entry in pod.spec.resourceClaims of
-                                  the Pod where this field is used. It makes that resource available
-                                  inside a container.
-                                type: string
-                              request:
-                                description: |-
-                                  Request is the name chosen for a request in the referenced claim.
-                                  If empty, everything from the claim is made available, otherwise
-                                  only the result of this request.
-                                type: string
-                            required:
-                            - name
-                            type: object
-                          type: array
-                          x-kubernetes-list-map-keys:
-                          - name
-                          x-kubernetes-list-type: map
-                        limits:
-                          additionalProperties:
-                            anyOf:
-                            - type: integer
-                            - type: string
-                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                            x-kubernetes-int-or-string: true
-                          description: |-
-                            Limits describes the maximum amount of compute resources allowed.
-                            More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
-                          type: object
-                        requests:
-                          additionalProperties:
-                            anyOf:
-                            - type: integer
-                            - type: string
-                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                            x-kubernetes-int-or-string: true
-                          description: |-
-                            Requests describes the minimum amount of compute resources required.
-                            If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
-                            otherwise to an implementation-defined value. Requests cannot exceed Limits.
-                            More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
-                          type: object
-                      type: object
-                  required:
-                  - name
-                  type: object
-                type: array
+              environmentRef:
+                description: EnvironmentRef references the Environment this application
+                  belongs to
+                properties:
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
               gitRepository:
                 description: GitRepository contains configuration for GitRepository
                   applications
@@ -610,21 +530,6 @@ spec:
                     description: Version is the PostgreSQL version to deploy
                     type: string
                 type: object
-              projectRef:
-                description: ProjectRef references the Project this application belongs
-                  to
-                properties:
-                  name:
-                    default: ""
-                    description: |-
-                      Name of the referent.
-                      This field is effectively required, but due to backwards compatibility is
-                      allowed to be empty. Instances of this type with an empty value here are
-                      almost certainly wrong.
-                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                    type: string
-                type: object
-                x-kubernetes-map-type: atomic
               type:
                 description: Type defines the type of application
                 enum:
@@ -636,7 +541,7 @@ spec:
                 - GitRepository
                 type: string
             required:
-            - projectRef
+            - environmentRef
             - type
             type: object
           status:
@@ -698,27 +603,6 @@ spec:
                   - reason
                   - status
                   - type
-                  type: object
-                type: array
-              environmentStatus:
-                description: EnvironmentStatus tracks the readiness of each environment
-                items:
-                  description: EnvironmentStatus tracks the status of an environment
-                  properties:
-                    lastDeploymentTime:
-                      description: LastDeploymentTime tracks last deployment to this
-                        environment
-                      format: date-time
-                      type: string
-                    name:
-                      description: Name of the environment
-                      type: string
-                    secretReady:
-                      description: SecretReady indicates if environment secret exists
-                      type: boolean
-                  required:
-                  - name
-                  - secretReady
                   type: object
                 type: array
               message:
@@ -806,12 +690,6 @@ spec:
                     type: string
                 type: object
                 x-kubernetes-map-type: atomic
-              environmentName:
-                default: production
-                description: |-
-                  EnvironmentName specifies which environment to deploy to
-                  Defaults to "production" if not specified
-                type: string
               gitRepository:
                 description: |-
                   GitRepository contains configuration for GitRepository deployments
@@ -899,6 +777,177 @@ spec:
               phase:
                 description: Current phase of the deployment
                 type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.19.0
+  name: environments.platform.operator.kibaship.com
+spec:
+  group: platform.operator.kibaship.com
+  names:
+    kind: Environment
+    listKind: EnvironmentList
+    plural: environments
+    singular: environment
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.projectRef.name
+      name: Project
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.applicationCount
+      name: Applications
+      type: integer
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: Environment is the Schema for the environments API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: EnvironmentSpec defines the desired state of Environment
+            properties:
+              description:
+                description: Description of the environment (optional)
+                type: string
+              projectRef:
+                description: ProjectRef references the Project this environment belongs
+                  to
+                properties:
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+              variables:
+                additionalProperties:
+                  type: string
+                description: Variables contains environment-specific configuration
+                  variables
+                type: object
+            required:
+            - projectRef
+            type: object
+          status:
+            description: EnvironmentStatus defines the observed state of Environment
+            properties:
+              applicationCount:
+                description: ApplicationCount tracks number of applications in this
+                  environment
+                format: int32
+                type: integer
+              conditions:
+                description: Conditions represent the latest available observations
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              lastReconcileTime:
+                description: LastReconcileTime is the timestamp of the last successful
+                  reconciliation
+                format: date-time
+                type: string
+              message:
+                description: Message provides additional information about the current
+                  status
+                type: string
+              phase:
+                description: Phase represents the current phase of the environment
+                enum:
+                - Pending
+                - Ready
+                - Failed
+                type: string
+              secretReady:
+                description: SecretReady indicates if environment secret exists
+                type: boolean
             type: object
         type: object
     served: true
@@ -1645,7 +1694,7 @@ spec:
           value: "3000"
         - name: KIBASHIP_ACME_EMAIL
           value: test@kibaship.com
-        image: ghcr.io/kibamail/kibaship-operator:v0.1.3
+        image: ghcr.io/kibamail/kibaship-operator:v0.1.4
         livenessProbe:
           httpGet:
             path: /healthz
@@ -1800,6 +1849,26 @@ webhooks:
     service:
       name: kibaship-operator-webhook-service
       namespace: kibaship-operator
+      path: /validate-platform-operator-kibaship-com-v1alpha1-environment
+  failurePolicy: Fail
+  name: venvironment.kb.io
+  rules:
+  - apiGroups:
+    - platform.operator.kibaship.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - environments
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: kibaship-operator-webhook-service
+      namespace: kibaship-operator
       path: /validate-platform-operator-kibaship-com-v1alpha1-project
   failurePolicy: Fail
   name: vproject.kb.io
@@ -1859,6 +1928,8 @@ rules:
   resources:
   - projects
   - projects/status
+  - environments
+  - environments/status
   - applications
   - applications/status
   - deployments
@@ -1959,7 +2030,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
-        image: ghcr.io/kibamail/kibaship-operator-apiserver:v0.1.3
+        image: ghcr.io/kibamail/kibaship-operator-apiserver:v0.1.4
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
@@ -2124,7 +2195,7 @@ spec:
         - --tls-cert-file=/tls/tls.crt
         - --tls-private-key-file=/tls/tls.key
         - --secure-port=8443
-        image: ghcr.io/kibamail/kibaship-operator-cert-manager-webhook:v0.1.3
+        image: ghcr.io/kibamail/kibaship-operator-cert-manager-webhook:v0.1.4
         imagePullPolicy: IfNotPresent
         name: webhook
         ports:
@@ -2764,7 +2835,7 @@ spec:
         app: registry-auth
     spec:
       containers:
-      - image: ghcr.io/kibamail/kibaship-operator-registry-auth:v0.1.3
+      - image: ghcr.io/kibamail/kibaship-operator-registry-auth:v0.1.4
         imagePullPolicy: IfNotPresent
         livenessProbe:
           failureThreshold: 3
