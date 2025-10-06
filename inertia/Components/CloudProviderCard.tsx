@@ -1,7 +1,7 @@
 import { Text } from '@kibamail/owly/text'
 import { useForm, usePage } from '@inertiajs/react'
 import { CloudProvider, PageProps } from '~/types'
-import { providerIcons } from '~/pages/clusters/NoCloudProviders'
+import { providerIcons } from '~/lib/providerIcons'
 import { OptionsDropdown } from './OptionsDropdown'
 import { TrashIcon } from './Icons/trash.svg'
 import { useState } from 'react'

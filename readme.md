@@ -110,7 +110,11 @@ TARGET_VERSION="v1.11.1"
 ```
 
 ```bash
-wget https://factory.talos.dev/image/e048aaf4461ff9f9576c9a42f760f2fef566559bd4933f322853ac291e46f238/v1.11.0/metal-amd64.raw.zst
+wget https://factory.talos.dev/image/376567988ad370138ad8b2698212367b8edcb69b5fd68c80be1f2ec7d603b4ba/v1.11.0/metal-amd64.raw.zst
+wget https://factory.talos.dev/image/376567988ad370138ad8b2698212367b8edcb69b5fd68c80be1f2ec7d603b4ba/v1.11.2/metal-arm64.raw.zst
+
+# amd64 376567988ad370138ad8b2698212367b8edcb69b5fd68c80be1f2ec7d603b4ba
+# arm64 376567988ad370138ad8b2698212367b8edcb69b5fd68c80be1f2ec7d603b4ba
 
 zstd -d metal-amd64.raw.zst
 

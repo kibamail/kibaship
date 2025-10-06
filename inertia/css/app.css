@@ -12,6 +12,7 @@
 @import '@kibamail/owly/styles/progress.css' layer(base);
 @import '@kibamail/owly/styles/text-field.css' layer(base);
 @import '@kibamail/owly/styles/select-field.css' layer(base);
+@import '@kibamail/owly/styles/multi-select.css' layer(base);
 
 @import '@kibamail/owly/styles/semantic-classes.css' layer(base);
 
@@ -26,7 +27,8 @@
 
 @theme inline {
   --font-sans: var(--default-font-family);
-  --font-mono: "Dank Mono", "Space Mono", 'ui-monospace', Menlo, Consolas, 'Liberation Mono', monospace;
+  --font-mono:
+    'Dank Mono', 'Space Mono', 'ui-monospace', Menlo, Consolas, 'Liberation Mono', monospace;
 }
 
 @layer base {
@@ -105,4 +107,8 @@ select {
 
 .kb-select-item-text {
   @apply w-full;
+}
+
+.kb-multi-select-content {
+  @apply data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 w-full;
 }

@@ -1,0 +1,187 @@
+terraform {
+  required_providers {
+    hcloud = {
+      source  = "hetznercloud/hcloud"
+      version = "~> 1.52"
+    }
+  }
+
+  backend "s3" {
+    bucket = "{{ s3_bucket }}"
+    key    = "clusters/{{ cluster_id }}/bare-metal-cloud-load-balancer/terraform.tfstate"
+    region = "{{ s3_region }}"
+    encrypt = true
+  }
+}
+
+variable "hcloud_token" {
+  description = "Hetzner Cloud API Token"
+  type        = string
+  sensitive   = true
+}
+
+variable "cluster_name" {
+  description = "Name of the cluster"
+  type        = string
+}
+
+variable "location" {
+  description = "Location for the network and load balancer"
+  type        = string
+  default     = "nbg1"
+}
+
+variable "network_zone" {
+  description = "Network zone (eu-central, us-east, etc.)"
+  type        = string
+}
+
+variable "vswitch_id" {
+  description = "Hetzner Robot vSwitch ID"
+  type        = number
+}
+
+provider "hcloud" {
+  token = var.hcloud_token
+}
+
+# Create Hetzner Cloud network
+resource "hcloud_network" "cluster_network" {
+  name     = "${var.cluster_name}-network"
+  ip_range = "{{ cluster_network_ip_range }}"
+  labels = {
+    cluster    = var.cluster_name
+    managed_by = "kibaship"
+  }
+}
+
+# Create cloud subnet and attach to vSwitch
+resource "hcloud_network_subnet" "vswitch_subnet" {
+  network_id   = hcloud_network.cluster_network.id
+  type         = "vswitch"
+  network_zone = var.network_zone
+  ip_range     = "{{ cluster_vswitch_subnet_ip_range }}"
+  vswitch_id   = var.vswitch_id
+}
+
+# Create load balancer subnet
+resource "hcloud_network_subnet" "load_balancer_subnet" {
+  network_id   = hcloud_network.cluster_network.id
+  type         = "cloud"
+  network_zone = var.network_zone
+  ip_range     = "{{ cluster_subnet_ip_range }}"
+}
+
+# Create ingress load balancer
+resource "hcloud_load_balancer" "ingress" {
+  name               = "${var.cluster_name}-ingress"
+  load_balancer_type = "lb11"
+  location           = var.location
+
+  labels = {
+    cluster    = var.cluster_name
+    managed_by = "kibaship"
+    type       = "ingress"
+  }
+}
+
+# Attach load balancer to network
+resource "hcloud_load_balancer_network" "ingress_network" {
+  load_balancer_id = hcloud_load_balancer.ingress.id
+  network_id       = hcloud_network.cluster_network.id
+
+  depends_on = [
+    hcloud_network_subnet.vswitch_subnet,
+    hcloud_network_subnet.load_balancer_subnet
+  ]
+}
+
+# HTTP service (port 80 -> 30080)
+resource "hcloud_load_balancer_service" "ingress_http" {
+  load_balancer_id = hcloud_load_balancer.ingress.id
+  protocol         = "http"
+  listen_port      = 80
+  destination_port = 30080
+  proxyprotocol    = true
+
+  health_check {
+    protocol = "tcp"
+    port     = 30080
+    interval = 15
+    timeout  = 10
+    retries  = 3
+  }
+}
+
+# HTTPS service (port 443 -> 30443) - TCP passthrough
+resource "hcloud_load_balancer_service" "ingress_https" {
+  load_balancer_id = hcloud_load_balancer.ingress.id
+  protocol         = "tcp"
+  listen_port      = 443
+  destination_port = 30443
+  proxyprotocol    = true
+
+  health_check {
+    protocol = "tcp"
+    port     = 30443
+    interval = 15
+    timeout  = 10
+    retries  = 3
+  }
+}
+
+# Add each node as a target to the load balancer
+@each(node in nodes)
+  resource "hcloud_load_balancer_target" "node_{{ node.slug }}" {
+  type             = "ip"
+  load_balancer_id = hcloud_load_balancer.ingress.id
+  ip               = "{{ node.private_ipv4_address }}"
+
+  depends_on = [hcloud_load_balancer_network.ingress_network]
+}
+@end
+
+output "network_id" {
+  description = "ID of the created network"
+  value       = hcloud_network.cluster_network.id
+}
+
+output "network_name" {
+  description = "Name of the created network"
+  value       = hcloud_network.cluster_network.name
+}
+
+output "network_ip_range" {
+  description = "IP range of the network"
+  value       = hcloud_network.cluster_network.ip_range
+}
+
+output "subnet_id" {
+  description = "ID of the network subnet"
+  value       = hcloud_network_subnet.load_balancer_subnet.id
+}
+
+output "vswitch_id" {
+  description = "ID of the attached vSwitch"
+  value       = var.vswitch_id
+}
+
+output "ingress_load_balancer_id" {
+  description = "ID of the ingress load balancer"
+  value       = hcloud_load_balancer.ingress.id
+}
+
+output "ingress_load_balancer_name" {
+  description = "Name of the ingress load balancer"
+  value       = hcloud_load_balancer.ingress.name
+}
+
+output "ingress_load_balancer_public_ip" {
+  description = "Public IPv4 of the ingress load balancer"
+  value       = hcloud_load_balancer.ingress.ipv4
+}
+
+output "ingress_load_balancer_public_ipv6" {
+  description = "Public IPv6 of the ingress load balancer"
+  value       = hcloud_load_balancer.ingress.ipv6
+}

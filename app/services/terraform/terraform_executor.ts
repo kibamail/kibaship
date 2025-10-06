@@ -23,6 +23,11 @@ export type TerraformStage =
   | 'kubernetes-config'
   | 'kubernetes-boot'
   | 'kubernetes-byoc'
+  | 'bare-metal-networking'
+  | 'bare-metal-cloud-load-balancer'
+  | 'bare-metal-talos-image'
+  | 'bare-metal-disk-discovery'
+  | 'bare-metal-servers-bootstrap'
 
 export interface TerraformExecutionOptions {
   autoApprove?: boolean

@@ -3,6 +3,7 @@ import Cluster from '#models/cluster'
 import { createExecutor, TerraformStage } from '#services/terraform/main'
 import { TerraformService, TerraformTemplate } from '#services/terraform/terraform_service'
 import logger from '@adonisjs/core/services/logger'
+import { CloudProviderDefinitions } from '#services/cloud-providers/cloud_provider_definitions'
 
 interface DestroyClusterJobPayload {
   clusterId: string
@@ -28,12 +29,14 @@ export default class DestroyClusterJob extends Job {
 
     const stages: TerraformStage[] = ['volumes', 'servers', 'load-balancers', 'ssh-keys']
 
-    for (const stage of stages) {
-      try {
-        await this.destroyStage(cluster, stage)
-      } catch (error) {
-        logger.error(`Failed to destroy ${stage} for cluster ${cluster.id}:`, error)
-        throw error
+    if (cluster.cloudProvider.type !== CloudProviderDefinitions.HETZNER_ROBOT) {
+      for (const stage of stages) {
+        try {
+          await this.destroyStage(cluster, stage)
+        } catch (error) {
+          logger.error(`Failed to destroy ${stage} for cluster ${cluster.id}:`, error)
+          throw error
+        }
       }
     }
 

@@ -3,6 +3,7 @@ import { FieldContext, Validator } from '@vinejs/vine/types'
 import { CloudProviderDefinitions } from '#services/cloud-providers/cloud_provider_definitions'
 import { SshKeyService } from '#services/ssh/ssh_key_service'
 import { HetznerService } from '#services/hetzner/hetzner_service'
+import { hetznerRobot } from '#services/hetzner-robot/provider'
 
 const hetznerProviderValidator = async (
     credentials: Record<string, string>,
@@ -35,6 +36,20 @@ const hetznerProviderValidator = async (
     await new HetznerService(credentials.token).sshkeys().delete(sshKeypair.data.ssh_key.id)
 }
 
+const hetznerRobotProviderValidator = async (
+    credentials: Record<string, string>,
+    field: FieldContext
+) => {
+    const isValid = await hetznerRobot({
+        username: credentials.username,
+        password: credentials.password,
+    }).auth().validate()
+
+    if (!isValid) {
+        field.report('Invalid Hetzner Robot credentials', 'credentials.username', field)
+    }
+}
+
 const credentialsValidator: Validator<Record<string, string>> = async (
     value: unknown,
     _options: Record<string, string>,
@@ -50,6 +65,10 @@ const credentialsValidator: Validator<Record<string, string>> = async (
 
     if (field.data.type === CloudProviderDefinitions.HETZNER) {
         return hetznerProviderValidator(value as Record<string, string>, field)
+    }
+
+    if (field.data.type === CloudProviderDefinitions.HETZNER_ROBOT) {
+        return hetznerRobotProviderValidator(value as Record<string, string>, field)
     }
 }
 
@@ -68,6 +87,14 @@ export const createCloudProviderValidator = vine.compile(
                         CloudProviderDefinitions.HETZNER,
                         CloudProviderDefinitions.DIGITAL_OCEAN,
                     ]),
+                username: vine
+                    .string()
+                    .optional()
+                    .requiredWhen('type', 'in', [CloudProviderDefinitions.HETZNER_ROBOT]),
+                password: vine
+                    .string()
+                    .optional()
+                    .requiredWhen('type', 'in', [CloudProviderDefinitions.HETZNER_ROBOT]),
             })
             .use(credentialsValidatorRule({})),
     })

@@ -6,7 +6,7 @@ import { SettingsIcon } from '../Icons/settings.svg'
 import { TrashIcon } from '../Icons/trash.svg'
 import { getStatusIcon } from './ClusterProvisioningStep'
 import { ItemAvatar } from '../ItemAvatar'
-import { providerIcons } from '~/pages/clusters/NoCloudProviders'
+import { providerIcons } from '~/lib/providerIcons'
 
 interface ProjectCardProps {
   cluster: Cluster
@@ -15,7 +15,6 @@ interface ProjectCardProps {
 }
 
 export function ClusterCard({ cluster, onClusterSelected, onClusterDeletion }: ProjectCardProps) {
-  console.log({ cluster })
   const statusClassNames = (() => {
     if (cluster.provisioningStatus === 'ready') {
       return 'text-owly-content-positive'

@@ -7,6 +7,8 @@ import { CloudProviderDefinitions } from '#services/cloud-providers/cloud_provid
 import queue from '@rlanz/bull-queue/services/main'
 import ProvisionHetznerTalosImageJob from '#jobs/cloud-providers/provision_hetzner_talos_image_job'
 import { DateTime } from 'luxon'
+import { hetznerRobot } from '#services/hetzner-robot/provider'
+import { cache } from '#services/cache/cache'
 
 @inject()
 export default class CloudProvidersController extends BaseController {
@@ -52,5 +54,71 @@ export default class CloudProvidersController extends BaseController {
     return ctx.response.redirect().toRoute('workspace.cloud.providers', {
       workspace: workspace.slug,
     })
+  }
+
+  public async servers(ctx: HttpContext) {
+    const workspace = await this.workspace(ctx)
+
+    const cloudProvider = await CloudProvider.query()
+      .where('id', ctx.params.cloudProvider)
+      .where('workspace_id', workspace.id)
+      .firstOrFail()
+
+    if (cloudProvider.type !== CloudProviderDefinitions.HETZNER_ROBOT) {
+      return ctx.response.badRequest({
+        error: 'Only Hetzner Robot providers support server listing',
+      })
+    }
+
+    const cacheKey = `provider:${cloudProvider.id}`
+    const cachedServers = await cache('hetzner-robot').item(cacheKey).read()
+
+    if (cachedServers) {
+      return ctx.response.json(cachedServers)
+    }
+
+    const servers = await hetznerRobot({
+      username: cloudProvider.credentials.username as string,
+      password: cloudProvider.credentials.password as string,
+    })
+      .servers()
+      .list()
+
+    await cache('hetzner-robot').item(cacheKey).write(servers, 3600)
+
+    return ctx.response.json(servers)
+  }
+
+  public async vswitches(ctx: HttpContext) {
+    const workspace = await this.workspace(ctx)
+
+    const cloudProvider = await CloudProvider.query()
+      .where('id', ctx.params.cloudProvider)
+      .where('workspace_id', workspace.id)
+      .firstOrFail()
+
+    if (cloudProvider.type !== CloudProviderDefinitions.HETZNER_ROBOT) {
+      return ctx.response.badRequest({
+        error: 'Only Hetzner Robot providers support vSwitch listing',
+      })
+    }
+
+    const cacheKey = `vswitches:provider:${cloudProvider.id}`
+    const cachedVswitches = await cache('hetzner-robot').item(cacheKey).read()
+
+    if (cachedVswitches) {
+      return ctx.response.json(cachedVswitches)
+    }
+
+    const vswitches = await hetznerRobot({
+      username: cloudProvider.credentials.username as string,
+      password: cloudProvider.credentials.password as string,
+    })
+      .vswitches()
+      .list()
+
+    await cache('hetzner-robot').item(cacheKey).write(vswitches, 3600)
+
+    return ctx.response.json(vswitches)
   }
 }

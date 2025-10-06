@@ -1,14 +1,6 @@
 import { CreateCloudProviderDialog } from './CreateCloudProviderDialog'
-import { AWSIcon } from '~/Components/Icons/aws.svg'
 import { CloudWaterdropIcon } from '~/Components/Icons/cloud-waterdrop.svg'
-import { DigitalOceanIcon } from '~/Components/Icons/digital-ocean.svg'
-import { GoogleCloudIcon } from '~/Components/Icons/google-cloud.svg'
-import { HetznerIcon } from '~/Components/Icons/hetzner.svg'
-import { LeaseWebIcon } from '~/Components/Icons/leaseweb.svg'
-import { LinodeIcon } from '~/Components/Icons/linode.svg'
-import { OVHIcon } from '~/Components/Icons/ovh.svg'
 import { PlusIcon } from '~/Components/Icons/plus.svg'
-import { VultrIcon } from '~/Components/Icons/vultr.svg'
 import type {
   CloudProviderInfo,
   CloudProviderRegion,
@@ -21,27 +13,11 @@ import { Button } from '@kibamail/owly'
 import { Heading } from '@kibamail/owly/heading'
 import { Text } from '@kibamail/owly/text'
 import { useState } from 'react'
-import { K8sIcon } from '~/Components/Icons/k8s.svg'
 import { CreateClusterDialog } from './CreateClusterDialog'
+import { providerIcons } from '~/lib/providerIcons'
 
 interface CloudProviderWithIcon extends CloudProviderInfo {
   icon: React.ComponentType<{ className?: string }>
-}
-
-// Icon mapping for cloud providers
-export const providerIcons: Record<
-  CloudProviderType,
-  React.ComponentType<{ className?: string }>
-> = {
-  aws: AWSIcon,
-  hetzner: HetznerIcon,
-  leaseweb: LeaseWebIcon,
-  google_cloud: GoogleCloudIcon,
-  digital_ocean: DigitalOceanIcon,
-  linode: LinodeIcon,
-  vultr: VultrIcon,
-  ovh: OVHIcon,
-  byoc: K8sIcon,
 }
 
 export function NoCloudProviders() {

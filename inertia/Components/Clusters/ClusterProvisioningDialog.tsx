@@ -36,6 +36,12 @@ interface ClusterProvisioningDialogProps {
 
 const defaultProvisioningSteps: ProvisioningStepInfo[] = [
   {
+    stage: 'bare-metal-networking',
+    title: 'Bare metal networking',
+    description: 'Preparing bare metal servers and vSwitch networking',
+    icon: <SettingsIcon className="!size-5" />,
+  },
+  {
     stage: 'talos-image',
     title: 'Talos OS image',
     description: 'Creating or locating the Talos OS system image for cluster nodes',
@@ -281,15 +287,17 @@ export function ClusterProvisioningDialog({
               onValueChange={(value) => setExpandedStage(value as TerraformStage)}
             >
               <div className="flex flex-col gap-2">
-                {provisioningSteps.map((info) => (
-                  <ClusterProvisioningStep
-                    info={info}
-                    cluster={cluster}
-                    key={info.stage}
-                    logs={logsQuery.data || []}
-                    active={expandedStage === info.stage}
-                  />
-                ))}
+                {provisioningSteps.map((info) =>
+                  info ? (
+                    <ClusterProvisioningStep
+                      info={info}
+                      cluster={cluster}
+                      key={info.stage}
+                      logs={logsQuery.data || []}
+                      active={expandedStage === info.stage}
+                    />
+                  ) : null
+                )}
               </div>
             </Accordion>
           ) : null}

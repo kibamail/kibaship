@@ -18,6 +18,8 @@ export enum TerraformTemplate {
   KUBERNETES_CONFIG = 'kubernetes-config.tf',
   KUBERNETES_BOOT = 'kubernetes-boot.tf',
   KUBERNETES_BYOC = 'kubernetes-byoc.tf',
+  HETZNER_ROBOT_NETWORKING = 'hetzner_robot/networking.tf',
+  BARE_METAL_DISK_DISCOVERY = 'hetzner_robot/disk_discovery.tf',
 }
 
 export interface TemplateContext {
@@ -43,6 +45,8 @@ export interface TemplateContext {
   cluster_region: string
   cluster_network_id: string
   cluster_network_ip_range: string
+  cluster_vswitch_subnet_ip_range: string
+  cluster_subnet_ip_range: string
   cluster_private_subnet: string
   cluster_pod_subnet: string
   cluster_service_subnet: string
@@ -77,6 +81,20 @@ export interface TemplateContext {
       primary_disk_name: string | null
       private_network_interface: string | null
       public_network_interface: string | null
+    }
+  >
+  nodes: Array<
+    ModelObject & {
+      id: string
+      slug: string
+      type: string
+      provider_id: string
+      ipv4_address: string | null
+      private_ipv4_address: string | null
+      primary_disk_name: string | null
+      private_network_interface: string | null
+      public_network_interface: string | null
+      public_ipv4_gateway: string | null
     }
   >
   public_key: string
@@ -236,16 +254,34 @@ export class TerraformService {
       templatePath = 'byoc.tf'
     }
 
+    if (templateName === TerraformTemplate.HETZNER_ROBOT_NETWORKING) {
+      templatePath = 'hetzner_robot/networking.tf'
+    }
+
+    if (templateName === TerraformTemplate.BARE_METAL_DISK_DISCOVERY) {
+      templatePath = 'hetzner_robot/disk_discovery.tf'
+    }
+
     const content = await this.edge.render(templatePath, context)
+
+    // Map template names to directory names for special cases
+    let directoryName: string = templateName
+    if (templateName === TerraformTemplate.HETZNER_ROBOT_NETWORKING) {
+      directoryName = 'bare-metal-cloud-load-balancer.tf'
+    }
+    if (templateName === TerraformTemplate.BARE_METAL_DISK_DISCOVERY) {
+      directoryName = 'bare-metal-disk-discovery.tf'
+    }
+
     const terraformFile: Omit<TerraformFile, 'key' | 'path'> = {
-      name: templateName,
+      name: directoryName,
       content,
     }
 
     const fileKey = await this.writeTerraformFile(terraformFile)
 
     return {
-      name: templateName.replace('.tf', ''),
+      name: directoryName.replace('.tf', ''),
       content,
       key: fileKey,
       path: this.keyToPath(fileKey),
@@ -316,6 +352,8 @@ export class TerraformService {
       /** Network configuration used by servers and load balancers */
       cluster_network_id: cluster.providerNetworkId as string, // Used by: servers.tf.edge
       cluster_network_ip_range: cluster.networkIpRange as string, // Used by: network.tf.edge for VPC IP range
+      cluster_vswitch_subnet_ip_range: cluster.vswitchSubnetIpRange as string, // Used by: hetzner_robot/networking.tf.edge for vSwitch subnet
+      cluster_subnet_ip_range: cluster.subnetIpRange as string, // Used by: hetzner_robot/networking.tf.edge for load balancer subnet
       cluster_private_subnet: cluster.subnetIpRange as string, // Used by: kubernetes.tf.edge for validSubnets
       cluster_pod_subnet: '10.244.0.0/16', // Used by: kubernetes.tf.edge for pod CIDR
       cluster_service_subnet: '10.96.0.0/12', // Used by: kubernetes.tf.edge for service CIDR
@@ -348,6 +386,9 @@ export class TerraformService {
 
       /** Worker nodes array with computed properties */
       workers: workers, // Used by: servers.tf.edge, kubernetes.tf.edge
+
+      /** All nodes array (control planes + workers) */
+      nodes: [...controlPlanes, ...workers], // Used by: hetzner_robot/networking.tf.edge
 
       // =============================================================================
       // LOAD BALANCER VARIABLES - Used by load-balancers.tf.edge and kubernetes.tf.edge

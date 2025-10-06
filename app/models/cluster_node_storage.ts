@@ -18,6 +18,9 @@ export default class ClusterNodeStorage extends BaseModel {
   declare providerMountId: string | null
 
   @column()
+  declare installationDisk: boolean | null // Used for bare metal to determine which disk the talos os will be installed on.
+
+  @column()
   declare status: ClusterNodeStorageStatus
 
   @column()

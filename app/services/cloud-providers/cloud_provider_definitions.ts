@@ -6,6 +6,7 @@ import { sizes as digitalOceanSizes } from './constants/digital_ocean/droplet_si
 export type CloudProviderType =
   | 'aws'
   | 'hetzner'
+  | 'hetzner_robot'
   | 'leaseweb'
   | 'google_cloud'
   | 'digital_ocean'
@@ -66,6 +67,7 @@ export interface CloudProviderData {
 export class CloudProviderDefinitions {
   static readonly AWS: CloudProviderType = 'aws'
   static readonly HETZNER: CloudProviderType = 'hetzner'
+  static readonly HETZNER_ROBOT: CloudProviderType = 'hetzner_robot'
   static readonly LEASEWEB: CloudProviderType = 'leaseweb'
   static readonly GOOGLE_CLOUD: CloudProviderType = 'google_cloud'
   static readonly DIGITAL_OCEAN: CloudProviderType = 'digital_ocean'
@@ -256,6 +258,7 @@ export class CloudProviderDefinitions {
     return [
       this.AWS,
       this.HETZNER,
+      this.HETZNER_ROBOT,
       this.GOOGLE_CLOUD,
       this.DIGITAL_OCEAN,
       // this.LEASEWEB,
@@ -271,6 +274,8 @@ export class CloudProviderDefinitions {
         return 'Amazon web services'
       case this.HETZNER:
         return 'Hetzner cloud'
+      case this.HETZNER_ROBOT:
+        return 'Hetzner robot'
       case this.LEASEWEB:
         return 'Lease web'
       case this.GOOGLE_CLOUD:
@@ -294,6 +299,8 @@ export class CloudProviderDefinitions {
         return 'Create an IAM user with programmatic access in your AWS console.'
       case this.HETZNER:
         return 'Generate an API token in your Hetzner Cloud console under Security > API Tokens.'
+      case this.HETZNER_ROBOT:
+        return 'Use your Hetzner Robot username and password for dedicated server management.'
       case this.DIGITAL_OCEAN:
         return 'Create a personal access token in your DigitalOcean control panel under API > Tokens.'
       case this.GOOGLE_CLOUD:
@@ -317,6 +324,8 @@ export class CloudProviderDefinitions {
         return 'https://kibaship.com/docs/providers/aws'
       case this.HETZNER:
         return 'https://kibaship.com/docs/providers/hetzner'
+      case this.HETZNER_ROBOT:
+        return 'https://kibaship.com/docs/providers/hetzner-robot'
       case this.DIGITAL_OCEAN:
         return 'https://kibaship.com/docs/providers/digitalocean'
       case this.GOOGLE_CLOUD:
@@ -360,6 +369,23 @@ export class CloudProviderDefinitions {
             label: 'API token',
             type: 'password',
             placeholder: 'Enter your hetzner cloud api token',
+            required: true,
+          },
+        ]
+      case this.HETZNER_ROBOT:
+        return [
+          {
+            name: 'username',
+            label: 'Username',
+            type: 'text',
+            placeholder: 'Enter your hetzner robot username',
+            required: true,
+          },
+          {
+            name: 'password',
+            label: 'Password',
+            type: 'password',
+            placeholder: 'Enter your hetzner robot password',
             required: true,
           },
         ]
@@ -526,6 +552,7 @@ export class CloudProviderDefinitions {
           'Africa': [{ name: 'Africa (Cape Town)', slug: 'af-south-1', flag: '/flags/za.svg' }],
         }
       case this.HETZNER:
+      case this.HETZNER_ROBOT:
         return this.transformHetznerLocationsToRegions()
       case this.DIGITAL_OCEAN:
         return this.transformDigitalOceanRegionsToRegions()
@@ -824,7 +851,7 @@ export class CloudProviderDefinitions {
   }
 
   static implemented(): CloudProviderType[] {
-    return [this.HETZNER, this.DIGITAL_OCEAN]
+    return [this.HETZNER, this.HETZNER_ROBOT, this.DIGITAL_OCEAN]
   }
 
   static flatRegions(type: CloudProviderType): Region[] {

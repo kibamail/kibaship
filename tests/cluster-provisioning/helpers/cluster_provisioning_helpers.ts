@@ -35,147 +35,142 @@ import { Assert } from '@japa/assert'
 export async function createFullyPopulatedDigitalOceanCluster() {
   const trx = await db.transaction()
 
-  try {
-    // Create user and workspace
-    const email = `test_${randomBytes(4).toString('hex')}@example.com`
-    const user = new User()
-    user.email = email
-    user.password = 'testpassword123'
-    user.useTransaction(trx)
-    await user.save()
+  // Create user and workspace
+  const email = `test_${randomBytes(4).toString('hex')}@example.com`
+  const user = new User()
+  user.email = email
+  user.password = 'testpassword123'
+  user.useTransaction(trx)
+  await user.save()
 
-    const [username] = email.split('@')
-    const workspace = new Workspace()
-    workspace.name = `${username}'s Workspace`
-    workspace.slug = username.toLowerCase().replace(/[^a-z0-9]/g, '-')
-    workspace.userId = user.id
-    workspace.useTransaction(trx)
-    await workspace.save()
+  const [username] = email.split('@')
+  const workspace = new Workspace()
+  workspace.name = `${username}'s Workspace`
+  workspace.slug = username.toLowerCase().replace(/[^a-z0-9]/g, '-')
+  workspace.userId = user.id
+  workspace.useTransaction(trx)
+  await workspace.save()
 
-    // Create Digital Ocean cloud provider
-    const cloudProvider = new CloudProvider()
-    cloudProvider.name = 'Test Digital Ocean Provider'
-    cloudProvider.type = 'digital_ocean'
-    cloudProvider.workspaceId = workspace.id
-    cloudProvider.credentials = {
-      token: env.get('DIGITAL_OCEAN_API_TESTING', 'test-do-token-12345'),
-    }
-    cloudProvider.providerImageProvisioningCompletedAt = DateTime.now()
-    cloudProvider.useTransaction(trx)
-    await cloudProvider.save()
+  // Create Digital Ocean cloud provider
+  const cloudProvider = new CloudProvider()
+  cloudProvider.name = 'Test Digital Ocean Provider'
+  cloudProvider.type = 'digital_ocean'
+  cloudProvider.workspaceId = workspace.id
+  cloudProvider.credentials = {
+    token: env.get('DIGITAL_OCEAN_API_TESTING', 'test-do-token-12345'),
+  }
+  cloudProvider.providerImageProvisioningCompletedAt = DateTime.now()
+  cloudProvider.useTransaction(trx)
+  await cloudProvider.save()
 
-    // Create cluster
-    const cluster = new Cluster()
-    cluster.location = 'nyc3'
-    cluster.controlPlaneEndpoint = `https://kube.test-cluster-${randomBytes(4).toString('hex')}.kibaship.com`
-    cluster.subdomainIdentifier = `test-cluster-${randomBytes(4).toString('hex')}.kibaship.com`
-    cluster.kind = 'all_purpose'
-    cluster.workspaceId = workspace.id
-    cluster.cloudProviderId = cloudProvider.id
-    cluster.serverType = 's-2vcpu-2gb'
-    cluster.status = 'provisioning'
-    cluster.talosVersion = configTalosVersion
-    cluster.networkIpRange = '10.0.0.0/16'
-    cluster.subnetIpRange = '10.0.1.0/24'
-    cluster.controlPlanesVolumeSize = 50
-    cluster.workersVolumeSize = 100
-    cluster.useTransaction(trx)
-    await cluster.save()
+  // Create cluster
+  const cluster = new Cluster()
+  cluster.location = 'nyc3'
+  cluster.controlPlaneEndpoint = `https://kube.test-cluster-${randomBytes(4).toString('hex')}.kibaship.com`
+  cluster.subdomainIdentifier = `test-cluster-${randomBytes(4).toString('hex')}.kibaship.com`
+  cluster.kind = 'all_purpose'
+  cluster.workspaceId = workspace.id
+  cluster.cloudProviderId = cloudProvider.id
+  cluster.serverType = 's-2vcpu-2gb'
+  cluster.status = 'provisioning'
+  cluster.talosVersion = configTalosVersion
+  cluster.networkIpRange = '10.0.0.0/16'
+  cluster.subnetIpRange = '10.0.1.0/24'
+  cluster.controlPlanesVolumeSize = 50
+  cluster.workersVolumeSize = 100
+  cluster.useTransaction(trx)
+  await cluster.save()
 
-    // Create SSH key
-    const sshKey = new ClusterSshKey()
-    sshKey.clusterId = cluster.id
-    sshKey.publicKey = 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC7... test-key'
-    sshKey.privateKey =
-      '-----BEGIN OPENSSH PRIVATE KEY-----\ntest-private-key\n-----END OPENSSH PRIVATE KEY-----'
-    sshKey.useTransaction(trx)
-    await sshKey.save()
+  // Create SSH key
+  const sshKey = new ClusterSshKey()
+  sshKey.clusterId = cluster.id
+  sshKey.publicKey = 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC7... test-key'
+  sshKey.privateKey =
+    '-----BEGIN OPENSSH PRIVATE KEY-----\ntest-private-key\n-----END OPENSSH PRIVATE KEY-----'
+  sshKey.useTransaction(trx)
+  await sshKey.save()
 
-    // Create load balancers
-    const kubeLoadBalancer = new ClusterLoadBalancer()
-    kubeLoadBalancer.clusterId = cluster.id
-    kubeLoadBalancer.type = 'cluster'
-    kubeLoadBalancer.publicIpv4Address = '192.168.1.100'
-    kubeLoadBalancer.privateIpv4Address = '10.0.1.100'
-    kubeLoadBalancer.useTransaction(trx)
-    await kubeLoadBalancer.save()
+  // Create load balancers
+  const kubeLoadBalancer = new ClusterLoadBalancer()
+  kubeLoadBalancer.clusterId = cluster.id
+  kubeLoadBalancer.type = 'cluster'
+  kubeLoadBalancer.publicIpv4Address = '192.168.1.100'
+  kubeLoadBalancer.privateIpv4Address = '10.0.1.100'
+  kubeLoadBalancer.useTransaction(trx)
+  await kubeLoadBalancer.save()
 
-    const ingressLoadBalancer = new ClusterLoadBalancer()
-    ingressLoadBalancer.clusterId = cluster.id
-    ingressLoadBalancer.type = 'ingress'
-    ingressLoadBalancer.publicIpv4Address = '192.168.1.101'
-    ingressLoadBalancer.privateIpv4Address = '10.0.1.101'
-    ingressLoadBalancer.useTransaction(trx)
-    await ingressLoadBalancer.save()
+  const ingressLoadBalancer = new ClusterLoadBalancer()
+  ingressLoadBalancer.clusterId = cluster.id
+  ingressLoadBalancer.type = 'ingress'
+  ingressLoadBalancer.publicIpv4Address = '192.168.1.101'
+  ingressLoadBalancer.privateIpv4Address = '10.0.1.101'
+  ingressLoadBalancer.useTransaction(trx)
+  await ingressLoadBalancer.save()
 
-    // Create control plane nodes
-    const controlPlaneNodes = []
-    for (let i = 0; i < 3; i++) {
-      const node = new ClusterNode()
-      node.clusterId = cluster.id
-      node.type = 'master'
-      node.status = 'provisioning'
-      node.serverType = 's-2vcpu-2gb'
-      node.ipv4Address = `192.168.1.${10 + i}`
-      node.privateIpv4Address = `10.0.1.${10 + i}`
-      node.useTransaction(trx)
-      await node.save()
-      controlPlaneNodes.push(node)
+  // Create control plane nodes
+  const controlPlaneNodes = []
+  for (let i = 0; i < 3; i++) {
+    const node = new ClusterNode()
+    node.clusterId = cluster.id
+    node.type = 'master'
+    node.status = 'provisioning'
+    node.serverType = 's-2vcpu-2gb'
+    node.ipv4Address = `192.168.1.${10 + i}`
+    node.privateIpv4Address = `10.0.1.${10 + i}`
+    node.useTransaction(trx)
+    await node.save()
+    controlPlaneNodes.push(node)
 
-      // Create storage for control plane node
-      const storage = new ClusterNodeStorage()
-      storage.clusterNodeId = node.id
-      storage.status = 'provisioning'
-      storage.size = 50
-      storage.useTransaction(trx)
-      await storage.save()
-    }
+    // Create storage for control plane node
+    const storage = new ClusterNodeStorage()
+    storage.clusterNodeId = node.id
+    storage.status = 'provisioning'
+    storage.size = 50
+    storage.useTransaction(trx)
+    await storage.save()
+  }
 
-    // Create worker nodes
-    const workerNodes = []
-    for (let i = 0; i < 3; i++) {
-      const node = new ClusterNode()
-      node.clusterId = cluster.id
-      node.type = 'worker'
-      node.status = 'provisioning'
-      node.serverType = 's-2vcpu-2gb'
-      node.ipv4Address = `192.168.1.${20 + i}`
-      node.privateIpv4Address = `10.0.1.${20 + i}`
-      node.useTransaction(trx)
-      await node.save()
-      workerNodes.push(node)
+  // Create worker nodes
+  const workerNodes = []
+  for (let i = 0; i < 3; i++) {
+    const node = new ClusterNode()
+    node.clusterId = cluster.id
+    node.type = 'worker'
+    node.status = 'provisioning'
+    node.serverType = 's-2vcpu-2gb'
+    node.ipv4Address = `192.168.1.${20 + i}`
+    node.privateIpv4Address = `10.0.1.${20 + i}`
+    node.useTransaction(trx)
+    await node.save()
+    workerNodes.push(node)
 
-      // Create storage for worker node
-      const storage = new ClusterNodeStorage()
-      storage.clusterNodeId = node.id
-      storage.status = 'provisioning'
-      storage.size = 100
-      storage.useTransaction(trx)
-      await storage.save()
-    }
+    // Create storage for worker node
+    const storage = new ClusterNodeStorage()
+    storage.clusterNodeId = node.id
+    storage.status = 'provisioning'
+    storage.size = 100
+    storage.useTransaction(trx)
+    await storage.save()
+  }
 
-    await trx.commit()
+  await trx.commit()
 
-    // Load all relationships
-    await cluster.load('cloudProvider')
-    await cluster.load('nodes', (query) => query.preload('storages'))
-    await cluster.load('sshKey')
-    await cluster.load('loadBalancers')
-    await cluster.load('workspace', (query) => query.preload('user'))
+  // Load all relationships
+  await cluster.load('cloudProvider')
+  await cluster.load('nodes', (query) => query.preload('storages'))
+  await cluster.load('sshKey')
+  await cluster.load('loadBalancers')
+  await cluster.load('workspace', (query) => query.preload('user'))
 
-    return {
-      user,
-      workspace,
-      cloudProvider,
-      cluster,
-      controlPlaneNodes,
-      workerNodes,
-      sshKey,
-      loadBalancers: [kubeLoadBalancer, ingressLoadBalancer],
-    }
-  } catch (error) {
-    await trx.rollback()
-    throw error
+  return {
+    user,
+    workspace,
+    cloudProvider,
+    cluster,
+    controlPlaneNodes,
+    workerNodes,
+    sshKey,
+    loadBalancers: [kubeLoadBalancer, ingressLoadBalancer],
   }
 }
 

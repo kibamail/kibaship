@@ -64,6 +64,7 @@ export interface WorkspaceMembershipProject {
 export type CloudProviderType =
   | 'aws'
   | 'hetzner'
+  | 'hetzner_robot'
   | 'leaseweb'
   | 'google_cloud'
   | 'digital_ocean'

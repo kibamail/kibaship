@@ -17,17 +17,27 @@ export default class ClusterNode extends BaseModel {
   declare type: ClusterNodeType
 
   @column({
-    columnName: 'ipv4_address'
+    columnName: 'ipv4_address',
   })
   declare ipv4Address: string | null
 
   @column({
-    columnName: 'public_ipv4_gateway'
+    columnName: 'public_ipv4_gateway',
   })
   declare publicIpv4Gateway: string | null
 
   @column({
-    columnName: 'ipv6_address'
+    columnName: 'public_network_interface',
+  })
+  declare publicNetworkInterface: string | null
+
+  @column({
+    columnName: 'private_ipv4_gateway',
+  })
+  declare privateIpv4Gateway: string | null
+
+  @column({
+    columnName: 'ipv6_address',
   })
   declare ipv6Address: string | null
 
@@ -38,19 +48,14 @@ export default class ClusterNode extends BaseModel {
   declare serverType: string | null
 
   @column({
-    columnName: 'private_ipv4_address'
+    columnName: 'private_ipv4_address',
   })
   declare privateIpv4Address: string | null
 
   @column({
-    columnName: 'private_network_interface'
+    columnName: 'private_network_interface',
   })
   declare privateNetworkInterface: string | null
-
-  @column({
-    columnName: 'public_network_interface'
-  })
-  declare publicNetworkInterface: string | null
 
   @column()
   declare clusterId: string

@@ -46,6 +46,9 @@ router
     router.get('/:workspace/clusters', [ClustersController, 'index']).as('clusters.index'),
     router.post('/:workspace/clusters', [ClustersController, 'store']).as('clusters.store'),
     router
+      .post('/:workspace/clusters/hetzner-robot', [ClustersController, 'storeHetznerRobotCluster'])
+      .as('clusters.hetzner-robot.store'),
+    router
       .post('/:workspace/clusters/bring-your-own', [ByocController, 'store'])
       .as('clusters.bring-your-own.store'),
     router.get('/:workspace/clusters/:clusterId', [ClustersController, 'show']).as('clusters.show'),
@@ -91,6 +94,8 @@ router
     router.get('/:provider/callback', [SourceProvidersController, 'callback']),
     router.get('/cloud-providers/digital-ocean/redirect', [DigitalOceanController, 'redirect']),
     router.get('/cloud-providers/digital-ocean/callback', [DigitalOceanController, 'callback']),
+    router.get('/cloud-providers/:cloudProvider/servers', [CloudProvidersController, 'servers']),
+    router.get('/cloud-providers/:cloudProvider/vswitches', [CloudProvidersController, 'vswitches']),
     router.delete('/cloud-providers/:cloudProvider', [CloudProvidersController, 'destroy']),
   ])
   .prefix('/connections')

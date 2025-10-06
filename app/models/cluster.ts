@@ -122,6 +122,18 @@ export default class Cluster extends BaseModel {
   @column()
   declare workersVolumeSize: number
 
+  @column()
+  declare vlanId: number | null
+
+  @column()
+  declare vswitchId: number | null
+
+  @column()
+  declare vswitchSubnetIpRange: string | null
+
+  @column()
+  declare robotCloudProviderId: string | null
+
   @column.dateTime()
   declare deletedAt: DateTime | null
 
@@ -245,6 +257,15 @@ export default class Cluster extends BaseModel {
   @column.dateTime()
   declare byocErrorAt: DateTime | null
 
+  @column.dateTime()
+  declare bareMetalNetworkingStartedAt: DateTime | null
+
+  @column.dateTime()
+  declare bareMetalNetworkingCompletedAt: DateTime | null
+
+  @column.dateTime()
+  declare bareMetalNetworkingErrorAt: DateTime | null
+
   @column({
     prepare: (value) => (value ? encryption.encrypt(JSON.stringify(value)) : null),
     consume: (value) => (value ? JSON.parse(encryption.decrypt(value) || '{}') : null),
@@ -367,6 +388,109 @@ export default class Cluster extends BaseModel {
       0, // todo: remove logic for control plane volumes
       data.workers_volume_size
     )
+
+    return cluster
+  }
+
+  public static async createWithHetznerRobotServers(
+    data: {
+      subdomain_identifier: string
+      cloud_provider_id: string
+      robot_cloud_provider_id: string
+      region: string
+      robot_server_numbers: number[]
+      servers: Array<{
+        server_number: number
+        server_ip: string
+        server_name: string
+      }>
+      vlan_id: number | null
+      vswitch_id: number | null
+      vlan_name: string | null
+    },
+    workspaceId: string,
+    trx: TransactionClientContract
+  ): Promise<Cluster> {
+    const cluster = new Cluster()
+    cluster.location = data.region
+    cluster.cloudProviderId = data.cloud_provider_id
+    cluster.robotCloudProviderId = data.robot_cloud_provider_id
+    cluster.workspaceId = workspaceId
+    cluster.status = 'provisioning'
+    cluster.kind = 'all_purpose'
+    cluster.subdomainIdentifier = data.subdomain_identifier
+    cluster.controlPlaneEndpoint = ''
+    cluster.serverType = 'bare-metal'
+    cluster.controlPlanesVolumeSize = 0
+    cluster.workersVolumeSize = 0
+    cluster.talosVersion = talosVersion
+    cluster.vlanId = data.vlan_id
+    cluster.vswitchId = data.vswitch_id
+    const workspace = await Workspace.findOrFail(workspaceId)
+    cluster.networkIpRange = await Cluster.getNextAvailableIpRange(workspace.userId)
+    // For bare metal, we need two subnets within the network /16 range:
+    // 1. vSwitch subnet (x.x.1.0/24) - for server private IPs
+    // 2. Load balancer subnet (x.x.2.0/24) - for the ingress load balancer
+    const networkParts = cluster.networkIpRange.split('/')
+    const networkBase = networkParts[0].split('.')
+    cluster.vswitchSubnetIpRange = `${networkBase[0]}.${networkBase[1]}.1.0/24`
+    cluster.subnetIpRange = `${networkBase[0]}.${networkBase[1]}.2.0/24`
+    cluster.useTransaction(trx)
+
+    await cluster.save()
+
+    await cluster.createSshKey(trx)
+
+    // Create nodes based on server count
+    // If only 3 servers, all are masters
+    // If more than 3, first 3 are masters, rest are workers
+    const totalServers = data.robot_server_numbers.length
+    const masterCount = totalServers === 3 ? 3 : 3
+    const workerCount = totalServers === 3 ? 0 : totalServers - 3
+
+    // Generate private IPs from vSwitch subnet range
+    const vswitchSubnetBase = cluster.vswitchSubnetIpRange!.split('/')[0].split('.')
+    const generatePrivateIp = (index: number) => {
+      // Start at .10, then .20, .30, etc.
+      const lastOctet = (index + 1) * 10
+      return `${vswitchSubnetBase[0]}.${vswitchSubnetBase[1]}.${vswitchSubnetBase[2]}.${lastOctet}`
+    }
+
+    const nodes: ClusterNode[] = []
+
+    // Create master nodes
+    for (let i = 0; i < masterCount; i++) {
+      const server = data.servers.find((s) => s.server_number === data.robot_server_numbers[i])
+      const masterNode = new ClusterNode()
+      masterNode.clusterId = cluster.id
+      masterNode.type = 'master'
+      masterNode.status = 'provisioning'
+      masterNode.serverType = 'bare-metal'
+      masterNode.providerId = data.robot_server_numbers[i].toString()
+      masterNode.ipv4Address = server?.server_ip || null
+      masterNode.privateIpv4Address = generatePrivateIp(i)
+      masterNode.useTransaction(trx)
+      nodes.push(masterNode)
+    }
+
+    // Create worker nodes
+    for (let i = 0; i < workerCount; i++) {
+      const server = data.servers.find(
+        (s) => s.server_number === data.robot_server_numbers[masterCount + i]
+      )
+      const workerNode = new ClusterNode()
+      workerNode.clusterId = cluster.id
+      workerNode.type = 'worker'
+      workerNode.status = 'provisioning'
+      workerNode.serverType = 'bare-metal'
+      workerNode.providerId = data.robot_server_numbers[masterCount + i].toString()
+      workerNode.ipv4Address = server?.server_ip || null
+      workerNode.privateIpv4Address = generatePrivateIp(masterCount + i)
+      workerNode.useTransaction(trx)
+      nodes.push(workerNode)
+    }
+
+    await Promise.all(nodes.map((node) => node.save()))
 
     return cluster
   }
@@ -520,8 +644,51 @@ export default class Cluster extends BaseModel {
     }
   }
 
+  public getBareMetalNetworkingStatus(): ProvisioningStepStatus {
+    if (this.bareMetalNetworkingCompletedAt) return 'ready'
+    if (this.bareMetalNetworkingErrorAt) return 'failed'
+    if (this.bareMetalNetworkingStartedAt) return 'in_progress'
+    return 'pending'
+  }
+
+  public getBareMetalCloudLoadBalancerStatus(): ProvisioningStepStatus {
+    if (this.networkingCompletedAt) return 'ready'
+    if (this.networkingErrorAt) return 'failed'
+    if (this.networkingStartedAt) return 'in_progress'
+    return 'pending'
+  }
+
+  public getBareMetalTalosImageStatus(): ProvisioningStepStatus {
+    if (this.talosImageCompletedAt) return 'ready'
+    if (this.talosImageErrorAt) return 'failed'
+    if (this.talosImageStartedAt) return 'in_progress'
+    return 'pending'
+  }
+
+  public getBareMetalServersBootstrapStatus(): ProvisioningStepStatus {
+    if (this.serversCompletedAt) return 'ready'
+    if (this.serversErrorAt) return 'failed'
+    if (this.serversStartedAt) return 'in_progress'
+    return 'pending'
+  }
+
+  @computed()
+  public get bareMetalProgress() {
+    return {
+      'bare-metal-networking': this.getBareMetalNetworkingStatus(),
+      'bare-metal-cloud-load-balancer': this.getBareMetalCloudLoadBalancerStatus(),
+      'bare-metal-talos-image': this.getBareMetalTalosImageStatus(),
+      'bare-metal-servers-bootstrap': this.getBareMetalServersBootstrapStatus(),
+    }
+  }
+
   @computed()
   public get progress() {
+    // If this is a bare metal cluster, return bare metal specific progress
+    if (this.robotCloudProviderId) {
+      return this.bareMetalProgress
+    }
+
     const stages: TerraformStage[] = [
       'talos-image',
       'network',
@@ -545,6 +712,29 @@ export default class Cluster extends BaseModel {
 
   @computed()
   public get provisioningStatus(): ProvisioningStepStatus {
+    if (this.deletedAt) {
+      return 'deleting'
+    }
+
+    // If this is a bare metal cluster, use bare metal specific status
+    if (this.robotCloudProviderId) {
+      const bareMetalStatuses = Object.values(this.bareMetalProgress)
+
+      if (bareMetalStatuses.some((status) => status === 'failed')) {
+        return 'failed'
+      }
+
+      if (bareMetalStatuses.some((status) => status === 'in_progress')) {
+        return 'in_progress'
+      }
+
+      if (bareMetalStatuses.every((status) => status === 'ready')) {
+        return 'ready'
+      }
+
+      return 'pending'
+    }
+
     let stages: TerraformStage[] = [
       'talos-image',
       'network',
@@ -556,10 +746,6 @@ export default class Cluster extends BaseModel {
       'kubernetes-boot',
       'dns',
     ]
-
-    if (this.deletedAt) {
-      return 'deleting'
-    }
 
     const statuses = stages.map((stage) => this.getStepStatus(stage))
 
@@ -580,6 +766,28 @@ export default class Cluster extends BaseModel {
 
   @computed()
   public get firstFailedStage(): TerraformStage | null {
+    // Handle Hetzner Robot (bare metal) clusters separately
+    if (this.robotCloudProviderId) {
+      if (this.getBareMetalNetworkingStatus() === 'failed') {
+        return 'bare-metal-networking' as TerraformStage
+      }
+
+      if (this.getBareMetalCloudLoadBalancerStatus() === 'failed') {
+        return 'bare-metal-cloud-load-balancer' as TerraformStage
+      }
+
+      if (this.getBareMetalTalosImageStatus() === 'failed') {
+        return 'bare-metal-talos-image' as TerraformStage
+      }
+
+      if (this.getBareMetalServersBootstrapStatus() === 'failed') {
+        return 'bare-metal-servers-bootstrap' as TerraformStage
+      }
+
+      return null
+    }
+
+    // Handle standard cloud provider stages
     const stages: TerraformStage[] = [
       'talos-image',
       'network',

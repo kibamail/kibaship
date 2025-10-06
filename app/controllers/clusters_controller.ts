@@ -2,7 +2,9 @@ import type { HttpContext } from '@adonisjs/core/http'
 import { BaseController } from './Base/base_controller.js'
 import { CloudProviderDefinitions } from '#services/cloud-providers/cloud_provider_definitions'
 import { createClusterValidator } from '#validators/create_cluster'
+import { createHetznerRobotClusterValidator } from '#validators/create_hetzner_robot_cluster'
 import { clusterRestartValidator } from '#validators/cluster_restart'
+import { cache } from '#services/cache/cache'
 import CloudProvider from '#models/cloud_provider'
 import Cluster from '#models/cluster'
 import db from '@adonisjs/lucid/services/db'
@@ -18,6 +20,10 @@ import ProvisionTalosImageJob from '#jobs/clusters/provision_talos_image_job'
 import { TerraformStage } from '#services/terraform/terraform_executor'
 import ProvisionKubernetesConfigJob from '#jobs/clusters/provision_kubernetes_config_job'
 import ProvisionKubernetesBootJob from '#jobs/clusters/provision_kubernetes_boot_job'
+import ProvisionHetznerBareMetalCluster from '#jobs/clusters/provision_hetzner_bare_metal_cluster'
+import ProvisionBareMetalCloudLoadBalancerJob from '#jobs/clusters/provision_bare_metal_cloud_load_balancer_job'
+import ProvisionBareMetalTalosImageJob from '#jobs/clusters/provision_bare_metal_talos_image_job'
+import ProvisionBareMetalServersBootstrapJob from '#jobs/clusters/provision_bare_metal_servers_bootstrap_job'
 import { DateTime } from 'luxon'
 
 export default class ClustersController extends BaseController {
@@ -26,7 +32,10 @@ export default class ClustersController extends BaseController {
 
     const connectedProviders = await CloudProvider.query().where('workspace_id', workspace.id)
 
-    const clusters = await Cluster.query().where('workspace_id', workspace.id).preload('nodes')
+    const clusters = await Cluster.query()
+      .where('workspace_id', workspace.id)
+      .preload('nodes')
+      .preload('cloudProvider')
 
     return {
       ...(await this.pageProps(ctx)),
@@ -75,6 +84,81 @@ export default class ClustersController extends BaseController {
     })
   }
 
+  public async storeHetznerRobotCluster(ctx: HttpContext) {
+    const workspace = await this.workspace(ctx)
+    const payload = await ctx.request.validateUsing(createHetznerRobotClusterValidator)
+
+    const cloudProvider = await CloudProvider.findOrFail(payload.cloud_provider_id)
+
+    const serversCacheKey = `provider:${cloudProvider.id}`
+    const cachedServers = (await cache('hetzner-robot').item(serversCacheKey).read()) as Array<{
+      server_number: number
+      server_ip: string
+      server_name: string
+    }> | null
+
+    if (!cachedServers) {
+      return ctx.response.badRequest({
+        error: 'Server data not found in cache. Please refresh the page.',
+      })
+    }
+
+    const selectedServers = cachedServers.filter((s) =>
+      payload.robot_server_numbers.includes(s.server_number)
+    )
+
+    let vlanId: number | null = null
+    let vswitchId: number | null = null
+    let vlanName: string | null = null
+
+    if (payload.robot_vswitch_id !== 'create_new') {
+      const cacheKey = `vswitches:provider:${cloudProvider.id}`
+      const cachedVswitches = (await cache('hetzner-robot').item(cacheKey).read()) as Array<{
+        id: number
+        name: string
+        vlan: number
+      }> | null
+
+      const vswitch = cachedVswitches?.find((v) => v.id === Number(payload.robot_vswitch_id))
+      if (vswitch) {
+        vlanId = vswitch.vlan
+        vswitchId = vswitch.id
+        vlanName = vswitch.name
+      }
+    }
+
+    const cluster = await db.transaction(async (trx) => {
+      return await Cluster.createWithHetznerRobotServers(
+        {
+          subdomain_identifier: payload.subdomain_identifier,
+          cloud_provider_id: payload.cloud_provider_id,
+          robot_cloud_provider_id: payload.robot_cloud_provider_id,
+          region: payload.region,
+          robot_server_numbers: payload.robot_server_numbers,
+          servers: selectedServers,
+          vlan_id: vlanId,
+          vswitch_id: vswitchId,
+          vlan_name: vlanName,
+        },
+        workspace.id,
+        trx
+      )
+    })
+
+    ctx.session.flash(
+      'success',
+      `Cluster "${cluster.subdomainIdentifier}" has been created and is being provisioned.`
+    )
+
+    queue.dispatch(ProvisionHetznerBareMetalCluster, {
+      clusterId: cluster.id,
+    })
+
+    return ctx.response.redirect().toRoute('clusters.index', {
+      workspace: workspace.slug,
+    })
+  }
+
   public async restart(ctx: HttpContext) {
     const workspace = await this.workspace(ctx)
     const clusterId = ctx.params.clusterId
@@ -87,7 +171,11 @@ export default class ClustersController extends BaseController {
       .firstOrFail()
 
     if (payload.type === 'start') {
-      await queue.dispatch(ProvisionClusterJob, { clusterId })
+      if (cluster.robotCloudProviderId) {
+        await queue.dispatch(ProvisionHetznerBareMetalCluster, { clusterId }, { attempts: 1 })
+      } else {
+        await queue.dispatch(ProvisionClusterJob, { clusterId }, { attempts: 1 })
+      }
 
       return ctx.response.json({
         message: 'Cluster provisioning restarted from beginning',
@@ -103,7 +191,7 @@ export default class ClustersController extends BaseController {
       })
     }
 
-    const job = this.getJobForStage(failedStage)
+    const job = this.getJobForStage(failedStage, cluster)
 
     await queue.dispatch(job, { clusterId })
 
@@ -133,7 +221,24 @@ export default class ClustersController extends BaseController {
     })
   }
 
-  private getJobForStage(stage: TerraformStage) {
+  private getJobForStage(stage: TerraformStage, cluster: Cluster) {
+    // Handle Hetzner Robot (bare metal) stages separately
+    if (cluster.robotCloudProviderId) {
+      switch (stage) {
+        case 'bare-metal-networking':
+          return ProvisionHetznerBareMetalCluster
+        case 'bare-metal-cloud-load-balancer':
+          return ProvisionBareMetalCloudLoadBalancerJob
+        case 'bare-metal-talos-image':
+          return ProvisionBareMetalTalosImageJob
+        case 'bare-metal-servers-bootstrap':
+          return ProvisionBareMetalServersBootstrapJob
+        default:
+          throw new Error(`Unknown Hetzner Robot stage: ${stage}`)
+      }
+    }
+
+    // Handle standard cloud provider stages
     switch (stage) {
       case 'network':
         return ProvisionNetworkJob

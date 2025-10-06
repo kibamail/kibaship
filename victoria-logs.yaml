@@ -1,0 +1,44 @@
+# -- Print chart notes
+printNotes: false
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+  maxUnavailable: 1
+
+server:
+  enabled: true
+  replicaCount: 1
+  priorityClassName: ''
+  retentionPeriod: 12w
+  persistentVolume:
+    enabled: true
+    accessModes:
+      - ReadWriteOnce
+    storageClassName: 'storage-replica-1'
+    size: 100Gi
+
+  securityContext:
+    enabled: true
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
+    readOnlyRootFilesystem: true
+
+  mode: statefulSet
+
+  terminationGracePeriodSeconds: 60
+  vmServiceScrape:
+    enabled: true
+dashboards:
+  enabled: true
+vector:
+  enabled: true
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi

@@ -239,10 +239,6 @@ resource "helm_release" "longhorn" {
       value = false
     },
     {
-      name = "defaultSettings.defaultReplicaCount"
-      value = 1
-    },
-    {
       name = "defaultSettings.replicaAutoBalance"
       value = "strict-local"
     }

@@ -1,15 +1,7 @@
-import { AWSIcon } from '~/Components/Icons/aws.svg'
-import { DigitalOceanIcon } from '~/Components/Icons/digital-ocean.svg'
-import { GoogleCloudIcon } from '~/Components/Icons/google-cloud.svg'
-import { HetznerIcon } from '~/Components/Icons/hetzner.svg'
-import { K8sIcon } from '~/Components/Icons/k8s.svg'
-import { LeaseWebIcon } from '~/Components/Icons/leaseweb.svg'
-import { LinodeIcon } from '~/Components/Icons/linode.svg'
-import { OVHIcon } from '~/Components/Icons/ovh.svg'
-import { VultrIcon } from '~/Components/Icons/vultr.svg'
 import type { CloudProvider, CloudProviderType, PageProps } from '~/types'
 import { CreateBringYourOwnCluster } from './CreateBringYourOwnCluster'
 import { CreateCloudProviderCluster } from './CreateCloudProviderCluster'
+import { CreateHetznerRobotCluster } from './CreateHetznerRobotCluster'
 import { useForm, usePage } from '@inertiajs/react'
 import { Button } from '@kibamail/owly/button'
 import * as Dialog from '@kibamail/owly/dialog'
@@ -17,23 +9,13 @@ import * as Select from '@kibamail/owly/select-field'
 import { Text } from '@kibamail/owly/text'
 import * as TextField from '@kibamail/owly/text-field'
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden'
+import { K8sIcon } from '~/Components/Icons/k8s.svg'
+import { providerIcons } from '~/lib/providerIcons'
 
 interface CreateClusterModalProps {
   isOpen: boolean
   provider?: CloudProviderType
   onOpenChange: (open: boolean) => void
-}
-
-const providerIcons: Record<CloudProviderType, React.ComponentType<{ className?: string }>> = {
-  aws: AWSIcon,
-  hetzner: HetznerIcon,
-  leaseweb: LeaseWebIcon,
-  google_cloud: GoogleCloudIcon,
-  digital_ocean: DigitalOceanIcon,
-  linode: LinodeIcon,
-  vultr: VultrIcon,
-  ovh: OVHIcon,
-  byoc: K8sIcon,
 }
 
 export function CreateClusterDialog({ isOpen, onOpenChange }: CreateClusterModalProps) {
@@ -53,6 +35,8 @@ export function CreateClusterDialog({ isOpen, onOpenChange }: CreateClusterModal
     server_type: '',
     control_planes_volume_size: 0,
     workers_volume_size: 20,
+    robot_server_numbers: [] as number[],
+    robot_cloud_provider_id: '',
   })
 
   function onCloudProviderChange(providerId: string) {
@@ -77,7 +61,15 @@ export function CreateClusterDialog({ isOpen, onOpenChange }: CreateClusterModal
 
   function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    post(`/w/${workspace.slug}/clusters`, {
+
+    const selectedProvider = connectedProviders.find((p) => p.id === data.cloud_provider_id)
+    const isHetznerRobot = selectedProvider?.type === 'hetzner_robot'
+
+    const endpoint = isHetznerRobot
+      ? `/w/${workspace.slug}/clusters/hetzner-robot`
+      : `/w/${workspace.slug}/clusters`
+
+    post(endpoint, {
       onSuccess: () => {
         reset()
         onOpenChange(false)
@@ -133,7 +125,7 @@ export function CreateClusterDialog({ isOpen, onOpenChange }: CreateClusterModal
               onValueChange={onCloudProviderChange}
               disabled={connectedProviders.length === 0}
             >
-              <Select.Label>Cloud Provider</Select.Label>
+              <Select.Label>Cloud provider</Select.Label>
               <Select.Trigger
                 placeholder={
                   connectedProviders.length === 0
@@ -173,6 +165,14 @@ export function CreateClusterDialog({ isOpen, onOpenChange }: CreateClusterModal
                 onOpenChange(false)
               }}
             />
+          ) : connectedProviders.find((p) => p.id === data.cloud_provider_id)?.type ===
+            'hetzner_robot' ? (
+            <CreateHetznerRobotCluster
+              data={data}
+              setData={setData}
+              errors={errors}
+              connectedProviders={connectedProviders}
+            />
           ) : (
             <CreateCloudProviderCluster
               data={data}
@@ -186,7 +186,16 @@ export function CreateClusterDialog({ isOpen, onOpenChange }: CreateClusterModal
             <Dialog.Close asChild disabled={processing}>
               <Button variant="secondary">Cancel</Button>
             </Dialog.Close>
-            <Button type="submit" loading={processing}>
+            <Button
+              type="submit"
+              loading={processing}
+              disabled={
+                processing ||
+                (connectedProviders.find((p) => p.id === data.cloud_provider_id)?.type ===
+                  'hetzner_robot' &&
+                  (!data.robot_server_numbers || data.robot_server_numbers.length < 3))
+              }
+            >
               Create Cluster
             </Button>
           </Dialog.Footer>

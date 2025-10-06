@@ -11,6 +11,7 @@ import { Button } from '@kibamail/owly'
 import { ClusterCard } from '~/Components/Clusters/ClusterCard'
 import { ConfirmDeletionModal } from '~/Components/ConfirmDeletionModal'
 import { ClusterProvisioningDialog } from '~/Components/Clusters/ClusterProvisioningDialog'
+import { ClusterHetznerRobotProvisioningDialog } from '~/Components/Clusters/ClusterHetznerRobotProvisioningDialog'
 
 export default function Clusters() {
   const { props } = usePage<PageProps>()
@@ -83,9 +84,16 @@ export default function Clusters() {
           </div>
         </>
       )}
+      <ClusterHetznerRobotProvisioningDialog
+        cluster={selectedCluster}
+        isOpen={!!selectedCluster && selectedCluster?.cloudProvider?.type === 'hetzner_robot'}
+        onClusterUpdated={onClusterUpdated}
+        onOpenChange={() => setSelectedCluster(null)}
+      />
+
       <ClusterProvisioningDialog
         cluster={selectedCluster}
-        isOpen={!!selectedCluster}
+        isOpen={!!selectedCluster && selectedCluster?.cloudProvider?.type !== 'hetzner_robot'}
         onClusterUpdated={onClusterUpdated}
         onOpenChange={() => setSelectedCluster(null)}
       />

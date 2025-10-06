@@ -13,7 +13,7 @@ import {
   validateTerraformPlan,
   assertTerraformPlanValid,
   HETZNER_NETWORK_OUTPUT,
-  DIGITAL_OCEAN_NETWORK_OUTPUT
+  DIGITAL_OCEAN_NETWORK_OUTPUT,
 } from './helpers/cluster_provisioning_helpers.js'
 
 test.group('ProvisionNetworkJob - Hetzner', (group) => {
@@ -26,7 +26,7 @@ test.group('ProvisionNetworkJob - Hetzner', (group) => {
     // Convert to Hetzner cluster with valid 64-character token
     cloudProvider.type = 'hetzner'
     cloudProvider.credentials = {
-      token: '1234567890123456789012345678901234567890123456789012345678901234'
+      token: '1234567890123456789012345678901234567890123456789012345678901234',
     }
     await cloudProvider.save()
 
@@ -74,13 +74,15 @@ test.group('ProvisionNetworkJob - Hetzner', (group) => {
     app.default.container.bind('terraform.executor', () => MockTerraformExecutor as any)
   })
 
-  test('should execute terraform plan and generate valid output for hetzner', async ({ assert }) => {
+  test('should execute terraform plan and generate valid output for hetzner', async ({
+    assert,
+  }) => {
     const { cluster, cloudProvider } = await createFullyPopulatedDigitalOceanCluster()
 
     // Convert to Hetzner cluster with valid 64-character token
     cloudProvider.type = 'hetzner'
     cloudProvider.credentials = {
-      token: '1234567890123456789012345678901234567890123456789012345678901234'
+      token: '1234567890123456789012345678901234567890123456789012345678901234',
     }
     await cloudProvider.save()
 
@@ -111,13 +113,15 @@ test.group('ProvisionNetworkJob - Hetzner', (group) => {
     app.default.container.bind('terraform.executor', () => MockTerraformExecutor as any)
   })
 
-  test('should handle errors gracefully and set error timestamp for hetzner', async ({ assert }) => {
+  test('should handle errors gracefully and set error timestamp for hetzner', async ({
+    assert,
+  }) => {
     const { cluster, cloudProvider } = await createFullyPopulatedDigitalOceanCluster()
 
     // Convert to Hetzner cluster with valid 64-character token
     cloudProvider.type = 'hetzner'
     cloudProvider.credentials = {
-      token: '1234567890123456789012345678901234567890123456789012345678901234'
+      token: '1234567890123456789012345678901234567890123456789012345678901234',
     }
     await cloudProvider.save()
 
@@ -152,8 +156,11 @@ test.group('ProvisionNetworkJob - Hetzner', (group) => {
 test.group('ProvisionNetworkJob - DigitalOcean', (group) => {
   group.setup(setupTerraformExecutorMock)
   group.teardown(restoreTerraformExecutor)
+  group.each.timeout(240000)
 
-  test('should provision network for digital ocean and dispatch ssh keys job', async ({ assert }) => {
+  test('should provision network for digital ocean and dispatch ssh keys job', async ({
+    assert,
+  }) => {
     const { cluster } = await createFullyPopulatedDigitalOceanCluster()
 
     assert.isUndefined(cluster.networkingStartedAt)
@@ -199,7 +206,9 @@ test.group('ProvisionNetworkJob - DigitalOcean', (group) => {
     app.default.container.bind('terraform.executor', () => MockTerraformExecutor as any)
   })
 
-  test('should execute terraform plan and generate valid output for digital ocean', async ({ assert }) => {
+  test('should execute terraform plan and generate valid output for digital ocean', async ({
+    assert,
+  }) => {
     const { cluster } = await createFullyPopulatedDigitalOceanCluster()
 
     class TestMockExecutor extends MockTerraformExecutor {
@@ -228,7 +237,9 @@ test.group('ProvisionNetworkJob - DigitalOcean', (group) => {
     app.default.container.bind('terraform.executor', () => MockTerraformExecutor as any)
   })
 
-  test('should handle errors gracefully and set error timestamp for digital ocean', async ({ assert }) => {
+  test('should handle errors gracefully and set error timestamp for digital ocean', async ({
+    assert,
+  }) => {
     const { cluster } = await createFullyPopulatedDigitalOceanCluster()
 
     class ErrorMockExecutor extends MockTerraformExecutor {

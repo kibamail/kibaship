@@ -7,33 +7,13 @@ import { Text } from '@kibamail/owly/text'
 import * as TextField from '@kibamail/owly/text-field'
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden'
 import { type FormEventHandler, useEffect, useState } from 'react'
-
-import { AWSIcon } from '~/Components/Icons/aws.svg'
 import { DigitalOceanIcon } from '~/Components/Icons/digital-ocean.svg'
-import { GoogleCloudIcon } from '~/Components/Icons/google-cloud.svg'
-import { HetznerIcon } from '~/Components/Icons/hetzner.svg'
-import { LeaseWebIcon } from '~/Components/Icons/leaseweb.svg'
-import { LinodeIcon } from '~/Components/Icons/linode.svg'
-import { OVHIcon } from '~/Components/Icons/ovh.svg'
-import { VultrIcon } from '~/Components/Icons/vultr.svg'
-import { K8sIcon } from '../Icons/k8s.svg'
+import { providerIcons } from '~/lib/providerIcons'
 
 interface CreateCloudProviderDialogProps {
   isOpen: boolean
   onOpenChange: (open: boolean) => void
   preselectedProviderType?: CloudProviderType
-}
-
-const providerIcons: Record<CloudProviderType, React.ComponentType<{ className?: string }>> = {
-  aws: AWSIcon,
-  hetzner: HetznerIcon,
-  leaseweb: LeaseWebIcon,
-  google_cloud: GoogleCloudIcon,
-  digital_ocean: DigitalOceanIcon,
-  linode: LinodeIcon,
-  vultr: VultrIcon,
-  ovh: OVHIcon,
-  byoc: K8sIcon
 }
 
 export function CreateCloudProviderDialog({

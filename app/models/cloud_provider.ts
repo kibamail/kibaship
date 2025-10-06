@@ -21,6 +21,7 @@ export default class CloudProvider extends BaseModel {
     | 'vultr'
     | 'ovh'
     | 'byoc'
+    | 'hetzner_robot'
 
   @column()
   declare workspaceId: string
@@ -60,6 +61,10 @@ export default class CloudProvider extends BaseModel {
     application_key: string
     application_secret: string
     consumer_key: string
+
+    // hetzner robot
+    username: string
+    password: string
   }>
 
   @column.dateTime({ autoCreate: true })
