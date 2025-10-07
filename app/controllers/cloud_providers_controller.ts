@@ -71,6 +71,12 @@ export default class CloudProvidersController extends BaseController {
     }
 
     const cacheKey = `provider:${cloudProvider.id}`
+    const clearCache = ctx.request.input('clearCache') === 'true'
+
+    if (clearCache) {
+      await cache('hetzner-robot').item(cacheKey).delete()
+    }
+
     const cachedServers = await cache('hetzner-robot').item(cacheKey).read()
 
     if (cachedServers) {
@@ -104,6 +110,12 @@ export default class CloudProvidersController extends BaseController {
     }
 
     const cacheKey = `vswitches:provider:${cloudProvider.id}`
+    const clearCache = ctx.request.input('clearCache') === 'true'
+
+    if (clearCache) {
+      await cache('hetzner-robot').item(cacheKey).delete()
+    }
+
     const cachedVswitches = await cache('hetzner-robot').item(cacheKey).read()
 
     if (cachedVswitches) {

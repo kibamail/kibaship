@@ -88,6 +88,7 @@ export interface TalosNetworkDetection {
     name: string
     gateway: string
     ipAddress: string
+    addressSubnet: string
   } | null
 }
 
@@ -167,14 +168,14 @@ export class TalosBareMetalNetworkDetectionService {
   }
 
   /**
-   * Find the public interface name and gateway
+   * Find the public interface name, gateway, and address subnet
    */
   private findPublicInterface(
     links: TalosLinkStatus[],
     addresses: TalosAddressStatus[],
     routes: TalosRouteStatus[],
     nodeIp: string
-  ): { name: string; gateway: string; ipAddress: string } | null {
+  ): { name: string; gateway: string; ipAddress: string; addressSubnet: string } | null {
     // Find the default route (empty dst = 0.0.0.0/0)
     const defaultRoute = routes.find(
       (route) =>
@@ -208,13 +209,14 @@ export class TalosBareMetalNetworkDetectionService {
     }
 
     logger.info(
-      `Detected public interface for ${nodeIp}: ${publicInterfaceName}, gateway: ${gateway}`
+      `Detected public interface for ${nodeIp}: ${publicInterfaceName}, gateway: ${gateway}, subnet: ${publicAddress.spec.address}`
     )
 
     return {
       name: publicInterfaceName,
       gateway,
       ipAddress: publicAddress.spec.address,
+      addressSubnet: publicAddress.spec.address, // Full address with CIDR (e.g., "65.109.58.113/26")
     }
   }
 }

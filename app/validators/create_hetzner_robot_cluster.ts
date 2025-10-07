@@ -164,6 +164,6 @@ export const createHetznerRobotClusterValidator = vine.compile(
     robot_cloud_provider_id: vine.string().uuid().use(robotCloudProviderRule()),
     region: vine.string().trim().minLength(1).maxLength(255),
     robot_server_numbers: vine.array(vine.number()).use(robotServerNumbersRule()),
-    robot_vswitch_id: vine.number().use(robotVSwitchIdRule()),
+    robot_vswitch_id: vine.number().use(robotVSwitchIdRule()).optional(),
   })
 )

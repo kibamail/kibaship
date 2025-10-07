@@ -2,10 +2,13 @@ import type { CloudProvider } from '~/types'
 import * as MultiSelect from '@kibamail/owly/multi-select'
 import * as Select from '@kibamail/owly/select-field'
 import { Text } from '@kibamail/owly/text'
-import { useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import Spinner from '~/Components/Icons/Spinner'
+import Refresh from '~/Components/Icons/Refresh'
 import { RegionSelector } from '~/Components/CloudProviders/RegionSelector'
 import { InputError, InputHint } from '@kibamail/owly/input-hint'
+import { Button } from '@kibamail/owly/button'
+import { useState } from 'react'
 
 interface HetznerRobotServer {
   server_ip: string
@@ -49,41 +52,53 @@ export function CreateHetznerRobotCluster({
   errors,
   connectedProviders,
 }: CreateHetznerRobotClusterProps) {
-  const [servers, setServers] = useState<HetznerRobotServer[]>([])
-  const [vswitches, setVswitches] = useState<HetznerRobotVSwitch[]>([])
-  const [loadingServers, setLoadingServers] = useState(false)
-  const [loadingVswitches, setLoadingVswitches] = useState(false)
-
+  const [cache, setCache] = useState({
+    servers: false,
+    vswitches: false,
+  })
   const selectedProvider = connectedProviders.find((p) => p.id === data.cloud_provider_id)
 
-  useEffect(() => {
-    if (selectedProvider && selectedProvider.type === 'hetzner_robot') {
-      setLoadingServers(true)
-      setLoadingVswitches(true)
+  const {
+    data: servers = [],
+    isLoading: loadingServers,
+    refetch: refetchServers,
+  } = useQuery<HetznerRobotServer[]>({
+    queryKey: ['hetzner-robot-servers', selectedProvider?.id, cache],
+    queryFn: async () => {
+      if (!selectedProvider || selectedProvider.type !== 'hetzner_robot') {
+        return []
+      }
+      const response = await fetch(
+        `/connections/cloud-providers/${selectedProvider.id}/servers?clearCache=${cache.servers}`
+      )
+      if (!response.ok) {
+        throw new Error('Failed to fetch servers')
+      }
+      return response.json()
+    },
+    enabled: !!selectedProvider && selectedProvider.type === 'hetzner_robot',
+  })
 
-      fetch(`/connections/cloud-providers/${selectedProvider.id}/servers`)
-        .then((response) => response.json())
-        .then((data) => {
-          setServers(data)
-          setLoadingServers(false)
-        })
-        .catch((error) => {
-          console.error('Failed to fetch servers:', error)
-          setLoadingServers(false)
-        })
-
-      fetch(`/connections/cloud-providers/${selectedProvider.id}/vswitches`)
-        .then((response) => response.json())
-        .then((data) => {
-          setVswitches(data)
-          setLoadingVswitches(false)
-        })
-        .catch((error) => {
-          console.error('Failed to fetch vswitches:', error)
-          setLoadingVswitches(false)
-        })
-    }
-  }, [selectedProvider])
+  const {
+    data: vswitches = [],
+    isLoading: loadingVswitches,
+    refetch: refetchVswitches,
+  } = useQuery<HetznerRobotVSwitch[]>({
+    queryKey: ['hetzner-robot-vswitches', selectedProvider?.id, cache],
+    queryFn: async () => {
+      if (!selectedProvider || selectedProvider.type !== 'hetzner_robot') {
+        return []
+      }
+      const response = await fetch(
+        `/connections/cloud-providers/${selectedProvider.id}/vswitches?clearCache=${cache.vswitches}`
+      )
+      if (!response.ok) {
+        throw new Error('Failed to fetch vswitches')
+      }
+      return response.json()
+    },
+    enabled: !!selectedProvider && selectedProvider.type === 'hetzner_robot',
+  })
 
   const handleServerChange = (values: string[]) => {
     setData(
@@ -94,7 +109,7 @@ export function CreateHetznerRobotCluster({
 
   const handleVSwitchChange = (value: string) => {
     if (value === 'create_new') {
-      setData('robot_vswitch_id', 'create_new')
+      setData('robot_vswitch_id', undefined)
     } else {
       setData('robot_vswitch_id', parseInt(value, 10))
     }
@@ -161,7 +176,20 @@ export function CreateHetznerRobotCluster({
         onValueChange={handleServerChange}
         disabled={loadingServers}
       >
-        <MultiSelect.Label>Dedicated servers</MultiSelect.Label>
+        <div className="flex items-center justify-between">
+          <MultiSelect.Label>Dedicated servers</MultiSelect.Label>
+
+          <Button
+            type="button"
+            variant="tertiary"
+            size="sm"
+            onClick={() => setCache((current) => ({ ...current, servers: true }))}
+            disabled={loadingServers}
+            className="h-7 px-2"
+          >
+            <Refresh className={`w-4 h-4 ${loadingServers ? 'animate-spin' : ''}`} />
+          </Button>
+        </div>
         <MultiSelect.Trigger
           placeholder={loadingServers ? 'Loading servers...' : 'Select servers'}
         />
@@ -243,7 +271,19 @@ export function CreateHetznerRobotCluster({
         onValueChange={handleVSwitchChange}
         disabled={loadingVswitches}
       >
-        <Select.Label>Vswitch</Select.Label>
+        <div className="flex items-center justify-between">
+          <Select.Label>Vswitch</Select.Label>
+          <Button
+            type="button"
+            variant="tertiary"
+            size="sm"
+            onClick={() => setCache((current) => ({ ...current, vswitches: true }))}
+            disabled={loadingVswitches}
+            className="h-7 px-2"
+          >
+            <Refresh className={`w-4 h-4 ${loadingVswitches ? 'animate-spin' : ''}`} />
+          </Button>
+        </div>
         <Select.Trigger
           placeholder={loadingVswitches ? 'Loading vSwitches...' : 'Select a vSwitch'}
         />

@@ -18,7 +18,7 @@ export function toFormUrlEncoded<T extends Record<string, string | number | stri
   for (const [key, value] of Object.entries(data)) {
     if (value !== undefined && value !== null) {
       if (Array.isArray(value)) {
-        value.forEach((v) => params.append(key, String(v)))
+        value.forEach((v) => params.append(`${key}[]`, String(v)))
         continue
       }
 

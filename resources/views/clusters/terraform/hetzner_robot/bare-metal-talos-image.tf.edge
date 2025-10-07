@@ -1,0 +1,321 @@
+terraform {
+  required_providers {
+    talos = {
+      source = "siderolabs/talos"
+      version = "0.9.0"
+    }
+  }
+
+  backend "s3" {
+    bucket = "{{ s3_bucket }}"
+    key    = "clusters/{{ cluster_id }}/bare-metal-talos-bootstrap/terraform.tfstate"
+    region = "{{ s3_region }}"
+    encrypt = true
+  }
+}
+
+variable "cluster_name" {
+  description = "Name of the cluster"
+  type        = string
+}
+
+variable "cluster_endpoint" {
+  description = "Kubernetes API endpoint URL"
+  type        = string
+}
+
+variable "vlan_id" {
+  description = "VLAN ID for private network"
+  type        = number
+}
+
+variable "vswitch_subnet_ip_range" {
+  description = "vSwitch subnet IP range (e.g., 10.0.1.0/24)"
+  type        = string
+}
+
+variable "cluster_network_ip_range" {
+  description = "Cluster network IP range (e.g., 10.0.0.0/16)"
+  type        = string
+}
+
+# Talos machine secrets for cluster bootstrapping
+resource "talos_machine_secrets" "machine_secrets" {}
+
+locals {
+  # Base cluster configuration shared by all nodes
+  cluster_config = {
+    network = {
+      cni = {
+        name = "none"
+      }
+    }
+    proxy = {
+      disabled = true
+    }
+  }
+
+  # Control plane specific cluster configuration
+  control_plane_cluster_config = merge(local.cluster_config, {
+    allowSchedulingOnControlPlanes = true
+    apiServer = {
+      admissionControl = [
+        {
+          name = "PodSecurity"
+          configuration = {
+            apiVersion = "pod-security.admission.config.k8s.io/v1beta1"
+            kind = "PodSecurityConfiguration"
+            exemptions = {
+              namespaces = [
+                "longhorn-system"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  })
+
+  worker_machine_config = {
+    machine = {
+      nodeLabels = {
+        "ingress.kibaship.com/ready" = "true"
+      }
+      features = {
+        hostDNS = {
+          enabled = true
+          forwardKubeDNSToHost = false
+        }
+      }
+    }
+  }
+}
+
+# Generate control plane machine configurations with VLAN networking
+@each((node, index) in control_planes)
+  data "talos_machine_configuration" "machineconfig_cp_{{ node.slug }}" {
+  cluster_name     = var.cluster_name
+  cluster_endpoint = var.cluster_endpoint
+  machine_type     = "controlplane"
+  machine_secrets  = talos_machine_secrets.machine_secrets.machine_secrets
+
+  config_patches = [
+    yamlencode({
+      cluster = local.control_plane_cluster_config
+    }),
+    yamlencode({
+      machine = {
+        kubelet = {
+          nodeIP = {
+            validSubnets = [
+              var.vswitch_subnet_ip_range
+            ]
+          }
+        }
+        network = {
+          hostname = "cp-{{ index }}"
+          interfaces = [
+            {
+              interface = "{{ node.public_network_interface }}"
+              addresses = [
+                "{{ node.public_address_subnet }}"
+              ]
+              routes = [
+                {
+                  network = "0.0.0.0/0"
+                  gateway = "{{ node.public_ipv4_gateway }}"
+                }
+              ]
+              vlans = [
+                {
+                  vlanId = var.vlan_id
+                  addresses = [
+                    "{{ node.private_address_subnet }}"
+                  ]
+                  mtu = 1400
+                  routes = [
+                    {
+                      network = var.cluster_network_ip_range
+                      gateway = "{{ node.private_ipv4_gateway }}"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    })
+  ]
+}
+@end
+
+# Generate worker machine configurations with VLAN networking
+@each((node, index) in workers)
+  data "talos_machine_configuration" "machineconfig_worker_{{ node.slug }}" {
+  cluster_name     = var.cluster_name
+  cluster_endpoint = var.cluster_endpoint
+  machine_type     = "worker"
+  machine_secrets  = talos_machine_secrets.machine_secrets.machine_secrets
+
+  config_patches = [
+    yamlencode(merge(
+      {
+        cluster = local.cluster_config
+      },
+      local.worker_machine_config
+    )),
+    yamlencode({
+      machine = {
+        kubelet = {
+          nodeIP = {
+            validSubnets = [
+              var.vswitch_subnet_ip_range
+            ]
+          }
+        }
+        network = {
+          hostname = "worker-{{ index }}"
+          interfaces = [
+            {
+              interface = "{{ node.public_network_interface }}"
+              addresses = [
+                "{{ node.public_address_subnet }}"
+              ]
+              routes = [
+                {
+                  network = "0.0.0.0/0"
+                  gateway = "{{ node.public_ipv4_gateway }}"
+                }
+              ]
+              vlans = [
+                {
+                  vlanId = var.vlan_id
+                  addresses = [
+                    "{{ node.private_address_subnet }}"
+                  ]
+                  mtu = 1400
+                  routes = [
+                    {
+                      network = var.cluster_network_ip_range
+                      gateway = "{{ node.private_ipv4_gateway }}"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    })
+  ]
+}
+@end
+
+# Apply machine configurations to control plane nodes
+@each((node, index) in control_planes)
+  resource "talos_machine_configuration_apply" "control_plane_{{ node.slug }}" {
+  client_configuration        = talos_machine_secrets.machine_secrets.client_configuration
+  machine_configuration_input = data.talos_machine_configuration.machineconfig_cp_{{ node.slug }}.machine_configuration
+  node                        = "{{ node.ipv4_address }}"
+  config_patches = [
+    yamlencode({
+      machine = {
+        install = {
+          disk = "{{ node.installation_disk }}"
+          wipe = true
+        }
+      }
+    })
+  ]
+}
+@end
+
+# Apply machine configurations to worker nodes
+@each((node, index) in workers)
+  resource "talos_machine_configuration_apply" "worker_{{ node.slug }}" {
+  client_configuration        = talos_machine_secrets.machine_secrets.client_configuration
+  machine_configuration_input = data.talos_machine_configuration.machineconfig_worker_{{ node.slug }}.machine_configuration
+  node                        = "{{ node.ipv4_address }}"
+  config_patches = [
+    yamlencode({
+      machine = {
+        install = {
+          disk = "{{ node.installation_disk }}"
+          wipe = true
+        }
+      }
+    })
+  ]
+}
+@end
+
+# Bootstrap the cluster on the first control plane node
+resource "talos_machine_bootstrap" "this" {
+  depends_on = [
+@each((node, index) in control_planes)
+  talos_machine_configuration_apply.control_plane_{{ node.slug }}{{ index === control_planes.length - 1 ? '' : ',' }}
+@end
+@if(workers && workers.length > 0)
+  ,
+  @each((node, index) in workers)
+    talos_machine_configuration_apply.worker_{{ node.slug }}{{ index === workers.length - 1 ? '' : ',' }}
+  @end
+@endif
+]
+  node                 = "{{ control_planes[0].ipv4_address }}"
+  client_configuration = talos_machine_secrets.machine_secrets.client_configuration
+}
+
+# Generate kubeconfig after cluster bootstrap
+resource "talos_cluster_kubeconfig" "this" {
+  depends_on = [
+    talos_machine_bootstrap.this
+  ]
+  client_configuration = talos_machine_secrets.machine_secrets.client_configuration
+  node                 = "{{ control_planes[0].ipv4_address }}"
+}
+
+# Generate Talos client configuration
+data "talos_client_configuration" "talosconfig" {
+  cluster_name         = var.cluster_name
+  client_configuration = talos_machine_secrets.machine_secrets.client_configuration
+  endpoints            = [
+@each((node, index) in control_planes)
+  "{{ node.ipv4_address }}"{{ index === control_planes.length - 1 ? '' : ',' }}
+@end
+]
+}
+
+# Talos Configuration Outputs
+output "talos_config" {
+  description = "Talos client configuration for managing the cluster"
+  value       = talos_machine_secrets.machine_secrets.client_configuration
+  sensitive   = true
+}
+
+output "control_plane_machine_configurations" {
+  description = "Map of control plane machine configurations keyed by node slug"
+  value = {
+@each((node, index) in control_planes)
+    "{{ node.slug }}" = data.talos_machine_configuration.machineconfig_cp_{{ node.slug }}.machine_configuration{{ index === control_planes.length - 1 ? '' : ',' }}
+@end
+  }
+  sensitive = true
+}
+
+output "worker_machine_configurations" {
+  description = "Map of worker machine configurations keyed by node slug"
+  value = {
+@each((node, index) in workers)
+    "{{ node.slug }}" = data.talos_machine_configuration.machineconfig_worker_{{ node.slug }}.machine_configuration{{ index === workers.length - 1 ? '' : ',' }}
+@end
+  }
+  sensitive = true
+}
+
+output "kubeconfig" {
+  description = "Kubeconfig for accessing the Kubernetes cluster"
+  value       = talos_cluster_kubeconfig.this.kubeconfig_raw
+  sensitive   = true
+}

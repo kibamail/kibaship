@@ -49,6 +49,7 @@ provider "hcloud" {
 resource "hcloud_network" "cluster_network" {
   name     = "${var.cluster_name}-network"
   ip_range = "{{ cluster_network_ip_range }}"
+  expose_routes_to_vswitch = true
   labels = {
     cluster    = var.cluster_name
     managed_by = "kibaship"
@@ -74,7 +75,7 @@ resource "hcloud_network_subnet" "load_balancer_subnet" {
 
 # Create ingress load balancer
 resource "hcloud_load_balancer" "ingress" {
-  name               = "${var.cluster_name}-ingress"
+  name               = "ingress.${var.cluster_name}"
   load_balancer_type = "lb11"
   location           = var.location
 
@@ -130,7 +131,7 @@ resource "hcloud_load_balancer_service" "ingress_https" {
   }
 }
 
-# Add each node as a target to the load balancer
+# Add each node as a target to the ingress load balancer
 @each(node in nodes)
   resource "hcloud_load_balancer_target" "node_{{ node.slug }}" {
   type             = "ip"
@@ -138,6 +139,57 @@ resource "hcloud_load_balancer_service" "ingress_https" {
   ip               = "{{ node.private_ipv4_address }}"
 
   depends_on = [hcloud_load_balancer_network.ingress_network]
+}
+@end
+
+# Create Kubernetes API load balancer
+resource "hcloud_load_balancer" "kube" {
+  name               = "kube.${var.cluster_name}"
+  load_balancer_type = "lb11"
+  location           = var.location
+
+  labels = {
+    cluster    = var.cluster_name
+    managed_by = "kibaship"
+    type       = "kubernetes-api"
+  }
+}
+
+# Attach Kubernetes API load balancer to network
+resource "hcloud_load_balancer_network" "kube_network" {
+  load_balancer_id = hcloud_load_balancer.kube.id
+  network_id       = hcloud_network.cluster_network.id
+
+  depends_on = [
+    hcloud_network_subnet.vswitch_subnet,
+    hcloud_network_subnet.load_balancer_subnet
+  ]
+}
+
+# Kubernetes API service (port 6443)
+resource "hcloud_load_balancer_service" "kube_api" {
+  load_balancer_id = hcloud_load_balancer.kube.id
+  protocol         = "tcp"
+  listen_port      = 6443
+  destination_port = 6443
+
+  health_check {
+    protocol = "tcp"
+    port     = 50000
+    interval = 15
+    timeout  = 10
+    retries  = 3
+  }
+}
+
+# Add control plane nodes as targets to the Kubernetes API load balancer
+@each(node in control_planes)
+  resource "hcloud_load_balancer_target" "kube_cp_{{ node.slug }}" {
+  type             = "ip"
+  load_balancer_id = hcloud_load_balancer.kube.id
+  ip               = "{{ node.private_ipv4_address }}"
+
+  depends_on = [hcloud_load_balancer_network.kube_network]
 }
 @end
 
@@ -184,4 +236,29 @@ output "ingress_load_balancer_public_ip" {
 output "ingress_load_balancer_public_ipv6" {
   description = "Public IPv6 of the ingress load balancer"
   value       = hcloud_load_balancer.ingress.ipv6
+}
+
+output "ingress_load_balancer_private_ip" {
+  description = "Private IPv4 of the ingress load balancer"
+  value       = hcloud_load_balancer_network.ingress_network.ip
+}
+
+output "kube_load_balancer_id" {
+  description = "ID of the Kubernetes API load balancer"
+  value       = hcloud_load_balancer.kube.id
+}
+
+output "kube_load_balancer_name" {
+  description = "Name of the Kubernetes API load balancer"
+  value       = hcloud_load_balancer.kube.name
+}
+
+output "kube_load_balancer_public_ip" {
+  description = "Public IPv4 of the Kubernetes API load balancer"
+  value       = hcloud_load_balancer.kube.ipv4
+}
+
+output "kube_load_balancer_private_ip" {
+  description = "Private IPv4 of the Kubernetes API load balancer"
+  value       = hcloud_load_balancer_network.kube_network.ip
 }

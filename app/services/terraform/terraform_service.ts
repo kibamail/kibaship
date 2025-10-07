@@ -20,6 +20,7 @@ export enum TerraformTemplate {
   KUBERNETES_BYOC = 'kubernetes-byoc.tf',
   HETZNER_ROBOT_NETWORKING = 'hetzner_robot/networking.tf',
   BARE_METAL_DISK_DISCOVERY = 'hetzner_robot/disk_discovery.tf',
+  BARE_METAL_TALOS_IMAGE = 'hetzner_robot/bare-metal-talos-image.tf',
 }
 
 export interface TemplateContext {
@@ -262,6 +263,10 @@ export class TerraformService {
       templatePath = 'hetzner_robot/disk_discovery.tf'
     }
 
+    if (templateName === TerraformTemplate.BARE_METAL_TALOS_IMAGE) {
+      templatePath = 'hetzner_robot/bare-metal-talos-image.tf'
+    }
+
     const content = await this.edge.render(templatePath, context)
 
     // Map template names to directory names for special cases
@@ -271,6 +276,9 @@ export class TerraformService {
     }
     if (templateName === TerraformTemplate.BARE_METAL_DISK_DISCOVERY) {
       directoryName = 'bare-metal-disk-discovery.tf'
+    }
+    if (templateName === TerraformTemplate.BARE_METAL_TALOS_IMAGE) {
+      directoryName = 'bare-metal-talos-image.tf'
     }
 
     const terraformFile: Omit<TerraformFile, 'key' | 'path'> = {
@@ -294,6 +302,9 @@ export class TerraformService {
   private buildTemplateContext(cluster: Cluster): TemplateContext {
     const publicKey = cluster.sshKey?.publicKey
 
+    // Extract CIDR suffix from vSwitch subnet range (e.g., "/16" from "10.219.0.0/16")
+    const cidrSuffix = cluster.vswitchSubnetIpRange?.split('/')?.[1]
+
     const controlPlanes =
       cluster.nodes
         ?.filter((node) => node.type === 'master')
@@ -308,6 +319,12 @@ export class TerraformService {
           private_network_interface: node.privateNetworkInterface,
           public_network_interface: node.publicNetworkInterface,
           public_ipv4_gateway: node.publicIpv4Gateway,
+          public_address_subnet: node.publicAddressSubnet,
+          private_ipv4_gateway: node.privateIpv4Gateway,
+          private_address_subnet: node.privateIpv4Address
+            ? `${node.privateIpv4Address}/${cidrSuffix}`
+            : '',
+          installation_disk: node.storages?.find((s) => s.installationDisk)?.providerMountId,
         })) || []
 
     const workers =
@@ -324,6 +341,12 @@ export class TerraformService {
           private_network_interface: node.privateNetworkInterface,
           public_network_interface: node.publicNetworkInterface,
           public_ipv4_gateway: node.publicIpv4Gateway,
+          public_address_subnet: node.publicAddressSubnet,
+          private_address_subnet: node.privateIpv4Address
+            ? `${node.privateIpv4Address}/${cidrSuffix}`
+            : '',
+          private_ipv4_gateway: node.privateIpv4Gateway,
+          installation_disk: node.storages?.find((s) => s.installationDisk)?.providerMountId,
         })) || []
 
     const loadBalancer = cluster.loadBalancers.find((lb) => lb.type === 'cluster')

@@ -32,6 +32,11 @@ export default class ClusterNode extends BaseModel {
   declare publicNetworkInterface: string | null
 
   @column({
+    columnName: 'public_address_subnet',
+  })
+  declare publicAddressSubnet: string | null
+
+  @column({
     columnName: 'private_ipv4_gateway',
   })
   declare privateIpv4Gateway: string | null

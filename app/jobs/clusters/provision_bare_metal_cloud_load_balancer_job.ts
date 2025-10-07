@@ -2,6 +2,7 @@ import { Job } from '@rlanz/bull-queue'
 import queue from '@rlanz/bull-queue/services/main'
 import Cluster from '#models/cluster'
 import CloudProvider from '#models/cloud_provider'
+import ClusterLoadBalancer from '#models/cluster_load_balancer'
 import { createExecutor } from '#services/terraform/main'
 import { TerraformService, TerraformTemplate } from '#services/terraform/terraform_service'
 import { DateTime } from 'luxon'
@@ -27,6 +28,11 @@ interface NetworkingOutput {
   ingress_load_balancer_name: TerraformOutputValue
   ingress_load_balancer_public_ip: TerraformOutputValue
   ingress_load_balancer_public_ipv6: TerraformOutputValue
+  ingress_load_balancer_private_ip: TerraformOutputValue
+  kube_load_balancer_id: TerraformOutputValue
+  kube_load_balancer_name: TerraformOutputValue
+  kube_load_balancer_public_ip: TerraformOutputValue
+  kube_load_balancer_private_ip: TerraformOutputValue
 }
 
 export default class ProvisionBareMetalCloudLoadBalancerJob extends Job {
@@ -74,6 +80,40 @@ export default class ProvisionBareMetalCloudLoadBalancerJob extends Job {
 
       cluster.providerNetworkId = output.network_id.value as string
       cluster.providerSubnetId = output.subnet_id.value as string
+
+      // Create or update ingress load balancer
+      let ingressLoadBalancer = await ClusterLoadBalancer.query()
+        .where('cluster_id', cluster.id)
+        .where('type', 'ingress')
+        .first()
+
+      if (!ingressLoadBalancer) {
+        ingressLoadBalancer = new ClusterLoadBalancer()
+        ingressLoadBalancer.clusterId = cluster.id
+        ingressLoadBalancer.type = 'ingress'
+      }
+
+      ingressLoadBalancer.providerId = output.ingress_load_balancer_id.value as string
+      ingressLoadBalancer.publicIpv4Address = output.ingress_load_balancer_public_ip.value as string
+      ingressLoadBalancer.privateIpv4Address = output.ingress_load_balancer_private_ip
+        .value as string
+      await ingressLoadBalancer.save()
+
+      let kubeLoadBalancer = await ClusterLoadBalancer.query()
+        .where('cluster_id', cluster.id)
+        .where('type', 'cluster')
+        .first()
+
+      if (!kubeLoadBalancer) {
+        kubeLoadBalancer = new ClusterLoadBalancer()
+        kubeLoadBalancer.clusterId = cluster.id
+        kubeLoadBalancer.type = 'cluster'
+      }
+
+      kubeLoadBalancer.providerId = output.kube_load_balancer_id.value as string
+      kubeLoadBalancer.publicIpv4Address = output.kube_load_balancer_public_ip.value as string
+      kubeLoadBalancer.privateIpv4Address = output.kube_load_balancer_private_ip.value as string
+      await kubeLoadBalancer.save()
 
       cluster.networkingCompletedAt = DateTime.now()
       await cluster.save()

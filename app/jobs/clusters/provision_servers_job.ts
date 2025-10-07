@@ -21,11 +21,11 @@ interface TerraformOutputValue {
 interface ServersOutput {
   // Allow dynamic key access for node-specific outputs
   [key: string]: TerraformOutputValue
-  
+
   // Summary outputs
   control_plane_server_ids: TerraformOutputValue
   worker_server_ids: TerraformOutputValue
-  
+
   // Talos configuration outputs
   talos_config: TerraformOutputValue
   control_plane_machine_configuration: TerraformOutputValue
@@ -58,20 +58,19 @@ export default class ProvisionServersJob extends Job {
       const terraform = new TerraformService(payload.clusterId)
       await terraform.generate(cluster, TerraformTemplate.SERVERS)
 
-      const ingressLoadBalancer = cluster.loadBalancers.find(lb => lb.type === 'ingress')
-      const kubeLoadBalancer = cluster.loadBalancers.find(lb => lb.type === 'cluster')
+      const ingressLoadBalancer = cluster.loadBalancers.find((lb) => lb.type === 'ingress')
+      const kubeLoadBalancer = cluster.loadBalancers.find((lb) => lb.type === 'cluster')
 
-      const executor = (await createExecutor(cluster.id, 'servers'))
-        .vars({
-          ...cluster.cloudProvider?.getTerraformCredentials(),
-          location: cluster.location,
-          cluster_name: cluster.subdomainIdentifier,
-          server_type: cluster.serverType,
-          network_id: cluster.providerNetworkId || '',
-          ssh_key_id: cluster.sshKey?.providerId || '',
-          kube_load_balancer_id: kubeLoadBalancer?.providerId || '',
-          ingress_load_balancer_id: ingressLoadBalancer?.providerId || '',
-        })
+      const executor = (await createExecutor(cluster.id, 'servers')).vars({
+        ...cluster.cloudProvider?.getTerraformCredentials(),
+        location: cluster.location,
+        cluster_name: cluster.subdomainIdentifier,
+        server_type: cluster.serverType,
+        network_id: cluster.providerNetworkId || '',
+        ssh_key_id: cluster.sshKey?.providerId || '',
+        kube_load_balancer_id: kubeLoadBalancer?.providerId || '',
+        ingress_load_balancer_id: ingressLoadBalancer?.providerId || '',
+      })
 
       await executor.init()
       await executor.apply({ autoApprove: true })
@@ -98,16 +97,10 @@ export default class ProvisionServersJob extends Job {
   /**
    * This is an optional method that gets called when the retries has exceeded and is marked failed.
    */
-  async rescue(_payload: ProvisionServersJobPayload) { }
+  async rescue(_payload: ProvisionServersJobPayload) {}
 
-  private async updateClusterNodes(
-    clusterId: string,
-    output: ServersOutput
-  ): Promise<void> {
-    const cluster = await Cluster.query()
-      .where('id', clusterId)
-      .preload('nodes')
-      .firstOrFail()
+  private async updateClusterNodes(clusterId: string, output: ServersOutput): Promise<void> {
+    const cluster = await Cluster.query().where('id', clusterId).preload('nodes').firstOrFail()
 
     for (const node of cluster.nodes) {
       const serverIdKey = `${node.type === 'master' ? 'control_plane' : 'worker'}_${node.slug}_server_id`
@@ -149,14 +142,11 @@ export default class ProvisionServersJob extends Job {
     await cluster.save()
   }
 
-  private async saveTalosConfigurations(
-    clusterId: string,
-    output: ServersOutput
-  ): Promise<void> {
+  private async saveTalosConfigurations(clusterId: string, output: ServersOutput): Promise<void> {
     const disk = drive.use('fs')
     const configsPath = `talos-configs/${clusterId}`
     const terraformConfigsPath = `terraform/clusters/${clusterId}/configs`
-    
+
     const cluster = await Cluster.complete(clusterId)
     if (!cluster) return
 
@@ -167,8 +157,8 @@ export default class ProvisionServersJob extends Job {
 
     if (talosConfig && cluster.nodes) {
       const controlPlaneEndpoints = cluster.nodes
-        .filter(node => node.type === 'master')
-        .map(node => node.ipv4Address)
+        .filter((node) => node.type === 'master')
+        .map((node) => node.ipv4Address)
         .filter(Boolean)
 
       const talosConfigYaml = {
@@ -178,9 +168,9 @@ export default class ProvisionServersJob extends Job {
             endpoints: controlPlaneEndpoints,
             ca: talosConfig.ca_certificate,
             crt: talosConfig.client_certificate,
-            key: talosConfig.client_key
-          }
-        }
+            key: talosConfig.client_key,
+          },
+        },
       }
 
       await disk.put(`${configsPath}/talosconfig`, yaml.stringify(talosConfigYaml))

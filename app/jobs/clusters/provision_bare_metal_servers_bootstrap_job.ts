@@ -1,4 +1,5 @@
 import Cluster from '#models/cluster'
+import ClusterLoadBalancer from '#models/cluster_load_balancer'
 import logger from '@adonisjs/core/services/logger'
 import { Job } from '@rlanz/bull-queue'
 import { DateTime } from 'luxon'
@@ -7,6 +8,10 @@ import { RedisStream } from '#utils/redis_stream'
 import { RedisStreamConfig } from '#services/redis/redis_stream_config'
 import { TerraformStage } from '#services/terraform/terraform_executor'
 import { TalosBareMetalNetworkDetectionService } from '#services/talos/talos_bare_metal_network_detection_service'
+import { TerraformService, TerraformTemplate } from '#services/terraform/terraform_service'
+import { createExecutor } from '#services/terraform/main'
+import yaml from 'yaml'
+import drive from '@adonisjs/drive/services/main'
 
 interface ProvisionBareMetalServersBootstrapJobPayload {
   clusterId: string
@@ -158,6 +163,7 @@ export default class ProvisionBareMetalServersBootstrapJob extends Job {
           if (networkConfig.publicInterface) {
             node.publicNetworkInterface = networkConfig.publicInterface.name
             node.publicIpv4Gateway = networkConfig.publicInterface.gateway
+            node.publicAddressSubnet = networkConfig.publicInterface.addressSubnet
           }
 
           node.privateIpv4Gateway = privateGateway
@@ -168,7 +174,7 @@ export default class ProvisionBareMetalServersBootstrapJob extends Job {
             'network_detection',
             `Node ${node.slug} network detection complete:\n` +
               `  Public Interface: ${networkConfig.publicInterface?.name || 'not found'}\n` +
-              `  Public IP: ${networkConfig.publicInterface?.ipAddress || 'not found'}\n` +
+              `  Public Address/Subnet: ${networkConfig.publicInterface?.addressSubnet || 'not found'}\n` +
               `  Public Gateway: ${networkConfig.publicInterface?.gateway || 'not found'}\n` +
               `  Private Gateway: ${privateGateway}\n` +
               `  Total Links: ${networkConfig.links.length}\n` +
@@ -186,11 +192,6 @@ export default class ProvisionBareMetalServersBootstrapJob extends Job {
             addressesCount: networkConfig.addresses.length,
             routesCount: networkConfig.routes.length,
           })
-
-          // Log full JSON to console for debugging
-          console.log(`\n=== Network Detection Results for ${node.slug} ===`)
-          console.log(JSON.stringify(networkConfig, null, 2))
-          console.log(`=== End Network Detection for ${node.slug} ===\n`)
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : 'Unknown error'
           await this.logToStream(
@@ -198,12 +199,139 @@ export default class ProvisionBareMetalServersBootstrapJob extends Job {
             `Failed to detect network on node ${node.slug}: ${errorMessage}`
           )
           logger.error(`Failed to detect network on node ${node.slug}:`, error)
+          console.error(error)
         }
       }
 
       await this.logToStream('success', 'Network detection completed on all nodes')
 
-      cluster.serversErrorAt = DateTime.now()
+      // Bootstrap Talos on all nodes
+      await this.logToStream('info', 'Starting Talos bootstrap on all nodes')
+      logger.info('Starting Talos bootstrap on all nodes')
+
+      const terraform = new TerraformService(payload.clusterId)
+      await terraform.generate(cluster, TerraformTemplate.BARE_METAL_TALOS_IMAGE)
+
+      const executor = await createExecutor(cluster.id, 'bare-metal-talos-image')
+
+      // Get the Kubernetes API load balancer
+      const kubeLoadBalancer = await ClusterLoadBalancer.query()
+        .where('cluster_id', cluster.id)
+        .where('type', 'cluster')
+        .firstOrFail()
+
+      executor.vars({
+        cluster_name: cluster.subdomainIdentifier,
+        cluster_endpoint: `https://${kubeLoadBalancer.publicIpv4Address}:6443`,
+        vlan_id: cluster.vlanId as number,
+        vswitch_subnet_ip_range: cluster.vswitchSubnetIpRange as string,
+        cluster_network_ip_range: cluster.networkIpRange as string,
+      })
+
+      await this.logToStream('info', 'Initial`izing Terraform for Talos bootstrap')
+      await executor.init()
+
+      await this.logToStream('info', 'Applying Talos configuration to all nodes')
+      await executor.apply({ autoApprove: true })
+
+      await this.logToStream('success', 'Talos bootstrap completed successfully')
+
+      // Get outputs from terraform
+      const { stdout } = await executor.output()
+      const output = JSON.parse(stdout as string)
+
+      // Store talos config and kubeconfig (similar to provision_servers_job.ts)
+      if (output.talos_config?.value) {
+        cluster.talosConfig = output.talos_config.value
+      }
+
+      if (output.kubeconfig?.value) {
+        const kubeconfigData = yaml.parse(output.kubeconfig.value)
+        const clusterData = kubeconfigData.clusters[0].cluster
+        const userData = kubeconfigData.users[0].user
+
+        cluster.kubeconfig = {
+          host: clusterData.server,
+          clientCertificate: userData['client-certificate-data'],
+          clientKey: userData['client-key-data'],
+          clusterCaCertificate: clusterData['certificate-authority-data'],
+        }
+      }
+
+      // Write talos config and kubeconfig to YAML files in cluster's terraform directory
+      const disk = drive.use('fs')
+      const clusterBasePath = `terraform/clusters/${cluster.id}`
+
+      try {
+        const talosConfig = output.talos_config?.value as Cluster['talosConfig']
+        const kubeConfigRaw = output.kubeconfig?.value as string
+
+        if (talosConfig && cluster.nodes) {
+          const controlPlaneEndpoints = cluster.nodes
+            .filter((node) => node.type === 'master')
+            .map((node) => node.ipv4Address)
+            .filter(Boolean)
+
+          const talosConfigYaml = {
+            context: cluster.subdomainIdentifier,
+            contexts: {
+              [cluster.subdomainIdentifier]: {
+                endpoints: controlPlaneEndpoints,
+                ca: talosConfig.ca_certificate,
+                crt: talosConfig.client_certificate,
+                key: talosConfig.client_key,
+              },
+            },
+          }
+
+          await disk.put(`${clusterBasePath}/talosconfig.yaml`, yaml.stringify(talosConfigYaml))
+          await this.logToStream('success', 'Talos config written to talosconfig.yaml')
+        }
+
+        // Generate proper kubeconfig YAML structure
+        if (kubeConfigRaw && cluster.kubeconfig) {
+          const kubeconfigYaml = {
+            apiVersion: 'v1',
+            kind: 'Config',
+            'current-context': `admin@${cluster.subdomainIdentifier}`,
+            clusters: [
+              {
+                name: cluster.subdomainIdentifier,
+                cluster: {
+                  'certificate-authority-data': cluster.kubeconfig.clusterCaCertificate,
+                  server: cluster.kubeconfig.host,
+                },
+              },
+            ],
+            contexts: [
+              {
+                name: `admin@${cluster.subdomainIdentifier}`,
+                context: {
+                  cluster: cluster.subdomainIdentifier,
+                  namespace: 'default',
+                  user: `admin@${cluster.subdomainIdentifier}`,
+                },
+              },
+            ],
+            users: [
+              {
+                name: `admin@${cluster.subdomainIdentifier}`,
+                user: {
+                  'client-certificate-data': cluster.kubeconfig.clientCertificate,
+                  'client-key-data': cluster.kubeconfig.clientKey,
+                },
+              },
+            ],
+          }
+
+          await disk.put(`${clusterBasePath}/kubeconfig.yaml`, yaml.stringify(kubeconfigYaml))
+          await this.logToStream('success', 'Kubeconfig written to kubeconfig.yaml')
+        }
+      } catch (error) {
+        console.error(error)
+      }
+
+      cluster.serversCompletedAt = DateTime.now()
       await cluster.save()
 
       await this.logToStream('success', 'Servers bootstrap completed')
@@ -214,6 +342,7 @@ export default class ProvisionBareMetalServersBootstrapJob extends Job {
       logger.error('Error in ProvisionBareMetalServersBootstrapJob:', error)
       cluster.status = 'unhealthy'
       cluster.serversErrorAt = DateTime.now()
+      console.error(error)
 
       await cluster.save()
       throw error

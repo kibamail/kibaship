@@ -111,7 +111,7 @@ export default class ClustersController extends BaseController {
     let vswitchId: number | null = null
     let vlanName: string | null = null
 
-    if (payload.robot_vswitch_id !== 'create_new') {
+    if (payload.robot_vswitch_id) {
       const cacheKey = `vswitches:provider:${cloudProvider.id}`
       const cachedVswitches = (await cache('hetzner-robot').item(cacheKey).read()) as Array<{
         id: number

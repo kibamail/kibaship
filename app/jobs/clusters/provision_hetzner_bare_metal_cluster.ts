@@ -84,117 +84,118 @@ export default class ProvisionHetznerBareMetalCluster extends Job {
 
     await this.logToStream('info', 'Connected to Hetzner Robot API')
 
-    let vswitchId = cluster.vswitchId
-    let vlanId = cluster.vlanId
+    // Step 1: Fetch all vSwitches from Hetzner API
+    await this.logToStream('info', 'Fetching all vSwitches from Hetzner Robot')
+    const allVswitches = await robot.vswitches().list()
+    await this.logToStream('info', `Found ${allVswitches.length} existing vSwitches`)
+
+    logger.info('Fetched vSwitches from Hetzner', {
+      clusterId: cluster.id,
+      vswitchCount: allVswitches.length,
+    })
+
     let currentVswitch: components['schemas']['VSwitchDetailed'] | null = null
 
-    if (!vswitchId || !vlanId) {
-      await this.logToStream('info', 'Checking for existing vSwitch configuration')
+    // Step 2: Check if user selected a vSwitch
+    if (cluster.vswitchId) {
+      await this.logToStream('info', `Verifying selected vSwitch (ID: ${cluster.vswitchId}) exists`)
+
+      // Check if selected vSwitch is in the fetched list
+      const selectedVswitch = allVswitches.find((v) => v.id === cluster.vswitchId)
+
+      if (!selectedVswitch) {
+        await this.logToStream(
+          'error',
+          `Selected vSwitch ID ${cluster.vswitchId} not found in Hetzner Robot account`
+        )
+        throw new Error(
+          `Selected vSwitch ID ${cluster.vswitchId} does not exist in your Hetzner Robot account`
+        )
+      }
+
+      // Set vswitch_id and vlan_id on cluster
+      cluster.vswitchId = selectedVswitch.id
+      cluster.vlanId = selectedVswitch.vlan
+      await cluster.save()
+
+      await this.logToStream(
+        'success',
+        `Using selected vSwitch "${selectedVswitch.name}" (ID: ${selectedVswitch.id}, VLAN: ${selectedVswitch.vlan})`
+      )
+
+      logger.info('Using selected vSwitch', {
+        clusterId: cluster.id,
+        vswitchId: selectedVswitch.id,
+        vlanId: selectedVswitch.vlan,
+        vswitchName: selectedVswitch.name,
+      })
+
+      // Fetch detailed vSwitch info
+      currentVswitch = await robot.vswitches().get(selectedVswitch.id)
+    } else {
+      // Step 3: No vSwitch provided - create a new one
+      await this.logToStream('info', 'No vSwitch selected - creating new vSwitch')
       logger.info('Creating new vSwitch for cluster', { clusterId: cluster.id })
 
       const vswitchName = cluster.subdomainIdentifier
 
-      const existingVswitches = await robot.vswitches().list()
-      await this.logToStream('info', `Found ${existingVswitches.length} existing vSwitches`)
+      // Find an unused VLAN ID from 4000 to 4091
+      const usedVlans = allVswitches.map((v) => v.vlan)
 
-      const existingVswitch = existingVswitches.find((v) => v.name === vswitchName)
-
-      if (existingVswitch) {
-        await this.logToStream(
-          'info',
-          `Found existing vSwitch "${existingVswitch.name}" (VLAN ${existingVswitch.vlan}) - reusing it`
-        )
-        logger.info('vSwitch with this name already exists, using existing vSwitch', {
-          clusterId: cluster.id,
-          vswitchId: existingVswitch.id,
-          vlanId: existingVswitch.vlan,
-          vswitchName: existingVswitch.name,
-        })
-
-        cluster.vlanId = existingVswitch.vlan
-        cluster.vswitchId = existingVswitch.id
-        await cluster.save()
-        currentVswitch = await robot.vswitches().get(existingVswitch.id)
-      } else {
-        // Create new vSwitch
-        const usedVlans = existingVswitches.map((v) => v.vlan)
-
-        let newVlanId = 4000
-        while (usedVlans.includes(newVlanId) && newVlanId <= 4091) {
-          newVlanId++
-        }
-
-        if (newVlanId > 4091) {
-          await this.logToStream('error', 'No available VLAN IDs (4000-4091 range exhausted)')
-          throw new Error('No available VLAN IDs. All VLANs from 4000-4091 are in use.')
-        }
-
-        await this.logToStream(
-          'info',
-          `Creating new vSwitch "${vswitchName}" with VLAN ID ${newVlanId}`
-        )
-
-        const vswitch = await robot.vswitches().create(vswitchName, newVlanId)
-
-        if (!vswitch) {
-          await this.logToStream('error', 'Failed to create vSwitch via Hetzner Robot API')
-          throw new Error('Failed to create vSwitch')
-        }
-
-        cluster.vlanId = vswitch.vlan
-        cluster.vswitchId = vswitch.id
-        await cluster.save()
-        currentVswitch = vswitch
-
-        await this.logToStream(
-          'success',
-          `vSwitch created successfully (ID: ${vswitch.id}, VLAN: ${vswitch.vlan})`
-        )
-        logger.info('vSwitch created successfully', {
-          clusterId: cluster.id,
-          vswitchId: vswitch.id,
-          vlanId: vswitch.vlan,
-          vswitchName: vswitch.name,
-        })
-      }
-    } else {
-      await this.logToStream('info', `Using configured vSwitch (ID: ${vswitchId}, VLAN: ${vlanId})`)
-
-      // Verify the vSwitch still exists
-      currentVswitch = await robot.vswitches().get(vswitchId)
-
-      if (!currentVswitch) {
-        await this.logToStream('error', `vSwitch ID ${vswitchId} not found in Hetzner Robot`)
-        logger.warn('Stored vSwitch ID not found, will create a new one', {
-          clusterId: cluster.id,
-          vswitchId,
-        })
-
-        // Reset cluster vSwitch info so it gets recreated
-        cluster.vlanId = null
-        cluster.vswitchId = null
-        await cluster.save()
-
-        throw new Error('vSwitch not found. Please retry the job to create a new vSwitch.')
+      let newVlanId = 4000
+      while (usedVlans.includes(newVlanId) && newVlanId <= 4091) {
+        newVlanId++
       }
 
-      await this.logToStream('info', 'Verified vSwitch exists and is accessible')
-      logger.info('Using existing vSwitch', {
+      if (newVlanId > 4091) {
+        await this.logToStream('error', 'No available VLAN IDs (4000-4091 range exhausted)')
+        throw new Error('No available VLAN IDs. All VLANs from 4000-4091 are in use.')
+      }
+
+      await this.logToStream(
+        'info',
+        `Creating new vSwitch "${vswitchName}" with VLAN ID ${newVlanId}`
+      )
+
+      // Step 4: Create vSwitch
+      const vswitch = await robot.vswitches().create(vswitchName, newVlanId)
+
+      if (!vswitch) {
+        await this.logToStream('error', 'Failed to create vSwitch via Hetzner Robot API')
+        throw new Error('Failed to create vSwitch')
+      }
+
+      cluster.vlanId = vswitch.vlan
+      cluster.vswitchId = vswitch.id
+      await cluster.save()
+      currentVswitch = vswitch
+
+      await this.logToStream(
+        'success',
+        `vSwitch created successfully (ID: ${vswitch.id}, VLAN: ${vswitch.vlan})`
+      )
+      logger.info('vSwitch created successfully', {
         clusterId: cluster.id,
-        vswitchId: cluster.vswitchId,
-        vlanId: cluster.vlanId,
+        vswitchId: vswitch.id,
+        vlanId: vswitch.vlan,
+        vswitchName: vswitch.name,
       })
     }
 
-    // Step 2: Add servers to vSwitch (idempotent)
+    // Step 5: Fetch servers attached to the vSwitch and attach missing ones
     if (!cluster.vswitchId) {
       await this.logToStream('error', 'vSwitch ID not found in cluster configuration')
       throw new Error('vSwitch ID not found in cluster')
     }
 
+    if (!currentVswitch) {
+      await this.logToStream('error', 'vSwitch configuration not available')
+      throw new Error('vSwitch not found')
+    }
+
     await this.logToStream(
       'info',
-      `Preparing to add ${cluster.nodes.length} bare metal servers to vSwitch`
+      `Preparing to attach ${cluster.nodes.length} bare metal servers to vSwitch`
     )
 
     logger.info('Checking vSwitch server membership', {
@@ -215,77 +216,34 @@ export default class ProvisionHetznerBareMetalCluster extends Job {
 
     await this.logToStream('info', `Found ${serverIdentifiers.length} server(s) to configure`)
 
-    // Use the vSwitch we already fetched
-    const vswitch = currentVswitch
+    await this.logToStream('info', `Attaching ${serverIdentifiers.length} server(s) to vSwitch`)
 
-    if (!vswitch) {
-      await this.logToStream('error', 'vSwitch configuration not available')
-      throw new Error('vSwitch not found')
+    logger.info('Adding servers to vSwitch', {
+      clusterId: cluster.id,
+      vswitchId: cluster.vswitchId,
+      servers: serverIdentifiers,
+    })
+
+    // Batch attach all servers at once (idempotent - will skip already attached servers)
+    const success = await robot.vswitches().addServers(cluster.vswitchId, serverIdentifiers)
+
+    if (!success) {
+      await this.logToStream('error', 'Failed to add servers to vSwitch')
+      throw new Error('Failed to add servers to vSwitch')
     }
 
-    // Extract server IPs that are already on the vSwitch
-    const currentServerIps = vswitch.server?.map((s) => s.server_ip) || []
-
-    // Filter out servers that are already on the vSwitch
-    const serversToAdd = serverIdentifiers.filter(
-      (serverId) => !currentServerIps.includes(serverId)
+    await this.logToStream(
+      'success',
+      `Successfully attached ${serverIdentifiers.length} server(s) to vSwitch`
     )
 
-    if (serversToAdd.length === 0) {
-      await this.logToStream(
-        'success',
-        `All ${serverIdentifiers.length} server(s) already attached to vSwitch`
-      )
-      logger.info('All servers are already on the vSwitch', {
-        clusterId: cluster.id,
-        vswitchId: cluster.vswitchId,
-        serverCount: serverIdentifiers.length,
-      })
-    } else {
-      await this.logToStream(
-        'info',
-        `Attaching ${serversToAdd.length} server(s) to vSwitch (${currentServerIps.length} already attached)`
-      )
+    logger.info('Servers added to vSwitch successfully', {
+      clusterId: cluster.id,
+      vswitchId: cluster.vswitchId,
+      serverCount: serverIdentifiers.length,
+      serverIdentifiers,
+    })
 
-      logger.info('Adding servers to vSwitch', {
-        clusterId: cluster.id,
-        vswitchId: cluster.vswitchId,
-        serversToAdd,
-        alreadyOnVswitch: currentServerIps,
-      })
-
-      const success = await robot.vswitches().addServers(cluster.vswitchId, serversToAdd)
-
-      if (!success) {
-        await this.logToStream('error', 'Failed to add servers to vSwitch')
-        throw new Error('Failed to add servers to vSwitch')
-      }
-
-      await this.logToStream(
-        'success',
-        `Successfully attached ${serversToAdd.length} server(s) to vSwitch`
-      )
-
-      logger.info('Servers added to vSwitch successfully', {
-        clusterId: cluster.id,
-        vswitchId: cluster.vswitchId,
-        serverCount: serversToAdd.length,
-        serverIdentifiers: serversToAdd,
-      })
-    }
-
-    // 3. trigger rescue mode on all servers
-    // 4. wait for rescue mode to be ready
-    // 5. execute terraform that downloads terraform in each of the servers
-    // 6. reboot servers
-    // 7. wait for servers to be ready
-    // 8. execute terraform that applies talos configs
-    // 9. wait for talos to be ready
-    // 10. discover all disks on the server
-    // 11. create node storages for each disk
-    // 12. bootstrap kubernetes cluster
-
-    // Dispatch the next job to provision cloud networking
     await this.logToStream(
       'success',
       'Bare metal server preparation complete - proceeding to cloud networking'
