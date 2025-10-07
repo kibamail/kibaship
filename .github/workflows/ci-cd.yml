@@ -1,5 +1,11 @@
 name: CI/CD
 
+# Two-Phase Docker Hub Rollout Strategy:
+# Phase 1: Build and push all images with v-<tag>-prerelease tags
+# Phase 2: If ALL prerelease builds succeed, promote to v-<tag> release tags
+# If ANY build fails, the promotion phase will detect missing images and abort
+# This ensures atomic rollouts - either all images are promoted or none are
+
 on:
   push:
     branches:
@@ -9,8 +15,9 @@ on:
   pull_request:
 
 env:
-  REGISTRY: ghcr.io
+  REGISTRY: docker.io
   CLI_NAME: kibaship
+  DOCKER_HUB_USERNAME: kibamail
 
 jobs:
   # Phase 1: Run tests in parallel
@@ -114,25 +121,30 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to GitHub Container Registry
+      - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          username: ${{ env.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
 
       - name: Extract metadata for prerelease tags
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/kibamail/${{ matrix.image.name }}
+          images: ${{ env.REGISTRY }}/${{ env.DOCKER_HUB_USERNAME }}/${{ matrix.image.name }}
           tags: |
-            type=ref,event=branch,suffix=-prerelease
-            type=ref,event=pr,suffix=-prerelease
-            type=semver,pattern={{version}},suffix=-prerelease
-            type=semver,pattern={{major}}.{{minor}},suffix=-prerelease
-            type=semver,pattern={{major}},suffix=-prerelease
-            type=sha,format=short,prefix=sha-,suffix=-prerelease
+            type=ref,event=branch,prefix=v-,suffix=-prerelease
+            type=ref,event=pr,prefix=v-,suffix=-prerelease
+            type=semver,pattern=v-{{version}},suffix=-prerelease
+            type=sha,format=short,prefix=v-sha-,suffix=-prerelease
+
+      - name: Show tags that will be pushed
+        run: |
+          echo "Tags to be created:"
+          echo "${{ steps.meta.outputs.tags }}"
+          echo ""
+          echo "Image name: ${{ matrix.image.name }}"
 
       - name: Build and push to prerelease tags
         id: build
@@ -146,6 +158,36 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+        continue-on-error: false
+
+      - name: Verify image was pushed to registry
+        run: |
+          echo "Verifying pushed images for ${{ matrix.image.name }}"
+          echo "Tags that were pushed:"
+          echo "${{ steps.meta.outputs.tags }}"
+          echo ""
+
+          # Get the first tag and verify it exists in the registry
+          FIRST_TAG=$(echo "${{ steps.meta.outputs.tags }}" | head -n1)
+          echo "Checking if $FIRST_TAG exists in registry..."
+
+          # Use docker buildx imagetools to inspect the pushed image
+          if docker buildx imagetools inspect "$FIRST_TAG"; then
+            echo "✅ Successfully verified image was pushed to Docker Hub"
+          else
+            echo "❌ ERROR: Failed to verify image in Docker Hub!"
+            echo "The build reported success but the image is not accessible"
+            echo "This will cause the promotion phase to fail."
+            exit 1
+          fi
+
+      - name: Cleanup on failure
+        if: failure()
+        run: |
+          echo "🧹 Build failed for ${{ matrix.image.name }}"
+          echo "Prerelease images may be partially pushed."
+          echo "The promotion phase will detect missing images and abort."
+          echo "Manual cleanup of prerelease tags may be required."
 
   # Phase 3: Promote prerelease tags to final tags (only if ALL builds succeeded)
   promote-images:
@@ -165,12 +207,62 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to GitHub Container Registry
+      - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          username: ${{ env.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+
+      - name: Verify all prerelease images exist before promotion
+        env:
+          IMAGES: |
+            kibaship-operator
+            kibaship-operator-apiserver
+            kibaship-operator-cert-manager-webhook
+            kibaship-operator-registry-auth
+            kibaship-railpack-cli
+            kibaship-railpack-build
+        run: |
+          set -e
+
+          # Determine prerelease tag
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            VERSION="${{ github.ref_name }}"
+            VERSION_NO_V="${VERSION#v}"  # Remove 'v' prefix
+            PRERELEASE_TAG="v-${VERSION_NO_V}-prerelease"
+          else
+            BRANCH_NAME="${{ github.ref_name }}"
+            PRERELEASE_TAG="v-${BRANCH_NAME}-prerelease"
+          fi
+
+          echo "Verifying all prerelease images exist with tag: $PRERELEASE_TAG"
+
+          MISSING_IMAGES=()
+
+          for image_name in $IMAGES; do
+            IMAGE="${{ env.REGISTRY }}/${{ env.DOCKER_HUB_USERNAME }}/${image_name}:${PRERELEASE_TAG}"
+            echo "Checking: $IMAGE"
+
+            if docker buildx imagetools inspect "$IMAGE" >/dev/null 2>&1; then
+              echo "✅ Found: $IMAGE"
+            else
+              echo "❌ Missing: $IMAGE"
+              MISSING_IMAGES+=("$image_name")
+            fi
+          done
+
+          if [ ${#MISSING_IMAGES[@]} -gt 0 ]; then
+            echo ""
+            echo "❌ PROMOTION ABORTED: Missing prerelease images:"
+            printf '%s\n' "${MISSING_IMAGES[@]}"
+            echo ""
+            echo "All prerelease images must exist before promotion can proceed."
+            exit 1
+          else
+            echo ""
+            echo "✅ All prerelease images verified. Proceeding with promotion..."
+          fi
 
       - name: Promote all images from prerelease to release
         env:
@@ -182,49 +274,162 @@ jobs:
             kibaship-railpack-cli
             kibaship-railpack-build
         run: |
+          set -e  # Exit on any error
+
+          # Track failed promotions for rollback
+          FAILED_IMAGES=()
+          PROMOTED_IMAGES=()
+
           # Determine source and target tags based on trigger
           if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
             VERSION="${{ github.ref_name }}"
-            VERSION_NO_V="${VERSION#v}"
-            MAJOR=$(echo "$VERSION_NO_V" | cut -d. -f1)
-            MINOR=$(echo "$VERSION_NO_V" | cut -d. -f1-2)
+            VERSION_NO_V="${VERSION#v}"  # Remove 'v' prefix
 
-            PRERELEASE_TAGS=(
-              "${VERSION}-prerelease"
-              "${MAJOR}.${MINOR}-prerelease"
-              "${MAJOR}-prerelease"
-            )
+            PRERELEASE_TAG="v-${VERSION_NO_V}-prerelease"
             RELEASE_TAGS=(
-              "${VERSION}"
-              "${MAJOR}.${MINOR}"
-              "${MAJOR}"
+              "v-${VERSION_NO_V}"
               "latest"
             )
           else
             BRANCH_NAME="${{ github.ref_name }}"
-            PRERELEASE_TAGS=("${BRANCH_NAME}-prerelease")
-            RELEASE_TAGS=("${BRANCH_NAME}")
+            PRERELEASE_TAG="v-${BRANCH_NAME}-prerelease"
+            RELEASE_TAGS=("v-${BRANCH_NAME}")
           fi
+
+          echo "Source prerelease tag: $PRERELEASE_TAG"
+          echo "Target release tags: ${RELEASE_TAGS[*]}"
+
+          # Function to rollback promoted images
+          rollback_images() {
+            echo "🔄 Rolling back promoted images..."
+            for image_name in "${PROMOTED_IMAGES[@]}"; do
+              echo "Rolling back $image_name"
+              for release_tag in "${RELEASE_TAGS[@]}"; do
+                TARGET_IMAGE="${{ env.REGISTRY }}/${{ env.DOCKER_HUB_USERNAME }}/${image_name}:${release_tag}"
+                echo "Attempting to delete: $TARGET_IMAGE"
+                # Note: Docker Hub doesn't support programmatic tag deletion via API easily
+                # This would require additional tooling or manual intervention
+                echo "⚠️  Manual cleanup required for: $TARGET_IMAGE"
+              done
+            done
+          }
 
           # Promote each image
           for image_name in $IMAGES; do
             echo "===> Promoting $image_name"
 
-            SOURCE_TAG="${PRERELEASE_TAGS[0]}"
-            SOURCE_IMAGE="${{ env.REGISTRY }}/kibamail/${image_name}:${SOURCE_TAG}"
+            SOURCE_IMAGE="${{ env.REGISTRY }}/${{ env.DOCKER_HUB_USERNAME }}/${image_name}:${PRERELEASE_TAG}"
 
             echo "Pulling source: $SOURCE_IMAGE"
-            docker pull "$SOURCE_IMAGE"
+            if ! docker pull "$SOURCE_IMAGE"; then
+              echo "❌ ERROR: Failed to pull prerelease image: $SOURCE_IMAGE"
+              FAILED_IMAGES+=("$image_name")
+              continue
+            fi
 
             # Tag and push all release versions
+            IMAGE_PROMOTION_FAILED=false
             for release_tag in "${RELEASE_TAGS[@]}"; do
-              TARGET_IMAGE="${{ env.REGISTRY }}/kibamail/${image_name}:${release_tag}"
+              TARGET_IMAGE="${{ env.REGISTRY }}/${{ env.DOCKER_HUB_USERNAME }}/${image_name}:${release_tag}"
               echo "Tagging as: $TARGET_IMAGE"
-              docker tag "$SOURCE_IMAGE" "$TARGET_IMAGE"
-              docker push "$TARGET_IMAGE"
+
+              if ! docker tag "$SOURCE_IMAGE" "$TARGET_IMAGE"; then
+                echo "❌ ERROR: Failed to tag image: $TARGET_IMAGE"
+                IMAGE_PROMOTION_FAILED=true
+                break
+              fi
+
+              if ! docker push "$TARGET_IMAGE"; then
+                echo "❌ ERROR: Failed to push image: $TARGET_IMAGE"
+                IMAGE_PROMOTION_FAILED=true
+                break
+              fi
+
+              echo "✅ Successfully pushed: $TARGET_IMAGE"
             done
 
-            echo "Successfully promoted $image_name"
+            if [ "$IMAGE_PROMOTION_FAILED" = true ]; then
+              FAILED_IMAGES+=("$image_name")
+              echo "❌ Failed to promote $image_name"
+            else
+              PROMOTED_IMAGES+=("$image_name")
+              echo "✅ Successfully promoted $image_name"
+            fi
+          done
+
+          # Check if any promotions failed
+          if [ ${#FAILED_IMAGES[@]} -gt 0 ]; then
+            echo ""
+            echo "❌ PROMOTION FAILED for the following images:"
+            printf '%s\n' "${FAILED_IMAGES[@]}"
+            echo ""
+            echo "Successfully promoted images:"
+            printf '%s\n' "${PROMOTED_IMAGES[@]}"
+            echo ""
+            rollback_images
+            echo ""
+            echo "❌ Rollout failed. Manual cleanup may be required."
+            exit 1
+          else
+            echo ""
+            echo "✅ ALL IMAGES SUCCESSFULLY PROMOTED!"
+            echo "Promoted images:"
+            printf '%s\n' "${PROMOTED_IMAGES[@]}"
+            echo ""
+            echo "🎉 Two-phase rollout completed successfully!"
+          fi
+
+  # Cleanup job for failed rollouts (manual trigger)
+  cleanup-prerelease:
+    name: Cleanup Prerelease Tags
+    runs-on: ubuntu-latest
+    if: failure() && (github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')))
+    needs: [promote-images]
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ env.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+
+      - name: Cleanup prerelease tags
+        env:
+          IMAGES: |
+            kibaship-operator
+            kibaship-operator-apiserver
+            kibaship-operator-cert-manager-webhook
+            kibaship-operator-registry-auth
+            kibaship-railpack-cli
+            kibaship-railpack-build
+        run: |
+          # Determine prerelease tag
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            VERSION="${{ github.ref_name }}"
+            VERSION_NO_V="${VERSION#v}"  # Remove 'v' prefix
+            PRERELEASE_TAG="v-${VERSION_NO_V}-prerelease"
+          else
+            BRANCH_NAME="${{ github.ref_name }}"
+            PRERELEASE_TAG="v-${BRANCH_NAME}-prerelease"
+          fi
+
+          echo "⚠️  CLEANUP: Attempting to clean up prerelease tags: $PRERELEASE_TAG"
+          echo "Note: Docker Hub doesn't support programmatic tag deletion via standard tools."
+          echo "Manual cleanup may be required through Docker Hub web interface."
+
+          for image_name in $IMAGES; do
+            IMAGE="${{ env.REGISTRY }}/${{ env.DOCKER_HUB_USERNAME }}/${image_name}:${PRERELEASE_TAG}"
+            echo "Would clean up: $IMAGE"
+            echo "Please manually delete this tag from Docker Hub if needed."
           done
 
   # Phase 4: Release jobs (only on version tags, after successful push)
@@ -310,10 +515,10 @@ jobs:
       - name: Generate deployment manifests
         run: |
           make build-installer \
-            IMG=${{ env.REGISTRY }}/kibamail/kibaship-operator:v${{ steps.version.outputs.version }} \
-            IMG_APISERVER=${{ env.REGISTRY }}/kibamail/kibaship-operator-apiserver:v${{ steps.version.outputs.version }} \
-            IMG_CERT_MANAGER_WEBHOOK=${{ env.REGISTRY }}/kibamail/kibaship-operator-cert-manager-webhook:v${{ steps.version.outputs.version }} \
-            IMG_REGISTRY_AUTH=${{ env.REGISTRY }}/kibamail/kibaship-operator-registry-auth:v${{ steps.version.outputs.version }}
+            IMG=${{ env.REGISTRY }}/${{ env.DOCKER_HUB_USERNAME }}/kibaship-operator:v-${{ steps.version.outputs.version }} \
+            IMG_APISERVER=${{ env.REGISTRY }}/${{ env.DOCKER_HUB_USERNAME }}/kibaship-operator-apiserver:v-${{ steps.version.outputs.version }} \
+            IMG_CERT_MANAGER_WEBHOOK=${{ env.REGISTRY }}/${{ env.DOCKER_HUB_USERNAME }}/kibaship-operator-cert-manager-webhook:v-${{ steps.version.outputs.version }} \
+            IMG_REGISTRY_AUTH=${{ env.REGISTRY }}/${{ env.DOCKER_HUB_USERNAME }}/kibaship-operator-registry-auth:v-${{ steps.version.outputs.version }}
 
       - name: Upload deployment manifests
         uses: actions/upload-artifact@v4
@@ -366,12 +571,12 @@ jobs:
             ### Container Images
 
             The following container images are available for this release:
-            - `ghcr.io/kibamail/kibaship-operator:${{ steps.version.outputs.tag_name }}`
-            - `ghcr.io/kibamail/kibaship-operator-apiserver:${{ steps.version.outputs.tag_name }}`
-            - `ghcr.io/kibamail/kibaship-operator-cert-manager-webhook:${{ steps.version.outputs.tag_name }}`
-            - `ghcr.io/kibamail/kibaship-operator-registry-auth:${{ steps.version.outputs.tag_name }}`
-            - `ghcr.io/kibamail/kibaship-railpack-cli:${{ steps.version.outputs.tag_name }}`
-            - `ghcr.io/kibamail/kibaship-railpack-build:${{ steps.version.outputs.tag_name }}`
+            - `docker.io/kibamail/kibaship-operator:v-${{ steps.version.outputs.version }}`
+            - `docker.io/kibamail/kibaship-operator-apiserver:v-${{ steps.version.outputs.version }}`
+            - `docker.io/kibamail/kibaship-operator-cert-manager-webhook:v-${{ steps.version.outputs.version }}`
+            - `docker.io/kibamail/kibaship-operator-registry-auth:v-${{ steps.version.outputs.version }}`
+            - `docker.io/kibamail/kibaship-railpack-cli:v-${{ steps.version.outputs.version }}`
+            - `docker.io/kibamail/kibaship-railpack-build:v-${{ steps.version.outputs.version }}`
 
             ### CLI Tool
 
