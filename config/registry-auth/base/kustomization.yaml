@@ -14,4 +14,4 @@ resources:
 images:
 - name: registry-auth
   newName: ghcr.io/kibamail/kibaship-operator-registry-auth
-  newTag: v0.1.5
+  newTag: v0.1.6
