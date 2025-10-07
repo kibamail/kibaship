@@ -67,7 +67,8 @@ locals {
             kind = "PodSecurityConfiguration"
             exemptions = {
               namespaces = [
-                "longhorn-system"
+                "longhorn-system",
+                "observability"
               ]
             }
           }
