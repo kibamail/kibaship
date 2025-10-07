@@ -16,6 +16,7 @@ import ProvisionLoadBalancersJob from '#jobs/clusters/provision_load_balancers_j
 import ProvisionServersJob from '#jobs/clusters/provision_servers_job'
 import ProvisionVolumesJob from '#jobs/clusters/provision_volumes_job'
 import DestroyClusterJob from '#jobs/clusters/destroy_cluster_job'
+import DestroyBareMetalHetznerJob from '#jobs/clusters/destroy_bare_metal_hetzner_job'
 import ProvisionTalosImageJob from '#jobs/clusters/provision_talos_image_job'
 import { TerraformStage } from '#services/terraform/terraform_executor'
 import ProvisionKubernetesConfigJob from '#jobs/clusters/provision_kubernetes_config_job'
@@ -214,7 +215,12 @@ export default class ClustersController extends BaseController {
     cluster.deletedAt = DateTime.now()
     await cluster.save()
 
-    await queue.dispatch(DestroyClusterJob, { clusterId: cluster.id })
+    // Dispatch appropriate destroy job based on cluster type
+    if (cluster.robotCloudProviderId) {
+      await queue.dispatch(DestroyBareMetalHetznerJob, { clusterId: cluster.id })
+    } else {
+      await queue.dispatch(DestroyClusterJob, { clusterId: cluster.id })
+    }
 
     return ctx.response.redirect().toRoute('workspace.cloud.clusters', {
       workspace: workspace.slug,
@@ -233,6 +239,10 @@ export default class ClustersController extends BaseController {
           return ProvisionBareMetalTalosImageJob
         case 'bare-metal-servers-bootstrap':
           return ProvisionBareMetalServersBootstrapJob
+        case 'kubernetes-config':
+          return ProvisionKubernetesConfigJob
+        case 'kubernetes-boot':
+          return ProvisionKubernetesBootJob
         default:
           throw new Error(`Unknown Hetzner Robot stage: ${stage}`)
       }

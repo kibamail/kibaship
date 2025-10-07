@@ -153,3 +153,17 @@ In talos factory, to generate the image hash, we need to ensure the following mo
 
 - siderolabs/iscsi-tools (v0.2.0)
 - siderolabs/util-linux-tools (2.41.1)
+
+# Bare metal talos linux factory image:
+
+```yaml
+customization:
+  systemExtensions:
+    officialExtensions:
+      - siderolabs/iscsi-tools
+      - siderolabs/nut-client
+      - siderolabs/nvme-cli
+      - siderolabs/util-linux-tools
+```
+
+Your image schematic ID is: `3df38c5e5faf43879e6ff0f13c6b0ba02aaa0eb5f9291f28749c4056c1974e7b`

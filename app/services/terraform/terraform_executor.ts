@@ -22,6 +22,7 @@ export type TerraformStage =
   | 'talos'
   | 'kubernetes-config'
   | 'kubernetes-boot'
+  | 'kibaship-operator'
   | 'kubernetes-byoc'
   | 'bare-metal-networking'
   | 'bare-metal-cloud-load-balancer'

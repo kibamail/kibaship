@@ -161,6 +161,10 @@ resource "helm_release" "victoria_metrics" {
   chart      = "victoria-metrics-k8s-stack"
   version    = "0.60.1"
   namespace  = kubernetes_namespace.observability.metadata[0].name
+  cleanup_on_fail  = true
+  timeout    = 900
+  wait       = false
+  replace    = true
 
   values = [
     yamlencode({
@@ -331,6 +335,10 @@ resource "helm_release" "victoria_logs" {
   chart      = "victoria-logs-single"
   version    = "0.11.11"
   namespace  = kubernetes_namespace.observability.metadata[0].name
+  cleanup_on_fail  = true
+  timeout    = 900
+  wait       = false
+  replace    = true
 
   values = [
     yamlencode({

@@ -244,6 +244,14 @@ export default class ProvisionHetznerBareMetalCluster extends Job {
       serverIdentifiers,
     })
 
+    // Wait 2 minutes for server attachment to complete on Hetzner's side
+    await this.logToStream(
+      'info',
+      'Waiting 2 minutes for vSwitch server attachment to complete...'
+    )
+    await new Promise((resolve) => setTimeout(resolve, 120000)) // 120 seconds = 2 minutes
+    await this.logToStream('success', 'vSwitch attachment wait period completed')
+
     await this.logToStream(
       'success',
       'Bare metal server preparation complete - proceeding to cloud networking'

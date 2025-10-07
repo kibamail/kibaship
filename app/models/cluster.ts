@@ -304,6 +304,11 @@ export default class Cluster extends BaseModel {
   @belongsTo(() => CloudProvider)
   declare cloudProvider: BelongsTo<typeof CloudProvider>
 
+  @belongsTo(() => CloudProvider, {
+    foreignKey: 'robotCloudProviderId',
+  })
+  declare robotCloudProvider: BelongsTo<typeof CloudProvider>
+
   @belongsTo(() => Workspace)
   declare workspace: BelongsTo<typeof Workspace>
 
@@ -573,6 +578,7 @@ export default class Cluster extends BaseModel {
     return Cluster.query()
       .where('id', clusterId)
       .preload('cloudProvider')
+      .preload('robotCloudProvider')
       .preload('loadBalancers')
       .preload('nodes')
       .preload('sshKey')
@@ -633,6 +639,12 @@ export default class Cluster extends BaseModel {
         if (this.kubernetesBootStartedAt) return 'in_progress'
         return 'pending'
 
+      case 'kibaship-operator':
+        if (this.kibashipOperatorCompletedAt) return 'ready'
+        if (this.kibashipOperatorErrorAt) return 'failed'
+        if (this.kibashipOperatorStartedAt) return 'in_progress'
+        return 'pending'
+
       case 'dns':
         if (this.dnsCompletedAt) return 'ready'
         if (this.dnsErrorAt) return 'failed'
@@ -672,6 +684,34 @@ export default class Cluster extends BaseModel {
     return 'pending'
   }
 
+  public getBareMetalKubernetesConfigStatus(): ProvisioningStepStatus {
+    if (this.kubernetesConfigCompletedAt) return 'ready'
+    if (this.kubernetesConfigErrorAt) return 'failed'
+    if (this.kubernetesConfigStartedAt) return 'in_progress'
+    return 'pending'
+  }
+
+  public getBareMetalKubernetesBootStatus(): ProvisioningStepStatus {
+    if (this.kubernetesBootCompletedAt) return 'ready'
+    if (this.kubernetesBootErrorAt) return 'failed'
+    if (this.kubernetesBootStartedAt) return 'in_progress'
+    return 'pending'
+  }
+
+  public getBareMetalKibashipOperatorStatus(): ProvisioningStepStatus {
+    if (this.kibashipOperatorCompletedAt) return 'ready'
+    if (this.kibashipOperatorErrorAt) return 'failed'
+    if (this.kibashipOperatorStartedAt) return 'in_progress'
+    return 'pending'
+  }
+
+  public getBareMetalDnsStatus(): ProvisioningStepStatus {
+    if (this.dnsCompletedAt) return 'ready'
+    if (this.dnsErrorAt) return 'failed'
+    if (this.dnsStartedAt) return 'in_progress'
+    return 'pending'
+  }
+
   @computed()
   public get bareMetalProgress() {
     return {
@@ -679,6 +719,10 @@ export default class Cluster extends BaseModel {
       'bare-metal-cloud-load-balancer': this.getBareMetalCloudLoadBalancerStatus(),
       'bare-metal-talos-image': this.getBareMetalTalosImageStatus(),
       'bare-metal-servers-bootstrap': this.getBareMetalServersBootstrapStatus(),
+      'kubernetes-config': this.getBareMetalKubernetesConfigStatus(),
+      'kubernetes-boot': this.getBareMetalKubernetesBootStatus(),
+      'dns': this.getBareMetalDnsStatus(),
+      'kibaship-operator': this.getBareMetalKibashipOperatorStatus(),
     }
   }
 
@@ -699,6 +743,7 @@ export default class Cluster extends BaseModel {
       'kubernetes-config',
       'kubernetes-boot',
       'dns',
+      'kibaship-operator',
     ]
 
     return stages.reduce(
@@ -744,6 +789,7 @@ export default class Cluster extends BaseModel {
       'volumes',
       'kubernetes-config',
       'kubernetes-boot',
+      'kibaship-operator',
       'dns',
     ]
 
@@ -784,6 +830,22 @@ export default class Cluster extends BaseModel {
         return 'bare-metal-servers-bootstrap' as TerraformStage
       }
 
+      if (this.getBareMetalKubernetesConfigStatus() === 'failed') {
+        return 'kubernetes-config' as TerraformStage
+      }
+
+      if (this.getBareMetalKubernetesBootStatus() === 'failed') {
+        return 'kubernetes-boot' as TerraformStage
+      }
+
+      if (this.getBareMetalDnsStatus() === 'failed') {
+        return 'dns' as TerraformStage
+      }
+
+      if (this.getBareMetalKibashipOperatorStatus() === 'failed') {
+        return 'kibaship-operator' as TerraformStage
+      }
+
       return null
     }
 
@@ -797,6 +859,8 @@ export default class Cluster extends BaseModel {
       'volumes',
       'kubernetes-config',
       'kubernetes-boot',
+      'dns',
+      'kibaship-operator',
     ]
 
     for (const stage of stages) {

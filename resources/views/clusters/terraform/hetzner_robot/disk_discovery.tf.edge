@@ -107,7 +107,7 @@ resource "null_resource" "disk_discovery_{{ node.slug }}" {
 
         # 7. Download Talos image
         echo "Downloading Talos image for $TALOS_ARCH..."
-        wget -O /tmp/metal-$TALOS_ARCH.raw.zst https://factory.talos.dev/image/376567988ad370138ad8b2698212367b8edcb69b5fd68c80be1f2ec7d603b4ba/$TALOS_VERSION/metal-$TALOS_ARCH.raw.zst
+        wget -O /tmp/metal-$TALOS_ARCH.raw.zst https://factory.talos.dev/image/3df38c5e5faf43879e6ff0f13c6b0ba02aaa0eb5f9291f28749c4056c1974e7b/$TALOS_VERSION/metal-$TALOS_ARCH.raw.zst
 
         # 8. Extract Talos image
         echo "Extracting Talos image..."

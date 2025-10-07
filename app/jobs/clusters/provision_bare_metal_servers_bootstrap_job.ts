@@ -2,6 +2,7 @@ import Cluster from '#models/cluster'
 import ClusterLoadBalancer from '#models/cluster_load_balancer'
 import logger from '@adonisjs/core/services/logger'
 import { Job } from '@rlanz/bull-queue'
+import queue from '@rlanz/bull-queue/services/main'
 import { DateTime } from 'luxon'
 import { PingIpv4Address } from '#services/ping/ping_ipv4_address'
 import { RedisStream } from '#utils/redis_stream'
@@ -12,6 +13,7 @@ import { TerraformService, TerraformTemplate } from '#services/terraform/terrafo
 import { createExecutor } from '#services/terraform/main'
 import yaml from 'yaml'
 import drive from '@adonisjs/drive/services/main'
+import ProvisionKubernetesConfigJob from './provision_kubernetes_config_job.js'
 
 interface ProvisionBareMetalServersBootstrapJobPayload {
   clusterId: string
@@ -336,7 +338,8 @@ export default class ProvisionBareMetalServersBootstrapJob extends Job {
 
       await this.logToStream('success', 'Servers bootstrap completed')
 
-      // TODO: Dispatch next job in the provisioning chain
+      // Dispatch Kubernetes configuration job
+      await queue.dispatch(ProvisionKubernetesConfigJob, payload)
     } catch (error) {
       await this.logToStream('error', `Servers bootstrap failed: ${error.message}`)
       logger.error('Error in ProvisionBareMetalServersBootstrapJob:', error)

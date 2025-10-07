@@ -74,6 +74,12 @@ const bareMetalProvisioningSteps: ProvisioningStepInfo[] = [
     description: 'Setup DNS for the cluster ingress.',
     icon: <DNSIcon className="!size-5" />,
   },
+  {
+    stage: 'kibaship-operator',
+    title: 'Kibaship Operator',
+    description: 'Installing Kibaship operator into the cluster',
+    icon: <SettingsIcon className="!size-5" />,
+  },
 ]
 
 function getLatestStage(cluster: Cluster | null | undefined): TerraformStage {

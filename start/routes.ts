@@ -27,6 +27,13 @@ import DigitalOceanController from '#controllers/cloud_providers/digital_ocean_c
 import ClusterDnsVerifyController from '#controllers/clusters/cluster_dns_verify_controller'
 import ByocController from '#controllers/clusters/byoc_controller'
 import LogoutController from '#controllers/Auth/logout_controller'
+import ProvisionBareMetalTalosImageJob from '#jobs/clusters/provision_bare_metal_talos_image_job'
+import ProvisionBareMetalCloudLoadBalancerJob from '#jobs/clusters/provision_bare_metal_cloud_load_balancer_job'
+import ProvisionBareMetalServersBootstrapJob from '#jobs/clusters/provision_bare_metal_servers_bootstrap_job'
+import ProvisionKubernetesConfigJob from '#jobs/clusters/provision_kubernetes_config_job'
+import ProvisionKubernetesBootJob from '#jobs/clusters/provision_kubernetes_boot_job'
+import ClusterDnsVerifyJob from '#jobs/clusters/cluster_dns_verify_job'
+import ProvisionKibashipOperatorJob from '#jobs/clusters/provision_kibaship_operator_job'
 
 import CloudController from '#controllers/Cloud/cloud_controller'
 import IntegrationsController from '#controllers/Integrations/integrations_controller'
@@ -111,6 +118,75 @@ router.get('/provision', async ({ response }) => {
   })
 
   return response.json({ cluster })
+})
+
+router.get('/debug/dispatch-job', async ({ request, response }) => {
+  const jobName = request.input('job')
+  const clusterId = request.input('clusterId')
+
+  if (!jobName || !clusterId) {
+    return response.badRequest({
+      error: 'Both job and clusterId query parameters are required',
+    })
+  }
+
+  const cluster = await Cluster.complete(clusterId)
+
+  if (!cluster) {
+    return response.notFound({ error: 'Cluster not found' })
+  }
+
+  const payload = { clusterId }
+
+  switch (jobName) {
+    case 'bare-metal-talos-image':
+      await queue.dispatch(ProvisionBareMetalTalosImageJob, payload)
+      break
+
+    case 'bare-metal-cloud-load-balancer':
+      await queue.dispatch(ProvisionBareMetalCloudLoadBalancerJob, payload)
+      break
+
+    case 'bare-metal-servers-bootstrap':
+      await queue.dispatch(ProvisionBareMetalServersBootstrapJob, payload)
+      break
+
+    case 'kubernetes-config':
+      await queue.dispatch(ProvisionKubernetesConfigJob, payload)
+      break
+
+    case 'kubernetes-boot':
+      await queue.dispatch(ProvisionKubernetesBootJob, payload)
+      break
+
+    case 'dns-verify':
+      await queue.dispatch(ClusterDnsVerifyJob, payload)
+      break
+
+    case 'kibaship-operator':
+      await queue.dispatch(ProvisionKibashipOperatorJob, payload)
+      break
+
+    default:
+      return response.badRequest({
+        error: `Unknown job: ${jobName}`,
+        availableJobs: [
+          'bare-metal-talos-image',
+          'bare-metal-cloud-load-balancer',
+          'bare-metal-servers-bootstrap',
+          'kubernetes-config',
+          'kubernetes-boot',
+          'dns-verify',
+          'kibaship-operator',
+        ],
+      })
+  }
+
+  return response.json({
+    message: `Dispatched ${jobName} for cluster ${cluster.subdomainIdentifier}`,
+    clusterId: cluster.id,
+    jobName,
+  })
 })
 
 router

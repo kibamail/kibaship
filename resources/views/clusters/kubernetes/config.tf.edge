@@ -109,6 +109,8 @@ resource "helm_release" "cilium" {
   chart      = "cilium"
   version    = "1.18.0"
   namespace  = "kube-system"
+  cleanup_on_fail  = true
+  replace    = true
 
   set = [
     {
@@ -197,6 +199,8 @@ resource "helm_release" "cert_manager" {
   version          = "v1.18.2"
   namespace        = "cert-manager"
   create_namespace = true
+  cleanup_on_fail  = true
+  replace          = true
 
   set = [
     {
@@ -228,6 +232,7 @@ resource "helm_release" "longhorn" {
   namespace        = "longhorn-system"
   create_namespace = true
   cleanup_on_fail  = true
+  replace          = true
 
   set = [
     {
@@ -257,6 +262,7 @@ resource "helm_release" "mysql_operator" {
   namespace        = "mysql-operator"
   create_namespace = true
   cleanup_on_fail  = true
+  replace          = true
 
   set = [
     {
