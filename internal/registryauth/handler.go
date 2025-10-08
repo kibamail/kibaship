@@ -50,44 +50,80 @@ func (h *Handler) ServeAuth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Parse scope to extract repository and actions
-	var accessGrants []AccessEntry
-	var namespace string
-
-	if scope == "" {
+	// Parse all scope parameters to extract repositories and actions
+	scopes := r.URL.Query()["scope"]
+	if len(scopes) == 0 {
 		log.Printf("auth: missing scope parameter")
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
 
-	repo, actions, err := parseScope(scope)
-	if err != nil {
-		log.Printf("auth: failed to parse scope: %v", err)
-		http.Error(w, "bad request", http.StatusBadRequest)
-		return
-	}
+	var accessGrants []AccessEntry
+	var authenticatedNamespace string
 
-	// Extract namespace from repository path (e.g., "test-build/img-v2" → "test-build")
-	namespace, err = extractNamespaceFromRepo(repo)
-	if err != nil {
-		log.Printf("auth: failed to extract namespace from repo=%s: %v", repo, err)
-		http.Error(w, "bad request", http.StatusBadRequest)
-		return
-	}
+	// Determine the authenticated namespace from the username
+	// The username should match the namespace that owns the credentials
+	authenticatedNamespace = username
 
-	log.Printf("auth: extracted namespace=%s from repo=%s", namespace, repo)
+	log.Printf("auth: authenticated namespace=%s", authenticatedNamespace)
 
-	accessGrants = append(accessGrants, AccessEntry{
-		Type:    "repository",
-		Name:    repo,
-		Actions: actions,
-	})
-
-	// Validate credentials against <namespace>-registry-credentials secret
-	if !h.validator.ValidateCredentials(r.Context(), namespace, username, password) {
-		log.Printf("auth: invalid credentials for namespace=%s", namespace)
+	// Validate credentials against the authenticated namespace
+	if !h.validator.ValidateCredentials(r.Context(), authenticatedNamespace, username, password) {
+		log.Printf("auth: invalid credentials for namespace=%s", authenticatedNamespace)
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
+	}
+
+	// Process each scope
+	for _, scopeStr := range scopes {
+		repo, actions, err := parseScope(scopeStr)
+		if err != nil {
+			log.Printf("auth: failed to parse scope %s: %v", scopeStr, err)
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+
+		// Extract namespace from repository path
+		repoNamespace, err := extractNamespaceFromRepo(repo)
+		if err != nil {
+			log.Printf("auth: failed to extract namespace from repo=%s: %v", repo, err)
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+
+		log.Printf("auth: processing scope=%s repo=%s namespace=%s actions=%v", scopeStr, repo, repoNamespace, actions)
+
+		// Security policy:
+		// 1. Full access (read/write) only to authenticated namespace
+		// 2. Read-only access allowed to other namespaces (for layer mounting)
+		if repoNamespace == authenticatedNamespace {
+			// Full access to own namespace
+			accessGrants = append(accessGrants, AccessEntry{
+				Type:    "repository",
+				Name:    repo,
+				Actions: actions,
+			})
+			log.Printf("auth: granted full access to own namespace repo=%s actions=%v", repo, actions)
+		} else {
+			// Cross-namespace access: only allow read operations
+			allowedActions := []string{}
+			for _, action := range actions {
+				if action == "pull" {
+					allowedActions = append(allowedActions, action)
+				}
+			}
+
+			if len(allowedActions) > 0 {
+				accessGrants = append(accessGrants, AccessEntry{
+					Type:    "repository",
+					Name:    repo,
+					Actions: allowedActions,
+				})
+				log.Printf("auth: granted cross-namespace read access repo=%s actions=%v", repo, allowedActions)
+			} else {
+				log.Printf("auth: denied cross-namespace write access repo=%s actions=%v", repo, actions)
+			}
+		}
 	}
 
 	// Generate JWT token
@@ -114,7 +150,7 @@ func (h *Handler) ServeAuth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("auth: token issued for namespace=%s scope=%s", namespace, scope)
+	log.Printf("auth: token issued for namespace=%s with %d access grants", authenticatedNamespace, len(accessGrants))
 }
 
 // parseScope parses Docker registry scope format: "repository:<name>:<actions>"
