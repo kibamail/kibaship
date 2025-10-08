@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"time"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -30,6 +31,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -46,7 +48,7 @@ const (
 	// DeploymentFinalizerName is the finalizer name for Deployment resources
 	DeploymentFinalizerName = "platform.operator.kibaship.com/deployment-finalizer"
 	// GitRepositoryPipelineName is the suffix for git repository pipeline names
-	GitRepositoryPipelineSuffix = "git-repository-pipeline-kibaship-com"
+	GitRepositoryPipelineSuffix = "git-repository-pipeline"
 	// GitCloneTaskName is the name of the git clone task in tekton-pipelines namespace
 	GitCloneTaskName = "tekton-task-git-clone-kibaship-com"
 	// RailpackPrepareTaskName is the name of the railpack prepare task in tekton-pipelines namespace
@@ -70,10 +72,13 @@ type DeploymentReconciler struct {
 // +kubebuilder:rbac:groups=platform.operator.kibaship.com,resources=deployments/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=platform.operator.kibaship.com,resources=deployments/finalizers,verbs=update
 // +kubebuilder:rbac:groups=platform.operator.kibaship.com,resources=applications,verbs=get;list;watch
+// +kubebuilder:rbac:groups=platform.operator.kibaship.com,resources=projects,verbs=get;list;watch
 // +kubebuilder:rbac:groups=tekton.dev,resources=pipelines,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=tekton.dev,resources=pipelineruns,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=tekton.dev,resources=taskruns,verbs=get;list;watch
 // +kubebuilder:rbac:groups=mysql.oracle.com,resources=innodbclusters,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
@@ -150,6 +155,30 @@ func (r *DeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	if err := r.checkPipelineRunStatusAndEmitWebhook(ctx, &deployment); err != nil {
 		log.Error(err, "Failed to check PipelineRun status")
 		// Don't return error - this is non-critical
+	}
+
+	// If deployment phase is Deploying and it's a GitRepository app, create Kubernetes resources
+	if deployment.Status.Phase == platformv1alpha1.DeploymentPhaseDeploying &&
+		app.Spec.Type == platformv1alpha1.ApplicationTypeGitRepository {
+		// Create Kubernetes Deployment
+		if err := r.createKubernetesDeployment(ctx, &deployment, &app); err != nil {
+			log.Error(err, "Failed to create Kubernetes Deployment")
+			return ctrl.Result{}, err
+		}
+
+		// Create Kubernetes Service
+		if err := r.createKubernetesService(ctx, &deployment, &app); err != nil {
+			log.Error(err, "Failed to create Kubernetes Service")
+			return ctrl.Result{}, err
+		}
+
+		// After creating Kubernetes resources, transition to Succeeded
+		deployment.Status.Phase = platformv1alpha1.DeploymentPhaseSucceeded
+		if err := r.Status().Update(ctx, &deployment); err != nil {
+			log.Error(err, "Failed to update Deployment status to Succeeded")
+			return ctrl.Result{}, err
+		}
+		log.Info("Deployment transitioned to Succeeded phase with Kubernetes resources created")
 	}
 
 	log.Info("Successfully reconciled Deployment")
@@ -230,6 +259,14 @@ func (r *DeploymentReconciler) handleMySQLDeployment(ctx context.Context, deploy
 		return fmt.Errorf("invalid MySQL configuration: %w", err)
 	}
 
+	// Get project for resource metadata
+	var project platformv1alpha1.Project
+	if err := r.Get(ctx, types.NamespacedName{
+		Name: fmt.Sprintf("project-%s", deployment.GetProjectUUID()),
+	}, &project); err != nil {
+		return fmt.Errorf("failed to get project: %w", err)
+	}
+
 	// Get project and app slugs from labels
 	projectSlug, err := r.getProjectSlug(ctx, deployment.GetProjectUUID())
 	if err != nil {
@@ -274,7 +311,7 @@ func (r *DeploymentReconciler) handleMySQLDeployment(ctx context.Context, deploy
 	// Create secret if it doesn't exist
 	if errors.IsNotFound(err) {
 		log.Info("Creating MySQL credentials secret", "secretName", secretName)
-		secret, err := generateMySQLCredentialsSecret(deployment, projectSlug, appSlug, deployment.Namespace)
+		secret, err := generateMySQLCredentialsSecret(deployment, project.Name, projectSlug, appSlug, deployment.Namespace)
 		if err != nil {
 			return fmt.Errorf("failed to generate MySQL credentials secret: %w", err)
 		}
@@ -311,7 +348,7 @@ func (r *DeploymentReconciler) handleMySQLDeployment(ctx context.Context, deploy
 	// Create InnoDBCluster if it doesn't exist
 	if errors.IsNotFound(err) {
 		log.Info("Creating InnoDBCluster", "clusterName", clusterName)
-		cluster := generateInnoDBCluster(deployment, app, projectSlug, appSlug, secretName, deployment.Namespace)
+		cluster := generateInnoDBCluster(deployment, app, project.Name, projectSlug, appSlug, secretName, deployment.Namespace)
 
 		// Set owner reference to the deployment
 		if err := controllerutil.SetControllerReference(deployment, cluster, r.Scheme); err != nil {
@@ -329,10 +366,288 @@ func (r *DeploymentReconciler) handleMySQLDeployment(ctx context.Context, deploy
 	return nil
 }
 
+// getImageName derives the container image name from deployment labels
+// Format: registry.registry.svc.cluster.local/{namespace}/{application-uuid}:{deployment-uuid}
+func (r *DeploymentReconciler) getImageName(deployment *platformv1alpha1.Deployment) string {
+	return fmt.Sprintf("registry.registry.svc.cluster.local/%s/%s:%s",
+		deployment.Namespace,
+		deployment.Labels["platform.kibaship.com/application-uuid"],
+		deployment.Labels["platform.kibaship.com/uuid"])
+}
+
+// createKubernetesDeployment creates a Kubernetes Deployment resource for GitRepository applications
+func (r *DeploymentReconciler) createKubernetesDeployment(ctx context.Context, deployment *platformv1alpha1.Deployment, app *platformv1alpha1.Application) error {
+	log := logf.FromContext(ctx).WithValues("deployment", deployment.Name, "application", app.Name)
+
+	deploymentSlug := deployment.GetSlug()
+	deploymentUUID := deployment.GetUUID()
+	appSlug := app.GetSlug()
+	appUUID := app.GetUUID()
+
+	// Generate Kubernetes Deployment name
+	k8sDeploymentName := fmt.Sprintf("deployment-%s", deploymentUUID)
+
+	// Check if Kubernetes Deployment already exists
+	existingK8sDeployment := &appsv1.Deployment{}
+	err := r.Get(ctx, types.NamespacedName{
+		Name:      k8sDeploymentName,
+		Namespace: deployment.Namespace,
+	}, existingK8sDeployment)
+
+	if err == nil {
+		log.Info("Kubernetes Deployment already exists", "k8sDeploymentName", k8sDeploymentName)
+		return nil
+	}
+
+	if !errors.IsNotFound(err) {
+		return fmt.Errorf("failed to check for existing Kubernetes Deployment: %w", err)
+	}
+
+	// Get project for resource limits
+	var project platformv1alpha1.Project
+	if err := r.Get(ctx, types.NamespacedName{
+		Name: fmt.Sprintf("project-%s", deployment.GetProjectUUID()),
+	}, &project); err != nil {
+		return fmt.Errorf("failed to get project: %w", err)
+	}
+
+	// Derive the image name
+	imageName := r.getImageName(deployment)
+
+	// Determine container port (default to 3000 for now, will be enhanced with ApplicationDomain logic later)
+	containerPort := int32(3000)
+
+	// Get resource profile from project (default to standard for now)
+	// TODO: Add ResourceProfile field to ProjectSpec
+	resourceProfile := "standard"
+
+	// Define resource requirements based on profile
+	var resourceRequirements corev1.ResourceRequirements
+	switch resourceProfile {
+	case "minimal":
+		resourceRequirements = corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("100m"),
+				corev1.ResourceMemory: resource.MustParse("128Mi"),
+			},
+			Limits: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("500m"),
+				corev1.ResourceMemory: resource.MustParse("512Mi"),
+			},
+		}
+	case "standard":
+		resourceRequirements = corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("250m"),
+				corev1.ResourceMemory: resource.MustParse("512Mi"),
+			},
+			Limits: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("1000m"),
+				corev1.ResourceMemory: resource.MustParse("1Gi"),
+			},
+		}
+	case "performance":
+		resourceRequirements = corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("500m"),
+				corev1.ResourceMemory: resource.MustParse("1Gi"),
+			},
+			Limits: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("2000m"),
+				corev1.ResourceMemory: resource.MustParse("2Gi"),
+			},
+		}
+	default:
+		// Default to standard
+		resourceRequirements = corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("250m"),
+				corev1.ResourceMemory: resource.MustParse("512Mi"),
+			},
+			Limits: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("1000m"),
+				corev1.ResourceMemory: resource.MustParse("1Gi"),
+			},
+		}
+	}
+
+	// Create the Kubernetes Deployment
+	replicas := int32(1)
+	k8sDeployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      k8sDeploymentName,
+			Namespace: deployment.Namespace,
+			Labels: map[string]string{
+				"app.kubernetes.io/name":                 fmt.Sprintf("app-%s", appUUID),
+				"app.kubernetes.io/managed-by":           "kibaship-operator",
+				"app.kubernetes.io/component":            "application",
+				"platform.kibaship.com/deployment-uuid":  deployment.Labels["platform.kibaship.com/uuid"],
+				"platform.kibaship.com/application-uuid": deployment.Labels["platform.kibaship.com/application-uuid"],
+				"platform.kibaship.com/project-uuid":     deployment.Labels["platform.kibaship.com/project-uuid"],
+			},
+			Annotations: map[string]string{
+				"platform.kibaship.com/deployment-slug":  deploymentSlug,
+				"platform.kibaship.com/application-slug": appSlug,
+				"platform.kibaship.com/image":            imageName,
+			},
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: &replicas,
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"app.kubernetes.io/name":                fmt.Sprintf("app-%s", appUUID),
+					"platform.kibaship.com/deployment-uuid": deployment.Labels["platform.kibaship.com/uuid"],
+				},
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						"app.kubernetes.io/name":                 fmt.Sprintf("app-%s", appUUID),
+						"app.kubernetes.io/managed-by":           "kibaship-operator",
+						"app.kubernetes.io/component":            "application",
+						"platform.kibaship.com/deployment-uuid":  deployment.Labels["platform.kibaship.com/uuid"],
+						"platform.kibaship.com/application-uuid": deployment.Labels["platform.kibaship.com/application-uuid"],
+						"platform.kibaship.com/project-uuid":     deployment.Labels["platform.kibaship.com/project-uuid"],
+					},
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						func() corev1.Container {
+							container := corev1.Container{
+								Name:  "app",
+								Image: imageName,
+								Ports: []corev1.ContainerPort{
+									{
+										Name:          "http",
+										ContainerPort: containerPort,
+										Protocol:      corev1.ProtocolTCP,
+									},
+								},
+								Resources: resourceRequirements,
+								EnvFrom: func() []corev1.EnvFromSource {
+									secretName := r.getEnvSecretName(app)
+									if secretName == "" {
+										return nil
+									}
+									return []corev1.EnvFromSource{
+										{
+											SecretRef: &corev1.SecretEnvSource{
+												LocalObjectReference: corev1.LocalObjectReference{
+													Name: secretName,
+												},
+											},
+										},
+									}
+								}(),
+							}
+
+							// Add health check probes if configured
+							healthCheckConfig := r.getHealthCheckConfig(app)
+							if healthCheckConfig != nil {
+								readinessProbe, livenessProbe := r.buildHealthProbes(healthCheckConfig, containerPort)
+								container.ReadinessProbe = readinessProbe
+								container.LivenessProbe = livenessProbe
+							}
+
+							return container
+						}(),
+					},
+					RestartPolicy: corev1.RestartPolicyAlways,
+				},
+			},
+		},
+	}
+
+	// Set owner reference to the Deployment CR
+	if err := controllerutil.SetControllerReference(deployment, k8sDeployment, r.Scheme); err != nil {
+		return fmt.Errorf("failed to set controller reference on Kubernetes Deployment: %w", err)
+	}
+
+	if err := r.Create(ctx, k8sDeployment); err != nil {
+		return fmt.Errorf("failed to create Kubernetes Deployment: %w", err)
+	}
+
+	log.Info("Successfully created Kubernetes Deployment", "k8sDeploymentName", k8sDeploymentName, "image", imageName)
+	return nil
+}
+
+// createKubernetesService creates a Kubernetes Service resource for the application
+func (r *DeploymentReconciler) createKubernetesService(ctx context.Context, deployment *platformv1alpha1.Deployment, app *platformv1alpha1.Application) error {
+	log := logf.FromContext(ctx).WithValues("deployment", deployment.Name, "application", app.Name)
+
+	appUUID := app.GetUUID()
+
+	// Generate Service name based on application UUID
+	serviceName := fmt.Sprintf("service-%s", appUUID)
+
+	// Check if Service already exists
+	existingService := &corev1.Service{}
+	err := r.Get(ctx, types.NamespacedName{
+		Name:      serviceName,
+		Namespace: deployment.Namespace,
+	}, existingService)
+
+	if err == nil {
+		log.Info("Kubernetes Service already exists", "serviceName", serviceName)
+		return nil
+	}
+
+	if !errors.IsNotFound(err) {
+		return fmt.Errorf("failed to check for existing Service: %w", err)
+	}
+
+	// Determine container port (default to 3000 for now)
+	// TODO: Get port from ApplicationDomain when domain reconciler is implemented
+	containerPort := int32(3000)
+
+	// Create Service with selector matching the Deployment pods
+	service := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      serviceName,
+			Namespace: deployment.Namespace,
+			Labels: map[string]string{
+				"app.kubernetes.io/name":                 fmt.Sprintf("project-%s", app.GetProjectUUID()),
+				"app.kubernetes.io/managed-by":           "kibaship-operator",
+				"app.kubernetes.io/component":            "application-service",
+				"platform.kibaship.com/application-uuid": app.Labels["platform.kibaship.com/uuid"],
+				"platform.kibaship.com/project-uuid":     app.Labels["platform.kibaship.com/project-uuid"],
+				"platform.kibaship.com/deployment-uuid":  deployment.Labels["platform.kibaship.com/uuid"],
+			},
+		},
+		Spec: corev1.ServiceSpec{
+			Type: corev1.ServiceTypeClusterIP,
+			Selector: map[string]string{
+				"app.kubernetes.io/name":                 fmt.Sprintf("app-%s", appUUID),
+				"platform.kibaship.com/application-uuid": app.Labels["platform.kibaship.com/uuid"],
+			},
+			Ports: []corev1.ServicePort{
+				{
+					Name:       "http",
+					Protocol:   corev1.ProtocolTCP,
+					Port:       containerPort,
+					TargetPort: intstr.FromInt32(containerPort),
+				},
+			},
+		},
+	}
+
+	// Set owner reference to the Deployment CR for cascading deletion
+	if err := controllerutil.SetControllerReference(deployment, service, r.Scheme); err != nil {
+		return fmt.Errorf("failed to set controller reference on Service: %w", err)
+	}
+
+	if err := r.Create(ctx, service); err != nil {
+		return fmt.Errorf("failed to create Service: %w", err)
+	}
+
+	log.Info("Successfully created Kubernetes Service", "serviceName", serviceName, "port", containerPort)
+	return nil
+}
+
 // generateGitRepositoryPipelineName generates the pipeline name for GitRepository applications
 func (r *DeploymentReconciler) generateGitRepositoryPipelineName(_ context.Context, deployment *platformv1alpha1.Deployment, _ *platformv1alpha1.Application) string {
-	deploymentSlug := deployment.GetSlug()
-	return fmt.Sprintf("pipeline-%s-kibaship-com", deploymentSlug)
+	deploymentUUID := deployment.GetUUID()
+	return fmt.Sprintf("pipeline-%s", deploymentUUID)
 }
 
 // createGitRepositoryPipeline creates a Tekton Pipeline for GitRepository applications
@@ -340,9 +655,11 @@ func (r *DeploymentReconciler) createGitRepositoryPipeline(ctx context.Context, 
 	log := logf.FromContext(ctx)
 
 	deploymentSlug := deployment.GetSlug()
+	deploymentUUID := deployment.GetUUID()
+	projectUUID := deployment.GetProjectUUID()
 
 	// Get project slug for labels
-	projectSlug, err := r.getProjectSlug(ctx, deployment.GetProjectUUID())
+	projectSlug, err := r.getProjectSlug(ctx, projectUUID)
 	if err != nil {
 		return fmt.Errorf("failed to get project slug: %w", err)
 	}
@@ -368,15 +685,15 @@ func (r *DeploymentReconciler) createGitRepositoryPipeline(ctx context.Context, 
 		tokenSecret = gitConfig.SecretRef.Name
 	}
 
-	// Generate workspace name based on deployment
-	workspaceName := fmt.Sprintf("workspace-%s-kibaship-com", deploymentSlug)
+	// Generate workspace name based on deployment UUID
+	workspaceName := fmt.Sprintf("workspace-%s", deploymentUUID)
 
 	pipeline := &tektonv1.Pipeline{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      pipelineName,
 			Namespace: deployment.Namespace,
 			Labels: map[string]string{
-				"app.kubernetes.io/name":                 fmt.Sprintf("project-%s", projectSlug),
+				"app.kubernetes.io/name":                 fmt.Sprintf("project-%s", projectUUID),
 				"app.kubernetes.io/managed-by":           "kibaship-operator",
 				"app.kubernetes.io/component":            "ci-cd-pipeline",
 				"tekton.dev/pipeline":                    "git-repository-clone",
@@ -419,6 +736,11 @@ func (r *DeploymentReconciler) createGitRepositoryPipeline(ctx context.Context, 
 				{
 					Name:        "registry-ca-cert",
 					Description: "Registry CA certificate for TLS trust",
+					Optional:    true,
+				},
+				{
+					Name:        "app-env-vars",
+					Description: "Application environment variables from secret",
 					Optional:    true,
 				},
 			},
@@ -519,13 +841,14 @@ func (r *DeploymentReconciler) createGitRepositoryPipeline(ctx context.Context, 
 							}
 							return gitConfig.RootDirectory
 						}()}},
-						{Name: "railpackFrontendSource", Value: tektonv1.ParamValue{Type: tektonv1.ParamTypeString, StringVal: "ghcr.io/railwayapp/railpack-frontend:v0.7.2"}},
+						{Name: "railpackFrontendSource", Value: tektonv1.ParamValue{Type: tektonv1.ParamTypeString, StringVal: "ghcr.io/railwayapp/railpack-frontend:v0.9.0"}},
 						{Name: "imageTag", Value: tektonv1.ParamValue{Type: tektonv1.ParamTypeString, StringVal: fmt.Sprintf("registry.registry.svc.cluster.local/%s/%s:%s", deployment.Namespace, deployment.Labels["platform.kibaship.com/application-uuid"], deployment.Labels["platform.kibaship.com/uuid"])}},
 					},
 					Workspaces: []tektonv1.WorkspacePipelineTaskBinding{
 						{Name: "output", Workspace: workspaceName},
 						{Name: "docker-config", Workspace: "registry-docker-config"},
 						{Name: "registry-ca", Workspace: "registry-ca-cert"},
+						{Name: "app-env-vars", Workspace: "app-env-vars"},
 					},
 				},
 			},
@@ -557,22 +880,157 @@ func (r *DeploymentReconciler) createGitRepositoryPipeline(ctx context.Context, 
 	return nil
 }
 
+// getEnvSecretName returns the environment secret name from the application based on its type
+func (r *DeploymentReconciler) getEnvSecretName(app *platformv1alpha1.Application) string {
+	switch app.Spec.Type {
+	case platformv1alpha1.ApplicationTypeGitRepository:
+		if app.Spec.GitRepository != nil && app.Spec.GitRepository.Env != nil {
+			return app.Spec.GitRepository.Env.Name
+		}
+	case platformv1alpha1.ApplicationTypeDockerImage:
+		if app.Spec.DockerImage != nil && app.Spec.DockerImage.Env != nil {
+			return app.Spec.DockerImage.Env.Name
+		}
+	case platformv1alpha1.ApplicationTypeMySQL:
+		if app.Spec.MySQL != nil && app.Spec.MySQL.Env != nil {
+			return app.Spec.MySQL.Env.Name
+		}
+	case platformv1alpha1.ApplicationTypeMySQLCluster:
+		if app.Spec.MySQLCluster != nil && app.Spec.MySQLCluster.Env != nil {
+			return app.Spec.MySQLCluster.Env.Name
+		}
+	case platformv1alpha1.ApplicationTypePostgres:
+		if app.Spec.Postgres != nil && app.Spec.Postgres.Env != nil {
+			return app.Spec.Postgres.Env.Name
+		}
+	case platformv1alpha1.ApplicationTypePostgresCluster:
+		if app.Spec.PostgresCluster != nil && app.Spec.PostgresCluster.Env != nil {
+			return app.Spec.PostgresCluster.Env.Name
+		}
+	}
+	// Fallback: generate from app UUID
+	if appUUID, exists := app.Labels["platform.kibaship.com/uuid"]; exists {
+		return fmt.Sprintf("env-%s", appUUID)
+	}
+	return ""
+}
+
+// getEnvWorkspaceBinding returns a workspace binding for the application's env secret
+func (r *DeploymentReconciler) getEnvWorkspaceBinding(app *platformv1alpha1.Application) *tektonv1.WorkspaceBinding {
+	secretName := r.getEnvSecretName(app)
+	if secretName == "" {
+		return nil
+	}
+
+	return &tektonv1.WorkspaceBinding{
+		Name: "app-env-vars",
+		Secret: &corev1.SecretVolumeSource{
+			SecretName: secretName,
+		},
+	}
+}
+
+// getHealthCheckConfig returns the health check configuration from the application based on its type
+func (r *DeploymentReconciler) getHealthCheckConfig(app *platformv1alpha1.Application) *platformv1alpha1.HealthCheckConfig {
+	switch app.Spec.Type {
+	case platformv1alpha1.ApplicationTypeGitRepository:
+		if app.Spec.GitRepository != nil {
+			return app.Spec.GitRepository.HealthCheck
+		}
+	case platformv1alpha1.ApplicationTypeDockerImage:
+		if app.Spec.DockerImage != nil {
+			return app.Spec.DockerImage.HealthCheck
+		}
+	}
+	return nil
+}
+
+// buildHealthProbes creates readiness and liveness probes based on health check configuration
+func (r *DeploymentReconciler) buildHealthProbes(healthCheck *platformv1alpha1.HealthCheckConfig, containerPort int32) (readiness *corev1.Probe, liveness *corev1.Probe) {
+	if healthCheck == nil || healthCheck.Path == "" {
+		return nil, nil
+	}
+
+	// Determine the port to use for health checks
+	port := containerPort
+	if healthCheck.Port > 0 {
+		port = healthCheck.Port
+	}
+
+	// Set default values if not provided (following Kubernetes defaults)
+	initialDelay := healthCheck.InitialDelaySeconds
+	if initialDelay == 0 {
+		initialDelay = 30
+	}
+
+	period := healthCheck.PeriodSeconds
+	if period == 0 {
+		period = 10
+	}
+
+	timeout := healthCheck.TimeoutSeconds
+	if timeout == 0 {
+		timeout = 5
+	}
+
+	successThreshold := healthCheck.SuccessThreshold
+	if successThreshold == 0 {
+		successThreshold = 1
+	}
+
+	failureThreshold := healthCheck.FailureThreshold
+	if failureThreshold == 0 {
+		failureThreshold = 3
+	}
+
+	// Create the HTTP GET action
+	httpGet := &corev1.HTTPGetAction{
+		Path:   healthCheck.Path,
+		Port:   intstr.FromInt32(port),
+		Scheme: corev1.URISchemeHTTP,
+	}
+
+	// Readiness probe - determines when pod is ready to receive traffic
+	readiness = &corev1.Probe{
+		ProbeHandler: corev1.ProbeHandler{
+			HTTPGet: httpGet,
+		},
+		InitialDelaySeconds: initialDelay,
+		PeriodSeconds:       period,
+		TimeoutSeconds:      timeout,
+		SuccessThreshold:    successThreshold,
+		FailureThreshold:    failureThreshold,
+	}
+
+	// Liveness probe - determines when pod should be restarted
+	// Use slightly more lenient settings for liveness to avoid unnecessary restarts
+	liveness = &corev1.Probe{
+		ProbeHandler: corev1.ProbeHandler{
+			HTTPGet: httpGet,
+		},
+		InitialDelaySeconds: initialDelay + 10, // Give app more time before checking liveness
+		PeriodSeconds:       period * 2,        // Check less frequently
+		TimeoutSeconds:      timeout,
+		SuccessThreshold:    1, // Always 1 for liveness
+		FailureThreshold:    failureThreshold,
+	}
+
+	return readiness, liveness
+}
+
 // createPipelineRun creates a PipelineRun for the deployment
 func (r *DeploymentReconciler) createPipelineRun(ctx context.Context, deployment *platformv1alpha1.Deployment, app *platformv1alpha1.Application, pipelineName string) error {
 	log := logf.FromContext(ctx)
 
-	projectSlug, err := r.getProjectSlug(ctx, deployment.GetProjectUUID())
-	if err != nil {
-		return fmt.Errorf("failed to get project slug: %w", err)
-	}
 	deploymentSlug := deployment.GetSlug()
+	deploymentUUID := deployment.GetUUID()
 
 	// Generate PipelineRun name with generation for uniqueness
-	pipelineRunName := fmt.Sprintf("pipeline-run-%s-%d-kibaship-com", deploymentSlug, deployment.Generation)
+	pipelineRunName := fmt.Sprintf("pipeline-run-%s-%d", deploymentUUID, deployment.Generation)
 
 	// Check if PipelineRun already exists for this generation
 	existingPipelineRun := &tektonv1.PipelineRun{}
-	err = r.Get(ctx, types.NamespacedName{
+	err := r.Get(ctx, types.NamespacedName{
 		Name:      pipelineRunName,
 		Namespace: deployment.Namespace,
 	}, existingPipelineRun)
@@ -601,11 +1059,13 @@ func (r *DeploymentReconciler) createPipelineRun(ctx context.Context, deployment
 		}
 	}
 
-	// Generate workspace name based on deployment
-	workspaceName := fmt.Sprintf("workspace-%s-kibaship-com", deploymentSlug)
+	// Generate workspace name based on deployment UUID
+	workspaceName := fmt.Sprintf("workspace-%s", deploymentUUID)
 
+	// Get project UUID for service account name
+	projectUUID := deployment.GetProjectUUID()
 	// Generate service account name - must match project controller naming
-	serviceAccountName := fmt.Sprintf("project-%s-sa-kibaship-com", projectSlug)
+	serviceAccountName := fmt.Sprintf("project-%s-sa", projectUUID)
 
 	pipelineRun := &tektonv1.PipelineRun{
 		ObjectMeta: metav1.ObjectMeta{
@@ -641,42 +1101,49 @@ func (r *DeploymentReconciler) createPipelineRun(ctx context.Context, deployment
 			TaskRunTemplate: tektonv1.PipelineTaskRunTemplate{
 				ServiceAccountName: serviceAccountName,
 			},
-			Workspaces: []tektonv1.WorkspaceBinding{
-				{
-					Name: workspaceName,
-					VolumeClaimTemplate: &corev1.PersistentVolumeClaim{
-						ObjectMeta: metav1.ObjectMeta{
-							Labels: map[string]string{
-								"app.kubernetes.io/name":       fmt.Sprintf("workspace-%s", deploymentSlug),
-								"app.kubernetes.io/managed-by": "kibaship",
+			Workspaces: func() []tektonv1.WorkspaceBinding {
+				workspaces := []tektonv1.WorkspaceBinding{
+					{
+						Name: workspaceName,
+						VolumeClaimTemplate: &corev1.PersistentVolumeClaim{
+							ObjectMeta: metav1.ObjectMeta{
+								Labels: map[string]string{
+									"app.kubernetes.io/name":       fmt.Sprintf("workspace-%s", deploymentSlug),
+									"app.kubernetes.io/managed-by": "kibaship",
+								},
 							},
-						},
-						Spec: corev1.PersistentVolumeClaimSpec{
-							AccessModes: []corev1.PersistentVolumeAccessMode{
-								corev1.ReadWriteOnce,
-							},
-							StorageClassName: func() *string { s := config.StorageClassReplica1; return &s }(),
-							Resources: corev1.VolumeResourceRequirements{
-								Requests: corev1.ResourceList{
-									corev1.ResourceStorage: resource.MustParse("24Gi"),
+							Spec: corev1.PersistentVolumeClaimSpec{
+								AccessModes: []corev1.PersistentVolumeAccessMode{
+									corev1.ReadWriteOnce,
+								},
+								StorageClassName: func() *string { s := config.StorageClassReplica1; return &s }(),
+								Resources: corev1.VolumeResourceRequirements{
+									Requests: corev1.ResourceList{
+										corev1.ResourceStorage: resource.MustParse("24Gi"),
+									},
 								},
 							},
 						},
 					},
-				},
-				{
-					Name: "registry-docker-config",
-					Secret: &corev1.SecretVolumeSource{
-						SecretName: "registry-docker-config",
+					{
+						Name: "registry-docker-config",
+						Secret: &corev1.SecretVolumeSource{
+							SecretName: "registry-docker-config",
+						},
 					},
-				},
-				{
-					Name: "registry-ca-cert",
-					Secret: &corev1.SecretVolumeSource{
-						SecretName: "registry-ca-cert",
+					{
+						Name: "registry-ca-cert",
+						Secret: &corev1.SecretVolumeSource{
+							SecretName: "registry-ca-cert",
+						},
 					},
-				},
-			},
+				}
+				// Add env vars workspace if available
+				if envWorkspace := r.getEnvWorkspaceBinding(app); envWorkspace != nil {
+					workspaces = append(workspaces, *envWorkspace)
+				}
+				return workspaces
+			}(),
 		},
 	}
 
@@ -705,8 +1172,8 @@ func (r *DeploymentReconciler) updateDeploymentStatus(ctx context.Context, deplo
 	deployment.Status.ObservedGeneration = deployment.Generation
 
 	// Get the PipelineRun for this deployment to determine phase
-	deploymentSlug := deployment.GetSlug()
-	pipelineRunName := fmt.Sprintf("pipeline-run-%s-%d-kibaship-com", deploymentSlug, deployment.Generation)
+	deploymentUUID := deployment.GetUUID()
+	pipelineRunName := fmt.Sprintf("pipeline-run-%s-%d", deploymentUUID, deployment.Generation)
 	pipelineRun := &tektonv1.PipelineRun{}
 	err := r.Get(ctx, types.NamespacedName{
 		Namespace: deployment.Namespace,
@@ -1049,8 +1516,8 @@ func (r *DeploymentReconciler) checkPipelineRunStatusAndEmitWebhook(ctx context.
 	}
 
 	// Get the PipelineRun for this deployment
-	deploymentSlug := deployment.GetSlug()
-	pipelineRunName := fmt.Sprintf("pipeline-run-%s-%d-kibaship-com", deploymentSlug, deployment.Generation)
+	deploymentUUID := deployment.GetUUID()
+	pipelineRunName := fmt.Sprintf("pipeline-run-%s-%d", deploymentUUID, deployment.Generation)
 	pipelineRun := &tektonv1.PipelineRun{}
 	err := r.Get(ctx, types.NamespacedName{
 		Namespace: deployment.Namespace,
@@ -1126,6 +1593,8 @@ func (r *DeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&platformv1alpha1.Deployment{}).
 		Owns(&tektonv1.PipelineRun{}).
+		Owns(&appsv1.Deployment{}).
+		Owns(&corev1.Service{}).
 		Named("deployment").
 		Complete(r)
 }

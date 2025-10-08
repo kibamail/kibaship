@@ -5,7 +5,7 @@ resources:
   - ../../base
 
 images:
-  - name: ghcr.io/kibamail/kibaship-operator-registry-auth
+  - name: kibamail/kibaship-operator-registry-auth
     newName: kibaship.com/kibaship-operator-registry-auth
     newTag: v0.0.1
 

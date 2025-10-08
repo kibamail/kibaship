@@ -34,7 +34,7 @@ spec:
       description: Absolute path to the generated railpack-info.json in the workspace
   steps:
     - name: prepare
-      image: ghcr.io/kibamail/kibaship-railpack-cli:$(params.railpackVersion)
+      image: kibamail/kibaship-railpack-cli:$(params.railpackVersion)
       workingDir: $(workspaces.output.path)/repo/$(params.contextPath)
       script: |
         #!/usr/bin/env sh

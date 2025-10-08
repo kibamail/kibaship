@@ -23,7 +23,7 @@ import (
 var _ = Describe("API Server Project Creation", func() {
 	It("creates a project via REST and operator reconciles it", func() {
 		By("fetching API key from api-server secret")
-		cmd := exec.Command("kubectl", "get", "secret", "api-server-api-key-kibaship-com", "-n", "kibaship-operator", "-o", "jsonpath={.data.api-key}")
+		cmd := exec.Command("kubectl", "get", "secret", "api-server-api-key", "-n", "kibaship-operator", "-o", "jsonpath={.data.api-key}")
 		output, err := cmd.CombinedOutput()
 		Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("failed to get api key secret: %s", string(output)))
 		encodedKey := strings.TrimSpace(string(output))
@@ -47,14 +47,14 @@ var _ = Describe("API Server Project Creation", func() {
 			return resp.StatusCode == http.StatusOK
 		}, "60s", "1s").Should(BeTrue(), "API server did not become ready via /readyz")
 
-		By("calling POST /projects to create a project")
+		By("calling POST /v1/projects to create a project")
 		workspaceUUID := workspaceUUIDConst
 		bodyMap := map[string]any{
 			"name":          "test-project-api-e2e",
 			"workspaceUuid": workspaceUUID,
 		}
 		reqBytes, _ := json.Marshal(bodyMap)
-		httpReq, _ := http.NewRequest("POST", "http://127.0.0.1:18080/projects", bytes.NewReader(reqBytes))
+		httpReq, _ := http.NewRequest("POST", "http://127.0.0.1:18080/v1/projects", bytes.NewReader(reqBytes))
 		httpReq.Header.Set("Content-Type", "application/json")
 		httpReq.Header.Set("Authorization", "Bearer "+apiKey)
 		httpClient := &http.Client{Timeout: 30 * time.Second}
@@ -64,17 +64,19 @@ var _ = Describe("API Server Project Creation", func() {
 		Expect(httpResp.StatusCode).To(Equal(http.StatusCreated))
 
 		var respObj struct {
+			UUID string `json:"uuid"`
 			Slug string `json:"slug"`
 		}
 		_ = json.NewDecoder(httpResp.Body).Decode(&respObj)
 		Expect(respObj.Slug).NotTo(BeEmpty(), "API response should include slug")
+		Expect(respObj.UUID).NotTo(BeEmpty(), "API response should include UUID")
 
-		projectCRName := "project-" + respObj.Slug
-		expectedNamespace := "project-" + projectCRName + "-kibaship-com"
-		serviceAccountName := "project-" + projectCRName + "-sa-kibaship-com"
-		roleName := "project-" + projectCRName + "-admin-role-kibaship-com"
-		roleBindingName := "project-" + projectCRName + "-admin-binding-kibaship-com"
-		tektonRoleBindingName := "project-" + projectCRName + "-tekton-tasks-reader-binding-kibaship-com"
+		projectCRName := "project-" + respObj.UUID
+		expectedNamespace := projectCRName
+		serviceAccountName := projectCRName + "-sa"
+		roleName := projectCRName + "-admin-role"
+		roleBindingName := projectCRName + "-admin-binding"
+		tektonRoleBindingName := projectCRName + "-tekton-tasks-reader-binding"
 
 		By("asserting Project CR is created")
 		Eventually(func() bool {

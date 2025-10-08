@@ -37,13 +37,13 @@ func NewDeploymentHandler(deploymentService *services.DeploymentService) *Deploy
 	}
 }
 
-// CreateDeployment handles POST /applications/{applicationSlug}/deployments
+// CreateDeployment handles POST /v1/applications/:uuid/deployments
 // @Summary Create a new deployment
 // @Description Create a new deployment for an application
 // @Tags deployments
 // @Accept json
 // @Produce json
-// @Param applicationSlug path string true "Application slug (8-character identifier)"
+// @Param uuid path string true "Application UUID or slug"
 // @Param deployment body models.DeploymentCreateRequest true "Deployment creation data"
 // @Success 201 {object} models.DeploymentResponse "Deployment created successfully"
 // @Failure 400 {object} models.ValidationErrors "Validation errors in request data"
@@ -51,14 +51,14 @@ func NewDeploymentHandler(deploymentService *services.DeploymentService) *Deploy
 // @Failure 404 {object} auth.ErrorResponse "Application not found"
 // @Failure 500 {object} auth.ErrorResponse "Internal server error"
 // @Security BearerAuth
-// @Router /applications/{applicationSlug}/deployments [post]
+// @Router /v1/applications/{uuid}/deployments [post]
 func (h *DeploymentHandler) CreateDeployment(c *gin.Context) {
-	applicationSlug := c.Param("applicationSlug")
+	applicationUUID := c.Param("uuid")
 
-	if applicationSlug == "" {
+	if applicationUUID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error":   "Bad Request",
-			"message": "Application slug is required",
+			"message": "Application UUID is required",
 		})
 		return
 	}
@@ -72,8 +72,8 @@ func (h *DeploymentHandler) CreateDeployment(c *gin.Context) {
 		return
 	}
 
-	// Set the application slug from the URL
-	req.ApplicationSlug = applicationSlug
+	// Set the application UUID from the URL
+	req.ApplicationUUID = applicationUUID
 
 	// Validate the request
 	if validationErr := req.Validate(); validationErr != nil {
@@ -83,10 +83,10 @@ func (h *DeploymentHandler) CreateDeployment(c *gin.Context) {
 
 	deployment, err := h.deploymentService.CreateDeployment(c.Request.Context(), &req)
 	if err != nil {
-		if err.Error() == "failed to get application: application with slug "+applicationSlug+" not found" {
+		if err.Error() == "failed to get application: application with UUID "+applicationUUID+" not found" {
 			c.JSON(http.StatusNotFound, gin.H{
 				"error":   "Not Found",
-				"message": "Application with slug '" + applicationSlug + "' was not found",
+				"message": "Application with UUID '" + applicationUUID + "' was not found",
 			})
 			return
 		}
@@ -101,20 +101,20 @@ func (h *DeploymentHandler) CreateDeployment(c *gin.Context) {
 	c.JSON(http.StatusCreated, deployment.ToResponse())
 }
 
-// GetDeployment handles GET /deployments/{slug}
-// @Summary Get deployment by slug
-// @Description Retrieve a deployment by its unique slug identifier
+// GetDeployment handles GET /v1/deployments/:uuid
+// @Summary Get deployment by UUID
+// @Description Retrieve a deployment by its unique UUID or slug identifier
 // @Tags deployments
 // @Produce json
-// @Param slug path string true "Deployment slug (8-character identifier)"
+// @Param uuid path string true "Deployment UUID or slug (8-character identifier)"
 // @Success 200 {object} models.DeploymentResponse "Deployment details"
 // @Failure 401 {object} auth.ErrorResponse "Authentication required"
 // @Failure 404 {object} auth.ErrorResponse "Deployment not found"
 // @Failure 500 {object} auth.ErrorResponse "Internal server error"
 // @Security BearerAuth
-// @Router /deployments/{slug} [get]
+// @Router /v1/deployments/{uuid} [get]
 func (h *DeploymentHandler) GetDeployment(c *gin.Context) {
-	slug := c.Param("slug")
+	slug := c.Param("uuid")
 
 	if slug == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -126,10 +126,10 @@ func (h *DeploymentHandler) GetDeployment(c *gin.Context) {
 
 	deployment, err := h.deploymentService.GetDeployment(c.Request.Context(), slug)
 	if err != nil {
-		if err.Error() == "deployment with slug "+slug+" not found" {
+		if err.Error() == "deployment with UUID "+slug+" not found" {
 			c.JSON(http.StatusNotFound, gin.H{
 				"error":   "Not Found",
-				"message": "Deployment with slug '" + slug + "' was not found",
+				"message": "Deployment with UUID '" + slug + "' was not found",
 			})
 			return
 		}
@@ -144,20 +144,20 @@ func (h *DeploymentHandler) GetDeployment(c *gin.Context) {
 	c.JSON(http.StatusOK, deployment.ToResponse())
 }
 
-// GetDeploymentsByApplication handles GET /applications/{applicationSlug}/deployments
+// GetDeploymentsByApplication handles GET /v1/applications/:uuid/deployments
 // @Summary Get deployments by application
 // @Description Retrieve all deployments for a specific application
 // @Tags deployments
 // @Produce json
-// @Param applicationSlug path string true "Application slug (8-character identifier)"
+// @Param uuid path string true "Application UUID or slug (8-character identifier)"
 // @Success 200 {array} models.DeploymentResponse "List of deployments"
 // @Failure 401 {object} auth.ErrorResponse "Authentication required"
 // @Failure 404 {object} auth.ErrorResponse "Application not found"
 // @Failure 500 {object} auth.ErrorResponse "Internal server error"
 // @Security BearerAuth
-// @Router /applications/{applicationSlug}/deployments [get]
+// @Router /v1/applications/{uuid}/deployments [get]
 func (h *DeploymentHandler) GetDeploymentsByApplication(c *gin.Context) {
-	applicationSlug := c.Param("applicationSlug")
+	applicationSlug := c.Param("uuid")
 
 	if applicationSlug == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -169,10 +169,10 @@ func (h *DeploymentHandler) GetDeploymentsByApplication(c *gin.Context) {
 
 	deployments, err := h.deploymentService.GetDeploymentsByApplication(c.Request.Context(), applicationSlug)
 	if err != nil {
-		if err.Error() == "failed to get application: application with slug "+applicationSlug+" not found" {
+		if err.Error() == "failed to get application: application with UUID "+applicationSlug+" not found" {
 			c.JSON(http.StatusNotFound, gin.H{
 				"error":   "Not Found",
-				"message": "Application with slug '" + applicationSlug + "' was not found",
+				"message": "Application with UUID '" + applicationSlug + "' was not found",
 			})
 			return
 		}

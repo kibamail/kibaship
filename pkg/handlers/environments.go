@@ -36,13 +36,13 @@ func NewEnvironmentHandler(environmentService *services.EnvironmentService) *Env
 	}
 }
 
-// CreateEnvironment handles POST /projects/:projectSlug/environments
+// CreateEnvironment handles POST /v1/projects/:uuid/environments
 // @Summary Create a new environment
 // @Description Create a new environment within a project. The environment will be assigned a random 8-character slug.
 // @Tags environments
 // @Accept json
 // @Produce json
-// @Param projectSlug path string true "Project slug (8-character identifier)"
+// @Param uuid path string true "Project UUID or slug (8-character identifier)"
 // @Param environment body models.EnvironmentCreateRequest true "Environment creation data"
 // @Success 201 {object} models.EnvironmentResponse "Environment created successfully"
 // @Failure 400 {object} models.ValidationErrors "Validation errors in request data"
@@ -50,14 +50,14 @@ func NewEnvironmentHandler(environmentService *services.EnvironmentService) *Env
 // @Failure 404 {object} auth.ErrorResponse "Project not found"
 // @Failure 500 {object} auth.ErrorResponse "Internal server error"
 // @Security BearerAuth
-// @Router /projects/{projectSlug}/environments [post]
+// @Router /v1/projects/{uuid}/environments [post]
 func (h *EnvironmentHandler) CreateEnvironment(c *gin.Context) {
-	projectSlug := c.Param("projectSlug")
+	projectUUID := c.Param("uuid")
 
-	if projectSlug == "" {
+	if projectUUID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error":   "Bad Request",
-			"message": "Project slug is required",
+			"message": "Project UUID is required",
 		})
 		return
 	}
@@ -77,8 +77,8 @@ func (h *EnvironmentHandler) CreateEnvironment(c *gin.Context) {
 		return
 	}
 
-	// Set the project slug from URL param (overrides any value in body)
-	req.ProjectSlug = projectSlug
+	// Set the project UUID from URL param (overrides any value in body)
+	req.ProjectUUID = projectUUID
 
 	// Validate request
 	if validationErrors := req.Validate(); validationErrors != nil {
@@ -90,10 +90,10 @@ func (h *EnvironmentHandler) CreateEnvironment(c *gin.Context) {
 	environment, err := h.environmentService.CreateEnvironment(c.Request.Context(), &req)
 	if err != nil {
 		// Check if it's a "project not found" error
-		if err.Error() == "failed to get project: project with slug "+projectSlug+" not found" {
+		if err.Error() == "failed to get project: project with UUID "+projectUUID+" not found" {
 			c.JSON(http.StatusNotFound, gin.H{
 				"error":   "Not Found",
-				"message": "Project with slug '" + projectSlug + "' was not found",
+				"message": "Project with UUID '" + projectUUID + "' was not found",
 			})
 			return
 		}
@@ -108,20 +108,20 @@ func (h *EnvironmentHandler) CreateEnvironment(c *gin.Context) {
 	c.JSON(http.StatusCreated, environment.ToResponse())
 }
 
-// GetEnvironment handles GET /environments/:slug
-// @Summary Get environment by slug
-// @Description Retrieve an environment by its unique slug identifier
+// GetEnvironment handles GET /v1/environments/:uuid
+// @Summary Get environment by UUID
+// @Description Retrieve an environment by its unique UUID or slug identifier
 // @Tags environments
 // @Produce json
-// @Param slug path string true "Environment slug (8-character identifier)"
+// @Param uuid path string true "Environment UUID or slug (8-character identifier)"
 // @Success 200 {object} models.EnvironmentResponse "Environment details"
 // @Failure 401 {object} auth.ErrorResponse "Authentication required"
 // @Failure 404 {object} auth.ErrorResponse "Environment not found"
 // @Failure 500 {object} auth.ErrorResponse "Internal server error"
 // @Security BearerAuth
-// @Router /environments/{slug} [get]
+// @Router /v1/environments/{uuid} [get]
 func (h *EnvironmentHandler) GetEnvironment(c *gin.Context) {
-	slug := c.Param("slug")
+	slug := c.Param("uuid")
 
 	if slug == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -133,10 +133,10 @@ func (h *EnvironmentHandler) GetEnvironment(c *gin.Context) {
 
 	environment, err := h.environmentService.GetEnvironment(c.Request.Context(), slug)
 	if err != nil {
-		if err.Error() == "environment with slug "+slug+" not found" {
+		if err.Error() == "environment with UUID "+slug+" not found" {
 			c.JSON(http.StatusNotFound, gin.H{
 				"error":   "Not Found",
-				"message": "Environment with slug '" + slug + "' was not found",
+				"message": "Environment with UUID '" + slug + "' was not found",
 			})
 			return
 		}
@@ -151,20 +151,20 @@ func (h *EnvironmentHandler) GetEnvironment(c *gin.Context) {
 	c.JSON(http.StatusOK, environment.ToResponse())
 }
 
-// GetEnvironmentsByProject handles GET /projects/:projectSlug/environments
+// GetEnvironmentsByProject handles GET /v1/projects/:uuid/environments
 // @Summary List environments for a project
 // @Description Retrieve all environments for a specific project
 // @Tags environments
 // @Produce json
-// @Param projectSlug path string true "Project slug (8-character identifier)"
+// @Param uuid path string true "Project UUID or slug (8-character identifier)"
 // @Success 200 {array} models.EnvironmentResponse "List of environments"
 // @Failure 401 {object} auth.ErrorResponse "Authentication required"
 // @Failure 404 {object} auth.ErrorResponse "Project not found"
 // @Failure 500 {object} auth.ErrorResponse "Internal server error"
 // @Security BearerAuth
-// @Router /projects/{projectSlug}/environments [get]
+// @Router /v1/projects/{uuid}/environments [get]
 func (h *EnvironmentHandler) GetEnvironmentsByProject(c *gin.Context) {
-	projectSlug := c.Param("projectSlug")
+	projectSlug := c.Param("uuid")
 
 	if projectSlug == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -177,10 +177,10 @@ func (h *EnvironmentHandler) GetEnvironmentsByProject(c *gin.Context) {
 	environments, err := h.environmentService.GetEnvironmentsByProject(c.Request.Context(), projectSlug)
 	if err != nil {
 		// Check if it's a "project not found" error
-		if err.Error() == "failed to get project: project with slug "+projectSlug+" not found" {
+		if err.Error() == "failed to get project: project with UUID "+projectSlug+" not found" {
 			c.JSON(http.StatusNotFound, gin.H{
 				"error":   "Not Found",
-				"message": "Project with slug '" + projectSlug + "' was not found",
+				"message": "Project with UUID '" + projectSlug + "' was not found",
 			})
 			return
 		}
@@ -201,13 +201,13 @@ func (h *EnvironmentHandler) GetEnvironmentsByProject(c *gin.Context) {
 	c.JSON(http.StatusOK, responses)
 }
 
-// UpdateEnvironment handles PATCH /environments/:slug
-// @Summary Update environment by slug
-// @Description Update an environment by its unique slug identifier with partial updates
+// UpdateEnvironment handles PATCH /v1/environments/:uuid
+// @Summary Update environment by UUID
+// @Description Update an environment by its unique UUID or slug identifier with partial updates
 // @Tags environments
 // @Accept json
 // @Produce json
-// @Param slug path string true "Environment slug (8-character identifier)"
+// @Param uuid path string true "Environment UUID or slug (8-character identifier)"
 // @Param environment body models.EnvironmentUpdateRequest true "Environment update data"
 // @Success 200 {object} models.EnvironmentResponse "Updated environment details"
 // @Failure 400 {object} models.ValidationErrors "Validation errors in request data"
@@ -215,9 +215,9 @@ func (h *EnvironmentHandler) GetEnvironmentsByProject(c *gin.Context) {
 // @Failure 404 {object} auth.ErrorResponse "Environment not found"
 // @Failure 500 {object} auth.ErrorResponse "Internal server error"
 // @Security BearerAuth
-// @Router /environments/{slug} [patch]
+// @Router /v1/environments/{uuid} [patch]
 func (h *EnvironmentHandler) UpdateEnvironment(c *gin.Context) {
-	slug := c.Param("slug")
+	slug := c.Param("uuid")
 
 	if slug == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -247,10 +247,10 @@ func (h *EnvironmentHandler) UpdateEnvironment(c *gin.Context) {
 
 	environment, err := h.environmentService.UpdateEnvironment(c.Request.Context(), slug, &req)
 	if err != nil {
-		if err.Error() == "environment with slug "+slug+" not found" {
+		if err.Error() == "environment with UUID "+slug+" not found" {
 			c.JSON(http.StatusNotFound, gin.H{
 				"error":   "Not Found",
-				"message": "Environment with slug '" + slug + "' was not found",
+				"message": "Environment with UUID '" + slug + "' was not found",
 			})
 			return
 		}
@@ -265,19 +265,19 @@ func (h *EnvironmentHandler) UpdateEnvironment(c *gin.Context) {
 	c.JSON(http.StatusOK, environment.ToResponse())
 }
 
-// DeleteEnvironment handles DELETE /environments/:slug
-// @Summary Delete environment by slug
-// @Description Delete an environment by its unique slug identifier
+// DeleteEnvironment handles DELETE /v1/environments/:uuid
+// @Summary Delete environment by UUID
+// @Description Delete an environment by its unique UUID or slug identifier
 // @Tags environments
-// @Param slug path string true "Environment slug (8-character identifier)"
+// @Param uuid path string true "Environment UUID or slug (8-character identifier)"
 // @Success 204 "Environment deleted successfully"
 // @Failure 401 {object} auth.ErrorResponse "Authentication required"
 // @Failure 404 {object} auth.ErrorResponse "Environment not found"
 // @Failure 500 {object} auth.ErrorResponse "Internal server error"
 // @Security BearerAuth
-// @Router /environments/{slug} [delete]
+// @Router /v1/environments/{uuid} [delete]
 func (h *EnvironmentHandler) DeleteEnvironment(c *gin.Context) {
-	slug := c.Param("slug")
+	slug := c.Param("uuid")
 
 	if slug == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -289,10 +289,10 @@ func (h *EnvironmentHandler) DeleteEnvironment(c *gin.Context) {
 
 	err := h.environmentService.DeleteEnvironment(c.Request.Context(), slug)
 	if err != nil {
-		if err.Error() == "environment with slug "+slug+" not found" {
+		if err.Error() == "environment with UUID "+slug+" not found" {
 			c.JSON(http.StatusNotFound, gin.H{
 				"error":   "Not Found",
-				"message": "Environment with slug '" + slug + "' was not found",
+				"message": "Environment with UUID '" + slug + "' was not found",
 			})
 			return
 		}

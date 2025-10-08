@@ -15,11 +15,11 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-// Covers: GET/PATCH/DELETE /projects/{slug}
+// Covers: GET/PATCH/DELETE /v1/projects/{uuid}
 var _ = Describe("API Server Project CRUD", func() {
 	It("performs GET, PATCH, and DELETE on a project and verifies operator cleanup", func() {
 		By("fetching API key from api-server secret")
-		cmd := exec.Command("kubectl", "get", "secret", "api-server-api-key-kibaship-com", "-n", "kibaship-operator", "-o", "jsonpath={.data.api-key}")
+		cmd := exec.Command("kubectl", "get", "secret", "api-server-api-key", "-n", "kibaship-operator", "-o", "jsonpath={.data.api-key}")
 		output, err := cmd.CombinedOutput()
 		Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("failed to get api key secret: %s", string(output)))
 		encodedKey := strings.TrimSpace(string(output))
@@ -45,14 +45,14 @@ var _ = Describe("API Server Project CRUD", func() {
 
 		httpClient := &http.Client{Timeout: 30 * time.Second}
 
-		By("creating a project via POST /projects")
+		By("creating a project via POST /v1/projects")
 		workspaceUUID := "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
 		projReqBody := map[string]any{
 			"name":          "proj-crud-e2e",
 			"workspaceUuid": workspaceUUID,
 		}
 		projBytes, _ := json.Marshal(projReqBody)
-		reqProj, _ := http.NewRequest("POST", "http://127.0.0.1:18080/projects", bytes.NewReader(projBytes))
+		reqProj, _ := http.NewRequest("POST", "http://127.0.0.1:18080/v1/projects", bytes.NewReader(projBytes))
 		reqProj.Header.Set("Content-Type", "application/json")
 		reqProj.Header.Set("Authorization", "Bearer "+apiKey)
 		respProj, err := httpClient.Do(reqProj)
@@ -60,21 +60,23 @@ var _ = Describe("API Server Project CRUD", func() {
 		defer func() { _ = respProj.Body.Close() }()
 		Expect(respProj.StatusCode).To(Equal(http.StatusCreated))
 		var projResp struct {
+			UUID string `json:"uuid"`
 			Slug string `json:"slug"`
 		}
 		_ = json.NewDecoder(respProj.Body).Decode(&projResp)
-		Expect(projResp.Slug).NotTo(BeEmpty())
+		Expect(projResp.UUID).NotTo(BeEmpty())
+		Expect(projResp.UUID).NotTo(BeEmpty())
 
-		projectCRName := "project-" + projResp.Slug
-		expectedNamespace := "project-" + projectCRName + "-kibaship-com"
-		serviceAccountName := "project-" + projectCRName + "-sa-kibaship-com"
-		roleName := "project-" + projectCRName + "-admin-role-kibaship-com"
-		roleBindingName := "project-" + projectCRName + "-admin-binding-kibaship-com"
-		tektonRB := "project-" + projectCRName + "-tekton-tasks-reader-binding-kibaship-com"
+		projectCRName := "project-" + projResp.UUID
+		expectedNamespace := projectCRName
+		serviceAccountName := projectCRName + "-sa"
+		roleName := projectCRName + "-admin-role"
+		roleBindingName := projectCRName + "-admin-binding"
+		tektonRB := projectCRName + "-tekton-tasks-reader-binding"
 
-		By("GET /projects/{slug} returns project details")
+		By("GET /v1/projects/{uuid} returns project details")
 		Eventually(func() int {
-			reqGet, _ := http.NewRequest("GET", fmt.Sprintf("http://127.0.0.1:18080/project/%s", projResp.Slug), nil)
+			reqGet, _ := http.NewRequest("GET", fmt.Sprintf("http://127.0.0.1:18080/v1/projects/%s", projResp.UUID), nil)
 			reqGet.Header.Set("Authorization", "Bearer "+apiKey)
 			respGet, err := httpClient.Do(reqGet)
 			if err != nil {
@@ -85,11 +87,11 @@ var _ = Describe("API Server Project CRUD", func() {
 			return respGet.StatusCode
 		}, "60s", "1s").Should(Equal(http.StatusOK))
 
-		By("PATCH /projects/{slug} updates description")
+		By("PATCH /v1/projects/{uuid} updates description")
 		newDesc := "updated from e2e"
 		patchBody := map[string]any{"description": newDesc}
 		patchBytes, _ := json.Marshal(patchBody)
-		reqPatch, _ := http.NewRequest("PATCH", fmt.Sprintf("http://127.0.0.1:18080/project/%s", projResp.Slug), bytes.NewReader(patchBytes))
+		reqPatch, _ := http.NewRequest("PATCH", fmt.Sprintf("http://127.0.0.1:18080/v1/projects/%s", projResp.UUID), bytes.NewReader(patchBytes))
 		reqPatch.Header.Set("Content-Type", "application/json")
 		reqPatch.Header.Set("Authorization", "Bearer "+apiKey)
 		respPatch, err := httpClient.Do(reqPatch)
@@ -103,8 +105,8 @@ var _ = Describe("API Server Project CRUD", func() {
 		_ = json.Unmarshal(bodyBytes, &patched)
 		Expect(patched.Description).To(Equal(newDesc))
 
-		By("DELETE /projects/{slug} deletes the project")
-		reqDel, _ := http.NewRequest("DELETE", fmt.Sprintf("http://127.0.0.1:18080/project/%s", projResp.Slug), nil)
+		By("DELETE /v1/projects/{uuid} deletes the project")
+		reqDel, _ := http.NewRequest("DELETE", fmt.Sprintf("http://127.0.0.1:18080/v1/projects/%s", projResp.UUID), nil)
 		reqDel.Header.Set("Authorization", "Bearer "+apiKey)
 		respDel, err := httpClient.Do(reqDel)
 		Expect(err).NotTo(HaveOccurred())

@@ -124,7 +124,7 @@ var _ = Describe("Project Creation Integration", func() {
 			jsonData, err := json.Marshal(payload)
 			Expect(err).NotTo(HaveOccurred())
 
-			req, err := http.NewRequest("POST", "/projects", bytes.NewBuffer(jsonData))
+			req, err := http.NewRequest("POST", "/v1/projects", bytes.NewBuffer(jsonData))
 			Expect(err).NotTo(HaveOccurred())
 			req.Header.Set("Content-Type", "application/json")
 			req.Header.Set("Authorization", "Bearer "+apiKey)
@@ -166,7 +166,7 @@ var _ = Describe("Project Creation Integration", func() {
 				// Verify Project CRD was actually created in Kubernetes
 				var project v1alpha1.Project
 				err := k8sClient.Get(ctx, client.ObjectKey{
-					Name: "project-" + resp.Slug,
+					Name: "project-" + resp.UUID,
 				}, &project)
 				Expect(err).NotTo(HaveOccurred(), "Project CRD should exist in Kubernetes")
 
@@ -226,7 +226,7 @@ var _ = Describe("Project Creation Integration", func() {
 				// Verify actual CRD in Kubernetes
 				var project v1alpha1.Project
 				err := k8sClient.Get(ctx, client.ObjectKey{
-					Name: "project-" + resp.Slug,
+					Name: "project-" + resp.UUID,
 				}, &project)
 				Expect(err).NotTo(HaveOccurred())
 
@@ -274,7 +274,7 @@ var _ = Describe("Project Retrieval Integration", func() {
 		jsonData, err := json.Marshal(payload)
 		Expect(err).NotTo(HaveOccurred())
 
-		req, err := http.NewRequest("POST", "/projects", bytes.NewBuffer(jsonData))
+		req, err := http.NewRequest("POST", "/v1/projects", bytes.NewBuffer(jsonData))
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+apiKey)
@@ -293,15 +293,15 @@ var _ = Describe("Project Retrieval Integration", func() {
 		// Clean up - delete the created project
 		var project v1alpha1.Project
 		err := k8sClient.Get(ctx, client.ObjectKey{
-			Name: "project-" + createdProject.Slug,
+			Name: "project-" + createdProject.UUID,
 		}, &project)
 		if err == nil {
 			_ = k8sClient.Delete(ctx, &project)
 		}
 	})
 
-	It("retrieves project by slug", NodeTimeout(30*time.Second), func(ctx SpecContext) {
-		req, err := http.NewRequest("GET", "/project/"+createdProject.Slug, nil)
+	It("retrieves project by UUID", NodeTimeout(30*time.Second), func(ctx SpecContext) {
+		req, err := http.NewRequest("GET", "/v1/projects/"+createdProject.UUID, nil)
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 
@@ -322,7 +322,7 @@ var _ = Describe("Project Retrieval Integration", func() {
 	})
 
 	It("returns 404 for non-existent project", NodeTimeout(30*time.Second), func(ctx SpecContext) {
-		req, err := http.NewRequest("GET", "/projects/notfound", nil)
+		req, err := http.NewRequest("GET", "/v1/projects/00000000-0000-0000-0000-000000000000", nil)
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 
@@ -371,7 +371,7 @@ var _ = Describe("Project Slug Uniqueness Integration", func() {
 			jsonData, err := json.Marshal(payload)
 			Expect(err).NotTo(HaveOccurred())
 
-			req, err := http.NewRequest("POST", "/projects", bytes.NewBuffer(jsonData))
+			req, err := http.NewRequest("POST", "/v1/projects", bytes.NewBuffer(jsonData))
 			Expect(err).NotTo(HaveOccurred())
 			req.Header.Set("Content-Type", "application/json")
 			req.Header.Set("Authorization", "Bearer "+apiKey)
@@ -394,7 +394,7 @@ var _ = Describe("Project Slug Uniqueness Integration", func() {
 			// Verify project exists in Kubernetes
 			var project v1alpha1.Project
 			err = k8sClient.Get(ctx, client.ObjectKey{
-				Name: "project-" + response.Slug,
+				Name: "project-" + response.UUID,
 			}, &project)
 			Expect(err).NotTo(HaveOccurred(), "Project should exist in Kubernetes")
 		}
@@ -431,44 +431,41 @@ func setupIntegrationTestRouter(apiKey string) http.Handler {
 	deploymentHandler := handlers.NewDeploymentHandler(deploymentService)
 	applicationDomainHandler := handlers.NewApplicationDomainHandler(applicationDomainService)
 
-	// Protected routes
-	protected := router.Group("/")
-	protected.Use(authenticator.Middleware())
+	// Protected routes with /v1 prefix
+	v1 := router.Group("/v1")
+	v1.Use(authenticator.Middleware())
 	{
 		// Project endpoints
-		protected.POST("/projects", projectHandler.CreateProject)
-		protected.GET("/project/:slug", projectHandler.GetProject)
-		protected.PATCH("/project/:slug", projectHandler.UpdateProject)
-		protected.DELETE("/project/:slug", projectHandler.DeleteProject)
+		v1.POST("/projects", projectHandler.CreateProject)
+		v1.GET("/projects/:uuid", projectHandler.GetProject)
+		v1.PATCH("/projects/:uuid", projectHandler.UpdateProject)
+		v1.DELETE("/projects/:uuid", projectHandler.DeleteProject)
 
 		// Environment endpoints
-		protected.POST("/projects/:projectSlug/environments", environmentHandler.CreateEnvironment)
-		protected.GET("/projects/:projectSlug/environments", environmentHandler.GetEnvironmentsByProject)
+		v1.POST("/projects/:uuid/environments", environmentHandler.CreateEnvironment)
+		v1.GET("/projects/:uuid/environments", environmentHandler.GetEnvironmentsByProject)
+		v1.GET("/environments/:uuid", environmentHandler.GetEnvironment)
+		v1.PATCH("/environments/:uuid", environmentHandler.UpdateEnvironment)
+		v1.DELETE("/environments/:uuid", environmentHandler.DeleteEnvironment)
 
-		// Application endpoints (environment-based) - MUST use same param name as environment routes
-		protected.POST("/environments/:slug/applications", applicationHandler.CreateApplication)
-		protected.GET("/environments/:slug/applications", applicationHandler.GetApplicationsByEnvironment)
-
-		// Environment detail endpoints - registered after more specific routes
-		protected.GET("/environments/:slug", environmentHandler.GetEnvironment)
-		protected.PATCH("/environments/:slug", environmentHandler.UpdateEnvironment)
-		protected.DELETE("/environments/:slug", environmentHandler.DeleteEnvironment)
-		// Keep legacy project-based route for backward compatibility in tests
-		protected.POST("/projects/:projectSlug/applications", applicationHandler.CreateApplication)
-		protected.GET("/projects/:projectSlug/applications", applicationHandler.GetApplicationsByProject)
-		protected.GET("/application/:slug", applicationHandler.GetApplication)
-		protected.PATCH("/application/:slug", applicationHandler.UpdateApplication)
-		protected.DELETE("/application/:slug", applicationHandler.DeleteApplication)
+		// Application endpoints
+		v1.POST("/environments/:uuid/applications", applicationHandler.CreateApplication)
+		v1.GET("/environments/:uuid/applications", applicationHandler.GetApplicationsByEnvironment)
+		v1.GET("/projects/:uuid/applications", applicationHandler.GetApplicationsByProject)
+		v1.GET("/applications/:uuid", applicationHandler.GetApplication)
+		v1.PATCH("/applications/:uuid", applicationHandler.UpdateApplication)
+		v1.DELETE("/applications/:uuid", applicationHandler.DeleteApplication)
+		v1.PATCH("/applications/:uuid/env", applicationHandler.UpdateApplicationEnv)
 
 		// Deployment endpoints
-		protected.POST("/applications/:applicationSlug/deployments", deploymentHandler.CreateDeployment)
-		protected.GET("/applications/:applicationSlug/deployments", deploymentHandler.GetDeploymentsByApplication)
-		protected.GET("/deployments/:slug", deploymentHandler.GetDeployment)
+		v1.POST("/applications/:uuid/deployments", deploymentHandler.CreateDeployment)
+		v1.GET("/applications/:uuid/deployments", deploymentHandler.GetDeploymentsByApplication)
+		v1.GET("/deployments/:uuid", deploymentHandler.GetDeployment)
 
 		// Application Domain endpoints
-		protected.POST("/applications/:applicationSlug/domains", applicationDomainHandler.CreateApplicationDomain)
-		protected.GET("/domains/:slug", applicationDomainHandler.GetApplicationDomain)
-		protected.DELETE("/domains/:slug", applicationDomainHandler.DeleteApplicationDomain)
+		v1.POST("/applications/:uuid/domains", applicationDomainHandler.CreateApplicationDomain)
+		v1.GET("/domains/:uuid", applicationDomainHandler.GetApplicationDomain)
+		v1.DELETE("/domains/:uuid", applicationDomainHandler.DeleteApplicationDomain)
 	}
 
 	return router
@@ -508,7 +505,7 @@ var _ = Describe("Project Update Integration", func() {
 		jsonData, err := json.Marshal(payload)
 		Expect(err).NotTo(HaveOccurred())
 
-		req, err := http.NewRequest("POST", "/projects", bytes.NewBuffer(jsonData))
+		req, err := http.NewRequest("POST", "/v1/projects", bytes.NewBuffer(jsonData))
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+apiKey)
@@ -527,7 +524,7 @@ var _ = Describe("Project Update Integration", func() {
 		// Clean up
 		var project v1alpha1.Project
 		err := k8sClient.Get(ctx, client.ObjectKey{
-			Name: "project-" + createdProject.Slug,
+			Name: "project-" + createdProject.UUID,
 		}, &project)
 		if err == nil {
 			_ = k8sClient.Delete(ctx, &project)
@@ -543,7 +540,7 @@ var _ = Describe("Project Update Integration", func() {
 		jsonData, err := json.Marshal(updateReq)
 		Expect(err).NotTo(HaveOccurred())
 
-		req, err := http.NewRequest("PATCH", "/project/"+createdProject.Slug, bytes.NewBuffer(jsonData))
+		req, err := http.NewRequest("PATCH", "/v1/projects/"+createdProject.UUID, bytes.NewBuffer(jsonData))
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+apiKey)
@@ -565,7 +562,7 @@ var _ = Describe("Project Update Integration", func() {
 		// Verify in Kubernetes
 		var project v1alpha1.Project
 		err = k8sClient.Get(ctx, client.ObjectKey{
-			Name: "project-" + createdProject.Slug,
+			Name: "project-" + createdProject.UUID,
 		}, &project)
 		Expect(err).NotTo(HaveOccurred())
 
@@ -582,7 +579,7 @@ var _ = Describe("Project Update Integration", func() {
 		jsonData, err := json.Marshal(updateReq)
 		Expect(err).NotTo(HaveOccurred())
 
-		req, err := http.NewRequest("PATCH", "/project/"+createdProject.Slug, bytes.NewBuffer(jsonData))
+		req, err := http.NewRequest("PATCH", "/v1/projects/"+createdProject.UUID, bytes.NewBuffer(jsonData))
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+apiKey)
@@ -601,7 +598,7 @@ var _ = Describe("Project Update Integration", func() {
 		// Verify production defaults were applied in Kubernetes
 		var project v1alpha1.Project
 		err = k8sClient.Get(ctx, client.ObjectKey{
-			Name: "project-" + createdProject.Slug,
+			Name: "project-" + createdProject.UUID,
 		}, &project)
 		Expect(err).NotTo(HaveOccurred())
 
@@ -618,7 +615,7 @@ var _ = Describe("Project Update Integration", func() {
 		jsonData, err := json.Marshal(updateReq)
 		Expect(err).NotTo(HaveOccurred())
 
-		req, err := http.NewRequest("PATCH", "/projects/notfound", bytes.NewBuffer(jsonData))
+		req, err := http.NewRequest("PATCH", "/v1/projects/00000000-0000-0000-0000-000000000000", bytes.NewBuffer(jsonData))
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+apiKey)
@@ -650,7 +647,7 @@ var _ = Describe("Project Delete Integration", func() {
 		jsonData, err := json.Marshal(payload)
 		Expect(err).NotTo(HaveOccurred())
 
-		req, err := http.NewRequest("POST", "/projects", bytes.NewBuffer(jsonData))
+		req, err := http.NewRequest("POST", "/v1/projects", bytes.NewBuffer(jsonData))
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+apiKey)
@@ -667,13 +664,13 @@ var _ = Describe("Project Delete Integration", func() {
 		// Verify project exists in Kubernetes
 		var k8sProject v1alpha1.Project
 		err = k8sClient.Get(ctx, client.ObjectKey{
-			Name: "project-" + createdProject.Slug,
+			Name: "project-" + createdProject.UUID,
 		}, &k8sProject)
 		Expect(err).NotTo(HaveOccurred(), "Project should exist before deletion")
 	})
 
 	It("deletes existing project", NodeTimeout(30*time.Second), func(ctx SpecContext) {
-		req, err := http.NewRequest("DELETE", "/project/"+createdProject.Slug, nil)
+		req, err := http.NewRequest("DELETE", "/v1/projects/"+createdProject.UUID, nil)
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 
@@ -685,14 +682,14 @@ var _ = Describe("Project Delete Integration", func() {
 		// Verify project no longer exists in Kubernetes
 		var project v1alpha1.Project
 		err = k8sClient.Get(ctx, client.ObjectKey{
-			Name: "project-" + createdProject.Slug,
+			Name: "project-" + createdProject.UUID,
 		}, &project)
 		Expect(err).To(HaveOccurred(), "Project should not exist after deletion")
 	})
 
 	It("returns 404 when deleting same project again", NodeTimeout(30*time.Second), func(ctx SpecContext) {
 		// First delete the project
-		req, err := http.NewRequest("DELETE", "/project/"+createdProject.Slug, nil)
+		req, err := http.NewRequest("DELETE", "/v1/projects/"+createdProject.UUID, nil)
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 
@@ -701,7 +698,7 @@ var _ = Describe("Project Delete Integration", func() {
 		Expect(w.Code).To(Equal(http.StatusNoContent))
 
 		// Try to delete it again
-		req, err = http.NewRequest("DELETE", "/project/"+createdProject.Slug, nil)
+		req, err = http.NewRequest("DELETE", "/v1/projects/"+createdProject.UUID, nil)
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 
@@ -711,8 +708,8 @@ var _ = Describe("Project Delete Integration", func() {
 		Expect(w.Code).To(Equal(http.StatusNotFound))
 	})
 
-	It("returns 404 for non-existent project slug", NodeTimeout(30*time.Second), func(ctx SpecContext) {
-		req, err := http.NewRequest("DELETE", "/projects/notfound", nil)
+	It("returns 404 for non-existent project UUID", NodeTimeout(30*time.Second), func(ctx SpecContext) {
+		req, err := http.NewRequest("DELETE", "/v1/projects/00000000-0000-0000-0000-000000000000", nil)
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 

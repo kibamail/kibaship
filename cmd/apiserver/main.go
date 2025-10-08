@@ -23,7 +23,7 @@ limitations under the License.
 // @license.name Apache 2.0
 // @license.url http://www.apache.org/licenses/LICENSE-2.0.html
 // @host localhost:8080
-// @BasePath /
+// @BasePath /v1
 // @securityDefinitions.apikey BearerAuth
 // @in header
 // @name Authorization
@@ -119,9 +119,9 @@ func main() {
 	router.GET("/healthz", healthzHandler)
 	router.GET("/readyz", readyzHandler)
 
-	// Protected routes
-	protected := router.Group("/")
-	protected.Use(authenticator.Middleware())
+	// Protected routes - v1 API
+	v1 := router.Group("/v1")
+	v1.Use(authenticator.Middleware())
 	{
 		// Initialize services with dependency injection
 		projectHandler := handlers.NewProjectHandler(projectService)
@@ -140,35 +140,36 @@ func main() {
 		applicationDomainHandler := handlers.NewApplicationDomainHandler(applicationDomainService)
 
 		// Project endpoints
-		protected.POST("/projects", projectHandler.CreateProject)
-		protected.GET("/project/:slug", projectHandler.GetProject)
-		protected.PATCH("/project/:slug", projectHandler.UpdateProject)
-		protected.DELETE("/project/:slug", projectHandler.DeleteProject)
+		v1.POST("/projects", projectHandler.CreateProject)
+		v1.GET("/projects/:uuid", projectHandler.GetProject)
+		v1.PATCH("/projects/:uuid", projectHandler.UpdateProject)
+		v1.DELETE("/projects/:uuid", projectHandler.DeleteProject)
 
 		// Environment endpoints
-		protected.POST("/projects/:projectSlug/environments", environmentHandler.CreateEnvironment)
-		protected.GET("/projects/:projectSlug/environments", environmentHandler.GetEnvironmentsByProject)
-		protected.GET("/environments/:slug", environmentHandler.GetEnvironment)
-		protected.PATCH("/environments/:slug", environmentHandler.UpdateEnvironment)
-		protected.DELETE("/environments/:slug", environmentHandler.DeleteEnvironment)
+		v1.POST("/projects/:uuid/environments", environmentHandler.CreateEnvironment)
+		v1.GET("/projects/:uuid/environments", environmentHandler.GetEnvironmentsByProject)
+		v1.GET("/environments/:uuid", environmentHandler.GetEnvironment)
+		v1.PATCH("/environments/:uuid", environmentHandler.UpdateEnvironment)
+		v1.DELETE("/environments/:uuid", environmentHandler.DeleteEnvironment)
 
 		// Application endpoints
-		protected.POST("/environments/:slug/applications", applicationHandler.CreateApplication)
-		protected.GET("/environments/:slug/applications", applicationHandler.GetApplicationsByEnvironment)
-		protected.GET("/projects/:projectSlug/applications", applicationHandler.GetApplicationsByProject)
-		protected.GET("/application/:slug", applicationHandler.GetApplication)
-		protected.PATCH("/application/:slug", applicationHandler.UpdateApplication)
-		protected.DELETE("/application/:slug", applicationHandler.DeleteApplication)
+		v1.POST("/environments/:uuid/applications", applicationHandler.CreateApplication)
+		v1.GET("/environments/:uuid/applications", applicationHandler.GetApplicationsByEnvironment)
+		v1.GET("/projects/:uuid/applications", applicationHandler.GetApplicationsByProject)
+		v1.GET("/applications/:uuid", applicationHandler.GetApplication)
+		v1.PATCH("/applications/:uuid", applicationHandler.UpdateApplication)
+		v1.PATCH("/applications/:uuid/env", applicationHandler.UpdateApplicationEnv)
+		v1.DELETE("/applications/:uuid", applicationHandler.DeleteApplication)
 
 		// Deployment endpoints
-		protected.POST("/applications/:applicationSlug/deployments", deploymentHandler.CreateDeployment)
-		protected.GET("/applications/:applicationSlug/deployments", deploymentHandler.GetDeploymentsByApplication)
-		protected.GET("/deployments/:slug", deploymentHandler.GetDeployment)
+		v1.POST("/applications/:uuid/deployments", deploymentHandler.CreateDeployment)
+		v1.GET("/applications/:uuid/deployments", deploymentHandler.GetDeploymentsByApplication)
+		v1.GET("/deployments/:uuid", deploymentHandler.GetDeployment)
 
 		// Application Domain endpoints
-		protected.POST("/applications/:applicationSlug/domains", applicationDomainHandler.CreateApplicationDomain)
-		protected.GET("/domains/:slug", applicationDomainHandler.GetApplicationDomain)
-		protected.DELETE("/domains/:slug", applicationDomainHandler.DeleteApplicationDomain)
+		v1.POST("/applications/:uuid/domains", applicationDomainHandler.CreateApplicationDomain)
+		v1.GET("/domains/:uuid", applicationDomainHandler.GetApplicationDomain)
+		v1.DELETE("/domains/:uuid", applicationDomainHandler.DeleteApplicationDomain)
 	}
 
 	// Get port from environment or use default

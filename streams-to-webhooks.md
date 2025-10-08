@@ -16,6 +16,11 @@ This plan replaces Valkey (Redis-compatible) Streams–based event publishing wi
 
 ---
 
+let's introduce a new crd called environments. environments belong to projects, and environments contain applications. applications no longer belong to projects but to
+environments. so deleting an environment deletes all the applications in that environment. when a new project is created, an environment called production is automatically
+created in that project. go ahead and scaffold a complete architecture to implement this setup. then you must modify ALL OF OUR TESTS TO REFLECT THIS. THIS WILL BE A BIG TASK, SO YOU HAVE TO GO SLOWLY, WHILE
+RUNNING TESTS YOU ARE MIGRAATING OVER GRADUALLY AND ENSURING YOU ARE NOT BREAKING ANY OTHER LOGIC AND MAKING SURE EVERYTHING WORKS GREAT. all details must be included in your plan. do not run any code or do anything at this time apart from analysing the entire codebase infrastructure and setup. then, save your plan to a file called env.md after approval, i will guide you on proceeding to each step.
+
 ## Architecture: Target
 
 - New package: `pkg/webhooks/notifier` providing a typed API:
@@ -110,7 +115,7 @@ This plan replaces Valkey (Redis-compatible) Streams–based event publishing wi
 - [ ] Remove infra assertions about Valkey pods (`test/e2e/infra_test.go`)
 - [ ] Add webhook receiver test fixture:
   - Option A: In-process HTTP server in tests with port-forward from cluster (keeps test local)
-  - Option B: Deploy a tiny HTTP receiver pod (e.g., `ghcr.io/neondatabase/http-echo` or custom) + Service; assert logs
+  - Option B: Deploy a tiny HTTP receiver pod (e.g., `neondatabase/http-echo` or custom) + Service; assert logs
   - Prefer A for speed in CI; add B as integration variant if needed
 - [ ] Add tests that perform controller actions and assert webhook POSTs received with correct payload and signature
   - Project create/update/delete → expect matching events

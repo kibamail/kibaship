@@ -13,5 +13,5 @@ resources:
 - service.yaml
 images:
 - name: registry-auth
-  newName: ghcr.io/kibamail/kibaship-operator-registry-auth
+  newName: kibamail/kibaship-operator-registry-auth
   newTag: v0.1.6

@@ -32,18 +32,25 @@ const (
 	MaxSubdomainAttempts = 10
 )
 
-// GenerateSubdomain creates a unique subdomain for an application based on its slug
-// It takes the app slug directly and adds a random suffix
-// Example: frontend -> frontend-abc12345
-func GenerateSubdomain(appSlug string) (string, error) {
+// GenerateSubdomain creates a unique subdomain for an application based on its UUID
+// It takes the app UUID directly and adds a random suffix
+// Example: 123e4567-e89b-12d3-a456-426614174000 -> 123e4567e89b12d3-abc12345
+func GenerateSubdomain(appUUID string) (string, error) {
 	// Generate random suffix for uniqueness
 	randomSuffix, err := generateRandomString(SubdomainRandomSuffixLength)
 	if err != nil {
 		return "", fmt.Errorf("failed to generate random suffix: %v", err)
 	}
 
-	// Combine app slug with random suffix
-	subdomain := fmt.Sprintf("%s-%s", appSlug, randomSuffix)
+	// Remove hyphens from UUID to make it shorter and more DNS-friendly
+	// Take first 16 characters for brevity (still unique enough)
+	cleanUUID := strings.ReplaceAll(appUUID, "-", "")
+	if len(cleanUUID) > 16 {
+		cleanUUID = cleanUUID[:16]
+	}
+
+	// Combine app UUID with random suffix
+	subdomain := fmt.Sprintf("%s-%s", cleanUUID, randomSuffix)
 
 	// Ensure subdomain meets DNS requirements
 	subdomain = sanitizeSubdomain(subdomain)

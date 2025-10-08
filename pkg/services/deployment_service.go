@@ -50,7 +50,7 @@ func NewDeploymentService(k8sClient client.Client, scheme *runtime.Scheme, appli
 // CreateDeployment creates a new deployment
 func (s *DeploymentService) CreateDeployment(ctx context.Context, req *models.DeploymentCreateRequest) (*models.Deployment, error) {
 	// First, verify the application exists and get its details
-	application, err := s.applicationService.GetApplication(ctx, req.ApplicationSlug)
+	application, err := s.getApplicationByUUID(ctx, req.ApplicationUUID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get application: %w", err)
 	}
@@ -111,23 +111,23 @@ func (s *DeploymentService) CreateDeployment(ctx context.Context, req *models.De
 	return deployment, nil
 }
 
-// GetDeployment retrieves a deployment by slug
-func (s *DeploymentService) GetDeployment(ctx context.Context, slug string) (*models.Deployment, error) {
-	// List all deployments and find by slug label
+// GetDeployment retrieves a deployment by UUID
+func (s *DeploymentService) GetDeployment(ctx context.Context, uuid string) (*models.Deployment, error) {
+	// List all deployments and find by UUID label
 	var deploymentList v1alpha1.DeploymentList
 	err := s.client.List(ctx, &deploymentList, client.MatchingLabels{
-		validation.LabelResourceSlug: slug,
+		validation.LabelResourceUUID: uuid,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list deployments: %w", err)
 	}
 
 	if len(deploymentList.Items) == 0 {
-		return nil, fmt.Errorf("deployment with slug %s not found", slug)
+		return nil, fmt.Errorf("deployment with UUID %s not found", uuid)
 	}
 
 	if len(deploymentList.Items) > 1 {
-		return nil, fmt.Errorf("multiple deployments found with slug %s", slug)
+		return nil, fmt.Errorf("multiple deployments found with UUID %s", uuid)
 	}
 
 	crd := deploymentList.Items[0]
@@ -147,9 +147,9 @@ func (s *DeploymentService) GetDeployment(ctx context.Context, slug string) (*mo
 }
 
 // GetDeploymentsByApplication retrieves all deployments for a specific application
-func (s *DeploymentService) GetDeploymentsByApplication(ctx context.Context, applicationSlug string) ([]*models.Deployment, error) {
+func (s *DeploymentService) GetDeploymentsByApplication(ctx context.Context, applicationUUID string) ([]*models.Deployment, error) {
 	// First, verify the application exists and get its details
-	application, err := s.applicationService.GetApplication(ctx, applicationSlug)
+	application, err := s.getApplicationByUUID(ctx, applicationUUID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get application: %w", err)
 	}
@@ -258,7 +258,7 @@ func (s *DeploymentService) convertToDeploymentCRD(deployment *models.Deployment
 			Kind:       "Deployment",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("deployment-%s-kibaship-com", deployment.Slug),
+			Name:      fmt.Sprintf("deployment-%s", deployment.UUID),
 			Namespace: "default",
 			Labels: map[string]string{
 				validation.LabelResourceUUID:    deployment.UUID,
@@ -273,7 +273,7 @@ func (s *DeploymentService) convertToDeploymentCRD(deployment *models.Deployment
 		},
 		Spec: v1alpha1.DeploymentSpec{
 			ApplicationRef: corev1.LocalObjectReference{
-				Name: fmt.Sprintf("application-%s-kibaship-com", deployment.ApplicationSlug),
+				Name: fmt.Sprintf("application-%s", deployment.ApplicationUUID),
 			},
 		},
 	}

@@ -1,0 +1,1397 @@
+# ==============================================================================
+# KIBASHIP MULTI-TENANT INGRESS ARCHITECTURE
+# Gateway API with Cilium Implementation Strategy
+# ==============================================================================
+#
+# This document provides a comprehensive strategy for implementing a highly
+# scalable, multi-tenant ingress system using Kubernetes Gateway API with Cilium.
+# It covers HTTP/HTTPS routing, TLS passthrough for databases (MySQL, Valkey,
+# PostgreSQL), automatic subdomain assignment, and cross-namespace certificate
+# management.
+#
+# ==============================================================================
+
+# ==============================================================================
+# TABLE OF CONTENTS
+# ==============================================================================
+# 1. ARCHITECTURE OVERVIEW
+# 2. GATEWAY API RESOURCES STRUCTURE
+# 3. HTTP/HTTPS ROUTING STRATEGY
+# 4. DATABASE TLS ROUTING STRATEGY (MySQL, Valkey, PostgreSQL)
+# 5. CERTIFICATE MANAGEMENT STRATEGY
+# 6. OPERATOR RECONCILER DESIGN
+# 7. DEPLOYMENT FLOW - STEP BY STEP
+# 8. COMPLETE CODE EXAMPLES
+# ==============================================================================
+
+# ==============================================================================
+# 1. ARCHITECTURE OVERVIEW
+# ==============================================================================
+#
+# MULTI-TENANT ISOLATION ARCHITECTURE:
+# ------------------------------------
+# - Each Project gets a dedicated Kubernetes namespace
+# - Each Application runs in the Project's namespace with isolated workloads
+# - Ingress routing is handled via Gateway API resources that route traffic
+#   from a shared Gateway to individual project namespaces
+#
+# TRAFFIC FLOW:
+# -------------
+# External Load Balancer
+#   |
+#   ├─> Port 30080 (HTTP) ──────> Gateway (Listener: HTTP/80)
+#   |                                  |
+#   |                                  └─> HTTPRoute (per-project) ─> Service ─> Pod
+#   |
+#   ├─> Port 30443 (HTTPS) ─────> Gateway (Listener: HTTPS/443)
+#   |                                  |
+#   |                                  └─> HTTPRoute (per-project) ─> Service ─> Pod
+#   |
+#   ├─> Port 33306 (MySQL) ─────> Gateway (Listener: TLS/3306)
+#   |                                  |
+#   |                                  └─> TLSRoute (per-project) ─> Service ─> MySQL Pod
+#   |
+#   ├─> Port 36379 (Valkey) ────> Gateway (Listener: TLS/6379)
+#   |                                  |
+#   |                                  └─> TLSRoute (per-project) ─> Service ─> Valkey Pod
+#   |
+#   └─> Port 35432 (PostgreSQL) ─> Gateway (Listener: TLS/5432)
+#                                      |
+#                                      └─> TLSRoute (per-project) ─> Service ─> PostgreSQL Pod
+#
+# NAMESPACE ORGANIZATION:
+# -----------------------
+# - gateway-api-system: Gateway controller namespace (Cilium)
+# - certificates: Centralized namespace for wildcard certificates
+# - project-<uuid>: Per-project namespaces containing:
+#   * Deployments (K8s Deployment resources)
+#   * Services (K8s Service resources)
+#   * HTTPRoutes (Gateway API resources)
+#   * TLSRoutes (Gateway API resources for databases)
+#   * ReferenceGrants (for cross-namespace certificate access)
+#
+# KEY DESIGN DECISIONS:
+# ---------------------
+# 1. Single shared Gateway in gateway-api-system namespace
+# 2. Per-project HTTPRoute and TLSRoute resources in each project namespace
+# 3. Centralized wildcard certificate in certificates namespace
+# 4. ReferenceGrant resources to allow cross-namespace certificate references
+# 5. Automatic subdomain generation using human-readable random slugs
+# 6. SNI-based routing for both HTTP/HTTPS and database TLS connections
+
+# ==============================================================================
+# 2. GATEWAY API RESOURCES STRUCTURE
+# ==============================================================================
+
+# -----------------------------------------------------------------------------
+# 2.1 GatewayClass
+# -----------------------------------------------------------------------------
+# The GatewayClass defines which controller manages Gateways of this class.
+# For Cilium, this is typically pre-installed by the Cilium operator.
+#
+# apiVersion: gateway.networking.k8s.io/v1
+# kind: GatewayClass
+# metadata:
+#   name: cilium
+# spec:
+#   controllerName: io.cilium/gateway-controller
+
+# -----------------------------------------------------------------------------
+# 2.2 Gateway (Shared, in gateway-api-system namespace)
+# -----------------------------------------------------------------------------
+# This is the SINGLE shared Gateway that handles ALL traffic for ALL tenants.
+# It has multiple listeners for different protocols and ports.
+#
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: kibaship-gateway
+  namespace: gateway-api-system
+spec:
+  gatewayClassName: cilium
+  listeners:
+    # HTTP Listener - Port 80
+    # Routes HTTP traffic, typically redirects to HTTPS
+    - name: http
+      protocol: HTTP
+      port: 80
+      allowedRoutes:
+        namespaces:
+          from: All  # Allow HTTPRoutes from any namespace
+
+    # HTTPS Listener - Port 443
+    # Routes HTTPS traffic with TLS termination
+    - name: https
+      protocol: HTTPS
+      port: 443
+      tls:
+        mode: Terminate
+        # Certificate will be selected dynamically per HTTPRoute based on hostname
+      allowedRoutes:
+        namespaces:
+          from: All  # Allow HTTPRoutes from any namespace
+
+    # MySQL TLS Listener - Port 3306
+    # Routes MySQL traffic with TLS passthrough (SNI-based routing)
+    - name: mysql-tls
+      protocol: TLS
+      port: 3306
+      tls:
+        mode: Passthrough  # Don't terminate TLS, pass it through to backend
+      allowedRoutes:
+        namespaces:
+          from: All  # Allow TLSRoutes from any namespace
+        kinds:
+          - kind: TLSRoute
+
+    # Valkey (Redis) TLS Listener - Port 6379
+    # Routes Valkey traffic with TLS passthrough (SNI-based routing)
+    - name: valkey-tls
+      protocol: TLS
+      port: 6379
+      tls:
+        mode: Passthrough  # Don't terminate TLS, pass it through to backend
+      allowedRoutes:
+        namespaces:
+          from: All
+        kinds:
+          - kind: TLSRoute
+
+    # PostgreSQL TLS Listener - Port 5432
+    # Routes PostgreSQL traffic with TLS passthrough (SNI-based routing)
+    - name: postgres-tls
+      protocol: TLS
+      port: 5432
+      tls:
+        mode: Passthrough  # Don't terminate TLS, pass it through to backend
+      allowedRoutes:
+        namespaces:
+          from: All
+        kinds:
+          - kind: TLSRoute
+
+# NOTES ON GATEWAY DESIGN:
+# -------------------------
+# 1. The Gateway is cluster-scoped and shared by all tenants
+# 2. allowedRoutes.namespaces.from: All enables multi-tenant routing
+# 3. Each listener can accept routes from any namespace
+# 4. TLS listeners use Passthrough mode for SNI-based routing without termination
+# 5. The Gateway's LoadBalancer service exposes these ports to external traffic:
+#    - Port 80 mapped to NodePort 30080
+#    - Port 443 mapped to NodePort 30443
+#    - Port 3306 mapped to NodePort 33306
+#    - Port 6379 mapped to NodePort 36379
+#    - Port 5432 mapped to NodePort 35432
+
+# ==============================================================================
+# 3. HTTP/HTTPS ROUTING STRATEGY
+# ==============================================================================
+
+# -----------------------------------------------------------------------------
+# 3.1 Automatic Subdomain Generation
+# -----------------------------------------------------------------------------
+# When a user creates an Application, the operator automatically:
+# 1. Generates a random slug (e.g., "copper-forest-7x9k")
+# 2. Creates a default ApplicationDomain:
+#    - Domain: <random-slug>.apps.kibaship.com
+#    - Type: default
+#    - TLSEnabled: true (default)
+# 3. Creates HTTPRoute resources for HTTP and HTTPS traffic
+#
+# Example domain: copper-forest-7x9k.apps.kibaship.com
+
+# -----------------------------------------------------------------------------
+# 3.2 HTTPRoute for Default Application Domain
+# -----------------------------------------------------------------------------
+# Each ApplicationDomain creates an HTTPRoute in the project namespace.
+# The HTTPRoute matches the domain hostname and routes to the application service.
+#
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: httproute-copper-forest-7x9k
+  namespace: project-abc123-uuid  # Project's namespace
+  labels:
+    platform.operator.kibaship.com/application: application-myapp-kibaship-com
+    platform.operator.kibaship.com/domain-type: default
+spec:
+  # Reference to the shared Gateway
+  parentRefs:
+    - name: kibaship-gateway
+      namespace: gateway-api-system
+      sectionName: https  # Attach to HTTPS listener
+
+  # Hostname matching - SNI-based routing
+  hostnames:
+    - "copper-forest-7x9k.apps.kibaship.com"
+
+  # Routing rules
+  rules:
+    # Rule 1: Redirect HTTP to HTTPS (optional, if attached to HTTP listener too)
+    # This rule would be in a separate HTTPRoute attached to the HTTP listener
+
+    # Rule 2: Forward HTTPS traffic to application service
+    - matches:
+        - path:
+            type: PathPrefix
+            value: "/"
+      backendRefs:
+        - name: service-myapp  # K8s Service for the application
+          namespace: project-abc123-uuid
+          port: 3000  # Application port from ApplicationDomain.Spec.Port
+
+# -----------------------------------------------------------------------------
+# 3.3 HTTP to HTTPS Redirect (Optional)
+# -----------------------------------------------------------------------------
+# A separate HTTPRoute attached to the HTTP listener can redirect to HTTPS
+#
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: httproute-copper-forest-7x9k-http-redirect
+  namespace: project-abc123-uuid
+spec:
+  parentRefs:
+    - name: kibaship-gateway
+      namespace: gateway-api-system
+      sectionName: http  # Attach to HTTP listener
+
+  hostnames:
+    - "copper-forest-7x9k.apps.kibaship.com"
+
+  rules:
+    - filters:
+        - type: RequestRedirect
+          requestRedirect:
+            scheme: https
+            statusCode: 301
+
+# -----------------------------------------------------------------------------
+# 3.4 TLS Certificate Reference
+# -----------------------------------------------------------------------------
+# For default domains (*.apps.kibaship.com), we use a wildcard certificate
+# stored in the certificates namespace. The HTTPRoute doesn't directly reference
+# the certificate; instead, the Gateway listener's TLS configuration references it.
+#
+# However, Gateway API allows dynamic certificate selection based on SNI.
+# For a production setup with wildcard certificates:
+#
+# Option 1: Configure the Gateway HTTPS listener with the wildcard certificate
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: kibaship-gateway
+  namespace: gateway-api-system
+spec:
+  gatewayClassName: cilium
+  listeners:
+    - name: https
+      protocol: HTTPS
+      port: 443
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: tenant-wildcard-certificate
+            namespace: certificates  # Cross-namespace reference
+            kind: Secret
+      allowedRoutes:
+        namespaces:
+          from: All
+
+# This requires a ReferenceGrant in the certificates namespace:
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: allow-gateway-to-certificates
+  namespace: certificates
+spec:
+  from:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      namespace: gateway-api-system
+  to:
+    - group: ""
+      kind: Secret
+      name: tenant-wildcard-certificate
+
+# -----------------------------------------------------------------------------
+# 3.5 Custom Domain Support
+# -----------------------------------------------------------------------------
+# For custom domains (e.g., custom.example.com), the flow is:
+# 1. User creates ApplicationDomain with Type: custom
+# 2. Operator creates a cert-manager Certificate for the custom domain
+# 3. Operator creates HTTPRoute with the custom hostname
+# 4. Certificate is stored in the project namespace
+# 5. HTTPRoute references the certificate (if needed, or Gateway handles SNI)
+
+# ==============================================================================
+# 4. DATABASE TLS ROUTING STRATEGY (MySQL, Valkey, PostgreSQL)
+# ==============================================================================
+
+# -----------------------------------------------------------------------------
+# 4.1 Database TLS Routing Overview
+# -----------------------------------------------------------------------------
+# Database applications (MySQL, Valkey, PostgreSQL) require TLS passthrough
+# routing based on SNI. The flow is:
+#
+# 1. User creates Application of type MySQL/Valkey/PostgreSQL
+# 2. Operator generates random subdomain: mysql-abc123.dbs.kibaship.com
+# 3. Operator creates ApplicationDomain with the database subdomain
+# 4. Operator creates TLSRoute for SNI-based routing to the database service
+# 5. Database service receives TLS-encrypted traffic (no TLS termination at Gateway)
+#
+# IMPORTANT: Databases must support TLS and SNI:
+# - MySQL 8.1.0+ supports SNI
+# - PostgreSQL 10+ supports SNI
+# - Valkey/Redis requires TLS configuration with SNI support
+
+# -----------------------------------------------------------------------------
+# 4.2 TLSRoute for MySQL Application
+# -----------------------------------------------------------------------------
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: TLSRoute
+metadata:
+  name: tlsroute-mysql-abc123
+  namespace: project-xyz789-uuid  # Project's namespace
+  labels:
+    platform.operator.kibaship.com/application: application-mysql-cluster-kibaship-com
+    platform.operator.kibaship.com/application-type: MySQL
+spec:
+  # Reference to the shared Gateway
+  parentRefs:
+    - name: kibaship-gateway
+      namespace: gateway-api-system
+      sectionName: mysql-tls  # Attach to MySQL TLS listener
+
+  # SNI hostname matching
+  hostnames:
+    - "mysql-abc123.dbs.kibaship.com"
+
+  # Routing rules
+  rules:
+    - backendRefs:
+        - name: service-mysql-abc123  # K8s Service for MySQL
+          namespace: project-xyz789-uuid
+          port: 3306  # MySQL port
+
+# -----------------------------------------------------------------------------
+# 4.3 TLSRoute for Valkey Application
+# -----------------------------------------------------------------------------
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: TLSRoute
+metadata:
+  name: tlsroute-valkey-def456
+  namespace: project-xyz789-uuid
+  labels:
+    platform.operator.kibaship.com/application: application-valkey-cluster-kibaship-com
+    platform.operator.kibaship.com/application-type: Valkey
+spec:
+  parentRefs:
+    - name: kibaship-gateway
+      namespace: gateway-api-system
+      sectionName: valkey-tls  # Attach to Valkey TLS listener
+
+  hostnames:
+    - "valkey-def456.dbs.kibaship.com"
+
+  rules:
+    - backendRefs:
+        - name: service-valkey-def456
+          namespace: project-xyz789-uuid
+          port: 6379  # Valkey port
+
+# -----------------------------------------------------------------------------
+# 4.4 TLSRoute for PostgreSQL Application
+# -----------------------------------------------------------------------------
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: TLSRoute
+metadata:
+  name: tlsroute-postgres-ghi789
+  namespace: project-xyz789-uuid
+  labels:
+    platform.operator.kibaship.com/application: application-postgres-cluster-kibaship-com
+    platform.operator.kibaship.com/application-type: Postgres
+spec:
+  parentRefs:
+    - name: kibaship-gateway
+      namespace: gateway-api-system
+      sectionName: postgres-tls  # Attach to PostgreSQL TLS listener
+
+  hostnames:
+    - "postgres-ghi789.dbs.kibaship.com"
+
+  rules:
+    - backendRefs:
+        - name: service-postgres-ghi789
+          namespace: project-xyz789-uuid
+          port: 5432  # PostgreSQL port
+
+# -----------------------------------------------------------------------------
+# 4.5 Database TLS Certificate Configuration
+# -----------------------------------------------------------------------------
+# For database TLS routing, we need wildcard certificates for the database subdomains:
+# - *.dbs.kibaship.com for MySQL/Valkey/PostgreSQL
+#
+# These certificates are provisioned in the certificates namespace and used by
+# database instances via ReferenceGrant.
+#
+# The database pods/containers must be configured to:
+# 1. Use TLS with the provided certificate
+# 2. Support SNI hostname verification
+# 3. Listen on the appropriate port
+
+# Example: MySQL InnoDBCluster with TLS
+# (The operator would create this when deploying MySQL Application)
+# apiVersion: mysql.oracle.com/v2
+# kind: InnoDBCluster
+# metadata:
+#   name: mysql-cluster-abc123
+#   namespace: project-xyz789-uuid
+# spec:
+#   tlsUseSelfSigned: false
+#   tlsSecretName: database-tls-certificate  # Created via cert-manager
+#   ...
+
+# ==============================================================================
+# 5. CERTIFICATE MANAGEMENT STRATEGY
+# ==============================================================================
+
+# -----------------------------------------------------------------------------
+# 5.1 Wildcard Certificate for Default Domains
+# -----------------------------------------------------------------------------
+# A single wildcard certificate covers all default application domains:
+# Certificate: *.apps.kibaship.com
+# Namespace: certificates
+# Name: tenant-wildcard-certificate
+#
+# This certificate is created once during cluster bootstrap and renewed
+# automatically by cert-manager.
+#
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: tenant-wildcard-certificate
+  namespace: certificates
+spec:
+  secretName: tenant-wildcard-certificate
+  issuerRef:
+    name: certmanager-acme-issuer
+    kind: ClusterIssuer
+  dnsNames:
+    - "*.apps.kibaship.com"
+  secretTemplate:
+    labels:
+      platform.operator.kibaship.com/certificate-type: wildcard
+
+# -----------------------------------------------------------------------------
+# 5.2 Wildcard Certificate for Database Domains
+# -----------------------------------------------------------------------------
+# A separate wildcard certificate covers all database domains:
+# Certificate: *.dbs.kibaship.com
+# Namespace: certificates
+# Name: database-wildcard-certificate
+#
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: database-wildcard-certificate
+  namespace: certificates
+spec:
+  secretName: database-wildcard-certificate
+  issuerRef:
+    name: certmanager-acme-issuer
+    kind: ClusterIssuer
+  dnsNames:
+    - "*.dbs.kibaship.com"
+  secretTemplate:
+    labels:
+      platform.operator.kibaship.com/certificate-type: database-wildcard
+
+# -----------------------------------------------------------------------------
+# 5.3 Custom Domain Certificates
+# -----------------------------------------------------------------------------
+# For custom domains, individual certificates are created in the project namespace
+# by the ApplicationDomainReconciler when Type: custom.
+#
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: custom-domain-example-com
+  namespace: project-abc123-uuid
+spec:
+  secretName: custom-domain-example-com
+  issuerRef:
+    name: certmanager-acme-issuer
+    kind: ClusterIssuer
+  dnsNames:
+    - "custom.example.com"
+
+# -----------------------------------------------------------------------------
+# 5.4 ReferenceGrant for Cross-Namespace Certificate Access
+# -----------------------------------------------------------------------------
+# ReferenceGrants are created in the certificates namespace to allow:
+# 1. Gateway to access wildcard certificates
+# 2. Project namespaces to access shared certificates (if needed)
+#
+# ReferenceGrant: Gateway access to certificates
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: gateway-to-certificates
+  namespace: certificates
+spec:
+  from:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      namespace: gateway-api-system
+  to:
+    - group: ""
+      kind: Secret
+
+# ReferenceGrant: Per-project access to wildcard certificate
+# (Created dynamically by the operator for each project)
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: project-abc123-to-certificates
+  namespace: certificates
+spec:
+  from:
+    - group: ""
+      kind: Service
+      namespace: project-abc123-uuid
+  to:
+    - group: ""
+      kind: Secret
+      name: tenant-wildcard-certificate
+
+# ==============================================================================
+# 6. OPERATOR RECONCILER DESIGN
+# ==============================================================================
+
+# -----------------------------------------------------------------------------
+# 6.1 ApplicationDomainReconciler Responsibilities
+# -----------------------------------------------------------------------------
+# The ApplicationDomainReconciler is responsible for:
+#
+# 1. DOMAIN VALIDATION
+#    - Validate domain format and uniqueness
+#    - Check DNS configuration for custom domains
+#
+# 2. CERTIFICATE MANAGEMENT
+#    - For default domains: Reference wildcard certificate
+#    - For custom domains: Create individual Certificate resource
+#    - Update Status.CertificateRef with certificate details
+#    - Monitor certificate readiness
+#
+# 3. ROUTING RESOURCE CREATION
+#    - Create HTTPRoute for HTTP/HTTPS applications
+#    - Create TLSRoute for database applications (MySQL, Valkey, PostgreSQL)
+#    - Attach routes to appropriate Gateway listeners
+#    - Configure hostname matching based on ApplicationDomain.Spec.Domain
+#
+# 4. REFERENCEGRANT MANAGEMENT
+#    - Create ReferenceGrant in project namespace to access certificates namespace
+#    - Ensure Gateway can access wildcard certificates
+#
+# 5. STATUS MANAGEMENT
+#    - Update Phase: Pending -> Ready -> Failed
+#    - Update CertificateReady status
+#    - Update IngressReady status
+#    - Set appropriate Conditions
+#
+# RECONCILIATION FLOW:
+# --------------------
+# func (r *ApplicationDomainReconciler) Reconcile(ctx, req) {
+#   1. Fetch ApplicationDomain
+#   2. Handle deletion if DeletionTimestamp is set
+#   3. Add finalizer if not present
+#   4. Fetch parent Application to determine type
+#   5. Generate or validate domain
+#   6. Determine certificate strategy (wildcard vs custom)
+#   7. Create/update Certificate resource if needed
+#   8. Create ReferenceGrant for cross-namespace access
+#   9. Create HTTPRoute or TLSRoute based on Application type
+#   10. Update Status with resource references and readiness
+#   11. Return and requeue if resources are not ready
+# }
+#
+# EXAMPLE RECONCILER ACTIONS:
+#
+# For GitRepository/DockerImage Application:
+#   - Create HTTPRoute attached to https listener
+#   - Reference tenant-wildcard-certificate
+#   - Set hostname: <random-slug>.apps.kibaship.com
+#   - Route to service-<app-slug> on port from ApplicationDomain.Spec.Port
+#
+# For MySQL Application:
+#   - Create TLSRoute attached to mysql-tls listener
+#   - Reference database-wildcard-certificate
+#   - Set hostname: <random-slug>.dbs.kibaship.com
+#   - Route to service-<mysql-slug> on port 3306
+#
+# For Valkey Application:
+#   - Create TLSRoute attached to valkey-tls listener
+#   - Reference database-wildcard-certificate
+#   - Set hostname: <random-slug>.dbs.kibaship.com
+#   - Route to service-<valkey-slug> on port 6379
+#
+# For PostgreSQL Application:
+#   - Create TLSRoute attached to postgres-tls listener
+#   - Reference database-wildcard-certificate
+#   - Set hostname: <random-slug>.dbs.kibaship.com
+#   - Route to service-<postgres-slug> on port 5432
+
+# -----------------------------------------------------------------------------
+# 6.2 DeploymentReconciler Enhancements
+# -----------------------------------------------------------------------------
+# The DeploymentReconciler needs to be enhanced to create Kubernetes resources
+# after a successful PipelineRun. Current flow:
+#
+# CURRENT FLOW (Build Phase):
+#   1. Deployment created -> Status: Initializing
+#   2. Create Tekton Pipeline and PipelineRun
+#   3. Monitor PipelineRun status
+#   4. Update Deployment.Status.Phase based on PipelineRun
+#   5. Status: Succeeded when PipelineRun completes
+#
+# ENHANCED FLOW (Build + Deploy Phase):
+#   1. Deployment created -> Status: Initializing
+#   2. Create Tekton Pipeline and PipelineRun
+#   3. Monitor PipelineRun status
+#   4. When PipelineRun succeeds:
+#      a. Status: Deploying
+#      b. Fetch Application to determine type
+#      c. Create Kubernetes Deployment resource
+#      d. Create Kubernetes Service resource
+#      e. Create ApplicationDomain (if not exists)
+#      f. Wait for Service and Pods to be ready
+#      g. Status: Succeeded
+#   5. If deployment fails:
+#      a. Status: Failed
+#
+# NEW RECONCILIATION LOGIC:
+# -------------------------
+# func (r *DeploymentReconciler) Reconcile(ctx, req) {
+#   // ... existing logic for PipelineRun creation ...
+#
+#   // NEW: After PipelineRun succeeds
+#   if deployment.Status.Phase == DeploymentPhaseSucceeded {
+#     // Check if Kubernetes resources are already created
+#     if !r.areKubernetesResourcesCreated(ctx, &deployment) {
+#       deployment.Status.Phase = DeploymentPhaseDeploying
+#       r.Status().Update(ctx, &deployment)
+#
+#       // Create Kubernetes Deployment
+#       if err := r.createKubernetesDeployment(ctx, &deployment, &app); err != nil {
+#         return err
+#       }
+#
+#       // Create Kubernetes Service
+#       if err := r.createKubernetesService(ctx, &deployment, &app); err != nil {
+#         return err
+#       }
+#
+#       // Create ApplicationDomain (default domain)
+#       if err := r.ensureApplicationDomain(ctx, &deployment, &app); err != nil {
+#         return err
+#       }
+#
+#       // Wait for resources to be ready
+#       if err := r.waitForResourcesReady(ctx, &deployment); err != nil {
+#         return err
+#       }
+#
+#       deployment.Status.Phase = DeploymentPhaseRunning
+#       r.Status().Update(ctx, &deployment)
+#     }
+#   }
+# }
+#
+# KUBERNETES DEPLOYMENT CREATION:
+# --------------------------------
+# func (r *DeploymentReconciler) createKubernetesDeployment(ctx, deployment, app) {
+#   // Construct Deployment name: deployment-<slug>-kibaship-com
+#   deploymentName := fmt.Sprintf("deployment-%s", deployment.GetSlug())
+#
+#   // Determine image from PipelineRun or Application spec
+#   image := r.getImageFromPipelineRun(ctx, deployment)
+#
+#   k8sDeployment := &appsv1.Deployment{
+#     ObjectMeta: metav1.ObjectMeta{
+#       Name:      deploymentName,
+#       Namespace: deployment.Namespace,
+#       Labels: map[string]string{
+#         "platform.operator.kibaship.com/application": app.Name,
+#         "platform.operator.kibaship.com/deployment":  deployment.Name,
+#       },
+#       OwnerReferences: []metav1.OwnerReference{
+#         *metav1.NewControllerRef(deployment, deployment.GroupVersionKind()),
+#       },
+#     },
+#     Spec: appsv1.DeploymentSpec{
+#       Replicas: int32Ptr(1),
+#       Selector: &metav1.LabelSelector{
+#         MatchLabels: map[string]string{
+#           "app": deploymentName,
+#         },
+#       },
+#       Template: corev1.PodTemplateSpec{
+#         ObjectMeta: metav1.ObjectMeta{
+#           Labels: map[string]string{
+#             "app": deploymentName,
+#           },
+#         },
+#         Spec: corev1.PodSpec{
+#           Containers: []corev1.Container{
+#             {
+#               Name:  "app",
+#               Image: image,
+#               Ports: []corev1.ContainerPort{
+#                 {ContainerPort: 3000}, // From ApplicationDomain.Spec.Port
+#               },
+#             },
+#           },
+#         },
+#       },
+#     },
+#   }
+#
+#   return r.Client.Create(ctx, k8sDeployment)
+# }
+#
+# KUBERNETES SERVICE CREATION:
+# -----------------------------
+# func (r *DeploymentReconciler) createKubernetesService(ctx, deployment, app) {
+#   serviceName := fmt.Sprintf("service-%s", app.GetSlug())
+#
+#   k8sService := &corev1.Service{
+#     ObjectMeta: metav1.ObjectMeta{
+#       Name:      serviceName,
+#       Namespace: deployment.Namespace,
+#       Labels: map[string]string{
+#         "platform.operator.kibaship.com/application": app.Name,
+#       },
+#       OwnerReferences: []metav1.OwnerReference{
+#         *metav1.NewControllerRef(deployment, deployment.GroupVersionKind()),
+#       },
+#     },
+#     Spec: corev1.ServiceSpec{
+#       Type: corev1.ServiceTypeClusterIP,
+#       Selector: map[string]string{
+#         "app": fmt.Sprintf("deployment-%s", deployment.GetSlug()),
+#       },
+#       Ports: []corev1.ServicePort{
+#         {
+#           Port:       3000, // From ApplicationDomain.Spec.Port
+#           TargetPort: intstr.FromInt(3000),
+#           Protocol:   corev1.ProtocolTCP,
+#         },
+#       },
+#     },
+#   }
+#
+#   return r.Client.Create(ctx, k8sService)
+# }
+#
+# APPLICATION DOMAIN CREATION:
+# ----------------------------
+# func (r *DeploymentReconciler) ensureApplicationDomain(ctx, deployment, app) {
+#   // Check if default ApplicationDomain exists
+#   var domains platformv1alpha1.ApplicationDomainList
+#   err := r.Client.List(ctx, &domains,
+#     client.InNamespace(deployment.Namespace),
+#     client.MatchingLabels{
+#       "platform.operator.kibaship.com/application": app.Name,
+#       "platform.operator.kibaship.com/domain-type": "default",
+#     })
+#
+#   if len(domains.Items) > 0 {
+#     return nil // Default domain already exists
+#   }
+#
+#   // Generate random slug for subdomain
+#   randomSlug := generateRandomSlug() // e.g., "copper-forest-7x9k"
+#
+#   // Determine domain pattern based on application type
+#   var domain string
+#   if isWebApplication(app) {
+#     domain = fmt.Sprintf("%s.apps.kibaship.com", randomSlug)
+#   } else if isDatabaseApplication(app) {
+#     domain = fmt.Sprintf("%s.dbs.kibaship.com", randomSlug)
+#   }
+#
+#   appDomain := &platformv1alpha1.ApplicationDomain{
+#     ObjectMeta: metav1.ObjectMeta{
+#       Name:      fmt.Sprintf("domain-%s", randomSlug),
+#       Namespace: deployment.Namespace,
+#       Labels: map[string]string{
+#         "platform.operator.kibaship.com/application": app.Name,
+#         "platform.operator.kibaship.com/domain-type": "default",
+#         validation.LabelResourceUUID:                 uuid.New().String(),
+#         validation.LabelResourceSlug:                 randomSlug,
+#         validation.LabelProjectUUID:                  app.GetProjectUUID(),
+#         validation.LabelApplicationUUID:              app.Labels[validation.LabelResourceUUID],
+#       },
+#     },
+#     Spec: platformv1alpha1.ApplicationDomainSpec{
+#       ApplicationRef: corev1.LocalObjectReference{Name: app.Name},
+#       Domain:         domain,
+#       Port:           3000, // Default, or from Application config
+#       Type:           platformv1alpha1.ApplicationDomainTypeDefault,
+#       Default:        true,
+#       TLSEnabled:     true,
+#     },
+#   }
+#
+#   return r.Client.Create(ctx, appDomain)
+# }
+
+# -----------------------------------------------------------------------------
+# 6.3 ApplicationReconciler (No Changes Required)
+# -----------------------------------------------------------------------------
+# The ApplicationReconciler manages the Application resource lifecycle but
+# doesn't directly interact with ingress resources. It:
+# - Validates Application configuration
+# - Sets up necessary secrets and config
+# - Updates Application status
+#
+# No changes required for ingress implementation.
+
+# ==============================================================================
+# 7. DEPLOYMENT FLOW - STEP BY STEP
+# ==============================================================================
+
+# -----------------------------------------------------------------------------
+# SCENARIO: User Creates a GitRepository Application
+# -----------------------------------------------------------------------------
+#
+# STEP 1: User creates Project
+# -----------------------------
+# kubectl apply -f - <<EOF
+# apiVersion: platform.operator.kibaship.com/v1alpha1
+# kind: Project
+# metadata:
+#   name: project-mycompany
+#   labels:
+#     platform.operator.kibaship.com/resource.uuid: "abc123-uuid"
+#     platform.operator.kibaship.com/resource.slug: "mycompany"
+# spec:
+#   applicationTypes:
+#     gitRepository:
+#       enabled: true
+# EOF
+#
+# Result: ProjectReconciler creates namespace "project-abc123-uuid"
+#
+# STEP 2: User creates Environment
+# ---------------------------------
+# kubectl apply -f - <<EOF
+# apiVersion: platform.operator.kibaship.com/v1alpha1
+# kind: Environment
+# metadata:
+#   name: environment-production-kibaship-com
+#   namespace: project-abc123-uuid
+#   labels:
+#     platform.operator.kibaship.com/resource.uuid: "env456-uuid"
+#     platform.operator.kibaship.com/resource.slug: "production"
+#     platform.operator.kibaship.com/project.uuid: "abc123-uuid"
+# spec:
+#   projectRef:
+#     name: project-mycompany
+# EOF
+#
+# Result: Environment created in project namespace
+#
+# STEP 3: User creates Application
+# ---------------------------------
+# kubectl apply -f - <<EOF
+# apiVersion: platform.operator.kibaship.com/v1alpha1
+# kind: Application
+# metadata:
+#   name: application-myapp-kibaship-com
+#   namespace: project-abc123-uuid
+#   labels:
+#     platform.operator.kibaship.com/resource.uuid: "app789-uuid"
+#     platform.operator.kibaship.com/resource.slug: "myapp"
+#     platform.operator.kibaship.com/project.uuid: "abc123-uuid"
+#     platform.operator.kibaship.com/environment.uuid: "env456-uuid"
+# spec:
+#   environmentRef:
+#     name: environment-production-kibaship-com
+#   type: GitRepository
+#   gitRepository:
+#     provider: github.com
+#     repository: myorg/myapp
+#     publicAccess: true
+#     branch: main
+# EOF
+#
+# Result:
+# - ApplicationReconciler validates and updates Application status
+# - NO deployment resources created yet (application is just configuration)
+#
+# STEP 4: User creates Deployment (triggers build and deploy)
+# ------------------------------------------------------------
+# kubectl apply -f - <<EOF
+# apiVersion: platform.operator.kibaship.com/v1alpha1
+# kind: Deployment
+# metadata:
+#   name: deployment-myapp-v1-kibaship-com
+#   namespace: project-abc123-uuid
+#   labels:
+#     platform.operator.kibaship.com/resource.uuid: "dep101-uuid"
+#     platform.operator.kibaship.com/resource.slug: "myapp-v1"
+#     platform.operator.kibaship.com/project.uuid: "abc123-uuid"
+#     platform.operator.kibaship.com/application.uuid: "app789-uuid"
+#     platform.operator.kibaship.com/environment.uuid: "env456-uuid"
+#     platform.operator.kibaship.com/deployment.uuid: "dep101-uuid"
+# spec:
+#   applicationRef:
+#     name: application-myapp-kibaship-com
+#   gitRepository:
+#     commitSHA: abc123def456
+# EOF
+#
+# Result: DeploymentReconciler starts the build and deploy flow
+#
+# STEP 5: DeploymentReconciler - Build Phase
+# -------------------------------------------
+# DeploymentReconciler Reconcile() is triggered:
+#
+# 5.1. Fetch Deployment resource
+# 5.2. Add finalizer
+# 5.3. Fetch Application resource
+# 5.4. Detect Application.Spec.Type == GitRepository
+# 5.5. Call handleGitRepositoryDeployment():
+#      a. Create Tekton Pipeline (if not exists)
+#      b. Create Tekton PipelineRun with:
+#         - Git clone task
+#         - Railpack prepare task (detect buildpack)
+#         - Railpack build task (build image)
+#         - Push image to registry
+#      c. Update Deployment.Status.Phase = "Running"
+# 5.6. Monitor PipelineRun status
+# 5.7. When PipelineRun succeeds:
+#      - Update Deployment.Status.Phase = "Succeeded"
+#
+# STEP 6: DeploymentReconciler - Deploy Phase
+# --------------------------------------------
+# DeploymentReconciler Reconcile() is triggered again (by status update):
+#
+# 6.1. Detect Deployment.Status.Phase == "Succeeded"
+# 6.2. Check if Kubernetes resources are created (Deployment, Service, Domain)
+# 6.3. If not created:
+#      a. Update Deployment.Status.Phase = "Deploying"
+#      b. Get built image from PipelineRun results
+#         (e.g., registry.kibaship.com/project-abc123-uuid/myapp:abc123def456)
+#      c. Create Kubernetes Deployment resource:
+#         - Name: deployment-myapp-v1
+#         - Namespace: project-abc123-uuid
+#         - Image: <image-from-pipeline>
+#         - Port: 3000 (default, or from application config)
+#         - Labels: app=deployment-myapp-v1
+#      d. Create Kubernetes Service resource:
+#         - Name: service-myapp
+#         - Namespace: project-abc123-uuid
+#         - Selector: app=deployment-myapp-v1
+#         - Port: 3000
+#         - Type: ClusterIP
+#      e. Generate random slug for subdomain (e.g., "copper-forest-7x9k")
+#      f. Create ApplicationDomain resource:
+#         - Name: domain-copper-forest-7x9k
+#         - Namespace: project-abc123-uuid
+#         - Spec.Domain: copper-forest-7x9k.apps.kibaship.com
+#         - Spec.Type: default
+#         - Spec.Default: true
+#         - Spec.TLSEnabled: true
+#         - Spec.Port: 3000
+#         - Spec.ApplicationRef: application-myapp-kibaship-com
+# 6.4. Wait for Deployment pods to be ready
+# 6.5. Update Deployment.Status.Phase = "Running"
+#
+# STEP 7: ApplicationDomainReconciler - Ingress Setup
+# ----------------------------------------------------
+# ApplicationDomainReconciler Reconcile() is triggered (by domain creation):
+#
+# 7.1. Fetch ApplicationDomain resource
+# 7.2. Add finalizer
+# 7.3. Fetch parent Application to determine type (GitRepository)
+# 7.4. Validate domain: copper-forest-7x9k.apps.kibaship.com
+# 7.5. Determine certificate strategy:
+#      - Type: default -> Use wildcard certificate
+#      - Certificate: tenant-wildcard-certificate
+#      - Namespace: certificates
+# 7.6. Update ApplicationDomain.Status.CertificateRef:
+#      - Name: tenant-wildcard-certificate
+#      - Namespace: certificates
+# 7.7. Create ReferenceGrant in project namespace:
+#      - Allow HTTPRoute to reference Service in same namespace
+#      - Allow Gateway to access wildcard certificate
+# 7.8. Create HTTPRoute resource:
+#      - Name: httproute-copper-forest-7x9k
+#      - Namespace: project-abc123-uuid
+#      - ParentRefs: kibaship-gateway (https listener)
+#      - Hostnames: copper-forest-7x9k.apps.kibaship.com
+#      - BackendRefs: service-myapp:3000
+# 7.9. Create HTTP->HTTPS redirect HTTPRoute:
+#      - Name: httproute-copper-forest-7x9k-http-redirect
+#      - Namespace: project-abc123-uuid
+#      - ParentRefs: kibaship-gateway (http listener)
+#      - Hostnames: copper-forest-7x9k.apps.kibaship.com
+#      - Redirect: https with 301
+# 7.10. Update ApplicationDomain.Status:
+#       - Phase: Ready
+#       - CertificateReady: true
+#       - IngressReady: true
+#       - Message: "Domain is configured and ready"
+#
+# STEP 8: Traffic Flow - End User Access
+# ---------------------------------------
+# 8.1. User visits: https://copper-forest-7x9k.apps.kibaship.com
+# 8.2. DNS resolves to external load balancer IP
+# 8.3. Load balancer forwards HTTPS traffic to NodePort 30443
+# 8.4. NodePort routes to Gateway service port 443
+# 8.5. Gateway (Cilium) performs SNI inspection
+# 8.6. Gateway matches hostname to HTTPRoute in project-abc123-uuid namespace
+# 8.7. HTTPRoute routes to service-myapp:3000
+# 8.8. Service routes to deployment-myapp-v1 pods
+# 8.9. Application pod serves the request
+# 8.10. Response returns through the same path
+
+# ==============================================================================
+# 8. COMPLETE CODE EXAMPLES
+# ==============================================================================
+
+# -----------------------------------------------------------------------------
+# 8.1 Complete Resource Set for GitRepository Application
+# -----------------------------------------------------------------------------
+---
+# Project
+apiVersion: platform.operator.kibaship.com/v1alpha1
+kind: Project
+metadata:
+  name: project-mycompany
+  labels:
+    platform.operator.kibaship.com/resource.uuid: "abc123-uuid"
+    platform.operator.kibaship.com/resource.slug: "mycompany"
+spec:
+  applicationTypes:
+    gitRepository:
+      enabled: true
+
+---
+# Environment
+apiVersion: platform.operator.kibaship.com/v1alpha1
+kind: Environment
+metadata:
+  name: environment-production-kibaship-com
+  namespace: project-abc123-uuid
+  labels:
+    platform.operator.kibaship.com/resource.uuid: "env456-uuid"
+    platform.operator.kibaship.com/resource.slug: "production"
+    platform.operator.kibaship.com/project.uuid: "abc123-uuid"
+spec:
+  projectRef:
+    name: project-mycompany
+
+---
+# Application
+apiVersion: platform.operator.kibaship.com/v1alpha1
+kind: Application
+metadata:
+  name: application-myapp-kibaship-com
+  namespace: project-abc123-uuid
+  labels:
+    platform.operator.kibaship.com/resource.uuid: "app789-uuid"
+    platform.operator.kibaship.com/resource.slug: "myapp"
+    platform.operator.kibaship.com/project.uuid: "abc123-uuid"
+    platform.operator.kibaship.com/environment.uuid: "env456-uuid"
+spec:
+  environmentRef:
+    name: environment-production-kibaship-com
+  type: GitRepository
+  gitRepository:
+    provider: github.com
+    repository: myorg/myapp
+    publicAccess: true
+    branch: main
+
+---
+# Deployment
+apiVersion: platform.operator.kibaship.com/v1alpha1
+kind: Deployment
+metadata:
+  name: deployment-myapp-v1-kibaship-com
+  namespace: project-abc123-uuid
+  labels:
+    platform.operator.kibaship.com/resource.uuid: "dep101-uuid"
+    platform.operator.kibaship.com/resource.slug: "myapp-v1"
+    platform.operator.kibaship.com/project.uuid: "abc123-uuid"
+    platform.operator.kibaship.com/application.uuid: "app789-uuid"
+    platform.operator.kibaship.com/environment.uuid: "env456-uuid"
+    platform.operator.kibaship.com/deployment.uuid: "dep101-uuid"
+spec:
+  applicationRef:
+    name: application-myapp-kibaship-com
+  gitRepository:
+    commitSHA: abc123def456
+
+---
+# ApplicationDomain (created by operator)
+apiVersion: platform.operator.kibaship.com/v1alpha1
+kind: ApplicationDomain
+metadata:
+  name: domain-copper-forest-7x9k
+  namespace: project-abc123-uuid
+  labels:
+    platform.operator.kibaship.com/resource.uuid: "dom202-uuid"
+    platform.operator.kibaship.com/resource.slug: "copper-forest-7x9k"
+    platform.operator.kibaship.com/project.uuid: "abc123-uuid"
+    platform.operator.kibaship.com/application.uuid: "app789-uuid"
+    platform.operator.kibaship.com/application: application-myapp-kibaship-com
+    platform.operator.kibaship.com/domain-type: default
+spec:
+  applicationRef:
+    name: application-myapp-kibaship-com
+  domain: copper-forest-7x9k.apps.kibaship.com
+  port: 3000
+  type: default
+  default: true
+  tlsEnabled: true
+
+---
+# Kubernetes Deployment (created by operator)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: deployment-myapp-v1
+  namespace: project-abc123-uuid
+  labels:
+    platform.operator.kibaship.com/application: application-myapp-kibaship-com
+    platform.operator.kibaship.com/deployment: deployment-myapp-v1-kibaship-com
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: deployment-myapp-v1
+  template:
+    metadata:
+      labels:
+        app: deployment-myapp-v1
+    spec:
+      containers:
+        - name: app
+          image: registry.kibaship.com/project-abc123-uuid/myapp:abc123def456
+          ports:
+            - containerPort: 3000
+
+---
+# Kubernetes Service (created by operator)
+apiVersion: v1
+kind: Service
+metadata:
+  name: service-myapp
+  namespace: project-abc123-uuid
+  labels:
+    platform.operator.kibaship.com/application: application-myapp-kibaship-com
+spec:
+  type: ClusterIP
+  selector:
+    app: deployment-myapp-v1
+  ports:
+    - port: 3000
+      targetPort: 3000
+      protocol: TCP
+
+---
+# HTTPRoute for HTTPS (created by operator)
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: httproute-copper-forest-7x9k
+  namespace: project-abc123-uuid
+  labels:
+    platform.operator.kibaship.com/application: application-myapp-kibaship-com
+    platform.operator.kibaship.com/domain: domain-copper-forest-7x9k
+spec:
+  parentRefs:
+    - name: kibaship-gateway
+      namespace: gateway-api-system
+      sectionName: https
+  hostnames:
+    - "copper-forest-7x9k.apps.kibaship.com"
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: "/"
+      backendRefs:
+        - name: service-myapp
+          port: 3000
+
+---
+# HTTPRoute for HTTP->HTTPS redirect (created by operator)
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: httproute-copper-forest-7x9k-redirect
+  namespace: project-abc123-uuid
+  labels:
+    platform.operator.kibaship.com/application: application-myapp-kibaship-com
+    platform.operator.kibaship.com/domain: domain-copper-forest-7x9k
+spec:
+  parentRefs:
+    - name: kibaship-gateway
+      namespace: gateway-api-system
+      sectionName: http
+  hostnames:
+    - "copper-forest-7x9k.apps.kibaship.com"
+  rules:
+    - filters:
+        - type: RequestRedirect
+          requestRedirect:
+            scheme: https
+            statusCode: 301
+
+# -----------------------------------------------------------------------------
+# 8.2 Complete Resource Set for MySQL Application
+# -----------------------------------------------------------------------------
+---
+# Application (MySQL)
+apiVersion: platform.operator.kibaship.com/v1alpha1
+kind: Application
+metadata:
+  name: application-mysql-db-kibaship-com
+  namespace: project-abc123-uuid
+  labels:
+    platform.operator.kibaship.com/resource.uuid: "mysql123-uuid"
+    platform.operator.kibaship.com/resource.slug: "mysql-db"
+    platform.operator.kibaship.com/project.uuid: "abc123-uuid"
+    platform.operator.kibaship.com/environment.uuid: "env456-uuid"
+spec:
+  environmentRef:
+    name: environment-production-kibaship-com
+  type: MySQL
+  mysql:
+    version: "8.1.0"
+    database: "myapp_db"
+
+---
+# Deployment (MySQL)
+apiVersion: platform.operator.kibaship.com/v1alpha1
+kind: Deployment
+metadata:
+  name: deployment-mysql-db-v1-kibaship-com
+  namespace: project-abc123-uuid
+  labels:
+    platform.operator.kibaship.com/resource.uuid: "mysqldep456-uuid"
+    platform.operator.kibaship.com/resource.slug: "mysql-db-v1"
+    platform.operator.kibaship.com/project.uuid: "abc123-uuid"
+    platform.operator.kibaship.com/application.uuid: "mysql123-uuid"
+    platform.operator.kibaship.com/environment.uuid: "env456-uuid"
+spec:
+  applicationRef:
+    name: application-mysql-db-kibaship-com
+
+---
+# ApplicationDomain (MySQL, created by operator)
+apiVersion: platform.operator.kibaship.com/v1alpha1
+kind: ApplicationDomain
+metadata:
+  name: domain-mysql-silver-lake-5k3x
+  namespace: project-abc123-uuid
+  labels:
+    platform.operator.kibaship.com/resource.uuid: "mysqldom789-uuid"
+    platform.operator.kibaship.com/resource.slug: "mysql-silver-lake-5k3x"
+    platform.operator.kibaship.com/project.uuid: "abc123-uuid"
+    platform.operator.kibaship.com/application.uuid: "mysql123-uuid"
+    platform.operator.kibaship.com/application: application-mysql-db-kibaship-com
+    platform.operator.kibaship.com/domain-type: default
+spec:
+  applicationRef:
+    name: application-mysql-db-kibaship-com
+  domain: mysql-silver-lake-5k3x.dbs.kibaship.com
+  port: 3306
+  type: default
+  default: true
+  tlsEnabled: true
+
+---
+# MySQL Service (created by operator)
+apiVersion: v1
+kind: Service
+metadata:
+  name: service-mysql-db
+  namespace: project-abc123-uuid
+  labels:
+    platform.operator.kibaship.com/application: application-mysql-db-kibaship-com
+spec:
+  type: ClusterIP
+  selector:
+    app: mysql-cluster-mysql-db
+  ports:
+    - port: 3306
+      targetPort: 3306
+      protocol: TCP
+
+---
+# TLSRoute for MySQL (created by operator)
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: TLSRoute
+metadata:
+  name: tlsroute-mysql-silver-lake-5k3x
+  namespace: project-abc123-uuid
+  labels:
+    platform.operator.kibaship.com/application: application-mysql-db-kibaship-com
+    platform.operator.kibaship.com/domain: domain-mysql-silver-lake-5k3x
+    platform.operator.kibaship.com/application-type: MySQL
+spec:
+  parentRefs:
+    - name: kibaship-gateway
+      namespace: gateway-api-system
+      sectionName: mysql-tls
+  hostnames:
+    - "mysql-silver-lake-5k3x.dbs.kibaship.com"
+  rules:
+    - backendRefs:
+        - name: service-mysql-db
+          port: 3306
+
+# ==============================================================================
+# END OF INGRESS ARCHITECTURE DOCUMENTATION
+# ==============================================================================
+#
+# SUMMARY OF OPERATOR CHANGES REQUIRED:
+# --------------------------------------
+# 1. DeploymentReconciler:
+#    - Add post-build deployment phase
+#    - Create Kubernetes Deployment resource
+#    - Create Kubernetes Service resource
+#    - Create default ApplicationDomain
+#    - Wait for resources to be ready
+#
+# 2. ApplicationDomainReconciler:
+#    - Determine routing strategy based on Application type
+#    - Create HTTPRoute for web applications
+#    - Create TLSRoute for database applications
+#    - Create ReferenceGrant for cross-namespace access
+#    - Reference wildcard certificates for default domains
+#    - Create individual certificates for custom domains
+#
+# 3. Bootstrap/Installation:
+#    - Deploy Gateway with multi-protocol listeners
+#    - Create wildcard certificates for *.apps.kibaship.com and *.dbs.kibaship.com
+#    - Create ReferenceGrants for Gateway access to certificates
+#
+# KEY BENEFITS OF THIS ARCHITECTURE:
+# -----------------------------------
+# - Highly scalable: Single Gateway handles all tenants
+# - Secure: Namespace isolation with cross-namespace access control
+# - Flexible: Supports both web apps and databases
+# - Friendly UX: Automatic subdomain assignment with human-readable names
+# - Production-ready: TLS everywhere with automatic certificate management
+# - Cloud-native: Leverages Kubernetes Gateway API standard
+# - Performant: Cilium eBPF-based routing
+#
+# ==============================================================================

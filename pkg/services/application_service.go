@@ -67,13 +67,13 @@ func (s *ApplicationService) SetDeploymentService(deploymentService *DeploymentS
 // CreateApplication creates a new application
 func (s *ApplicationService) CreateApplication(ctx context.Context, req *models.ApplicationCreateRequest) (*models.Application, error) {
 	// First, verify the environment exists and get its details
-	environment, err := s.environmentService.GetEnvironment(ctx, req.EnvironmentSlug)
+	environment, err := s.environmentService.GetEnvironment(ctx, req.EnvironmentUUID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get environment: %w", err)
 	}
 
 	// Get the project to check application type enablement
-	project, err := s.projectService.GetProject(ctx, environment.ProjectSlug)
+	project, err := s.projectService.GetProject(ctx, environment.ProjectUUID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get project: %w", err)
 	}
@@ -139,23 +139,23 @@ func (s *ApplicationService) CreateApplication(ctx context.Context, req *models.
 	return application, nil
 }
 
-// GetApplication retrieves an application by slug with domains auto-loaded
-func (s *ApplicationService) GetApplication(ctx context.Context, slug string) (*models.Application, error) {
-	// List all applications and find by slug label
+// GetApplication retrieves an application by UUID with domains auto-loaded
+func (s *ApplicationService) GetApplication(ctx context.Context, uuid string) (*models.Application, error) {
+	// List all applications and find by UUID label
 	var applicationList v1alpha1.ApplicationList
 	err := s.client.List(ctx, &applicationList, client.MatchingLabels{
-		validation.LabelResourceSlug: slug,
+		validation.LabelResourceUUID: uuid,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list applications: %w", err)
 	}
 
 	if len(applicationList.Items) == 0 {
-		return nil, fmt.Errorf("application with slug %s not found", slug)
+		return nil, fmt.Errorf("application with UUID %s not found", uuid)
 	}
 
 	if len(applicationList.Items) > 1 {
-		return nil, fmt.Errorf("multiple applications found with slug %s", slug)
+		return nil, fmt.Errorf("multiple applications found with UUID %s", uuid)
 	}
 
 	application := s.convertFromApplicationCRD(&applicationList.Items[0])
@@ -172,23 +172,23 @@ func (s *ApplicationService) GetApplication(ctx context.Context, slug string) (*
 	return application, nil
 }
 
-// UpdateApplication updates an application by slug with partial updates (PATCH)
-func (s *ApplicationService) UpdateApplication(ctx context.Context, slug string, req *models.ApplicationUpdateRequest) (*models.Application, error) {
+// UpdateApplication updates an application by UUID with partial updates (PATCH)
+func (s *ApplicationService) UpdateApplication(ctx context.Context, uuid string, req *models.ApplicationUpdateRequest) (*models.Application, error) {
 	// First get the existing application
 	var applicationList v1alpha1.ApplicationList
 	err := s.client.List(ctx, &applicationList, client.MatchingLabels{
-		validation.LabelResourceSlug: slug,
+		validation.LabelResourceUUID: uuid,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list applications: %w", err)
 	}
 
 	if len(applicationList.Items) == 0 {
-		return nil, fmt.Errorf("application with slug %s not found", slug)
+		return nil, fmt.Errorf("application with UUID %s not found", uuid)
 	}
 
 	if len(applicationList.Items) > 1 {
-		return nil, fmt.Errorf("multiple applications found with slug %s", slug)
+		return nil, fmt.Errorf("multiple applications found with UUID %s", uuid)
 	}
 
 	// Get the existing CRD
@@ -227,23 +227,112 @@ func (s *ApplicationService) UpdateApplication(ctx context.Context, slug string,
 	return updatedApplication, nil
 }
 
-// DeleteApplication deletes an application by slug
-func (s *ApplicationService) DeleteApplication(ctx context.Context, slug string) error {
-	// First check if application exists
+// UpdateApplicationEnv updates environment variables for an application
+func (s *ApplicationService) UpdateApplicationEnv(ctx context.Context, uuid string, req *models.ApplicationEnvUpdateRequest) error {
+	// First get the existing application
 	var applicationList v1alpha1.ApplicationList
 	err := s.client.List(ctx, &applicationList, client.MatchingLabels{
-		validation.LabelResourceSlug: slug,
+		validation.LabelResourceUUID: uuid,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to list applications: %w", err)
 	}
 
 	if len(applicationList.Items) == 0 {
-		return fmt.Errorf("application with slug %s not found", slug)
+		return fmt.Errorf("application with UUID %s not found", uuid)
 	}
 
 	if len(applicationList.Items) > 1 {
-		return fmt.Errorf("multiple applications found with slug %s", slug)
+		return fmt.Errorf("multiple applications found with UUID %s", uuid)
+	}
+
+	app := &applicationList.Items[0]
+
+	// Get the env secret ref based on application type
+	var secretName string
+	switch app.Spec.Type {
+	case v1alpha1.ApplicationTypeGitRepository:
+		if app.Spec.GitRepository == nil || app.Spec.GitRepository.Env == nil {
+			return fmt.Errorf("application does not have an environment variables secret configured")
+		}
+		secretName = app.Spec.GitRepository.Env.Name
+	case v1alpha1.ApplicationTypeDockerImage:
+		if app.Spec.DockerImage == nil || app.Spec.DockerImage.Env == nil {
+			return fmt.Errorf("application does not have an environment variables secret configured")
+		}
+		secretName = app.Spec.DockerImage.Env.Name
+	case v1alpha1.ApplicationTypeMySQL:
+		if app.Spec.MySQL == nil || app.Spec.MySQL.Env == nil {
+			return fmt.Errorf("application does not have an environment variables secret configured")
+		}
+		secretName = app.Spec.MySQL.Env.Name
+	case v1alpha1.ApplicationTypeMySQLCluster:
+		if app.Spec.MySQLCluster == nil || app.Spec.MySQLCluster.Env == nil {
+			return fmt.Errorf("application does not have an environment variables secret configured")
+		}
+		secretName = app.Spec.MySQLCluster.Env.Name
+	case v1alpha1.ApplicationTypePostgres:
+		if app.Spec.Postgres == nil || app.Spec.Postgres.Env == nil {
+			return fmt.Errorf("application does not have an environment variables secret configured")
+		}
+		secretName = app.Spec.Postgres.Env.Name
+	case v1alpha1.ApplicationTypePostgresCluster:
+		if app.Spec.PostgresCluster == nil || app.Spec.PostgresCluster.Env == nil {
+			return fmt.Errorf("application does not have an environment variables secret configured")
+		}
+		secretName = app.Spec.PostgresCluster.Env.Name
+	default:
+		return fmt.Errorf("unsupported application type: %s", app.Spec.Type)
+	}
+
+	// Fetch the secret
+	var secret corev1.Secret
+	err = s.client.Get(ctx, client.ObjectKey{
+		Name:      secretName,
+		Namespace: app.Namespace,
+	}, &secret)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return fmt.Errorf("environment variables secret %s not found", secretName)
+		}
+		return fmt.Errorf("failed to get secret: %w", err)
+	}
+
+	// Merge incoming variables with existing ones
+	if secret.Data == nil {
+		secret.Data = make(map[string][]byte)
+	}
+
+	for key, value := range req.Variables {
+		secret.Data[key] = []byte(value)
+	}
+
+	// Update the secret
+	err = s.client.Update(ctx, &secret)
+	if err != nil {
+		return fmt.Errorf("failed to update secret: %w", err)
+	}
+
+	return nil
+}
+
+// DeleteApplication deletes an application by UUID
+func (s *ApplicationService) DeleteApplication(ctx context.Context, uuid string) error {
+	// First check if application exists
+	var applicationList v1alpha1.ApplicationList
+	err := s.client.List(ctx, &applicationList, client.MatchingLabels{
+		validation.LabelResourceUUID: uuid,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to list applications: %w", err)
+	}
+
+	if len(applicationList.Items) == 0 {
+		return fmt.Errorf("application with UUID %s not found", uuid)
+	}
+
+	if len(applicationList.Items) > 1 {
+		return fmt.Errorf("multiple applications found with UUID %s", uuid)
 	}
 
 	// Delete the application CRD
@@ -257,9 +346,9 @@ func (s *ApplicationService) DeleteApplication(ctx context.Context, slug string)
 }
 
 // GetApplicationsByProject retrieves all applications for a project with domains batch-loaded
-func (s *ApplicationService) GetApplicationsByProject(ctx context.Context, projectSlug string) ([]*models.Application, error) {
-	// First get the project to get its UUID
-	project, err := s.projectService.GetProject(ctx, projectSlug)
+func (s *ApplicationService) GetApplicationsByProject(ctx context.Context, projectUUID string) ([]*models.Application, error) {
+	// First get the project to get its details
+	project, err := s.projectService.GetProject(ctx, projectUUID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get project: %w", err)
 	}
@@ -302,9 +391,9 @@ func (s *ApplicationService) GetApplicationsByProject(ctx context.Context, proje
 }
 
 // GetApplicationsByEnvironment retrieves all applications for an environment with domains batch-loaded
-func (s *ApplicationService) GetApplicationsByEnvironment(ctx context.Context, environmentSlug string) ([]*models.Application, error) {
-	// First get the environment to get its UUID
-	environment, err := s.environmentService.GetEnvironment(ctx, environmentSlug)
+func (s *ApplicationService) GetApplicationsByEnvironment(ctx context.Context, environmentUUID string) ([]*models.Application, error) {
+	// First get the environment to get its details
+	environment, err := s.environmentService.GetEnvironment(ctx, environmentUUID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get environment: %w", err)
 	}
@@ -502,7 +591,7 @@ func (s *ApplicationService) convertToApplicationCRD(app *models.Application, en
 			Kind:       "Application",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("application-%s-kibaship-com", app.Slug),
+			Name:      fmt.Sprintf("application-%s", app.UUID),
 			Namespace: "default",
 			Labels: map[string]string{
 				validation.LabelResourceUUID:    app.UUID,
@@ -517,7 +606,7 @@ func (s *ApplicationService) convertToApplicationCRD(app *models.Application, en
 		},
 		Spec: v1alpha1.ApplicationSpec{
 			EnvironmentRef: corev1.LocalObjectReference{
-				Name: fmt.Sprintf("environment-%s-kibaship-com", environment.Slug),
+				Name: fmt.Sprintf("environment-%s", environment.UUID),
 			},
 			Type:            s.convertApplicationType(app.Type),
 			GitRepository:   s.convertGitRepositoryConfig(app.GitRepository),
@@ -643,6 +732,38 @@ func (s *ApplicationService) convertApplicationTypeFromCRD(appType v1alpha1.Appl
 
 // Configuration conversion methods (simplified implementations)
 
+func (s *ApplicationService) convertHealthCheckConfig(config *models.HealthCheckConfig) *v1alpha1.HealthCheckConfig {
+	if config == nil {
+		return nil
+	}
+
+	return &v1alpha1.HealthCheckConfig{
+		Path:                config.Path,
+		Port:                config.Port,
+		InitialDelaySeconds: config.InitialDelaySeconds,
+		PeriodSeconds:       config.PeriodSeconds,
+		TimeoutSeconds:      config.TimeoutSeconds,
+		SuccessThreshold:    config.SuccessThreshold,
+		FailureThreshold:    config.FailureThreshold,
+	}
+}
+
+func (s *ApplicationService) convertHealthCheckConfigFromCRD(config *v1alpha1.HealthCheckConfig) *models.HealthCheckConfig {
+	if config == nil {
+		return nil
+	}
+
+	return &models.HealthCheckConfig{
+		Path:                config.Path,
+		Port:                config.Port,
+		InitialDelaySeconds: config.InitialDelaySeconds,
+		PeriodSeconds:       config.PeriodSeconds,
+		TimeoutSeconds:      config.TimeoutSeconds,
+		SuccessThreshold:    config.SuccessThreshold,
+		FailureThreshold:    config.FailureThreshold,
+	}
+}
+
 func (s *ApplicationService) convertGitRepositoryConfig(config *models.GitRepositoryConfig) *v1alpha1.GitRepositoryConfig {
 	if config == nil {
 		return nil
@@ -651,11 +772,6 @@ func (s *ApplicationService) convertGitRepositoryConfig(config *models.GitReposi
 	var secretRef *corev1.LocalObjectReference
 	if config.SecretRef != nil {
 		secretRef = &corev1.LocalObjectReference{Name: *config.SecretRef}
-	}
-
-	var envRef *corev1.LocalObjectReference
-	if config.Env != nil {
-		envRef = &corev1.LocalObjectReference{Name: *config.Env}
 	}
 
 	return &v1alpha1.GitRepositoryConfig{
@@ -668,8 +784,9 @@ func (s *ApplicationService) convertGitRepositoryConfig(config *models.GitReposi
 		RootDirectory:      config.RootDirectory,
 		BuildCommand:       config.BuildCommand,
 		StartCommand:       config.StartCommand,
-		Env:                envRef,
 		SpaOutputDirectory: config.SpaOutputDirectory,
+		HealthCheck:        s.convertHealthCheckConfig(config.HealthCheck),
+		// Env is automatically set by the application controller
 	}
 }
 
@@ -683,11 +800,6 @@ func (s *ApplicationService) convertGitRepositoryConfigFromCRD(config *v1alpha1.
 		secretRef = &config.SecretRef.Name
 	}
 
-	var envRef *string
-	if config.Env != nil {
-		envRef = &config.Env.Name
-	}
-
 	return &models.GitRepositoryConfig{
 		Provider:           models.GitProvider(config.Provider),
 		Repository:         config.Repository,
@@ -698,8 +810,9 @@ func (s *ApplicationService) convertGitRepositoryConfigFromCRD(config *v1alpha1.
 		RootDirectory:      config.RootDirectory,
 		BuildCommand:       config.BuildCommand,
 		StartCommand:       config.StartCommand,
-		Env:                envRef,
 		SpaOutputDirectory: config.SpaOutputDirectory,
+		HealthCheck:        s.convertHealthCheckConfigFromCRD(config.HealthCheck),
+		// Env is automatically managed by the application controller
 	}
 }
 
@@ -717,6 +830,7 @@ func (s *ApplicationService) convertDockerImageConfig(config *models.DockerImage
 		Image:              config.Image,
 		ImagePullSecretRef: imagePullSecretRef,
 		Tag:                config.Tag,
+		HealthCheck:        s.convertHealthCheckConfig(config.HealthCheck),
 	}
 }
 
@@ -734,6 +848,7 @@ func (s *ApplicationService) convertDockerImageConfigFromCRD(config *v1alpha1.Do
 		Image:              config.Image,
 		ImagePullSecretRef: imagePullSecretRef,
 		Tag:                config.Tag,
+		HealthCheck:        s.convertHealthCheckConfigFromCRD(config.HealthCheck),
 	}
 }
 

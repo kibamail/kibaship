@@ -118,23 +118,24 @@ func (s *ApplicationDomainService) CreateApplicationDomain(ctx context.Context, 
 	return applicationDomain, nil
 }
 
-// GetApplicationDomain retrieves an application domain by slug
-func (s *ApplicationDomainService) GetApplicationDomain(ctx context.Context, slug string) (*models.ApplicationDomain, error) {
-	// List all application domains and find by slug label
+// GetApplicationDomain retrieves an application domain by UUID
+func (s *ApplicationDomainService) GetApplicationDomain(ctx context.Context, uuid string) (*models.ApplicationDomain, error) {
+	// List all application domains and find by UUID label only
 	var domainList v1alpha1.ApplicationDomainList
 	err := s.client.List(ctx, &domainList, client.MatchingLabels{
-		validation.LabelResourceSlug: slug,
+		validation.LabelResourceUUID: uuid,
 	})
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to list application domains: %w", err)
 	}
 
 	if len(domainList.Items) == 0 {
-		return nil, fmt.Errorf("application domain with slug %s not found", slug)
+		return nil, fmt.Errorf("application domain with UUID %s not found", uuid)
 	}
 
 	if len(domainList.Items) > 1 {
-		return nil, fmt.Errorf("multiple application domains found with slug %s", slug)
+		return nil, fmt.Errorf("multiple application domains found with UUID %s", uuid)
 	}
 
 	crd := domainList.Items[0]
@@ -204,23 +205,24 @@ func (s *ApplicationDomainService) GetApplicationDomainsByApplicationUUIDNoValid
 	return applicationDomains, nil
 }
 
-// DeleteApplicationDomain deletes an application domain by slug
-func (s *ApplicationDomainService) DeleteApplicationDomain(ctx context.Context, slug string) error {
-	// First find the application domain
+// DeleteApplicationDomain deletes an application domain by UUID only
+func (s *ApplicationDomainService) DeleteApplicationDomain(ctx context.Context, uuid string) error {
+	// First find the application domain by UUID
 	var domainList v1alpha1.ApplicationDomainList
 	err := s.client.List(ctx, &domainList, client.MatchingLabels{
-		validation.LabelResourceSlug: slug,
+		validation.LabelResourceUUID: uuid,
 	})
+
 	if err != nil {
 		return fmt.Errorf("failed to list application domains: %w", err)
 	}
 
 	if len(domainList.Items) == 0 {
-		return fmt.Errorf("application domain with slug %s not found", slug)
+		return fmt.Errorf("application domain with UUID %s not found", uuid)
 	}
 
 	if len(domainList.Items) > 1 {
-		return fmt.Errorf("multiple application domains found with slug %s", slug)
+		return fmt.Errorf("multiple application domains found with UUID %s", uuid)
 	}
 
 	// Delete the CRD
@@ -280,7 +282,7 @@ func (s *ApplicationDomainService) convertToApplicationDomainCRD(applicationDoma
 			Kind:       "ApplicationDomain",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("domain-%s-kibaship-com", applicationDomain.Slug),
+			Name:      fmt.Sprintf("domain-%s", applicationDomain.UUID),
 			Namespace: "default",
 			Labels: map[string]string{
 				validation.LabelResourceUUID:    applicationDomain.UUID,
@@ -294,7 +296,7 @@ func (s *ApplicationDomainService) convertToApplicationDomainCRD(applicationDoma
 		},
 		Spec: v1alpha1.ApplicationDomainSpec{
 			ApplicationRef: corev1.LocalObjectReference{
-				Name: fmt.Sprintf("application-%s-kibaship-com", applicationDomain.ApplicationSlug),
+				Name: fmt.Sprintf("application-%s", applicationDomain.ApplicationUUID),
 			},
 			Domain:     applicationDomain.Domain,
 			Port:       applicationDomain.Port,

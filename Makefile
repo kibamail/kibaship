@@ -24,12 +24,12 @@ BUNDLE_DEFAULT_CHANNEL := --default-channel=$(DEFAULT_CHANNEL)
 endif
 BUNDLE_METADATA_OPTS ?= $(BUNDLE_CHANNELS) $(BUNDLE_DEFAULT_CHANNEL)
 
-# IMAGE_TAG_BASE defines the ghcr.io namespace and part of the image name for remote images.
+# IMAGE_TAG_BASE defines the docker.io namespace and part of the image name for remote images.
 # This variable is used to construct full image tags for bundle and catalog images.
 #
 # For example, running 'make bundle-build bundle-push catalog-build catalog-push' will build and push both
-# ghcr.io/kibamail/kibaship-operator-bundle:$VERSION and ghcr.io/kibamail/kibaship-operator-catalog:$VERSION.
-IMAGE_TAG_BASE ?= ghcr.io/kibamail/kibaship-operator
+# kibamail/kibaship-operator-bundle:$VERSION and kibamail/kibaship-operator-catalog:$VERSION.
+IMAGE_TAG_BASE ?= kibamail/kibaship-operator
 
 # BUNDLE_IMG defines the image:tag used for the bundle.
 # You can use it as an arg. (E.g make bundle-build BUNDLE_IMG=<some-registry>/<project-name-bundle>:<tag>)
@@ -61,10 +61,10 @@ IMG_CERT_MANAGER_WEBHOOK ?= $(IMAGE_TAG_BASE)-cert-manager-webhook:v$(VERSION)
 IMG_REGISTRY_AUTH ?= $(IMAGE_TAG_BASE)-registry-auth:v$(VERSION)
 
 # Railpack CLI image URL
-IMG_RAILPACK_CLI ?= ghcr.io/kibamail/kibaship-railpack-cli:v$(VERSION)
+IMG_RAILPACK_CLI ?= kibamail/kibaship-railpack-cli:v$(VERSION)
 
 # Railpack Build image URL
-IMG_RAILPACK_BUILD ?= ghcr.io/kibamail/kibaship-railpack-build:v$(VERSION)
+IMG_RAILPACK_BUILD ?= kibamail/kibaship-railpack-build:v$(VERSION)
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -124,7 +124,8 @@ vet: ## Run go vet against code.
 
 .PHONY: test
 test: manifests generate fmt vet setup-envtest ## Run tests.
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v /e2e | grep -v /test/api) -v -ginkgo.v -ginkgo.show-node-events -coverprofile cover.out
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v /e2e | grep -v /test/api | grep -v /internal/bootstrap) -v -ginkgo.v -ginkgo.show-node-events -coverprofile cover.out
+	go test ./internal/bootstrap/... -v
 
 .PHONY: test-api
 test-api: fmt vet ## Run API integration tests.
@@ -213,8 +214,6 @@ dev-api: generate-openapi ## Run API server in dev mode with swagger docs (http:
 	@echo "Starting API server in dev mode..."
 	@echo "Swagger UI available at: http://localhost:8080/swagger/index.html"
 	@echo "OpenAPI YAML available at: http://localhost:8080/openapi.yaml"
-	@echo ""
-	@go run ./cmd/apiserver/main.go
 
 .PHONY: build-registry-auth
 build-registry-auth: ## Build registry auth service binary.
@@ -351,10 +350,6 @@ build-installer: manifests generate kustomize ## Generate a consolidated YAML wi
 	$(KUSTOMIZE) build config/tekton-resources >> dist/install.yaml
 	echo "---" >> dist/install.yaml
 	$(KUSTOMIZE) build config/buildkit >> dist/install.yaml
-	echo "---" >> dist/install.yaml
-	$(KUSTOMIZE) build config/certificates >> dist/install.yaml
-	echo "---" >> dist/install.yaml
-	$(KUSTOMIZE) build config/ingress-gateway >> dist/install.yaml
 	echo "---" >> dist/install.yaml
 	cd config/registry-auth/base && $(KUSTOMIZE) edit set image registry-auth=${IMG_REGISTRY_AUTH}
 	$(KUSTOMIZE) build config/registry-auth/base >> dist/install.yaml

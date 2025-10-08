@@ -213,9 +213,9 @@ func (r *Deployment) validateDeployment(ctx context.Context) error {
 		}
 	}
 
-	// Validate deployment name format: deployment-<slug>-kibaship-com
+	// Validate deployment name format: deployment-<uuid>
 	if !r.isValidDeploymentName() {
-		errors = append(errors, fmt.Sprintf("deployment name '%s' must follow format 'deployment-<slug>-kibaship-com'", r.Name))
+		errors = append(errors, fmt.Sprintf("deployment name '%s' must follow format 'deployment-<uuid>'", r.Name))
 	}
 
 	// TODO: Add validation for GitRepository config when application type is GitRepository
@@ -231,9 +231,9 @@ func (r *Deployment) validateDeployment(ctx context.Context) error {
 
 // isValidDeploymentName validates if the deployment name follows the required format
 func (r *Deployment) isValidDeploymentName() bool {
-	// Pattern: deployment-<slug>-kibaship-com
-	// slug should be valid DNS label (lowercase alphanumeric with hyphens)
-	pattern := regexp.MustCompile(`^deployment-[a-z0-9]([a-z0-9-]*[a-z0-9])?-kibaship-com$`)
+	// Pattern: deployment-<uuid>
+	// UUID should be valid DNS label (lowercase alphanumeric with hyphens)
+	pattern := regexp.MustCompile(`^deployment-[a-z0-9]([a-z0-9-]*[a-z0-9])?$`)
 	return pattern.MatchString(r.Name)
 }
 
@@ -243,6 +243,14 @@ func (r *Deployment) GetSlug() string {
 		return ""
 	}
 	return r.Labels[validation.LabelResourceSlug]
+}
+
+// GetUUID returns the deployment UUID from labels
+func (r *Deployment) GetUUID() string {
+	if r.Labels == nil {
+		return ""
+	}
+	return r.Labels[validation.LabelResourceUUID]
 }
 
 // GetProjectUUID returns the project UUID from labels

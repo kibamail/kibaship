@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/kibamail/kibaship-operator/pkg/validation"
 )
 
 // EnvironmentCreateRequest represents the request to create an environment
@@ -28,7 +29,7 @@ type EnvironmentCreateRequest struct {
 	Name        string            `json:"name" example:"production"`
 	Description string            `json:"description,omitempty" example:"Production environment"`
 	Variables   map[string]string `json:"variables,omitempty"`
-	ProjectSlug string            `json:"projectSlug,omitempty" example:"abc123de"`
+	ProjectUUID string            `json:"projectUuid" example:"123e4567-e89b-12d3-a456-426614174001"`
 }
 
 // Validate validates the environment create request
@@ -44,10 +45,17 @@ func (r *EnvironmentCreateRequest) Validate() *ValidationErrors {
 		})
 	}
 
-	if r.ProjectSlug == "" {
+	if r.ProjectUUID == "" {
 		errors.Errors = append(errors.Errors, ValidationError{
-			Field:   "projectSlug",
-			Message: "projectSlug is required",
+			Field:   "projectUuid",
+			Message: "projectUuid is required",
+		})
+	}
+
+	if !validation.ValidateUUID(r.ProjectUUID) {
+		errors.Errors = append(errors.Errors, ValidationError{
+			Field:   "projectUuid",
+			Message: "projectUuid must be a valid UUID",
 		})
 	}
 

@@ -19,7 +19,7 @@ import (
 var _ = Describe("API Server Deployment CRUD", func() {
 	It("creates a deployment via API, lists and fetches it, and verifies Tekton resources + LatestDeployment", func() {
 		By("fetching API key from api-server secret")
-		cmd := exec.Command("kubectl", "get", "secret", "api-server-api-key-kibaship-com", "-n", "kibaship-operator", "-o", "jsonpath={.data.api-key}")
+		cmd := exec.Command("kubectl", "get", "secret", "api-server-api-key", "-n", "kibaship-operator", "-o", "jsonpath={.data.api-key}")
 		output, err := cmd.CombinedOutput()
 		Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("failed to get api key secret: %s", string(output)))
 		encodedKey := strings.TrimSpace(string(output))
@@ -45,14 +45,14 @@ var _ = Describe("API Server Deployment CRUD", func() {
 
 		httpClient := &http.Client{Timeout: 30 * time.Second}
 
-		By("creating a project via POST /projects")
+		By("creating a project via POST /v1/projects")
 		workspaceUUID := workspaceUUIDConst
 		projReqBody := map[string]any{
 			"name":          "proj-for-deploy-crud-e2e",
 			"workspaceUuid": workspaceUUID,
 		}
 		projBytes, _ := json.Marshal(projReqBody)
-		reqProj, _ := http.NewRequest("POST", "http://127.0.0.1:18080/projects", bytes.NewReader(projBytes))
+		reqProj, _ := http.NewRequest("POST", "http://127.0.0.1:18080/v1/projects", bytes.NewReader(projBytes))
 		reqProj.Header.Set("Content-Type", "application/json")
 		reqProj.Header.Set("Authorization", "Bearer "+apiKey)
 		respProj, err := httpClient.Do(reqProj)
@@ -60,18 +60,18 @@ var _ = Describe("API Server Deployment CRUD", func() {
 		defer func() { _ = respProj.Body.Close() }()
 		Expect(respProj.StatusCode).To(Equal(http.StatusCreated))
 		var projResp struct {
-			Slug string `json:"slug"`
+			UUID string `json:"uuid"`
 		}
 		_ = json.NewDecoder(respProj.Body).Decode(&projResp)
-		Expect(projResp.Slug).NotTo(BeEmpty())
+		Expect(projResp.UUID).NotTo(BeEmpty())
 
-		By("creating an environment via POST /projects/{slug}/environments")
+		By("creating an environment via POST /v1/projects/{uuid}/environments")
 		envReqBody := map[string]any{
 			"name":        "production",
 			"description": "Production environment",
 		}
 		envBytes, _ := json.Marshal(envReqBody)
-		reqEnv, _ := http.NewRequest("POST", fmt.Sprintf("http://127.0.0.1:18080/projects/%s/environments", projResp.Slug), bytes.NewReader(envBytes))
+		reqEnv, _ := http.NewRequest("POST", fmt.Sprintf("http://127.0.0.1:18080/v1/projects/%s/environments", projResp.UUID), bytes.NewReader(envBytes))
 		reqEnv.Header.Set("Content-Type", "application/json")
 		reqEnv.Header.Set("Authorization", "Bearer "+apiKey)
 		respEnv, err := httpClient.Do(reqEnv)
@@ -79,12 +79,12 @@ var _ = Describe("API Server Deployment CRUD", func() {
 		defer func() { _ = respEnv.Body.Close() }()
 		Expect(respEnv.StatusCode).To(Equal(http.StatusCreated))
 		var envResp struct {
-			Slug string `json:"slug"`
+			UUID string `json:"uuid"`
 		}
 		_ = json.NewDecoder(respEnv.Body).Decode(&envResp)
-		Expect(envResp.Slug).NotTo(BeEmpty())
+		Expect(envResp.UUID).NotTo(BeEmpty())
 
-		By("creating an application via POST /environments/{slug}/applications (GitRepository)")
+		By("creating an application via POST /v1/environments/{uuid}/applications (GitRepository)")
 		appReqBody := map[string]any{
 			"name": "app-for-deploy-crud-e2e",
 			"type": "GitRepository",
@@ -97,7 +97,7 @@ var _ = Describe("API Server Deployment CRUD", func() {
 			},
 		}
 		appBytes, _ := json.Marshal(appReqBody)
-		reqApp, _ := http.NewRequest("POST", fmt.Sprintf("http://127.0.0.1:18080/environments/%s/applications", envResp.Slug), bytes.NewReader(appBytes))
+		reqApp, _ := http.NewRequest("POST", fmt.Sprintf("http://127.0.0.1:18080/v1/environments/%s/applications", envResp.UUID), bytes.NewReader(appBytes))
 		reqApp.Header.Set("Content-Type", "application/json")
 		reqApp.Header.Set("Authorization", "Bearer "+apiKey)
 		respApp, err := httpClient.Do(reqApp)
@@ -105,12 +105,12 @@ var _ = Describe("API Server Deployment CRUD", func() {
 		defer func() { _ = respApp.Body.Close() }()
 		Expect(respApp.StatusCode).To(Equal(http.StatusCreated))
 		var appResp struct {
-			Slug string `json:"slug"`
+			UUID string `json:"uuid"`
 		}
 		_ = json.NewDecoder(respApp.Body).Decode(&appResp)
-		Expect(appResp.Slug).NotTo(BeEmpty())
+		Expect(appResp.UUID).NotTo(BeEmpty())
 
-		By("creating a deployment via POST /applications/{applicationSlug}/deployments")
+		By("creating a deployment via POST /v1/applications/{uuid}/deployments")
 		deployReqBody := map[string]any{
 			"gitRepository": map[string]any{
 				"commitSHA": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", // dummy SHA
@@ -118,7 +118,7 @@ var _ = Describe("API Server Deployment CRUD", func() {
 			},
 		}
 		deployBytes, _ := json.Marshal(deployReqBody)
-		reqDep, _ := http.NewRequest("POST", fmt.Sprintf("http://127.0.0.1:18080/applications/%s/deployments", appResp.Slug), bytes.NewReader(deployBytes))
+		reqDep, _ := http.NewRequest("POST", fmt.Sprintf("http://127.0.0.1:18080/v1/applications/%s/deployments", appResp.UUID), bytes.NewReader(deployBytes))
 		reqDep.Header.Set("Content-Type", "application/json")
 		reqDep.Header.Set("Authorization", "Bearer "+apiKey)
 		respDep, err := httpClient.Do(reqDep)
@@ -130,12 +130,14 @@ var _ = Describe("API Server Deployment CRUD", func() {
 		}
 		Expect(respDep.StatusCode).To(Equal(http.StatusCreated))
 		var depResp struct {
+			UUID string `json:"uuid"`
 			Slug string `json:"slug"`
 		}
 		_ = json.NewDecoder(respDep.Body).Decode(&depResp)
-		Expect(depResp.Slug).NotTo(BeEmpty())
+		Expect(depResp.UUID).NotTo(BeEmpty())
+		Expect(depResp.UUID).NotTo(BeEmpty())
 
-		pipelineName := fmt.Sprintf("pipeline-%s-kibaship-com", depResp.Slug)
+		pipelineName := fmt.Sprintf("pipeline-%s", depResp.UUID)
 
 		By("verifying Tekton Pipeline created for deployment")
 		Eventually(func() bool {
@@ -152,8 +154,8 @@ var _ = Describe("API Server Deployment CRUD", func() {
 			return strings.TrimSpace(string(out))
 		}, "4m", "5s").ShouldNot(Equal(""))
 
-		By("GET /applications/{slug}/deployments lists the deployment")
-		reqList, _ := http.NewRequest("GET", fmt.Sprintf("http://127.0.0.1:18080/applications/%s/deployments", appResp.Slug), nil)
+		By("GET /v1/applications/{uuid}/deployments lists the deployment")
+		reqList, _ := http.NewRequest("GET", fmt.Sprintf("http://127.0.0.1:18080/v1/applications/%s/deployments", appResp.UUID), nil)
 		reqList.Header.Set("Authorization", "Bearer "+apiKey)
 		respList, err := httpClient.Do(reqList)
 		Expect(err).NotTo(HaveOccurred())
@@ -173,16 +175,16 @@ var _ = Describe("API Server Deployment CRUD", func() {
 			return false
 		}()).To(BeTrue(), "created deployment should be listed")
 
-		By("GET /deployments/{slug} returns the deployment")
-		reqGet, _ := http.NewRequest("GET", fmt.Sprintf("http://127.0.0.1:18080/deployments/%s", depResp.Slug), nil)
+		By("GET /v1/deployments/{uuid} returns the deployment")
+		reqGet, _ := http.NewRequest("GET", fmt.Sprintf("http://127.0.0.1:18080/v1/deployments/%s", depResp.UUID), nil)
 		reqGet.Header.Set("Authorization", "Bearer "+apiKey)
 		respGet, err := httpClient.Do(reqGet)
 		Expect(err).NotTo(HaveOccurred())
 		defer func() { _ = respGet.Body.Close() }()
 		Expect(respGet.StatusCode).To(Equal(http.StatusOK))
 
-		By("GET /environments/{slug}/applications shows LatestDeployment populated")
-		reqProjApps, _ := http.NewRequest("GET", fmt.Sprintf("http://127.0.0.1:18080/environments/%s/applications", envResp.Slug), nil)
+		By("GET /v1/environments/{uuid}/applications shows LatestDeployment populated")
+		reqProjApps, _ := http.NewRequest("GET", fmt.Sprintf("http://127.0.0.1:18080/v1/environments/%s/applications", envResp.UUID), nil)
 		reqProjApps.Header.Set("Authorization", "Bearer "+apiKey)
 		Eventually(func() bool {
 			resp, err := httpClient.Do(reqProjApps)
@@ -194,12 +196,12 @@ var _ = Describe("API Server Deployment CRUD", func() {
 				return false
 			}
 			var apps []struct {
-				Slug             string      `json:"slug"`
+				UUID             string      `json:"uuid"`
 				LatestDeployment interface{} `json:"latestDeployment"`
 			}
 			_ = json.NewDecoder(resp.Body).Decode(&apps)
 			for _, a := range apps {
-				if a.Slug == appResp.Slug {
+				if a.UUID == appResp.UUID {
 					return a.LatestDeployment != nil
 				}
 			}

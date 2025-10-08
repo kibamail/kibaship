@@ -46,8 +46,8 @@ var _ = Describe("Domain Utils", func() {
 
 	Describe("GenerateSubdomain", func() {
 		DescribeTable("subdomain generation",
-			func(appName string) {
-				subdomain, err := GenerateSubdomain(appName)
+			func(appUUID string) {
+				subdomain, err := GenerateSubdomain(appUUID)
 				Expect(err).NotTo(HaveOccurred())
 
 				// Check that subdomain is not empty
@@ -68,23 +68,23 @@ var _ = Describe("Domain Utils", func() {
 						"subdomain contains invalid character '%c'", r)
 				}
 			},
-			Entry("frontend app", "project-myproject-app-frontend-kibaship-com"),
-			Entry("api gateway app", "project-myproject-app-api-gateway-kibaship-com"),
+			Entry("frontend app UUID", "123e4567-e89b-12d3-a456-426614174000"),
+			Entry("api gateway app UUID", "987fcdeb-51a2-43d7-9876-543210fedcba"),
 		)
 	})
 
 	Describe("GenerateApplicationDomainName", func() {
 		Context("with default domain type", func() {
 			It("generates expected domain name", func() {
-				appName := "project-myproject-app-frontend-kibaship-com"
+				appName := "project-myproject-app-frontend"
 				result := GenerateApplicationDomainName(appName, "default")
-				Expect(result).To(Equal("project-myproject-app-frontend-kibaship-com-default"))
+				Expect(result).To(Equal("project-myproject-app-frontend-default"))
 			})
 		})
 
 		Context("with custom domain type", func() {
 			It("generates domain name with random suffix", func() {
-				appName := "project-myproject-app-frontend-kibaship-com"
+				appName := "project-myproject-app-frontend"
 				result := GenerateApplicationDomainName(appName, "custom")
 
 				expectedPrefix := appName + "-custom-"

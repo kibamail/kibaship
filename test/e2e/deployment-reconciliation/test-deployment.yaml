@@ -1,7 +1,7 @@
 apiVersion: platform.operator.kibaship.com/v1alpha1
 kind: Deployment
 metadata:
-  name: deployment-test-deploy-deployment-e2e-kibaship-com
+  name: deployment-789e4567-e89b-12d3-a456-426614174003-kibaship-com
   namespace: project-test-project-deployment-e2e-kibaship-com
   labels:
     platform.operator.kibaship.com/resource-uuid: "789e4567-e89b-12d3-a456-426614174003"

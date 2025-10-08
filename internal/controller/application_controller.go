@@ -59,6 +59,7 @@ type ApplicationReconciler struct {
 // +kubebuilder:rbac:groups=platform.operator.kibaship.com,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=platform.operator.kibaship.com,resources=applicationdomains,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=platform.operator.kibaship.com,resources=environments,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -172,6 +173,22 @@ func (r *ApplicationReconciler) handleApplicationReconcile(ctx context.Context, 
 
 	log.Info("Reconciling Application")
 
+	// Ensure environment variables secret exists for all applications
+	secretRefUpdated, err := r.ensureApplicationEnvSecret(ctx, app)
+	if err != nil {
+		log.Error(err, "Failed to ensure application env secret")
+		return ctrl.Result{}, err
+	}
+	if secretRefUpdated {
+		// Update the Application spec with the secret reference
+		if err := r.Update(ctx, app); err != nil {
+			log.Error(err, "Failed to update Application with env secret ref")
+			return ctrl.Result{}, err
+		}
+		log.Info("Updated Application with env secret reference")
+		return ctrl.Result{Requeue: true}, nil
+	}
+
 	// Handle ApplicationDomain creation for GitRepository applications
 	if err := r.handleApplicationDomains(ctx, app); err != nil {
 		log.Error(err, "Failed to handle ApplicationDomains")
@@ -192,6 +209,154 @@ func (r *ApplicationReconciler) handleApplicationReconcile(ctx context.Context, 
 
 	log.Info("Successfully reconciled Application")
 	return ctrl.Result{}, nil
+}
+
+// ensureApplicationEnvSecret ensures that an environment variables secret exists for the application
+func (r *ApplicationReconciler) ensureApplicationEnvSecret(ctx context.Context, app *platformv1alpha1.Application) (bool, error) {
+	log := logf.FromContext(ctx).WithValues("application", app.Name, "namespace", app.Namespace)
+
+	appUUID := app.Labels[validation.LabelResourceUUID]
+	if appUUID == "" {
+		return false, fmt.Errorf("application UUID label not found")
+	}
+
+	secretName := fmt.Sprintf("env-%s", appUUID)
+
+	// Get current env ref based on application type
+	var currentEnvRef *corev1.LocalObjectReference
+	switch app.Spec.Type {
+	case platformv1alpha1.ApplicationTypeGitRepository:
+		if app.Spec.GitRepository != nil {
+			currentEnvRef = app.Spec.GitRepository.Env
+		}
+	case platformv1alpha1.ApplicationTypeDockerImage:
+		if app.Spec.DockerImage != nil {
+			currentEnvRef = app.Spec.DockerImage.Env
+		}
+	case platformv1alpha1.ApplicationTypeMySQL:
+		if app.Spec.MySQL != nil {
+			currentEnvRef = app.Spec.MySQL.Env
+		}
+	case platformv1alpha1.ApplicationTypeMySQLCluster:
+		if app.Spec.MySQLCluster != nil {
+			currentEnvRef = app.Spec.MySQLCluster.Env
+		}
+	case platformv1alpha1.ApplicationTypePostgres:
+		if app.Spec.Postgres != nil {
+			currentEnvRef = app.Spec.Postgres.Env
+		}
+	case platformv1alpha1.ApplicationTypePostgresCluster:
+		if app.Spec.PostgresCluster != nil {
+			currentEnvRef = app.Spec.PostgresCluster.Env
+		}
+	}
+
+	// Check if secret ref is already set correctly
+	if currentEnvRef != nil && currentEnvRef.Name == secretName {
+		// Secret ref already set correctly, check if secret exists
+		var existingSecret corev1.Secret
+		err := r.Get(ctx, types.NamespacedName{Name: secretName, Namespace: app.Namespace}, &existingSecret)
+		if err == nil {
+			// Secret exists and ref is set correctly
+			return false, nil
+		}
+		if !errors.IsNotFound(err) {
+			return false, fmt.Errorf("failed to get secret: %w", err)
+		}
+		// Secret doesn't exist, create it
+	} else if currentEnvRef != nil {
+		// Secret ref is set but to wrong name, update it
+		log.Info("Updating env secret ref", "oldRef", currentEnvRef.Name, "newRef", secretName)
+	}
+
+	// Create the secret if it doesn't exist
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      secretName,
+			Namespace: app.Namespace,
+			Labels: map[string]string{
+				"app.kubernetes.io/managed-by":        "kibaship-operator",
+				validation.LabelApplicationUUID:       appUUID,
+				"platform.operator.kibaship.com/type": "application-env-vars",
+				validation.LabelProjectUUID:           app.Labels[validation.LabelProjectUUID],
+				validation.LabelEnvironmentUUID:       app.Labels[validation.LabelEnvironmentUUID],
+			},
+		},
+		Type: corev1.SecretTypeOpaque,
+		Data: map[string][]byte{},
+	}
+
+	// Set owner reference to the application
+	if err := controllerutil.SetControllerReference(app, secret, r.Scheme); err != nil {
+		return false, fmt.Errorf("failed to set owner reference on secret: %w", err)
+	}
+
+	err := r.Get(ctx, types.NamespacedName{Name: secretName, Namespace: app.Namespace}, &corev1.Secret{})
+	if errors.IsNotFound(err) {
+		if err := r.Create(ctx, secret); err != nil {
+			return false, fmt.Errorf("failed to create env secret: %w", err)
+		}
+		log.Info("Created env secret for application", "secret", secretName)
+	} else if err != nil {
+		return false, fmt.Errorf("failed to check for existing secret: %w", err)
+	}
+
+	// Set the secret ref on the application based on type
+	updated := false
+	secretRef := &corev1.LocalObjectReference{Name: secretName}
+
+	switch app.Spec.Type {
+	case platformv1alpha1.ApplicationTypeGitRepository:
+		if app.Spec.GitRepository == nil {
+			return false, fmt.Errorf("git repository config is nil")
+		}
+		if app.Spec.GitRepository.Env == nil || app.Spec.GitRepository.Env.Name != secretName {
+			app.Spec.GitRepository.Env = secretRef
+			updated = true
+		}
+	case platformv1alpha1.ApplicationTypeDockerImage:
+		if app.Spec.DockerImage == nil {
+			return false, fmt.Errorf("docker image config is nil")
+		}
+		if app.Spec.DockerImage.Env == nil || app.Spec.DockerImage.Env.Name != secretName {
+			app.Spec.DockerImage.Env = secretRef
+			updated = true
+		}
+	case platformv1alpha1.ApplicationTypeMySQL:
+		if app.Spec.MySQL == nil {
+			return false, fmt.Errorf("mysql config is nil")
+		}
+		if app.Spec.MySQL.Env == nil || app.Spec.MySQL.Env.Name != secretName {
+			app.Spec.MySQL.Env = secretRef
+			updated = true
+		}
+	case platformv1alpha1.ApplicationTypeMySQLCluster:
+		if app.Spec.MySQLCluster == nil {
+			return false, fmt.Errorf("mysql cluster config is nil")
+		}
+		if app.Spec.MySQLCluster.Env == nil || app.Spec.MySQLCluster.Env.Name != secretName {
+			app.Spec.MySQLCluster.Env = secretRef
+			updated = true
+		}
+	case platformv1alpha1.ApplicationTypePostgres:
+		if app.Spec.Postgres == nil {
+			return false, fmt.Errorf("postgres config is nil")
+		}
+		if app.Spec.Postgres.Env == nil || app.Spec.Postgres.Env.Name != secretName {
+			app.Spec.Postgres.Env = secretRef
+			updated = true
+		}
+	case platformv1alpha1.ApplicationTypePostgresCluster:
+		if app.Spec.PostgresCluster == nil {
+			return false, fmt.Errorf("postgres cluster config is nil")
+		}
+		if app.Spec.PostgresCluster.Env == nil || app.Spec.PostgresCluster.Env.Name != secretName {
+			app.Spec.PostgresCluster.Env = secretRef
+			updated = true
+		}
+	}
+
+	return updated, nil
 }
 
 // ensureUUIDLabels ensures that the Application has the correct UUID and slug labels
@@ -345,15 +510,15 @@ func (r *ApplicationReconciler) createDefaultDomain(ctx context.Context, app *pl
 		return fmt.Errorf("failed to get operator configuration: %v", err)
 	}
 
-	// Use the application slug from labels for subdomain generation (not the CR name)
+	// Use the application UUID from labels for subdomain generation (not the CR name)
 	// The CR name includes domain suffix which would result in duplicate domains
-	appSlug := app.Labels[validation.LabelResourceSlug]
-	if appSlug == "" {
-		return fmt.Errorf("application missing required label %s", validation.LabelResourceSlug)
+	appUUID := app.Labels[validation.LabelResourceUUID]
+	if appUUID == "" {
+		return fmt.Errorf("application missing required label %s", validation.LabelResourceUUID)
 	}
 
-	// Generate unique subdomain based on application slug
-	subdomain, err := GenerateSubdomain(appSlug)
+	// Generate unique subdomain based on application UUID
+	subdomain, err := GenerateSubdomain(appUUID)
 	if err != nil {
 		return fmt.Errorf("failed to generate subdomain: %v", err)
 	}

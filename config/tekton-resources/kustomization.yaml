@@ -18,9 +18,9 @@ labels:
     app.kubernetes.io/managed-by: kibaship-operator
     app.kubernetes.io/name: kibaship-operator
 images:
-- name: ghcr.io/kibamail/kibaship-railpack-build
+- name: kibamail/kibaship-railpack-build
   newName: kibaship.com/kibaship-railpack-build
   newTag: v0.0.1
-- name: ghcr.io/kibamail/kibaship-railpack-cli
+- name: kibamail/kibaship-railpack-cli
   newName: kibaship.com/kibaship-railpack-cli
   newTag: v0.0.1

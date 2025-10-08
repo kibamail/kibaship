@@ -181,9 +181,9 @@ func (r *Environment) validateEnvironment(ctx context.Context) error {
 		}
 	}
 
-	// Validate environment name format: environment-<slug>-kibaship-com
+	// Validate environment name format: environment-<uuid>
 	if !r.isValidEnvironmentName() {
-		errors = append(errors, fmt.Sprintf("environment name '%s' must follow format 'environment-<slug>-kibaship-com'", r.Name))
+		errors = append(errors, fmt.Sprintf("environment name '%s' must follow format 'environment-<uuid>'", r.Name))
 	}
 
 	if len(errors) > 0 {
@@ -195,9 +195,9 @@ func (r *Environment) validateEnvironment(ctx context.Context) error {
 
 // isValidEnvironmentName validates if the environment name follows the required format
 func (r *Environment) isValidEnvironmentName() bool {
-	// Pattern: environment-<slug>-kibaship-com
-	// slug should be valid DNS label (lowercase alphanumeric with hyphens)
-	pattern := regexp.MustCompile(`^environment-[a-z0-9]([a-z0-9-]*[a-z0-9])?-kibaship-com$`)
+	// Pattern: environment-<uuid>
+	// UUID should be valid DNS label (lowercase alphanumeric with hyphens)
+	pattern := regexp.MustCompile(`^environment-[a-z0-9]([a-z0-9-]*[a-z0-9])?$`)
 	return pattern.MatchString(r.Name)
 }
 
@@ -215,6 +215,14 @@ func (r *Environment) GetProjectUUID() string {
 		return ""
 	}
 	return r.Labels[validation.LabelProjectUUID]
+}
+
+// GetUUID returns the environment UUID from labels
+func (r *Environment) GetUUID() string {
+	if r.Labels == nil {
+		return ""
+	}
+	return r.Labels[validation.LabelResourceUUID]
 }
 
 // SetupWebhookWithManager will setup the manager to manage the webhooks

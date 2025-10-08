@@ -11,7 +11,7 @@ This document proposes a production-grade design to build container images from 
 
 ### Key references (from Railpack docs)
 
-- Prefer custom BuildKit frontend image: ghcr.io/railwayapp/railpack-frontend (version should match plan)
+- Prefer custom BuildKit frontend image: railwayapp/railpack-frontend (version should match plan)
 - Use `railpack prepare` to generate: build plan (plan.json) and build info (info.json)
 - Pass secrets to prepare (names only) via `--env`, and mount actual values to build via BuildKit `--secret`
 - Provide `secrets-hash` build arg to force layer invalidation when secrets change
@@ -24,7 +24,7 @@ This document proposes a production-grade design to build container images from 
 - [x] Created lightweight Railpack CLI image (v0.7.2)
 
   - Path: build/railpack-cli/Dockerfile; Alpine base, non-root user, includes ca-certificates for HTTPS
-  - Publishes to: ghcr.io/kibamail/kibaship-railpack-cli:<tag>
+  - Publishes to: kibamail/kibaship-railpack-cli:<tag>
   - Excerpt:
 
   ```dockerfile
@@ -57,12 +57,12 @@ This document proposes a production-grade design to build container images from 
 
 - [x] Prepare step image selection and usage updated
 
-  - Use ghcr.io/kibamail/kibaship-railpack-cli:v0.7.2 for the Tekton prepare step
+  - Use kibamail/kibaship-railpack-cli:v0.7.2 for the Tekton prepare step
 
   ```yaml
   steps:
     - name: prepare
-      image: ghcr.io/kibamail/kibaship-railpack-cli:v0.7.2
+      image: kibamail/kibaship-railpack-cli:v0.7.2
       workingDir: $(workspaces.output.path)/repo/$(params.contextPath)
       command: ["railpack"]
       args:
@@ -151,7 +151,7 @@ This document proposes a production-grade design to build container images from 
 
 - contextPath: relative path of app within workspace (default: ".")
 - railpackVersion: pin CLI/frontend version (e.g., vX.Y.Z) to align plan and frontend
-- imageRegistry: e.g., ghcr.io
+- imageRegistry: e.g., docker.io
 - imageRepository: e.g., kibamail/<app>
 - imageTag: default commit SHA; optionally branch, timestamp, semver
 - platforms: e.g., linux/amd64[,linux/arm64]
@@ -212,7 +212,7 @@ spec:
     - name: infoPath
   steps:
     - name: prepare
-      image: ghcr.io/kibamail/kibaship-railpack-cli:$(params.railpackVersion)
+      image: kibamail/kibaship-railpack-cli:$(params.railpackVersion)
       workingDir: $(workspaces.output.path)/$(params.contextPath)
       script: |
         #!/bin/sh
@@ -237,8 +237,8 @@ spec:
 - Secrets:
   - For each secret name in params, mount value from Kubernetes Secret as a file (`/secrets/<NAME>`) and pass `--secret id=<NAME>,src=/secrets/<NAME>`
 - Build args:
-  - `--opt source=ghcr.io/railwayapp/railpack:railpack-frontend` (matching $(params.railpackVersion))
-  - `--build-arg BUILDKIT_SYNTAX=ghcr.io/railwayapp/railpack-frontend`
+  - `--opt source=railwayapp/railpack:railpack-frontend` (matching $(params.railpackVersion))
+  - `--build-arg BUILDKIT_SYNTAX=railwayapp/railpack-frontend`
   - `--build-arg secrets-hash=$(sha256 of concatenated NAME=VALUE pairs)`
   - `--build-arg cache-key=$(params.cacheKey)`
   - Pass $(params.additionalBuildArgs)
@@ -319,9 +319,9 @@ spec:
           --local context=$(workspaces.output.path) \
           --local dockerfile=$(workspaces.output.path) \
           --frontend=gateway.v0 \
-          --opt source=ghcr.io/railwayapp/railpack:railpack-frontend \
+          --opt source=railwayapp/railpack:railpack-frontend \
           --opt filename=$(basename "$PLAN") \
-          --opt build-arg:BUILDKIT_SYNTAX=ghcr.io/railwayapp/railpack-frontend \
+          --opt build-arg:BUILDKIT_SYNTAX=railwayapp/railpack-frontend \
           --opt build-arg:cache-key=$(params.cacheKey) \
           --opt build-arg:secrets-hash=$SH \
           $(for s in $(params.buildSecrets); do printf -- "--secret id=%s,src=/secrets/%s " "$s" "$s"; done) \
@@ -485,7 +485,7 @@ spec:
         name: railpack-build
       params:
         - name: imageRegistry
-          value: ghcr.io
+          value: docker.io
         - name: imageRepository
           value: kibamail/$(context.pipelineRun.name)
         - name: imageTag

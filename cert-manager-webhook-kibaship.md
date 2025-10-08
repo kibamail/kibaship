@@ -55,7 +55,7 @@ Notes (completed):
 - Fixed group name in code to `dns.kibaship.com` (no env needed)
 - Verified:
   - `make build-cert-manager-webhook` produced `bin/cert-manager-kibaship-webhook`
-  - `make docker-build-cert-manager-webhook` produced image `ghcr.io/kibamail/kibaship-operator-cert-manager-webhook:v${VERSION}` (not pushed)
+  - `make docker-build-cert-manager-webhook` produced image `kibamail/kibaship-operator-cert-manager-webhook:v${VERSION}` (not pushed)
 
 ---
 

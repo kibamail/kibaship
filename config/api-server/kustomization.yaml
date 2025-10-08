@@ -19,5 +19,5 @@ resources:
 - service.yaml
 images:
 - name: apiserver
-  newName: ghcr.io/kibamail/kibaship-operator-apiserver
+  newName: kibamail/kibaship-operator-apiserver
   newTag: v0.1.6

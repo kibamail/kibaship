@@ -56,7 +56,7 @@ func TestApplicationDomainCreation(t *testing.T) {
 	// Create test environment
 	testEnvironment := &platformv1alpha1.Environment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "environment-production-kibaship-com",
+			Name:      "environment-production",
 			Namespace: "test-namespace",
 			Labels: map[string]string{
 				validation.LabelResourceUUID: "env-550e8400-e29b-41d4-a716-446655440000",
@@ -72,7 +72,7 @@ func TestApplicationDomainCreation(t *testing.T) {
 	// Create test GitRepository application
 	testApp := &platformv1alpha1.Application{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "project-test-project-app-frontend-kibaship-com",
+			Name:      "project-test-project-app-frontend",
 			Namespace: "test-namespace",
 			Labels: map[string]string{
 				validation.LabelResourceUUID:    "550e8400-e29b-41d4-a716-446655440001",
@@ -84,7 +84,7 @@ func TestApplicationDomainCreation(t *testing.T) {
 		Spec: platformv1alpha1.ApplicationSpec{
 			Type: platformv1alpha1.ApplicationTypeGitRepository,
 			EnvironmentRef: corev1.LocalObjectReference{
-				Name: "environment-production-kibaship-com",
+				Name: "environment-production",
 			},
 			GitRepository: &platformv1alpha1.GitRepositoryConfig{
 				Repository: "https://github.com/test/frontend",
@@ -206,7 +206,7 @@ func TestApplicationDomainSkipsNonGitRepository(t *testing.T) {
 	// Create test DockerImage application (not GitRepository)
 	testApp := &platformv1alpha1.Application{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "project-test-project-app-backend-kibaship-com",
+			Name:      "project-test-project-app-backend",
 			Namespace: "test-namespace",
 		},
 		Spec: platformv1alpha1.ApplicationSpec{

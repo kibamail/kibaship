@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -26,6 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	platformv1alpha1 "github.com/kibamail/kibaship-operator/api/v1alpha1"
@@ -34,7 +36,7 @@ import (
 
 var _ = Describe("Application Controller", func() {
 	Context("When reconciling a resource", func() {
-		const resourceName = "project-myproject-app-myapp-kibaship-com"
+		const resourceName = "project-myproject-app-myapp"
 
 		ctx := context.Background()
 
@@ -68,7 +70,7 @@ var _ = Describe("Application Controller", func() {
 			By("creating a test environment")
 			testEnvironment := &platformv1alpha1.Environment{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "environment-production-kibaship-com",
+					Name:      "environment-production",
 					Namespace: "default",
 					Labels: map[string]string{
 						validation.LabelResourceUUID: "env-uuid-production",
@@ -80,7 +82,7 @@ var _ = Describe("Application Controller", func() {
 					ProjectRef: corev1.LocalObjectReference{Name: "test-project"},
 				},
 			}
-			err = k8sClient.Get(ctx, types.NamespacedName{Name: "environment-production-kibaship-com", Namespace: "default"}, &platformv1alpha1.Environment{})
+			err = k8sClient.Get(ctx, types.NamespacedName{Name: "environment-production", Namespace: "default"}, &platformv1alpha1.Environment{})
 			if errors.IsNotFound(err) {
 				Expect(k8sClient.Create(ctx, testEnvironment)).To(Succeed())
 			}
@@ -101,7 +103,7 @@ var _ = Describe("Application Controller", func() {
 					},
 					Spec: platformv1alpha1.ApplicationSpec{
 						EnvironmentRef: corev1.LocalObjectReference{
-							Name: "environment-production-kibaship-com",
+							Name: "environment-production",
 						},
 						Type: platformv1alpha1.ApplicationTypeDockerImage,
 						DockerImage: &platformv1alpha1.DockerImageConfig{
@@ -135,7 +137,13 @@ var _ = Describe("Application Controller", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			// Second reconcile handles application logic
+			// Second reconcile creates env secret and updates spec
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Third reconcile completes and sets status
 			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: typeNamespacedName,
 			})
@@ -169,7 +177,7 @@ var _ = Describe("Application Controller", func() {
 			By("Creating a GitRepository application")
 			gitApp := &platformv1alpha1.Application{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "project-myproject-app-gitapp-kibaship-com",
+					Name:      "project-myproject-app-gitapp",
 					Namespace: "default",
 					Labels: map[string]string{
 						validation.LabelResourceUUID:    "550e8400-e29b-41d4-a716-446655440010",
@@ -180,7 +188,7 @@ var _ = Describe("Application Controller", func() {
 				},
 				Spec: platformv1alpha1.ApplicationSpec{
 					EnvironmentRef: corev1.LocalObjectReference{
-						Name: "environment-production-kibaship-com",
+						Name: "environment-production",
 					},
 					Type: platformv1alpha1.ApplicationTypeGitRepository,
 					GitRepository: &platformv1alpha1.GitRepositoryConfig{
@@ -213,7 +221,7 @@ var _ = Describe("Application Controller", func() {
 			By("Creating a MySQL application")
 			mysqlApp := &platformv1alpha1.Application{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "project-myproject-app-mysqlapp-kibaship-com",
+					Name:      "project-myproject-app-mysqlapp",
 					Namespace: "default",
 					Labels: map[string]string{
 						validation.LabelResourceUUID:    "550e8400-e29b-41d4-a716-446655440011",
@@ -223,7 +231,7 @@ var _ = Describe("Application Controller", func() {
 				},
 				Spec: platformv1alpha1.ApplicationSpec{
 					EnvironmentRef: corev1.LocalObjectReference{
-						Name: "environment-production-kibaship-com",
+						Name: "environment-production",
 					},
 					Type: platformv1alpha1.ApplicationTypeMySQL,
 					MySQL: &platformv1alpha1.MySQLConfig{
@@ -247,7 +255,7 @@ var _ = Describe("Application Controller", func() {
 			By("Creating a GitRepository application with invalid repo format")
 			invalidGitApp := &platformv1alpha1.Application{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "project-myproject-app-invalidgitapp-kibaship-com",
+					Name:      "project-myproject-app-invalidgitapp",
 					Namespace: "default",
 					Labels: map[string]string{
 						validation.LabelResourceUUID:    "550e8400-e29b-41d4-a716-446655440012",
@@ -257,7 +265,7 @@ var _ = Describe("Application Controller", func() {
 				},
 				Spec: platformv1alpha1.ApplicationSpec{
 					EnvironmentRef: corev1.LocalObjectReference{
-						Name: "environment-production-kibaship-com",
+						Name: "environment-production",
 					},
 					Type: platformv1alpha1.ApplicationTypeGitRepository,
 					GitRepository: &platformv1alpha1.GitRepositoryConfig{
@@ -277,7 +285,7 @@ var _ = Describe("Application Controller", func() {
 			By("Creating an application with all required fields")
 			validApp := &platformv1alpha1.Application{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "project-myproject-app-validapp-kibaship-com",
+					Name:      "project-myproject-app-validapp",
 					Namespace: "default",
 					Labels: map[string]string{
 						validation.LabelResourceUUID:    "550e8400-e29b-41d4-a716-446655440013",
@@ -287,7 +295,7 @@ var _ = Describe("Application Controller", func() {
 				},
 				Spec: platformv1alpha1.ApplicationSpec{
 					EnvironmentRef: corev1.LocalObjectReference{
-						Name: "environment-production-kibaship-com",
+						Name: "environment-production",
 					},
 					Type: platformv1alpha1.ApplicationTypeDockerImage,
 					DockerImage: &platformv1alpha1.DockerImageConfig{
@@ -308,7 +316,7 @@ var _ = Describe("Application Controller", func() {
 			By("Creating a GitRepository application with minimal fields")
 			minimalGitApp := &platformv1alpha1.Application{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "project-myproject-app-minimalgitapp-kibaship-com",
+					Name:      "project-myproject-app-minimalgitapp",
 					Namespace: "default",
 					Labels: map[string]string{
 						validation.LabelResourceUUID:    "550e8400-e29b-41d4-a716-446655440014",
@@ -318,7 +326,7 @@ var _ = Describe("Application Controller", func() {
 				},
 				Spec: platformv1alpha1.ApplicationSpec{
 					EnvironmentRef: corev1.LocalObjectReference{
-						Name: "environment-production-kibaship-com",
+						Name: "environment-production",
 					},
 					Type: platformv1alpha1.ApplicationTypeGitRepository,
 					GitRepository: &platformv1alpha1.GitRepositoryConfig{
@@ -345,7 +353,7 @@ var _ = Describe("Application Controller", func() {
 			By("Creating a GitRepository application with SPA output directory")
 			spaGitApp := &platformv1alpha1.Application{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "project-myproject-app-spagitapp-kibaship-com",
+					Name:      "project-myproject-app-spagitapp",
 					Namespace: "default",
 					Labels: map[string]string{
 						validation.LabelResourceUUID:    "550e8400-e29b-41d4-a716-446655440015",
@@ -355,7 +363,7 @@ var _ = Describe("Application Controller", func() {
 				},
 				Spec: platformv1alpha1.ApplicationSpec{
 					EnvironmentRef: corev1.LocalObjectReference{
-						Name: "environment-production-kibaship-com",
+						Name: "environment-production",
 					},
 					Type: platformv1alpha1.ApplicationTypeGitRepository,
 					GitRepository: &platformv1alpha1.GitRepositoryConfig{
@@ -383,7 +391,7 @@ var _ = Describe("Application Controller", func() {
 			By("Creating an Application with UUID labels")
 			testApp := &platformv1alpha1.Application{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "project-myproject-app-uuidtest-kibaship-com",
+					Name:      "project-myproject-app-uuidtest",
 					Namespace: "default",
 					Labels: map[string]string{
 						validation.LabelResourceUUID:    "550e8400-e29b-41d4-a716-446655440100",
@@ -394,7 +402,7 @@ var _ = Describe("Application Controller", func() {
 				},
 				Spec: platformv1alpha1.ApplicationSpec{
 					EnvironmentRef: corev1.LocalObjectReference{
-						Name: "environment-production-kibaship-com",
+						Name: "environment-production",
 					},
 					Type: platformv1alpha1.ApplicationTypeDockerImage,
 					DockerImage: &platformv1alpha1.DockerImageConfig{
@@ -446,7 +454,7 @@ var _ = Describe("Application Controller", func() {
 				},
 				Spec: platformv1alpha1.ApplicationSpec{
 					EnvironmentRef: corev1.LocalObjectReference{
-						Name: "environment-production-kibaship-com",
+						Name: "environment-production",
 					},
 					Type: platformv1alpha1.ApplicationTypeDockerImage,
 					DockerImage: &platformv1alpha1.DockerImageConfig{
@@ -481,7 +489,7 @@ var _ = Describe("Application Controller", func() {
 			By("Creating a GitRepository application with PublicAccess=true and no SecretRef")
 			publicGitApp := &platformv1alpha1.Application{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "project-myproject-app-publicgitapp-kibaship-com",
+					Name:      "project-myproject-app-publicgitapp",
 					Namespace: "default",
 					Labels: map[string]string{
 						validation.LabelResourceUUID:    "550e8400-e29b-41d4-a716-446655440020",
@@ -491,7 +499,7 @@ var _ = Describe("Application Controller", func() {
 				},
 				Spec: platformv1alpha1.ApplicationSpec{
 					EnvironmentRef: corev1.LocalObjectReference{
-						Name: "environment-production-kibaship-com",
+						Name: "environment-production",
 					},
 					Type: platformv1alpha1.ApplicationTypeGitRepository,
 					GitRepository: &platformv1alpha1.GitRepositoryConfig{
@@ -515,7 +523,7 @@ var _ = Describe("Application Controller", func() {
 			By("Creating a GitRepository application with PublicAccess=true and SecretRef provided")
 			publicGitAppWithSecret := &platformv1alpha1.Application{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "project-myproject-app-publicwithsecret-kibaship-com",
+					Name:      "project-myproject-app-publicwithsecret",
 					Namespace: "default",
 					Labels: map[string]string{
 						validation.LabelResourceUUID:    "550e8400-e29b-41d4-a716-446655440021",
@@ -525,7 +533,7 @@ var _ = Describe("Application Controller", func() {
 				},
 				Spec: platformv1alpha1.ApplicationSpec{
 					EnvironmentRef: corev1.LocalObjectReference{
-						Name: "environment-production-kibaship-com",
+						Name: "environment-production",
 					},
 					Type: platformv1alpha1.ApplicationTypeGitRepository,
 					GitRepository: &platformv1alpha1.GitRepositoryConfig{
@@ -551,7 +559,7 @@ var _ = Describe("Application Controller", func() {
 			By("Creating a GitRepository application with PublicAccess=false and SecretRef provided")
 			privateGitApp := &platformv1alpha1.Application{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "project-myproject-app-privategitapp-kibaship-com",
+					Name:      "project-myproject-app-privategitapp",
 					Namespace: "default",
 					Labels: map[string]string{
 						validation.LabelResourceUUID:    "550e8400-e29b-41d4-a716-446655440022",
@@ -561,7 +569,7 @@ var _ = Describe("Application Controller", func() {
 				},
 				Spec: platformv1alpha1.ApplicationSpec{
 					EnvironmentRef: corev1.LocalObjectReference{
-						Name: "environment-production-kibaship-com",
+						Name: "environment-production",
 					},
 					Type: platformv1alpha1.ApplicationTypeGitRepository,
 					GitRepository: &platformv1alpha1.GitRepositoryConfig{
@@ -587,7 +595,7 @@ var _ = Describe("Application Controller", func() {
 			By("Testing validation directly for GitRepository application with PublicAccess=false and no SecretRef")
 			invalidPrivateGitApp := &platformv1alpha1.Application{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "project-myproject-app-invalidprivate-kibaship-com",
+					Name:      "project-myproject-app-invalidprivate",
 					Namespace: "default",
 					Labels: map[string]string{
 						validation.LabelResourceUUID:    "550e8400-e29b-41d4-a716-446655440023",
@@ -597,7 +605,7 @@ var _ = Describe("Application Controller", func() {
 				},
 				Spec: platformv1alpha1.ApplicationSpec{
 					EnvironmentRef: corev1.LocalObjectReference{
-						Name: "environment-production-kibaship-com",
+						Name: "environment-production",
 					},
 					Type: platformv1alpha1.ApplicationTypeGitRepository,
 					GitRepository: &platformv1alpha1.GitRepositoryConfig{
@@ -619,7 +627,7 @@ var _ = Describe("Application Controller", func() {
 			By("Creating a GitRepository application without specifying PublicAccess")
 			defaultPublicAccessApp := &platformv1alpha1.Application{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "project-myproject-app-defaultaccess-kibaship-com",
+					Name:      "project-myproject-app-defaultaccess",
 					Namespace: "default",
 					Labels: map[string]string{
 						validation.LabelResourceUUID:    "550e8400-e29b-41d4-a716-446655440024",
@@ -629,7 +637,7 @@ var _ = Describe("Application Controller", func() {
 				},
 				Spec: platformv1alpha1.ApplicationSpec{
 					EnvironmentRef: corev1.LocalObjectReference{
-						Name: "environment-production-kibaship-com",
+						Name: "environment-production",
 					},
 					Type: platformv1alpha1.ApplicationTypeGitRepository,
 					GitRepository: &platformv1alpha1.GitRepositoryConfig{
@@ -657,6 +665,275 @@ var _ = Describe("Application Controller", func() {
 			// Cleanup
 			defer func() {
 				Expect(k8sClient.Delete(ctx, &createdApp)).To(Succeed())
+			}()
+		})
+	})
+
+	Context("Application Environment Variables Secret", func() {
+		It("should create env secret for GitRepository application", func() {
+			By("Creating a GitRepository application")
+			appUUID := "660e8400-e29b-41d4-a716-446655440025"
+			app := &platformv1alpha1.Application{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "project-myproject-app-envtest",
+					Namespace: "default",
+					Labels: map[string]string{
+						validation.LabelResourceUUID:    appUUID,
+						validation.LabelResourceSlug:    "envtest1",
+						validation.LabelEnvironmentUUID: "env-uuid-production",
+						validation.LabelProjectUUID:     "550e8400-e29b-41d4-a716-446655440000",
+					},
+				},
+				Spec: platformv1alpha1.ApplicationSpec{
+					EnvironmentRef: corev1.LocalObjectReference{
+						Name: "environment-production",
+					},
+					Type: platformv1alpha1.ApplicationTypeGitRepository,
+					GitRepository: &platformv1alpha1.GitRepositoryConfig{
+						Provider:     platformv1alpha1.GitProviderGitHub,
+						Repository:   "myorg/envtest-repo",
+						PublicAccess: true,
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, app)).To(Succeed())
+
+			By("Reconciling the application to create env secret")
+			reconciler := &ApplicationReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+			// First reconcile: adds finalizer
+			_, err := reconciler.Reconcile(ctx, ctrl.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      app.Name,
+					Namespace: app.Namespace,
+				},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Second reconcile: creates env secret
+			_, err = reconciler.Reconcile(ctx, ctrl.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      app.Name,
+					Namespace: app.Namespace,
+				},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Verifying env secret was created")
+			expectedSecretName := fmt.Sprintf("env-%s", appUUID)
+			var secret corev1.Secret
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, types.NamespacedName{
+					Name:      expectedSecretName,
+					Namespace: app.Namespace,
+				}, &secret)
+				return err == nil
+			}, "5s", "100ms").Should(BeTrue())
+
+			By("Verifying secret has correct labels")
+			Expect(secret.Labels).To(HaveKeyWithValue("app.kubernetes.io/managed-by", "kibaship-operator"))
+			Expect(secret.Labels).To(HaveKeyWithValue(validation.LabelApplicationUUID, appUUID))
+			Expect(secret.Labels).To(HaveKeyWithValue("platform.operator.kibaship.com/type", "application-env-vars"))
+
+			By("Verifying secret ref was set on Application")
+			var updatedApp platformv1alpha1.Application
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, types.NamespacedName{
+					Name:      app.Name,
+					Namespace: app.Namespace,
+				}, &updatedApp)
+				if err != nil {
+					return false
+				}
+				return updatedApp.Spec.GitRepository != nil &&
+					updatedApp.Spec.GitRepository.Env != nil &&
+					updatedApp.Spec.GitRepository.Env.Name == expectedSecretName
+			}, "5s", "100ms").Should(BeTrue())
+
+			// Cleanup
+			defer func() {
+				Expect(k8sClient.Delete(ctx, app)).To(Succeed())
+				Expect(k8sClient.Delete(ctx, &secret)).To(Succeed())
+			}()
+		})
+
+		It("should create env secret for DockerImage applications", func() {
+			By("Creating a DockerImage application")
+			appUUID := "660e8400-e29b-41d4-a716-446655440026"
+			app := &platformv1alpha1.Application{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "project-myproject-app-dockertest",
+					Namespace: "default",
+					Labels: map[string]string{
+						validation.LabelResourceUUID:    appUUID,
+						validation.LabelResourceSlug:    "dockertest1",
+						validation.LabelEnvironmentUUID: "env-uuid-production",
+						validation.LabelProjectUUID:     "550e8400-e29b-41d4-a716-446655440000",
+					},
+				},
+				Spec: platformv1alpha1.ApplicationSpec{
+					EnvironmentRef: corev1.LocalObjectReference{
+						Name: "environment-production",
+					},
+					Type: platformv1alpha1.ApplicationTypeDockerImage,
+					DockerImage: &platformv1alpha1.DockerImageConfig{
+						Image: "nginx:latest",
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, app)).To(Succeed())
+
+			By("Reconciling the application")
+			reconciler := &ApplicationReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+
+			// First reconcile: adds finalizer
+			_, err := reconciler.Reconcile(ctx, ctrl.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      app.Name,
+					Namespace: app.Namespace,
+				},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Second reconcile: creates env secret
+			_, err = reconciler.Reconcile(ctx, ctrl.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      app.Name,
+					Namespace: app.Namespace,
+				},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Verifying env secret was created")
+			expectedSecretName := fmt.Sprintf("env-%s", appUUID)
+			var secret corev1.Secret
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, types.NamespacedName{
+					Name:      expectedSecretName,
+					Namespace: app.Namespace,
+				}, &secret)
+				return err == nil
+			}, "5s", "100ms").Should(BeTrue())
+
+			By("Verifying secret has correct labels")
+			Expect(secret.Labels).To(HaveKeyWithValue("app.kubernetes.io/managed-by", "kibaship-operator"))
+			Expect(secret.Labels).To(HaveKeyWithValue(validation.LabelApplicationUUID, appUUID))
+			Expect(secret.Labels).To(HaveKeyWithValue("platform.operator.kibaship.com/type", "application-env-vars"))
+
+			By("Verifying secret ref was set on DockerImage config")
+			var updatedApp platformv1alpha1.Application
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, types.NamespacedName{
+					Name:      app.Name,
+					Namespace: app.Namespace,
+				}, &updatedApp)
+				if err != nil {
+					return false
+				}
+				return updatedApp.Spec.DockerImage != nil &&
+					updatedApp.Spec.DockerImage.Env != nil &&
+					updatedApp.Spec.DockerImage.Env.Name == expectedSecretName
+			}, "5s", "100ms").Should(BeTrue())
+
+			// Cleanup
+			defer func() {
+				Expect(k8sClient.Delete(ctx, app)).To(Succeed())
+				Expect(k8sClient.Delete(ctx, &secret)).To(Succeed())
+			}()
+		})
+
+		It("should not recreate env secret if it already exists", func() {
+			By("Creating a GitRepository application with existing secret")
+			appUUID := "660e8400-e29b-41d4-a716-446655440027"
+			secretName := fmt.Sprintf("env-%s", appUUID)
+
+			// Create secret first
+			secret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      secretName,
+					Namespace: "default",
+					Labels: map[string]string{
+						"app.kubernetes.io/managed-by":        "kibaship-operator",
+						validation.LabelApplicationUUID:       appUUID,
+						"platform.operator.kibaship.com/type": "application-env-vars",
+					},
+				},
+				Type: corev1.SecretTypeOpaque,
+				Data: map[string][]byte{
+					"EXISTING_VAR": []byte("existing-value"),
+				},
+			}
+			Expect(k8sClient.Create(ctx, secret)).To(Succeed())
+
+			app := &platformv1alpha1.Application{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "project-myproject-app-existingsecret",
+					Namespace: "default",
+					Labels: map[string]string{
+						validation.LabelResourceUUID:    appUUID,
+						validation.LabelResourceSlug:    "existingsecret1",
+						validation.LabelEnvironmentUUID: "env-uuid-production",
+						validation.LabelProjectUUID:     "550e8400-e29b-41d4-a716-446655440000",
+					},
+				},
+				Spec: platformv1alpha1.ApplicationSpec{
+					EnvironmentRef: corev1.LocalObjectReference{
+						Name: "environment-production",
+					},
+					Type: platformv1alpha1.ApplicationTypeGitRepository,
+					GitRepository: &platformv1alpha1.GitRepositoryConfig{
+						Provider:     platformv1alpha1.GitProviderGitHub,
+						Repository:   "myorg/existingsecret-repo",
+						PublicAccess: true,
+						Env: &corev1.LocalObjectReference{
+							Name: secretName,
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, app)).To(Succeed())
+
+			By("Reconciling the application")
+			reconciler := &ApplicationReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+
+			// First reconcile: adds finalizer
+			_, err := reconciler.Reconcile(ctx, ctrl.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      app.Name,
+					Namespace: app.Namespace,
+				},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Second reconcile: handles env secret check
+			_, err = reconciler.Reconcile(ctx, ctrl.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      app.Name,
+					Namespace: app.Namespace,
+				},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Verifying existing secret data was preserved")
+			var retrievedSecret corev1.Secret
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name:      secretName,
+				Namespace: app.Namespace,
+			}, &retrievedSecret)).To(Succeed())
+			Expect(retrievedSecret.Data).To(HaveKeyWithValue("EXISTING_VAR", []byte("existing-value")))
+
+			// Cleanup
+			defer func() {
+				Expect(k8sClient.Delete(ctx, app)).To(Succeed())
+				Expect(k8sClient.Delete(ctx, &retrievedSecret)).To(Succeed())
 			}()
 		})
 	})

@@ -38,20 +38,20 @@ const (
 )
 
 // generateMySQLCredentialsSecret creates a secret with MySQL root credentials
-func generateMySQLCredentialsSecret(deployment *platformv1alpha1.Deployment, projectSlug, appSlug string, namespace string) (*corev1.Secret, error) {
+func generateMySQLCredentialsSecret(deployment *platformv1alpha1.Deployment, projectName, projectSlug, appSlug string, namespace string) (*corev1.Secret, error) {
 	password, err := generateSecurePassword()
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate MySQL password: %w", err)
 	}
 
-	secretName := fmt.Sprintf("mysql-secret-%s-kibaship-com", deployment.GetSlug())
+	secretName := fmt.Sprintf("mysql-secret-%s", deployment.GetUUID())
 
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      secretName,
 			Namespace: namespace,
 			Labels: map[string]string{
-				"app.kubernetes.io/name":        fmt.Sprintf("project-%s", projectSlug),
+				"app.kubernetes.io/name":        projectName,
 				"app.kubernetes.io/managed-by":  "kibaship",
 				"app.kubernetes.io/component":   "mysql-credentials",
 				"project.kibaship.com/slug":     projectSlug,
@@ -74,14 +74,16 @@ func generateMySQLCredentialsSecret(deployment *platformv1alpha1.Deployment, pro
 }
 
 // generateInnoDBCluster creates an InnoDBCluster resource for MySQL deployment
-func generateInnoDBCluster(deployment *platformv1alpha1.Deployment, app *platformv1alpha1.Application, projectSlug, appSlug string, secretName, namespace string) *unstructured.Unstructured {
+func generateInnoDBCluster(deployment *platformv1alpha1.Deployment, app *platformv1alpha1.Application, projectName, projectSlug, appSlug string, secretName, namespace string) *unstructured.Unstructured {
+	deploymentUUID := deployment.GetUUID()
+
 	// MySQL operator has a 40-character limit, use simple naming
-	clusterName := fmt.Sprintf("mysql-%s", deployment.GetSlug())
+	clusterName := fmt.Sprintf("mysql-%s", deploymentUUID)
 
 	// If name is still too long, truncate it
 	if len(clusterName) > 40 {
 		// Use hash for uniqueness if still too long
-		hash := sha256.Sum256([]byte(deployment.GetSlug()))
+		hash := sha256.Sum256([]byte(deploymentUUID))
 		clusterName = fmt.Sprintf("mysql-%x", hash)[:40]
 	}
 
@@ -93,7 +95,7 @@ func generateInnoDBCluster(deployment *platformv1alpha1.Deployment, app *platfor
 				"name":      clusterName,
 				"namespace": namespace,
 				"labels": map[string]interface{}{
-					"app.kubernetes.io/name":        fmt.Sprintf("project-%s", projectSlug),
+					"app.kubernetes.io/name":        projectName,
 					"app.kubernetes.io/managed-by":  "kibaship",
 					"app.kubernetes.io/component":   "mysql-database",
 					"project.kibaship.com/slug":     projectSlug,
@@ -111,7 +113,7 @@ func generateInnoDBCluster(deployment *platformv1alpha1.Deployment, app *platfor
 				"datadirVolumeClaimTemplate": map[string]interface{}{
 					"metadata": map[string]interface{}{
 						"labels": map[string]interface{}{
-							"app.kubernetes.io/name":       fmt.Sprintf("project-%s", projectSlug),
+							"app.kubernetes.io/name":       projectName,
 							"app.kubernetes.io/managed-by": "kibaship",
 							"project.kibaship.com/slug":    projectSlug,
 						},
@@ -160,16 +162,16 @@ func generateSecurePassword() (string, error) {
 
 // generateMySQLResourceNames generates resource names following naming conventions
 func generateMySQLResourceNames(deployment *platformv1alpha1.Deployment, _, _ string) (secretName, clusterName string) {
-	deploymentSlug := deployment.GetSlug()
+	deploymentUUID := deployment.GetUUID()
 
 	// For secrets
-	secretName = fmt.Sprintf("mysql-secret-%s-kibaship-com", deploymentSlug)
+	secretName = fmt.Sprintf("mysql-secret-%s", deploymentUUID)
 
 	// For InnoDBCluster (40 character limit)
-	clusterName = fmt.Sprintf("mysql-%s", deploymentSlug)
+	clusterName = fmt.Sprintf("mysql-%s", deploymentUUID)
 	if len(clusterName) > 40 {
 		// Use hash for uniqueness if too long
-		hash := sha256.Sum256([]byte(deploymentSlug))
+		hash := sha256.Sum256([]byte(deploymentUUID))
 		clusterName = fmt.Sprintf("mysql-%x", hash)[:40]
 	}
 	return

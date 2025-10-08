@@ -32,7 +32,7 @@ import (
 
 const (
 	// SecretName is the name of the secret containing the API key
-	SecretName = "api-server-api-key-kibaship-com"
+	SecretName = "api-server-api-key"
 	// SecretKey is the key within the secret data
 	SecretKey = "api-key"
 )

@@ -47,7 +47,7 @@ var _ = Describe("Deployment Integration", func() {
 		jsonData, err := json.Marshal(projectPayload)
 		Expect(err).NotTo(HaveOccurred())
 
-		req, err := http.NewRequest("POST", "/projects", bytes.NewBuffer(jsonData))
+		req, err := http.NewRequest("POST", "/v1/projects", bytes.NewBuffer(jsonData))
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+apiKey)
@@ -68,7 +68,7 @@ var _ = Describe("Deployment Integration", func() {
 		jsonData, err = json.Marshal(envPayload)
 		Expect(err).NotTo(HaveOccurred())
 
-		req, err = http.NewRequest("POST", "/projects/"+createdProject.Slug+"/environments", bytes.NewBuffer(jsonData))
+		req, err = http.NewRequest("POST", "/v1/projects/"+createdProject.UUID+"/environments", bytes.NewBuffer(jsonData))
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+apiKey)
@@ -96,7 +96,7 @@ var _ = Describe("Deployment Integration", func() {
 		jsonData, err = json.Marshal(applicationPayload)
 		Expect(err).NotTo(HaveOccurred())
 
-		req, err = http.NewRequest("POST", "/environments/"+createdEnvironment.Slug+"/applications", bytes.NewBuffer(jsonData))
+		req, err = http.NewRequest("POST", "/v1/environments/"+createdEnvironment.UUID+"/applications", bytes.NewBuffer(jsonData))
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+apiKey)
@@ -111,7 +111,7 @@ var _ = Describe("Deployment Integration", func() {
 
 		// Create deployment
 		payload := models.DeploymentCreateRequest{
-			ApplicationSlug: createdApplication.Slug,
+			ApplicationUUID: createdApplication.UUID,
 			GitRepository: &models.GitRepositoryDeploymentConfig{
 				CommitSHA: "abc123def456",
 				Branch:    "main",
@@ -121,7 +121,7 @@ var _ = Describe("Deployment Integration", func() {
 		jsonData, err = json.Marshal(payload)
 		Expect(err).NotTo(HaveOccurred())
 
-		req, err = http.NewRequest("POST", "/applications/"+createdApplication.Slug+"/deployments", bytes.NewBuffer(jsonData))
+		req, err = http.NewRequest("POST", "/v1/applications/"+createdApplication.UUID+"/deployments", bytes.NewBuffer(jsonData))
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+apiKey)
@@ -147,7 +147,7 @@ var _ = Describe("Deployment Integration", func() {
 		// Verify CRD
 		var deployment v1alpha1.Deployment
 		err = k8sClient.Get(ctx, client.ObjectKey{
-			Name:      "deployment-" + response.Slug + "-kibaship-com",
+			Name:      "deployment-" + response.UUID + "",
 			Namespace: "default",
 		}, &deployment)
 		Expect(err).NotTo(HaveOccurred())
@@ -166,7 +166,7 @@ var _ = Describe("Deployment Integration", func() {
 		_ = k8sClient.Delete(ctx, &deployment)
 		var application v1alpha1.Application
 		err = k8sClient.Get(ctx, client.ObjectKey{
-			Name:      "application-" + createdApplication.Slug + "-kibaship-com",
+			Name:      "application-" + createdApplication.UUID + "",
 			Namespace: "default",
 		}, &application)
 		if err == nil {
@@ -174,20 +174,20 @@ var _ = Describe("Deployment Integration", func() {
 		}
 		var project v1alpha1.Project
 		err = k8sClient.Get(ctx, client.ObjectKey{
-			Name: "project-" + createdProject.Slug + "-kibaship-com",
+			Name: "project-" + createdProject.UUID + "",
 		}, &project)
 		if err == nil {
 			_ = k8sClient.Delete(ctx, &project)
 		}
 	})
 
-	It("retrieves deployment by slug", NodeTimeout(30*time.Second), func(ctx SpecContext) {
+	It("retrieves deployment by UUID", NodeTimeout(30*time.Second), func(ctx SpecContext) {
 		apiKey := generateTestAPIKey()
 		router := setupIntegrationTestRouter(apiKey)
 
 		createdProject, createdApplication, createdDeployment := createTestDeployment(router, apiKey)
 
-		req, err := http.NewRequest("GET", "/deployments/"+createdDeployment.Slug, nil)
+		req, err := http.NewRequest("GET", "/v1/deployments/"+createdDeployment.UUID, nil)
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 
@@ -213,7 +213,7 @@ var _ = Describe("Deployment Integration", func() {
 
 		createdProject, createdApplication, createdDeployment := createTestDeployment(router, apiKey)
 
-		req, err := http.NewRequest("GET", "/applications/"+createdApplication.Slug+"/deployments", nil)
+		req, err := http.NewRequest("GET", "/v1/applications/"+createdApplication.UUID+"/deployments", nil)
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 
@@ -244,7 +244,7 @@ func createTestDeployment(router http.Handler, apiKey string) (*models.ProjectRe
 	jsonData, err := json.Marshal(projectPayload)
 	Expect(err).NotTo(HaveOccurred())
 
-	req, err := http.NewRequest("POST", "/projects", bytes.NewBuffer(jsonData))
+	req, err := http.NewRequest("POST", "/v1/projects", bytes.NewBuffer(jsonData))
 	Expect(err).NotTo(HaveOccurred())
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+apiKey)
@@ -265,7 +265,7 @@ func createTestDeployment(router http.Handler, apiKey string) (*models.ProjectRe
 	jsonData, err = json.Marshal(envPayload)
 	Expect(err).NotTo(HaveOccurred())
 
-	req, err = http.NewRequest("POST", "/projects/"+createdProject.Slug+"/environments", bytes.NewBuffer(jsonData))
+	req, err = http.NewRequest("POST", "/v1/projects/"+createdProject.UUID+"/environments", bytes.NewBuffer(jsonData))
 	Expect(err).NotTo(HaveOccurred())
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+apiKey)
@@ -293,7 +293,7 @@ func createTestDeployment(router http.Handler, apiKey string) (*models.ProjectRe
 	jsonData, err = json.Marshal(applicationPayload)
 	Expect(err).NotTo(HaveOccurred())
 
-	req, err = http.NewRequest("POST", "/environments/"+createdEnvironment.Slug+"/applications", bytes.NewBuffer(jsonData))
+	req, err = http.NewRequest("POST", "/v1/environments/"+createdEnvironment.UUID+"/applications", bytes.NewBuffer(jsonData))
 	Expect(err).NotTo(HaveOccurred())
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+apiKey)
@@ -308,7 +308,7 @@ func createTestDeployment(router http.Handler, apiKey string) (*models.ProjectRe
 
 	// Create deployment
 	deploymentPayload := models.DeploymentCreateRequest{
-		ApplicationSlug: createdApplication.Slug,
+		ApplicationUUID: createdApplication.UUID,
 		GitRepository: &models.GitRepositoryDeploymentConfig{
 			CommitSHA: "test123commit",
 			Branch:    "develop",
@@ -318,7 +318,7 @@ func createTestDeployment(router http.Handler, apiKey string) (*models.ProjectRe
 	jsonData, err = json.Marshal(deploymentPayload)
 	Expect(err).NotTo(HaveOccurred())
 
-	req, err = http.NewRequest("POST", "/applications/"+createdApplication.Slug+"/deployments", bytes.NewBuffer(jsonData))
+	req, err = http.NewRequest("POST", "/v1/applications/"+createdApplication.UUID+"/deployments", bytes.NewBuffer(jsonData))
 	Expect(err).NotTo(HaveOccurred())
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+apiKey)
@@ -339,7 +339,7 @@ func cleanupTestDeployment(ctx context.Context, project *models.ProjectResponse,
 	// Clean up deployment
 	var dep v1alpha1.Deployment
 	err := k8sClient.Get(ctx, client.ObjectKey{
-		Name:      "deployment-" + deployment.Slug + "-kibaship-com",
+		Name:      "deployment-" + deployment.UUID + "",
 		Namespace: "default",
 	}, &dep)
 	if err == nil {
@@ -349,7 +349,7 @@ func cleanupTestDeployment(ctx context.Context, project *models.ProjectResponse,
 	// Clean up application
 	var app v1alpha1.Application
 	err = k8sClient.Get(ctx, client.ObjectKey{
-		Name:      "application-" + application.Slug + "-kibaship-com",
+		Name:      "application-" + application.UUID + "",
 		Namespace: "default",
 	}, &app)
 	if err == nil {
@@ -359,7 +359,7 @@ func cleanupTestDeployment(ctx context.Context, project *models.ProjectResponse,
 	// Clean up project
 	var proj v1alpha1.Project
 	err = k8sClient.Get(ctx, client.ObjectKey{
-		Name:      "project-" + project.Slug + "-kibaship-com",
+		Name:      "project-" + project.UUID + "",
 		Namespace: "default",
 	}, &proj)
 	if err == nil {

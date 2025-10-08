@@ -19,7 +19,7 @@ import (
 var _ = Describe("API Server Application Domain CRUD", func() {
 	It("creates a custom domain, fetches it, then deletes it and verifies CR removal", func() {
 		By("fetching API key from api-server secret")
-		cmd := exec.Command("kubectl", "get", "secret", "api-server-api-key-kibaship-com", "-n", "kibaship-operator", "-o", "jsonpath={.data.api-key}")
+		cmd := exec.Command("kubectl", "get", "secret", "api-server-api-key", "-n", "kibaship-operator", "-o", "jsonpath={.data.api-key}")
 		output, err := cmd.CombinedOutput()
 		Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("failed to get api key secret: %s", string(output)))
 		encodedKey := strings.TrimSpace(string(output))
@@ -47,14 +47,14 @@ var _ = Describe("API Server Application Domain CRUD", func() {
 
 		var domainCRName string
 
-		By("creating a project via POST /projects")
+		By("creating a project via POST /v1/projects")
 		workspaceUUID := workspaceUUIDConst
 		projReqBody := map[string]any{
 			"name":          "proj-for-domain-crud-e2e",
 			"workspaceUuid": workspaceUUID,
 		}
 		projBytes, _ := json.Marshal(projReqBody)
-		reqProj, _ := http.NewRequest("POST", "http://127.0.0.1:18080/projects", bytes.NewReader(projBytes))
+		reqProj, _ := http.NewRequest("POST", "http://127.0.0.1:18080/v1/projects", bytes.NewReader(projBytes))
 		reqProj.Header.Set("Content-Type", "application/json")
 		reqProj.Header.Set("Authorization", "Bearer "+apiKey)
 		respProj, err := httpClient.Do(reqProj)
@@ -62,18 +62,18 @@ var _ = Describe("API Server Application Domain CRUD", func() {
 		defer func() { _ = respProj.Body.Close() }()
 		Expect(respProj.StatusCode).To(Equal(http.StatusCreated))
 		var projResp struct {
-			Slug string `json:"slug"`
+			UUID string `json:"uuid"`
 		}
 		_ = json.NewDecoder(respProj.Body).Decode(&projResp)
-		Expect(projResp.Slug).NotTo(BeEmpty())
+		Expect(projResp.UUID).NotTo(BeEmpty())
 
-		By("creating an environment via POST /projects/{slug}/environments")
+		By("creating an environment via POST /v1/projects/{uuid}/environments")
 		envReqBody := map[string]any{
 			"name":        "production",
 			"description": "Production environment",
 		}
 		envBytes, _ := json.Marshal(envReqBody)
-		reqEnv, _ := http.NewRequest("POST", fmt.Sprintf("http://127.0.0.1:18080/projects/%s/environments", projResp.Slug), bytes.NewReader(envBytes))
+		reqEnv, _ := http.NewRequest("POST", fmt.Sprintf("http://127.0.0.1:18080/v1/projects/%s/environments", projResp.UUID), bytes.NewReader(envBytes))
 		reqEnv.Header.Set("Content-Type", "application/json")
 		reqEnv.Header.Set("Authorization", "Bearer "+apiKey)
 		respEnv, err := httpClient.Do(reqEnv)
@@ -81,12 +81,12 @@ var _ = Describe("API Server Application Domain CRUD", func() {
 		defer func() { _ = respEnv.Body.Close() }()
 		Expect(respEnv.StatusCode).To(Equal(http.StatusCreated))
 		var envResp struct {
-			Slug string `json:"slug"`
+			UUID string `json:"uuid"`
 		}
 		_ = json.NewDecoder(respEnv.Body).Decode(&envResp)
-		Expect(envResp.Slug).NotTo(BeEmpty())
+		Expect(envResp.UUID).NotTo(BeEmpty())
 
-		By("creating an application via POST /environments/{slug}/applications (GitRepository)")
+		By("creating an application via POST /v1/environments/{uuid}/applications (GitRepository)")
 		appReqBody := map[string]any{
 			"name": "app-for-domain-crud-e2e",
 			"type": "GitRepository",
@@ -99,7 +99,7 @@ var _ = Describe("API Server Application Domain CRUD", func() {
 			},
 		}
 		appBytes, _ := json.Marshal(appReqBody)
-		reqApp, _ := http.NewRequest("POST", fmt.Sprintf("http://127.0.0.1:18080/environments/%s/applications", envResp.Slug), bytes.NewReader(appBytes))
+		reqApp, _ := http.NewRequest("POST", fmt.Sprintf("http://127.0.0.1:18080/v1/environments/%s/applications", envResp.UUID), bytes.NewReader(appBytes))
 		reqApp.Header.Set("Content-Type", "application/json")
 		reqApp.Header.Set("Authorization", "Bearer "+apiKey)
 		respApp, err := httpClient.Do(reqApp)
@@ -107,12 +107,13 @@ var _ = Describe("API Server Application Domain CRUD", func() {
 		defer func() { _ = respApp.Body.Close() }()
 		Expect(respApp.StatusCode).To(Equal(http.StatusCreated))
 		var appResp struct {
+			UUID string `json:"uuid"`
 			Slug string `json:"slug"`
 		}
 		_ = json.NewDecoder(respApp.Body).Decode(&appResp)
 		Expect(appResp.Slug).NotTo(BeEmpty())
 
-		By("creating a custom domain via POST /applications/{applicationSlug}/domains")
+		By("creating a custom domain via POST /v1/applications/{uuid}/domains")
 		domainReq := map[string]any{
 			"domain":  "custom-e2e.example.com",
 			"port":    3000,
@@ -120,7 +121,7 @@ var _ = Describe("API Server Application Domain CRUD", func() {
 			"default": false,
 		}
 		domainBytes, _ := json.Marshal(domainReq)
-		reqDom, _ := http.NewRequest("POST", fmt.Sprintf("http://127.0.0.1:18080/applications/%s/domains", appResp.Slug), bytes.NewReader(domainBytes))
+		reqDom, _ := http.NewRequest("POST", fmt.Sprintf("http://127.0.0.1:18080/v1/applications/%s/domains", appResp.UUID), bytes.NewReader(domainBytes))
 		reqDom.Header.Set("Content-Type", "application/json")
 		reqDom.Header.Set("Authorization", "Bearer "+apiKey)
 		respDom, err := httpClient.Do(reqDom)
@@ -128,13 +129,15 @@ var _ = Describe("API Server Application Domain CRUD", func() {
 		defer func() { _ = respDom.Body.Close() }()
 		Expect(respDom.StatusCode).To(Equal(http.StatusCreated))
 		var domResp struct {
+			UUID string `json:"uuid"`
 			Slug string `json:"slug"`
 		}
 		_ = json.NewDecoder(respDom.Body).Decode(&domResp)
-		Expect(domResp.Slug).NotTo(BeEmpty())
+		Expect(domResp.UUID).NotTo(BeEmpty())
+		Expect(domResp.UUID).NotTo(BeEmpty())
 
-		By("GET /domains/{slug} returns the domain")
-		reqGet, _ := http.NewRequest("GET", fmt.Sprintf("http://127.0.0.1:18080/domains/%s", domResp.Slug), nil)
+		By("GET /v1/domains/{uuid} returns the domain")
+		reqGet, _ := http.NewRequest("GET", fmt.Sprintf("http://127.0.0.1:18080/v1/domains/%s", domResp.UUID), nil)
 		reqGet.Header.Set("Authorization", "Bearer "+apiKey)
 		respGet, err := httpClient.Do(reqGet)
 		Expect(err).NotTo(HaveOccurred())
@@ -142,7 +145,7 @@ var _ = Describe("API Server Application Domain CRUD", func() {
 		Expect(respGet.StatusCode).To(Equal(http.StatusOK))
 
 		By("verifying Certificate is created and status.certificateRef is set")
-		domainCRName = fmt.Sprintf("domain-%s-kibaship-com", domResp.Slug)
+		domainCRName = fmt.Sprintf("domain-%s", domResp.UUID)
 		// Certificate should be named ad-<applicationdomain-name> in the certificates namespace
 		certName := fmt.Sprintf("ad-%s", domainCRName)
 		Eventually(func() bool {
@@ -174,17 +177,17 @@ var _ = Describe("API Server Application Domain CRUD", func() {
 			return strings.TrimSpace(string(out)), err
 		}, "2m", "5s").ShouldNot(BeEmpty())
 
-		By("DELETE /domains/{slug} deletes the domain")
-		reqDel, _ := http.NewRequest("DELETE", fmt.Sprintf("http://127.0.0.1:18080/domains/%s", domResp.Slug), nil)
+		By("DELETE /v1/domains/{uuid} deletes the domain")
+		reqDel, _ := http.NewRequest("DELETE", fmt.Sprintf("http://127.0.0.1:18080/v1/domains/%s", domResp.UUID), nil)
 		reqDel.Header.Set("Authorization", "Bearer "+apiKey)
 		respDel, err := httpClient.Do(reqDel)
 		Expect(err).NotTo(HaveOccurred())
 		defer func() { _ = respDel.Body.Close() }()
 		Expect(respDel.StatusCode).To(Equal(http.StatusNoContent))
 
-		By("verifying ApplicationDomain CR for slug is gone")
-		// The CR name pattern for custom domains comes from service: domain-<slug>-kibaship-com
-		domainCRName = fmt.Sprintf("domain-%s-kibaship-com", domResp.Slug)
+		By("verifying ApplicationDomain CR for UUID is gone")
+		// The CR name pattern for custom domains comes from service: domain-<uuid>
+		domainCRName = fmt.Sprintf("domain-%s", domResp.UUID)
 		Eventually(func() bool {
 			cmd := exec.Command("kubectl", "-n", "default", "get", "applicationdomains.platform.operator.kibaship.com", domainCRName)
 			_, err := cmd.CombinedOutput()

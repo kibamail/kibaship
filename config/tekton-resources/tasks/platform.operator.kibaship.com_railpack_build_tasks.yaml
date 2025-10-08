@@ -19,14 +19,14 @@ spec:
     - name: railpackFrontendSource
       type: string
       description: Railpack frontend gateway source for BuildKit (pin to CLI version)
-      default: "ghcr.io/railwayapp/railpack-frontend:v0.7.2"
+      default: "ghcr.io/railwayapp/railpack-frontend:v0.9.0"
     - name: imageTag
       type: string
       description: Full image tag to push (e.g., registry.registry.svc.cluster.local/namespace/app-uuid:deployment-uuid)
     - name: buildImage
       type: string
       description: Image for buildctl client (for kustomize override convenience)
-      default: "ghcr.io/kibamail/kibaship-railpack-build:0.1.0"
+      default: "kibamail/kibaship-railpack-build:0.1.0"
   workspaces:
     - name: output
       description: Shared workspace containing the cloned repository and plan
@@ -35,6 +35,9 @@ spec:
       optional: true
     - name: registry-ca
       description: Registry CA certificate for TLS trust
+      optional: true
+    - name: app-env-vars
+      description: Application environment variables from secret
       optional: true
   results:
     - name: buildOutput

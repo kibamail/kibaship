@@ -2,9 +2,11 @@ package e2e
 
 import (
 	"context"
+	"fmt"
 	"os/exec"
 	"strings"
 
+	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -16,8 +18,10 @@ import (
 
 var _ = Describe("Project Reconciliation", func() {
 	var (
-		k8sClient kubernetes.Interface
-		ctx       context.Context
+		k8sClient   kubernetes.Interface
+		ctx         context.Context
+		projectUUID string
+		projectName string
 	)
 
 	BeforeEach(func() {
@@ -25,6 +29,10 @@ var _ = Describe("Project Reconciliation", func() {
 		client, err := getKubernetesClient()
 		Expect(err).NotTo(HaveOccurred())
 		k8sClient = client
+
+		// Generate UUID for this test run
+		projectUUID = uuid.New().String()
+		projectName = fmt.Sprintf("project-%s", projectUUID)
 	})
 
 	AfterEach(func() {
@@ -33,21 +41,46 @@ var _ = Describe("Project Reconciliation", func() {
 
 	Context("When creating a new Project", func() {
 		It("should successfully reconcile with all controller side effects", func() {
-			By("Applying the test project YAML")
-			cmd := exec.Command("kubectl", "apply", "-f", "test/e2e/project-reconciliation/test-project.yaml")
+			By("Applying the test project with inline manifest")
+			projectManifest := fmt.Sprintf(`apiVersion: platform.operator.kibaship.com/v1alpha1
+kind: Project
+metadata:
+  name: %s
+  labels:
+    platform.kibaship.com/uuid: "%s"
+    platform.kibaship.com/slug: "%s"
+    platform.kibaship.com/workspace-uuid: "%s"
+spec:
+  applicationTypes:
+    dockerImage:
+      enabled: true
+    gitRepository:
+      enabled: true
+    mysql:
+      enabled: true
+    postgres:
+      enabled: true
+    mysqlCluster:
+      enabled: false
+    postgresCluster:
+      enabled: false
+`, projectName, projectUUID, projectName, workspaceUUIDConst)
+
+			cmd := exec.Command("kubectl", "apply", "-f", "-")
+			cmd.Stdin = strings.NewReader(projectManifest)
 			_, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Verifying Project resource exists and passes validation")
 			Eventually(func() bool {
-				cmd := exec.Command("kubectl", "get", "project", "test-project-reconciliation-e2e")
+				cmd := exec.Command("kubectl", "get", "project", projectName)
 				_, err := utils.Run(cmd)
 				return err == nil
 			}, "30s", "2s").Should(BeTrue(), "Project should be created successfully")
 
 			By("Verifying Project has finalizer added")
 			Eventually(func() bool {
-				cmd := exec.Command("kubectl", "get", "project", testProjectName, "-o", finalizersPath)
+				cmd := exec.Command("kubectl", "get", "project", projectName, "-o", finalizersPath)
 				output, err := cmd.CombinedOutput()
 				if err != nil {
 					return false
@@ -57,7 +90,7 @@ var _ = Describe("Project Reconciliation", func() {
 
 			By("Verifying Project status becomes Ready")
 			Eventually(func() bool {
-				cmd := exec.Command("kubectl", "get", "project", testProjectName, "-o", statusPhasePath)
+				cmd := exec.Command("kubectl", "get", "project", projectName, "-o", statusPhasePath)
 				output, err := cmd.CombinedOutput()
 				if err != nil {
 					return false
@@ -66,7 +99,7 @@ var _ = Describe("Project Reconciliation", func() {
 			}, "2m", "5s").Should(BeTrue(), "Project should become Ready")
 
 			By("Verifying Project namespace is created")
-			expectedNamespace := "project-test-project-reconciliation-e2e-kibaship-com"
+			expectedNamespace := projectName
 			Eventually(func() error {
 				_, err := k8sClient.CoreV1().Namespaces().Get(ctx, expectedNamespace, metav1.GetOptions{})
 				return err
@@ -81,20 +114,20 @@ var _ = Describe("Project Reconciliation", func() {
 				return ns.Labels
 			}, "30s", "2s").Should(And(
 				HaveKeyWithValue("app.kubernetes.io/managed-by", "kibaship-operator"),
-				HaveKeyWithValue("platform.kibaship.com/project-name", "test-project-reconciliation-e2e"),
-				HaveKeyWithValue("platform.kibaship.com/uuid", "550e8400-e29b-41d4-a716-446655440001"),
-				HaveKeyWithValue("platform.kibaship.com/workspace-uuid", "6ba7b810-9dad-11d1-80b4-00c04fd430c8"),
+				HaveKeyWithValue("platform.kibaship.com/project-name", projectName),
+				HaveKeyWithValue("platform.kibaship.com/uuid", projectUUID),
+				HaveKeyWithValue("platform.kibaship.com/workspace-uuid", workspaceUUIDConst),
 			), "Namespace should have correct labels")
 
 			By("Verifying service account is created")
-			serviceAccountName := "project-test-project-reconciliation-e2e-sa-kibaship-com"
+			serviceAccountName := fmt.Sprintf("%s-sa", projectName)
 			Eventually(func() error {
 				_, err := k8sClient.CoreV1().ServiceAccounts(expectedNamespace).Get(ctx, serviceAccountName, metav1.GetOptions{})
 				return err
 			}, "1m", "5s").Should(Succeed(), "Service account should be created")
 
 			By("Verifying admin role is created with full permissions")
-			roleName := "project-test-project-reconciliation-e2e-admin-role-kibaship-com"
+			roleName := fmt.Sprintf("%s-admin-role", projectName)
 			Eventually(func() []rbacv1.PolicyRule {
 				role, err := k8sClient.RbacV1().Roles(expectedNamespace).Get(ctx, roleName, metav1.GetOptions{})
 				if err != nil {
@@ -104,7 +137,7 @@ var _ = Describe("Project Reconciliation", func() {
 			}, "1m", "5s").Should(ContainElement(rbacv1.PolicyRule{APIGroups: []string{"*"}, Resources: []string{"*"}, Verbs: []string{"*"}}), "Role should have full permissions")
 
 			By("Verifying role binding connects service account to role")
-			roleBindingName := "project-test-project-reconciliation-e2e-admin-binding-kibaship-com"
+			roleBindingName := fmt.Sprintf("%s-admin-binding", projectName)
 			Eventually(func() bool {
 				rb, err := k8sClient.RbacV1().RoleBindings(expectedNamespace).Get(ctx, roleBindingName, metav1.GetOptions{})
 				if err != nil {
@@ -130,7 +163,7 @@ var _ = Describe("Project Reconciliation", func() {
 			}, "1m", "5s").Should(Succeed(), "Tekton role should be created")
 
 			By("Verifying Tekton role binding connects project service account to tekton role")
-			tektonRoleBindingName := "project-test-project-reconciliation-e2e-tekton-tasks-reader-binding-kibaship-com"
+			tektonRoleBindingName := fmt.Sprintf("%s-tekton-tasks-reader-binding", projectName)
 			Eventually(func() bool {
 				rb, err := k8sClient.RbacV1().RoleBindings("tekton-pipelines").Get(ctx, tektonRoleBindingName, metav1.GetOptions{})
 				if err != nil {
@@ -153,7 +186,7 @@ var _ = Describe("Project Reconciliation", func() {
 			Eventually(func() bool {
 				expectedLabels := map[string]string{
 					"app.kubernetes.io/managed-by":       "kibaship-operator",
-					"platform.kibaship.com/project-name": "test-project-reconciliation-e2e",
+					"platform.kibaship.com/project-name": projectName,
 				}
 				// Check service account labels
 				sa, err := k8sClient.CoreV1().ServiceAccounts(expectedNamespace).Get(ctx, serviceAccountName, metav1.GetOptions{})

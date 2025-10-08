@@ -44,13 +44,14 @@ var _ = Describe("NamespaceManager", func() {
 		ctx = context.Background()
 		namespaceManager = NewNamespaceManager(k8sClient)
 
-		// Generate unique project name to avoid conflicts between tests
+		// Generate unique project UUID and name to avoid conflicts between tests
 		uniqueID := time.Now().UnixNano()
+		uniqueUUID := fmt.Sprintf("550e8400-e29b-41d4-a716-%012d", uniqueID%1000000000000)
 		testProject = &platformv1alpha1.Project{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: fmt.Sprintf("test-namespace-project-%d", uniqueID),
 				Labels: map[string]string{
-					validation.LabelResourceUUID:  "550e8400-e29b-41d4-a716-446655440010",
+					validation.LabelResourceUUID:  uniqueUUID,
 					validation.LabelWorkspaceUUID: "6ba7b810-9dad-11d1-80b4-00c04fd430d0",
 				},
 			},
@@ -62,7 +63,7 @@ var _ = Describe("NamespaceManager", func() {
 	AfterEach(func() {
 		// Cleanup any namespaces that might have been created
 		if testProject != nil {
-			namespaceName := namespaceManager.GenerateNamespaceName(testProject.Name)
+			namespaceName := namespaceManager.GenerateNamespaceName(testProject.Labels[validation.LabelResourceUUID])
 			namespace := &corev1.Namespace{}
 			if err := k8sClient.Get(ctx, types.NamespacedName{Name: namespaceName}, namespace); err == nil {
 				_ = k8sClient.Delete(ctx, namespace)
@@ -85,14 +86,16 @@ var _ = Describe("NamespaceManager", func() {
 	})
 
 	Describe("GenerateNamespaceName", func() {
-		It("should generate correct namespace name with prefix and suffix", func() {
-			result := namespaceManager.GenerateNamespaceName("my-project")
-			Expect(result).To(Equal("project-my-project-kibaship-com"))
+		It("should generate correct namespace name with prefix", func() {
+			testUUID := "550e8400-e29b-41d4-a716-446655440000"
+			result := namespaceManager.GenerateNamespaceName(testUUID)
+			Expect(result).To(Equal("project-550e8400-e29b-41d4-a716-446655440000"))
 		})
 
-		It("should handle project names with hyphens", func() {
-			result := namespaceManager.GenerateNamespaceName("my-test-project")
-			Expect(result).To(Equal("project-my-test-project-kibaship-com"))
+		It("should handle UUIDs correctly", func() {
+			testUUID := "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+			result := namespaceManager.GenerateNamespaceName(testUUID)
+			Expect(result).To(Equal("project-6ba7b810-9dad-11d1-80b4-00c04fd430c8"))
 		})
 	})
 
@@ -104,13 +107,13 @@ var _ = Describe("NamespaceManager", func() {
 			Expect(namespace).NotTo(BeNil())
 
 			By("Verifying namespace properties")
-			expectedName := namespaceManager.GenerateNamespaceName(testProject.Name)
+			expectedName := namespaceManager.GenerateNamespaceName(testProject.Labels[validation.LabelResourceUUID])
 			Expect(namespace.Name).To(Equal(expectedName))
 
 			By("Verifying namespace labels")
 			Expect(namespace.Labels[ManagedByLabel]).To(Equal(ManagedByValue))
 			Expect(namespace.Labels[ProjectNameLabel]).To(Equal(testProject.Name))
-			Expect(namespace.Labels[validation.LabelResourceUUID]).To(Equal("550e8400-e29b-41d4-a716-446655440010"))
+			Expect(namespace.Labels[validation.LabelResourceUUID]).To(Equal(testProject.Labels[validation.LabelResourceUUID]))
 			Expect(namespace.Labels[validation.LabelWorkspaceUUID]).To(Equal("6ba7b810-9dad-11d1-80b4-00c04fd430d0"))
 
 			By("Verifying namespace annotations")
@@ -139,7 +142,8 @@ var _ = Describe("NamespaceManager", func() {
 
 		It("should fail if namespace exists for different project", func() {
 			By("Creating a namespace manually with different project UUID")
-			conflictingNamespaceName := "project-conflict-test-kibaship-com"
+			conflictProjectUUID := "550e8400-e29b-41d4-a716-446655440099"
+			conflictingNamespaceName := namespaceManager.GenerateNamespaceName(conflictProjectUUID)
 			conflictingNamespace := &corev1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: conflictingNamespaceName,
@@ -152,12 +156,12 @@ var _ = Describe("NamespaceManager", func() {
 			}
 			Expect(k8sClient.Create(ctx, conflictingNamespace)).To(Succeed())
 
-			// Create a test project that would conflict
+			// Create a test project that would conflict (same UUID generates same namespace name)
 			conflictProject := &platformv1alpha1.Project{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "conflict-test",
 					Labels: map[string]string{
-						validation.LabelResourceUUID: "550e8400-e29b-41d4-a716-446655440099",
+						validation.LabelResourceUUID: conflictProjectUUID,
 					},
 				},
 				Spec: platformv1alpha1.ProjectSpec{},
@@ -287,8 +291,8 @@ var _ = Describe("NamespaceManager", func() {
 			for _, ns := range namespaces {
 				foundNames = append(foundNames, ns.Name)
 			}
-			Expect(foundNames).To(ContainElement("project-list-test-project-1-kibaship-com"))
-			Expect(foundNames).To(ContainElement("project-list-test-project-2-kibaship-com"))
+			Expect(foundNames).To(ContainElement("project-550e8400-e29b-41d4-a716-446655440011"))
+			Expect(foundNames).To(ContainElement("project-550e8400-e29b-41d4-a716-446655440012"))
 
 			By("Cleaning up")
 			Expect(k8sClient.Delete(ctx, project1)).To(Succeed())
@@ -325,8 +329,9 @@ var _ = Describe("NamespaceManager", func() {
 		It("should create service account with all required resources", func() {
 			By("Verifying service account was created")
 			serviceAccount := &corev1.ServiceAccount{}
+			projectUUID := testProject.Labels[validation.LabelResourceUUID]
 			err := k8sClient.Get(ctx, types.NamespacedName{
-				Name:      namespaceManager.generateServiceAccountName(testProject.Name),
+				Name:      namespaceManager.generateServiceAccountName(projectUUID),
 				Namespace: testNamespace.Name,
 			}, serviceAccount)
 			Expect(err).NotTo(HaveOccurred())
@@ -334,7 +339,7 @@ var _ = Describe("NamespaceManager", func() {
 			By("Verifying service account has correct labels")
 			Expect(serviceAccount.Labels[ManagedByLabel]).To(Equal(ManagedByValue))
 			Expect(serviceAccount.Labels[ProjectNameLabel]).To(Equal(testProject.Name))
-			Expect(serviceAccount.Labels[validation.LabelResourceUUID]).To(Equal("550e8400-e29b-41d4-a716-446655440010"))
+			Expect(serviceAccount.Labels[validation.LabelResourceUUID]).To(Equal(testProject.Labels[validation.LabelResourceUUID]))
 			Expect(serviceAccount.Labels[validation.LabelWorkspaceUUID]).To(Equal("6ba7b810-9dad-11d1-80b4-00c04fd430d0"))
 
 			By("Verifying service account has correct annotations")
@@ -345,8 +350,9 @@ var _ = Describe("NamespaceManager", func() {
 		It("should create admin role with all permissions", func() {
 			By("Verifying role was created")
 			role := &rbacv1.Role{}
+			projectUUID := testProject.Labels[validation.LabelResourceUUID]
 			err := k8sClient.Get(ctx, types.NamespacedName{
-				Name:      namespaceManager.generateRoleName(testProject.Name),
+				Name:      namespaceManager.generateRoleName(projectUUID),
 				Namespace: testNamespace.Name,
 			}, role)
 			Expect(err).NotTo(HaveOccurred())
@@ -361,15 +367,16 @@ var _ = Describe("NamespaceManager", func() {
 			By("Verifying role has correct labels")
 			Expect(role.Labels[ManagedByLabel]).To(Equal(ManagedByValue))
 			Expect(role.Labels[ProjectNameLabel]).To(Equal(testProject.Name))
-			Expect(role.Labels[validation.LabelResourceUUID]).To(Equal("550e8400-e29b-41d4-a716-446655440010"))
+			Expect(role.Labels[validation.LabelResourceUUID]).To(Equal(testProject.Labels[validation.LabelResourceUUID]))
 			Expect(role.Labels[validation.LabelWorkspaceUUID]).To(Equal("6ba7b810-9dad-11d1-80b4-00c04fd430d0"))
 		})
 
 		It("should create role binding connecting service account to role", func() {
 			By("Verifying role binding was created")
 			roleBinding := &rbacv1.RoleBinding{}
+			projectUUID := testProject.Labels[validation.LabelResourceUUID]
 			err := k8sClient.Get(ctx, types.NamespacedName{
-				Name:      namespaceManager.generateRoleBindingName(testProject.Name),
+				Name:      namespaceManager.generateRoleBindingName(projectUUID),
 				Namespace: testNamespace.Name,
 			}, roleBinding)
 			Expect(err).NotTo(HaveOccurred())
@@ -378,18 +385,18 @@ var _ = Describe("NamespaceManager", func() {
 			Expect(roleBinding.Subjects).To(HaveLen(1))
 			subject := roleBinding.Subjects[0]
 			Expect(subject.Kind).To(Equal("ServiceAccount"))
-			Expect(subject.Name).To(Equal(namespaceManager.generateServiceAccountName(testProject.Name)))
+			Expect(subject.Name).To(Equal(namespaceManager.generateServiceAccountName(projectUUID)))
 			Expect(subject.Namespace).To(Equal(testNamespace.Name))
 
 			By("Verifying role binding has correct role reference")
 			Expect(roleBinding.RoleRef.APIGroup).To(Equal("rbac.authorization.k8s.io"))
 			Expect(roleBinding.RoleRef.Kind).To(Equal("Role"))
-			Expect(roleBinding.RoleRef.Name).To(Equal(namespaceManager.generateRoleName(testProject.Name)))
+			Expect(roleBinding.RoleRef.Name).To(Equal(namespaceManager.generateRoleName(projectUUID)))
 
 			By("Verifying role binding has correct labels")
 			Expect(roleBinding.Labels[ManagedByLabel]).To(Equal(ManagedByValue))
 			Expect(roleBinding.Labels[ProjectNameLabel]).To(Equal(testProject.Name))
-			Expect(roleBinding.Labels[validation.LabelResourceUUID]).To(Equal("550e8400-e29b-41d4-a716-446655440010"))
+			Expect(roleBinding.Labels[validation.LabelResourceUUID]).To(Equal(testProject.Labels[validation.LabelResourceUUID]))
 			Expect(roleBinding.Labels[validation.LabelWorkspaceUUID]).To(Equal("6ba7b810-9dad-11d1-80b4-00c04fd430d0"))
 		})
 
@@ -420,7 +427,7 @@ var _ = Describe("NamespaceManager", func() {
 			By("Verifying resources exist before cleanup")
 			serviceAccount := &corev1.ServiceAccount{}
 			err := k8sClient.Get(ctx, types.NamespacedName{
-				Name:      namespaceManager.generateServiceAccountName(testProject.Name),
+				Name:      namespaceManager.generateServiceAccountName(testProject.Labels[validation.LabelResourceUUID]),
 				Namespace: testNamespace.Name,
 			}, serviceAccount)
 			Expect(err).NotTo(HaveOccurred())
@@ -430,7 +437,7 @@ var _ = Describe("NamespaceManager", func() {
 
 			By("Verifying service account was deleted")
 			err = k8sClient.Get(ctx, types.NamespacedName{
-				Name:      namespaceManager.generateServiceAccountName(testProject.Name),
+				Name:      namespaceManager.generateServiceAccountName(testProject.Labels[validation.LabelResourceUUID]),
 				Namespace: testNamespace.Name,
 			}, serviceAccount)
 			Expect(errors.IsNotFound(err)).To(BeTrue())
@@ -438,7 +445,7 @@ var _ = Describe("NamespaceManager", func() {
 			By("Verifying role was deleted")
 			role := &rbacv1.Role{}
 			err = k8sClient.Get(ctx, types.NamespacedName{
-				Name:      namespaceManager.generateRoleName(testProject.Name),
+				Name:      namespaceManager.generateRoleName(testProject.Labels[validation.LabelResourceUUID]),
 				Namespace: testNamespace.Name,
 			}, role)
 			Expect(errors.IsNotFound(err)).To(BeTrue())
@@ -446,7 +453,7 @@ var _ = Describe("NamespaceManager", func() {
 			By("Verifying role binding was deleted")
 			roleBinding := &rbacv1.RoleBinding{}
 			err = k8sClient.Get(ctx, types.NamespacedName{
-				Name:      namespaceManager.generateRoleBindingName(testProject.Name),
+				Name:      namespaceManager.generateRoleBindingName(testProject.Labels[validation.LabelResourceUUID]),
 				Namespace: testNamespace.Name,
 			}, roleBinding)
 			Expect(errors.IsNotFound(err)).To(BeTrue())

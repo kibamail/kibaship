@@ -128,3 +128,103 @@ var _ = Measure("GenerateRandomSlug performance", func(b Benchmarker) {
 		Expect(err).NotTo(HaveOccurred())
 	})
 }, 100)
+
+var _ = Describe("GenerateHumanReadableSlug", func() {
+	It("generates correct format", func() {
+		slug, err := utils.GenerateHumanReadableSlug()
+		Expect(err).NotTo(HaveOccurred())
+
+		// Format: <adjective>-<noun>-<random-chars>
+		// Example: copper-forest-7x9k
+		formatRegex := regexp.MustCompile(`^[a-z]+-[a-z]+-[a-z0-9]{4}$`)
+		Expect(formatRegex.MatchString(slug)).To(BeTrue(), "Slug should match format <adjective>-<noun>-<random-chars>: %s", slug)
+	})
+
+	It("is DNS-compatible", func() {
+		slug, err := utils.GenerateHumanReadableSlug()
+		Expect(err).NotTo(HaveOccurred())
+
+		// DNS labels must match: [a-z0-9]([a-z0-9-]*[a-z0-9])?
+		dnsRegex := regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`)
+		Expect(dnsRegex.MatchString(slug)).To(BeTrue(), "Slug should be DNS-compatible: %s", slug)
+	})
+
+	It("generates unique slugs", func() {
+		const numSlugs = 100
+		slugs := make(map[string]bool)
+
+		for i := 0; i < numSlugs; i++ {
+			slug, err := utils.GenerateHumanReadableSlug()
+			Expect(err).NotTo(HaveOccurred())
+
+			// Check for duplicates (should be extremely rare with random suffix)
+			Expect(slugs[slug]).To(BeFalse(), "Generated duplicate slug: %s", slug)
+			slugs[slug] = true
+		}
+
+		Expect(slugs).To(HaveLen(numSlugs))
+	})
+
+	It("uses words from adjectives and nouns lists", func() {
+		slug, err := utils.GenerateHumanReadableSlug()
+		Expect(err).NotTo(HaveOccurred())
+
+		// Split slug into parts
+		parts := regexp.MustCompile(`-`).Split(slug, -1)
+		Expect(parts).To(HaveLen(3), "Slug should have 3 parts separated by hyphens")
+
+		// First part should be a word (adjective)
+		Expect(parts[0]).To(MatchRegexp(`^[a-z]+$`), "Adjective should be alphabetic")
+
+		// Second part should be a word (noun)
+		Expect(parts[1]).To(MatchRegexp(`^[a-z]+$`), "Noun should be alphabetic")
+
+		// Third part should be random alphanumeric
+		Expect(parts[2]).To(MatchRegexp(`^[a-z0-9]{4}$`), "Random suffix should be 4 alphanumeric characters")
+	})
+
+	It("random suffix is sufficiently random", func() {
+		const numSlugs = 100
+		suffixes := make(map[string]bool)
+
+		for i := 0; i < numSlugs; i++ {
+			slug, err := utils.GenerateHumanReadableSlug()
+			Expect(err).NotTo(HaveOccurred())
+
+			// Extract suffix (last part after splitting by -)
+			parts := regexp.MustCompile(`-`).Split(slug, -1)
+			suffix := parts[len(parts)-1]
+			suffixes[suffix] = true
+		}
+
+		// With 4 random characters from 36-character charset, we should get good uniqueness
+		// Expect at least 90% unique suffixes
+		Expect(len(suffixes)).To(BeNumerically(">=", 90), "Should generate mostly unique random suffixes")
+	})
+
+	It("generates human-readable names", func() {
+		// Generate a few slugs and verify they look reasonable
+		for i := 0; i < 10; i++ {
+			slug, err := utils.GenerateHumanReadableSlug()
+			Expect(err).NotTo(HaveOccurred())
+
+			// Should not start or end with hyphen
+			Expect(slug).NotTo(HavePrefix("-"), "Slug should not start with hyphen")
+			Expect(slug).NotTo(HaveSuffix("-"), "Slug should not end with hyphen")
+
+			// Should not have consecutive hyphens
+			Expect(slug).NotTo(ContainSubstring("--"), "Slug should not have consecutive hyphens")
+
+			// Length should be reasonable (adjective + noun + suffix + 2 hyphens)
+			// Minimum: 1 + 1 + 4 + 2 = 8 characters
+			Expect(len(slug)).To(BeNumerically(">=", 8), "Slug should be at least 8 characters")
+		}
+	})
+})
+
+var _ = Measure("GenerateHumanReadableSlug performance", func(b Benchmarker) {
+	b.Time("runtime", func() {
+		_, err := utils.GenerateHumanReadableSlug()
+		Expect(err).NotTo(HaveOccurred())
+	})
+}, 100)

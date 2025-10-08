@@ -24,6 +24,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -92,10 +93,11 @@ var _ = Describe("Project Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(updatedProject.Status.Phase).To(Equal("Ready"))
 			Expect(updatedProject.Status.NamespaceName).To(ContainSubstring("project-"))
-			Expect(updatedProject.Status.NamespaceName).To(ContainSubstring("-kibaship-com"))
+			Expect(updatedProject.Status.NamespaceName).To(Equal("project-550e8400-e29b-41d4-a716-446655440000"))
 
 			By("Verifying that a namespace was created for the project")
-			expectedNamespaceName := NamespacePrefix + resourceName + NamespaceSuffix
+			projectUUID := "550e8400-e29b-41d4-a716-446655440000"
+			expectedNamespaceName := NamespacePrefix + projectUUID + NamespaceSuffix
 			namespace := &corev1.Namespace{}
 			err = k8sClient.Get(ctx, types.NamespacedName{Name: expectedNamespaceName}, namespace)
 			Expect(err).NotTo(HaveOccurred())
@@ -103,7 +105,7 @@ var _ = Describe("Project Controller", func() {
 			By("Verifying namespace has correct labels")
 			Expect(namespace.Labels[ManagedByLabel]).To(Equal(ManagedByValue))
 			Expect(namespace.Labels[ProjectNameLabel]).To(Equal(resourceName))
-			Expect(namespace.Labels[validation.LabelResourceUUID]).To(Equal("550e8400-e29b-41d4-a716-446655440000"))
+			Expect(namespace.Labels[validation.LabelResourceUUID]).To(Equal(projectUUID))
 			Expect(namespace.Labels[validation.LabelWorkspaceUUID]).To(Equal("6ba7b810-9dad-11d1-80b4-00c04fd430c8"))
 
 			By("Verifying namespace has correct annotations")
@@ -111,13 +113,15 @@ var _ = Describe("Project Controller", func() {
 			Expect(namespace.Annotations["platform.kibaship.com/project"]).To(Equal(resourceName))
 
 			By("Verifying production environment was auto-created")
-			expectedNamespace := NamespacePrefix + resourceName + NamespaceSuffix
-			productionEnv := &platformv1alpha1.Environment{}
-			err = k8sClient.Get(ctx, types.NamespacedName{
-				Name:      "environment-production-kibaship-com",
-				Namespace: expectedNamespace,
-			}, productionEnv)
+			expectedNamespace := NamespacePrefix + projectUUID + NamespaceSuffix
+			envList := &platformv1alpha1.EnvironmentList{}
+			err = k8sClient.List(ctx, envList, client.InNamespace(expectedNamespace), client.MatchingLabels{
+				validation.LabelResourceSlug: "production",
+				validation.LabelProjectUUID:  projectUUID,
+			})
 			Expect(err).NotTo(HaveOccurred())
+			Expect(len(envList.Items)).To(Equal(1))
+			productionEnv := &envList.Items[0]
 
 			By("Verifying environment has correct labels")
 			Expect(productionEnv.Labels[validation.LabelResourceSlug]).To(Equal("production"))
@@ -297,7 +301,8 @@ var _ = Describe("Project Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Verifying namespace was created")
-			namespaceName := NamespacePrefix + "owner-ref-project" + NamespaceSuffix
+			projectUUID := testProject.Labels[validation.LabelResourceUUID]
+			namespaceName := NamespacePrefix + projectUUID + NamespaceSuffix
 			namespace := &corev1.Namespace{}
 			err = k8sClient.Get(ctx, types.NamespacedName{Name: namespaceName}, namespace)
 			Expect(err).NotTo(HaveOccurred())

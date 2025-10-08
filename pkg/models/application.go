@@ -47,26 +47,38 @@ const (
 	GitProviderBitbucket GitProvider = "bitbucket.com"
 )
 
+// HealthCheckConfig defines the health check configuration for an application
+type HealthCheckConfig struct {
+	Path                string `json:"path,omitempty" example:"/health"`
+	Port                int32  `json:"port,omitempty" example:"3000"`
+	InitialDelaySeconds int32  `json:"initialDelaySeconds,omitempty" example:"30"`
+	PeriodSeconds       int32  `json:"periodSeconds,omitempty" example:"10"`
+	TimeoutSeconds      int32  `json:"timeoutSeconds,omitempty" example:"5"`
+	SuccessThreshold    int32  `json:"successThreshold,omitempty" example:"1"`
+	FailureThreshold    int32  `json:"failureThreshold,omitempty" example:"3"`
+}
+
 // GitRepositoryConfig defines configuration for GitRepository applications
 type GitRepositoryConfig struct {
-	Provider           GitProvider `json:"provider" example:"github.com"`
-	Repository         string      `json:"repository" example:"myorg/myapp"`
-	PublicAccess       bool        `json:"publicAccess,omitempty" example:"false"`
-	SecretRef          *string     `json:"secretRef,omitempty" example:"git-credentials"`
-	Branch             string      `json:"branch,omitempty" example:"main"`
-	Path               string      `json:"path,omitempty" example:""`
-	RootDirectory      string      `json:"rootDirectory,omitempty" example:"./"`
-	BuildCommand       string      `json:"buildCommand,omitempty" example:"npm run build"`
-	StartCommand       string      `json:"startCommand,omitempty" example:"npm start"`
-	Env                *string     `json:"env,omitempty" example:"app-env-vars"`
-	SpaOutputDirectory string      `json:"spaOutputDirectory,omitempty" example:"dist"`
+	Provider           GitProvider        `json:"provider" example:"github.com"`
+	Repository         string             `json:"repository" example:"myorg/myapp"`
+	PublicAccess       bool               `json:"publicAccess,omitempty" example:"false"`
+	SecretRef          *string            `json:"secretRef,omitempty" example:"git-credentials"`
+	Branch             string             `json:"branch,omitempty" example:"main"`
+	Path               string             `json:"path,omitempty" example:""`
+	RootDirectory      string             `json:"rootDirectory,omitempty" example:"./"`
+	BuildCommand       string             `json:"buildCommand,omitempty" example:"npm run build"`
+	StartCommand       string             `json:"startCommand,omitempty" example:"npm start"`
+	SpaOutputDirectory string             `json:"spaOutputDirectory,omitempty" example:"dist"`
+	HealthCheck        *HealthCheckConfig `json:"healthCheck,omitempty"`
 }
 
 // DockerImageConfig defines configuration for DockerImage applications
 type DockerImageConfig struct {
-	Image              string  `json:"image" example:"nginx:latest"`
-	ImagePullSecretRef *string `json:"imagePullSecretRef,omitempty" example:"docker-registry-secret"`
-	Tag                string  `json:"tag,omitempty" example:"v1.0.0"`
+	Image              string             `json:"image" example:"nginx:latest"`
+	ImagePullSecretRef *string            `json:"imagePullSecretRef,omitempty" example:"docker-registry-secret"`
+	Tag                string             `json:"tag,omitempty" example:"v1.0.0"`
+	HealthCheck        *HealthCheckConfig `json:"healthCheck,omitempty"`
 }
 
 // MySQLConfig defines configuration for MySQL applications
@@ -102,7 +114,7 @@ type PostgresClusterConfig struct {
 // ApplicationCreateRequest represents a request to create an application
 type ApplicationCreateRequest struct {
 	Name            string                 `json:"name" example:"my-web-app"`
-	EnvironmentSlug string                 `json:"environmentSlug" example:"abc123de"`
+	EnvironmentUUID string                 `json:"environmentUuid" example:"123e4567-e89b-12d3-a456-426614174000"`
 	Type            ApplicationType        `json:"type" example:"DockerImage"`
 	GitRepository   *GitRepositoryConfig   `json:"gitRepository,omitempty"`
 	DockerImage     *DockerImageConfig     `json:"dockerImage,omitempty"`
@@ -121,6 +133,11 @@ type ApplicationUpdateRequest struct {
 	MySQLCluster    *MySQLClusterConfig    `json:"mysqlCluster,omitempty"`
 	Postgres        *PostgresConfig        `json:"postgres,omitempty"`
 	PostgresCluster *PostgresClusterConfig `json:"postgresCluster,omitempty"`
+}
+
+// ApplicationEnvUpdateRequest represents a request to update environment variables
+type ApplicationEnvUpdateRequest struct {
+	Variables map[string]string `json:"variables" example:"{\"API_KEY\":\"secret123\",\"DB_HOST\":\"localhost\"}"`
 }
 
 // Application represents an application in the system
@@ -200,17 +217,17 @@ func (req *ApplicationCreateRequest) Validate() *ValidationErrors {
 		})
 	}
 
-	// Validate environment slug
-	if strings.TrimSpace(req.EnvironmentSlug) == "" {
+	// Validate environment UUID
+	if strings.TrimSpace(req.EnvironmentUUID) == "" {
 		errors = append(errors, ValidationError{
-			Field:   "environmentSlug",
-			Message: "Environment slug is required",
+			Field:   "environmentUuid",
+			Message: "Environment UUID is required",
 		})
 	}
-	if !isValidSlug(req.EnvironmentSlug) {
+	if !validation.ValidateUUID(req.EnvironmentUUID) {
 		errors = append(errors, ValidationError{
-			Field:   "environmentSlug",
-			Message: "Environment slug must be a valid 8-character alphanumeric string",
+			Field:   "environmentUuid",
+			Message: "Environment UUID must be a valid UUID",
 		})
 	}
 
@@ -464,6 +481,7 @@ func (a *Application) ConvertFromCRD(crd *v1alpha1.Application) {
 	a.UUID = crd.GetLabels()[validation.LabelResourceUUID]
 	a.Slug = crd.GetLabels()[validation.LabelResourceSlug]
 	a.ProjectUUID = crd.GetLabels()[validation.LabelProjectUUID]
+	a.EnvironmentUUID = crd.GetLabels()[validation.LabelEnvironmentUUID]
 	a.Name = crd.GetAnnotations()[validation.AnnotationResourceName]
 	a.Type = ApplicationType(crd.Spec.Type)
 	a.CreatedAt = crd.CreationTimestamp.Time

@@ -47,7 +47,7 @@ var _ = Describe("Application Domain Integration", func() {
 		jsonData, err := json.Marshal(projectPayload)
 		Expect(err).NotTo(HaveOccurred())
 
-		req, err := http.NewRequest("POST", "/projects", bytes.NewBuffer(jsonData))
+		req, err := http.NewRequest("POST", "/v1/projects", bytes.NewBuffer(jsonData))
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+apiKey)
@@ -68,7 +68,7 @@ var _ = Describe("Application Domain Integration", func() {
 		jsonData, err = json.Marshal(envPayload)
 		Expect(err).NotTo(HaveOccurred())
 
-		req, err = http.NewRequest("POST", "/projects/"+createdProject.Slug+"/environments", bytes.NewBuffer(jsonData))
+		req, err = http.NewRequest("POST", "/v1/projects/"+createdProject.UUID+"/environments", bytes.NewBuffer(jsonData))
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+apiKey)
@@ -96,7 +96,7 @@ var _ = Describe("Application Domain Integration", func() {
 		jsonData, err = json.Marshal(applicationPayload)
 		Expect(err).NotTo(HaveOccurred())
 
-		req, err = http.NewRequest("POST", "/environments/"+createdEnvironment.Slug+"/applications", bytes.NewBuffer(jsonData))
+		req, err = http.NewRequest("POST", "/v1/environments/"+createdEnvironment.UUID+"/applications", bytes.NewBuffer(jsonData))
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+apiKey)
@@ -120,7 +120,7 @@ var _ = Describe("Application Domain Integration", func() {
 		jsonData, err = json.Marshal(payload)
 		Expect(err).NotTo(HaveOccurred())
 
-		req, err = http.NewRequest("POST", "/applications/"+createdApplication.Slug+"/domains", bytes.NewBuffer(jsonData))
+		req, err = http.NewRequest("POST", "/v1/applications/"+createdApplication.UUID+"/domains", bytes.NewBuffer(jsonData))
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+apiKey)
@@ -149,7 +149,7 @@ var _ = Describe("Application Domain Integration", func() {
 		// Verify CRD
 		var domain v1alpha1.ApplicationDomain
 		err = k8sClient.Get(ctx, client.ObjectKey{
-			Name:      "domain-" + response.Slug + "-kibaship-com",
+			Name:      "domain-" + response.UUID + "",
 			Namespace: "default",
 		}, &domain)
 		Expect(err).NotTo(HaveOccurred())
@@ -170,14 +170,14 @@ var _ = Describe("Application Domain Integration", func() {
 		_ = k8sClient.Delete(ctx, &domain)
 		var application v1alpha1.Application
 		err = k8sClient.Get(ctx, client.ObjectKey{
-			Name:      "application-" + createdApplication.Slug + "-kibaship-com",
+			Name:      "application-" + createdApplication.UUID + "",
 			Namespace: "default",
 		}, &application)
 		if err == nil {
 			_ = k8sClient.Delete(ctx, &application)
 		}
 		var project v1alpha1.Project
-		err = k8sClient.Get(ctx, client.ObjectKey{Name: "project-" + createdProject.Slug}, &project)
+		err = k8sClient.Get(ctx, client.ObjectKey{Name: "project-" + createdProject.UUID}, &project)
 		if err == nil {
 			_ = k8sClient.Delete(ctx, &project)
 		}
@@ -196,7 +196,7 @@ var _ = Describe("Application Domain Integration", func() {
 		jsonData, err := json.Marshal(projectPayload)
 		Expect(err).NotTo(HaveOccurred())
 
-		req, err := http.NewRequest("POST", "/projects", bytes.NewBuffer(jsonData))
+		req, err := http.NewRequest("POST", "/v1/projects", bytes.NewBuffer(jsonData))
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+apiKey)
@@ -217,7 +217,7 @@ var _ = Describe("Application Domain Integration", func() {
 		jsonData, err = json.Marshal(envPayload)
 		Expect(err).NotTo(HaveOccurred())
 
-		req, err = http.NewRequest("POST", "/projects/"+createdProject.Slug+"/environments", bytes.NewBuffer(jsonData))
+		req, err = http.NewRequest("POST", "/v1/projects/"+createdProject.UUID+"/environments", bytes.NewBuffer(jsonData))
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+apiKey)
@@ -245,7 +245,7 @@ var _ = Describe("Application Domain Integration", func() {
 		jsonData, err = json.Marshal(applicationPayload)
 		Expect(err).NotTo(HaveOccurred())
 
-		req, err = http.NewRequest("POST", "/environments/"+createdEnvironment.Slug+"/applications", bytes.NewBuffer(jsonData))
+		req, err = http.NewRequest("POST", "/v1/environments/"+createdEnvironment.UUID+"/applications", bytes.NewBuffer(jsonData))
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+apiKey)
@@ -268,7 +268,7 @@ var _ = Describe("Application Domain Integration", func() {
 		jsonData, err = json.Marshal(payload)
 		Expect(err).NotTo(HaveOccurred())
 
-		req, err = http.NewRequest("POST", "/applications/"+createdApplication.Slug+"/domains", bytes.NewBuffer(jsonData))
+		req, err = http.NewRequest("POST", "/v1/applications/"+createdApplication.UUID+"/domains", bytes.NewBuffer(jsonData))
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+apiKey)
@@ -280,14 +280,14 @@ var _ = Describe("Application Domain Integration", func() {
 		// Cleanup
 		var application v1alpha1.Application
 		err = k8sClient.Get(ctx, client.ObjectKey{
-			Name:      "application-" + createdApplication.Slug + "-kibaship-com",
+			Name:      "application-" + createdApplication.UUID + "",
 			Namespace: "default",
 		}, &application)
 		if err == nil {
 			_ = k8sClient.Delete(ctx, &application)
 		}
 		var project v1alpha1.Project
-		err = k8sClient.Get(ctx, client.ObjectKey{Name: "project-" + createdProject.Slug}, &project)
+		err = k8sClient.Get(ctx, client.ObjectKey{Name: "project-" + createdProject.UUID}, &project)
 		if err == nil {
 			_ = k8sClient.Delete(ctx, &project)
 		}
@@ -322,7 +322,7 @@ var _ = Describe("Application Domain Integration", func() {
 
 		createdProject, createdApplication, createdDomain := createTestApplicationDomain(router, apiKey)
 
-		req, err := http.NewRequest("GET", "/domains/"+createdDomain.Slug, nil)
+		req, err := http.NewRequest("GET", "/v1/domains/"+createdDomain.Slug, nil)
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 
@@ -362,7 +362,7 @@ var _ = Describe("Application Domain Integration", func() {
 
 		createdProject, createdApplication, createdDomain := createTestApplicationDomain(router, apiKey)
 
-		req, err := http.NewRequest("DELETE", "/domains/"+createdDomain.Slug, nil)
+		req, err := http.NewRequest("DELETE", "/v1/domains/"+createdDomain.Slug, nil)
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 
@@ -373,7 +373,7 @@ var _ = Describe("Application Domain Integration", func() {
 		// Verify domain deleted
 		var domain v1alpha1.ApplicationDomain
 		err = k8sClient.Get(ctx, client.ObjectKey{
-			Name:      "domain-" + createdDomain.Slug + "-kibaship-com",
+			Name:      "domain-" + createdDomain.UUID + "",
 			Namespace: "default",
 		}, &domain)
 		Expect(err).To(HaveOccurred())
@@ -381,14 +381,14 @@ var _ = Describe("Application Domain Integration", func() {
 		// Cleanup
 		var application v1alpha1.Application
 		err = k8sClient.Get(ctx, client.ObjectKey{
-			Name:      "application-" + createdApplication.Slug + "-kibaship-com",
+			Name:      "application-" + createdApplication.UUID + "",
 			Namespace: "default",
 		}, &application)
 		if err == nil {
 			_ = k8sClient.Delete(ctx, &application)
 		}
 		var project v1alpha1.Project
-		err = k8sClient.Get(ctx, client.ObjectKey{Name: "project-" + createdProject.Slug}, &project)
+		err = k8sClient.Get(ctx, client.ObjectKey{Name: "project-" + createdProject.UUID}, &project)
 		if err == nil {
 			_ = k8sClient.Delete(ctx, &project)
 		}
@@ -401,7 +401,7 @@ var _ = Describe("Application Domain Integration", func() {
 		createdProject, createdApplication, createdDomain := createTestApplicationDomain(router, apiKey)
 
 		// First delete
-		req, err := http.NewRequest("DELETE", "/domains/"+createdDomain.Slug, nil)
+		req, err := http.NewRequest("DELETE", "/v1/domains/"+createdDomain.Slug, nil)
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 
@@ -410,7 +410,7 @@ var _ = Describe("Application Domain Integration", func() {
 		Expect(w.Code).To(Equal(http.StatusNoContent))
 
 		// Try to delete again
-		req, err = http.NewRequest("DELETE", "/domains/"+createdDomain.Slug, nil)
+		req, err = http.NewRequest("DELETE", "/v1/domains/"+createdDomain.Slug, nil)
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 
@@ -421,14 +421,14 @@ var _ = Describe("Application Domain Integration", func() {
 		// Cleanup
 		var application v1alpha1.Application
 		err = k8sClient.Get(ctx, client.ObjectKey{
-			Name:      "application-" + createdApplication.Slug + "-kibaship-com",
+			Name:      "application-" + createdApplication.UUID + "",
 			Namespace: "default",
 		}, &application)
 		if err == nil {
 			_ = k8sClient.Delete(ctx, &application)
 		}
 		var project v1alpha1.Project
-		err = k8sClient.Get(ctx, client.ObjectKey{Name: "project-" + createdProject.Slug}, &project)
+		err = k8sClient.Get(ctx, client.ObjectKey{Name: "project-" + createdProject.UUID}, &project)
 		if err == nil {
 			_ = k8sClient.Delete(ctx, &project)
 		}
@@ -459,7 +459,7 @@ func createTestApplicationDomain(router http.Handler, apiKey string) (*models.Pr
 	jsonData, err := json.Marshal(projectPayload)
 	Expect(err).NotTo(HaveOccurred())
 
-	req, err := http.NewRequest("POST", "/projects", bytes.NewBuffer(jsonData))
+	req, err := http.NewRequest("POST", "/v1/projects", bytes.NewBuffer(jsonData))
 	Expect(err).NotTo(HaveOccurred())
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+apiKey)
@@ -480,7 +480,7 @@ func createTestApplicationDomain(router http.Handler, apiKey string) (*models.Pr
 	jsonData, err = json.Marshal(envPayload)
 	Expect(err).NotTo(HaveOccurred())
 
-	req, err = http.NewRequest("POST", "/projects/"+createdProject.Slug+"/environments", bytes.NewBuffer(jsonData))
+	req, err = http.NewRequest("POST", "/v1/projects/"+createdProject.UUID+"/environments", bytes.NewBuffer(jsonData))
 	Expect(err).NotTo(HaveOccurred())
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+apiKey)
@@ -508,7 +508,7 @@ func createTestApplicationDomain(router http.Handler, apiKey string) (*models.Pr
 	jsonData, err = json.Marshal(applicationPayload)
 	Expect(err).NotTo(HaveOccurred())
 
-	req, err = http.NewRequest("POST", "/environments/"+createdEnvironment.Slug+"/applications", bytes.NewBuffer(jsonData))
+	req, err = http.NewRequest("POST", "/v1/environments/"+createdEnvironment.UUID+"/applications", bytes.NewBuffer(jsonData))
 	Expect(err).NotTo(HaveOccurred())
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+apiKey)
@@ -531,7 +531,7 @@ func createTestApplicationDomain(router http.Handler, apiKey string) (*models.Pr
 	jsonData, err = json.Marshal(domainPayload)
 	Expect(err).NotTo(HaveOccurred())
 
-	req, err = http.NewRequest("POST", "/applications/"+createdApplication.Slug+"/domains", bytes.NewBuffer(jsonData))
+	req, err = http.NewRequest("POST", "/v1/applications/"+createdApplication.UUID+"/domains", bytes.NewBuffer(jsonData))
 	Expect(err).NotTo(HaveOccurred())
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+apiKey)
@@ -551,7 +551,7 @@ func cleanupTestApplicationDomain(ctx context.Context, project *models.ProjectRe
 	// Clean up domain
 	var dom v1alpha1.ApplicationDomain
 	err := k8sClient.Get(ctx, client.ObjectKey{
-		Name:      "domain-" + domain.Slug + "-kibaship-com",
+		Name:      "domain-" + domain.UUID + "",
 		Namespace: "default",
 	}, &dom)
 	if err == nil {
@@ -561,7 +561,7 @@ func cleanupTestApplicationDomain(ctx context.Context, project *models.ProjectRe
 	// Clean up application
 	var app v1alpha1.Application
 	err = k8sClient.Get(ctx, client.ObjectKey{
-		Name:      "application-" + application.Slug + "-kibaship-com",
+		Name:      "application-" + application.UUID + "",
 		Namespace: "default",
 	}, &app)
 	if err == nil {
@@ -571,7 +571,7 @@ func cleanupTestApplicationDomain(ctx context.Context, project *models.ProjectRe
 	// Clean up project
 	var proj v1alpha1.Project
 	err = k8sClient.Get(ctx, client.ObjectKey{
-		Name: "project-" + project.Slug,
+		Name: "project-" + project.UUID,
 	}, &proj)
 	if err == nil {
 		_ = k8sClient.Delete(ctx, &proj)

@@ -37,7 +37,7 @@ const (
 	NamespacePrefix = "project-"
 
 	// NamespaceSuffix is the suffix used for project namespaces
-	NamespaceSuffix = "-kibaship-com"
+	NamespaceSuffix = ""
 
 	// ProjectNameLabel is the label key for project name
 	ProjectNameLabel = "platform.kibaship.com/project-name"
@@ -51,17 +51,17 @@ const (
 	// ServiceAccountNamePrefix is the prefix for the service account name
 	ServiceAccountNamePrefix = "project-"
 	// ServiceAccountNameSuffix is the suffix for the service account name
-	ServiceAccountNameSuffix = "-sa-kibaship-com"
+	ServiceAccountNameSuffix = "-sa"
 
 	// RoleNamePrefix is the prefix for the role name
 	RoleNamePrefix = "project-"
 	// RoleNameSuffix is the suffix for the role name
-	RoleNameSuffix = "-admin-role-kibaship-com"
+	RoleNameSuffix = "-admin-role"
 
 	// RoleBindingNamePrefix is the prefix for the role binding name
 	RoleBindingNamePrefix = "project-"
 	// RoleBindingNameSuffix is the suffix for the role binding name
-	RoleBindingNameSuffix = "-admin-binding-kibaship-com"
+	RoleBindingNameSuffix = "-admin-binding"
 
 	// Tekton constants
 	TektonNamespace = "tekton-pipelines"
@@ -70,7 +70,7 @@ const (
 	// TektonRoleBindingNamePrefix is the prefix for the tekton role binding name
 	TektonRoleBindingNamePrefix = "project-"
 	// TektonRoleBindingNameSuffix is the suffix for the tekton role binding name
-	TektonRoleBindingNameSuffix = "-tekton-tasks-reader-binding-kibaship-com"
+	TektonRoleBindingNameSuffix = "-tekton-tasks-reader-binding"
 )
 
 // NamespaceManager handles namespace operations for projects
@@ -89,7 +89,8 @@ func NewNamespaceManager(k8sClient client.Client) *NamespaceManager {
 func (nm *NamespaceManager) CreateProjectNamespace(ctx context.Context, project *platformv1alpha1.Project) (*corev1.Namespace, error) {
 	log := logf.FromContext(ctx)
 
-	namespaceName := nm.GenerateNamespaceName(project.Name)
+	projectUUID := project.Labels[validation.LabelResourceUUID]
+	namespaceName := nm.GenerateNamespaceName(projectUUID)
 
 	log.Info("Creating namespace for project", "project", project.Name, "namespace", namespaceName)
 
@@ -144,7 +145,8 @@ func (nm *NamespaceManager) CreateProjectNamespace(ctx context.Context, project 
 func (nm *NamespaceManager) DeleteProjectNamespace(ctx context.Context, project *platformv1alpha1.Project) error {
 	log := logf.FromContext(ctx)
 
-	namespaceName := nm.GenerateNamespaceName(project.Name)
+	projectUUID := project.Labels[validation.LabelResourceUUID]
+	namespaceName := nm.GenerateNamespaceName(projectUUID)
 
 	log.Info("Deleting namespace for project", "project", project.Name, "namespace", namespaceName)
 
@@ -175,7 +177,8 @@ func (nm *NamespaceManager) DeleteProjectNamespace(ctx context.Context, project 
 
 // GetProjectNamespace retrieves the namespace for the given project
 func (nm *NamespaceManager) GetProjectNamespace(ctx context.Context, project *platformv1alpha1.Project) (*corev1.Namespace, error) {
-	namespaceName := nm.GenerateNamespaceName(project.Name)
+	projectUUID := project.Labels[validation.LabelResourceUUID]
+	namespaceName := nm.GenerateNamespaceName(projectUUID)
 
 	namespace := &corev1.Namespace{}
 	err := nm.Get(ctx, types.NamespacedName{Name: namespaceName}, namespace)
@@ -187,28 +190,28 @@ func (nm *NamespaceManager) GetProjectNamespace(ctx context.Context, project *pl
 }
 
 // GenerateNamespaceName generates the namespace name for a project
-func (nm *NamespaceManager) GenerateNamespaceName(projectName string) string {
-	return NamespacePrefix + projectName + NamespaceSuffix
+func (nm *NamespaceManager) GenerateNamespaceName(projectUUID string) string {
+	return NamespacePrefix + projectUUID + NamespaceSuffix
 }
 
 // generateServiceAccountName generates the service account name for a project
-func (nm *NamespaceManager) generateServiceAccountName(projectName string) string {
-	return ServiceAccountNamePrefix + projectName + ServiceAccountNameSuffix
+func (nm *NamespaceManager) generateServiceAccountName(projectUUID string) string {
+	return ServiceAccountNamePrefix + projectUUID + ServiceAccountNameSuffix
 }
 
 // generateRoleName generates the role name for a project
-func (nm *NamespaceManager) generateRoleName(projectName string) string {
-	return RoleNamePrefix + projectName + RoleNameSuffix
+func (nm *NamespaceManager) generateRoleName(projectUUID string) string {
+	return RoleNamePrefix + projectUUID + RoleNameSuffix
 }
 
 // generateRoleBindingName generates the role binding name for a project
-func (nm *NamespaceManager) generateRoleBindingName(projectName string) string {
-	return RoleBindingNamePrefix + projectName + RoleBindingNameSuffix
+func (nm *NamespaceManager) generateRoleBindingName(projectUUID string) string {
+	return RoleBindingNamePrefix + projectUUID + RoleBindingNameSuffix
 }
 
 // generateTektonRoleBindingName generates the Tekton role binding name for a project
-func (nm *NamespaceManager) generateTektonRoleBindingName(projectName string) string {
-	return TektonRoleBindingNamePrefix + projectName + TektonRoleBindingNameSuffix
+func (nm *NamespaceManager) generateTektonRoleBindingName(projectUUID string) string {
+	return TektonRoleBindingNamePrefix + projectUUID + TektonRoleBindingNameSuffix
 }
 
 // generateNamespaceLabels creates the labels for a project namespace
@@ -230,9 +233,9 @@ func (nm *NamespaceManager) generateNamespaceLabels(project *platformv1alpha1.Pr
 	return labels
 }
 
-// IsProjectNamespaceUnique checks if the project name would result in a unique namespace
-func (nm *NamespaceManager) IsProjectNamespaceUnique(ctx context.Context, projectName string, excludeProject *platformv1alpha1.Project) (bool, error) {
-	namespaceName := nm.GenerateNamespaceName(projectName)
+// IsProjectNamespaceUnique checks if the project UUID would result in a unique namespace
+func (nm *NamespaceManager) IsProjectNamespaceUnique(ctx context.Context, projectUUID string, excludeProject *platformv1alpha1.Project) (bool, error) {
+	namespaceName := nm.GenerateNamespaceName(projectUUID)
 
 	// Check if namespace exists
 	namespace := &corev1.Namespace{}
@@ -286,9 +289,10 @@ func (nm *NamespaceManager) CreateProjectServiceAccount(ctx context.Context, nam
 
 // createServiceAccount creates the service account in the namespace
 func (nm *NamespaceManager) createServiceAccount(ctx context.Context, namespace *corev1.Namespace, project *platformv1alpha1.Project) error {
+	projectUUID := project.Labels[validation.LabelResourceUUID]
 	serviceAccount := &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      nm.generateServiceAccountName(project.Name),
+			Name:      nm.generateServiceAccountName(projectUUID),
 			Namespace: namespace.Name,
 			Labels: map[string]string{
 				ManagedByLabel:   ManagedByValue,
@@ -318,9 +322,10 @@ func (nm *NamespaceManager) createServiceAccount(ctx context.Context, namespace 
 
 // createAdminRole creates a role with all permissions in the namespace
 func (nm *NamespaceManager) createAdminRole(ctx context.Context, namespace *corev1.Namespace, project *platformv1alpha1.Project) error {
+	projectUUID := project.Labels[validation.LabelResourceUUID]
 	role := &rbacv1.Role{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      nm.generateRoleName(project.Name),
+			Name:      nm.generateRoleName(projectUUID),
 			Namespace: namespace.Name,
 			Labels: map[string]string{
 				ManagedByLabel:   ManagedByValue,
@@ -357,9 +362,10 @@ func (nm *NamespaceManager) createAdminRole(ctx context.Context, namespace *core
 
 // createRoleBinding creates a role binding between the service account and the admin role
 func (nm *NamespaceManager) createRoleBinding(ctx context.Context, namespace *corev1.Namespace, project *platformv1alpha1.Project) error {
+	projectUUID := project.Labels[validation.LabelResourceUUID]
 	roleBinding := &rbacv1.RoleBinding{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      nm.generateRoleBindingName(project.Name),
+			Name:      nm.generateRoleBindingName(projectUUID),
 			Namespace: namespace.Name,
 			Labels: map[string]string{
 				ManagedByLabel:   ManagedByValue,
@@ -373,14 +379,14 @@ func (nm *NamespaceManager) createRoleBinding(ctx context.Context, namespace *co
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      nm.generateServiceAccountName(project.Name),
+				Name:      nm.generateServiceAccountName(projectUUID),
 				Namespace: namespace.Name,
 			},
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "Role",
-			Name:     nm.generateRoleName(project.Name),
+			Name:     nm.generateRoleName(projectUUID),
 		},
 	}
 
@@ -407,8 +413,10 @@ func (nm *NamespaceManager) deleteServiceAccountResources(ctx context.Context, n
 
 	log.Info("Cleaning up service account resources", "project", project.Name, "namespace", namespace.Name)
 
+	projectUUID := project.Labels[validation.LabelResourceUUID]
+
 	// Delete role binding
-	roleBindingName := nm.generateRoleBindingName(project.Name)
+	roleBindingName := nm.generateRoleBindingName(projectUUID)
 	roleBinding := &rbacv1.RoleBinding{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      roleBindingName,
@@ -420,7 +428,7 @@ func (nm *NamespaceManager) deleteServiceAccountResources(ctx context.Context, n
 	}
 
 	// Delete role
-	roleName := nm.generateRoleName(project.Name)
+	roleName := nm.generateRoleName(projectUUID)
 	role := &rbacv1.Role{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      roleName,
@@ -432,7 +440,7 @@ func (nm *NamespaceManager) deleteServiceAccountResources(ctx context.Context, n
 	}
 
 	// Delete service account
-	serviceAccountName := nm.generateServiceAccountName(project.Name)
+	serviceAccountName := nm.generateServiceAccountName(projectUUID)
 	serviceAccount := &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      serviceAccountName,
@@ -444,7 +452,7 @@ func (nm *NamespaceManager) deleteServiceAccountResources(ctx context.Context, n
 	}
 
 	// Delete Tekton role binding
-	tektonRoleBindingName := nm.generateTektonRoleBindingName(project.Name)
+	tektonRoleBindingName := nm.generateTektonRoleBindingName(projectUUID)
 	tektonRoleBinding := &rbacv1.RoleBinding{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      tektonRoleBindingName,
@@ -537,7 +545,8 @@ func (nm *NamespaceManager) ensureTektonTasksReaderRole(ctx context.Context) err
 func (nm *NamespaceManager) createTektonRoleBinding(ctx context.Context, namespace *corev1.Namespace, project *platformv1alpha1.Project) error {
 	log := logf.FromContext(ctx)
 
-	roleBindingName := nm.generateTektonRoleBindingName(project.Name)
+	projectUUID := project.Labels[validation.LabelResourceUUID]
+	roleBindingName := nm.generateTektonRoleBindingName(projectUUID)
 
 	roleBinding := &rbacv1.RoleBinding{
 		ObjectMeta: metav1.ObjectMeta{
@@ -556,7 +565,7 @@ func (nm *NamespaceManager) createTektonRoleBinding(ctx context.Context, namespa
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      nm.generateServiceAccountName(project.Name),
+				Name:      nm.generateServiceAccountName(projectUUID),
 				Namespace: namespace.Name,
 			},
 		},

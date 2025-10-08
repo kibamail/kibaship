@@ -42,7 +42,7 @@ type GitRepositoryDeploymentConfig struct {
 
 // DeploymentCreateRequest represents the request to create a new deployment
 type DeploymentCreateRequest struct {
-	ApplicationSlug string                         `json:"applicationSlug" example:"abc123de" validate:"required"`
+	ApplicationUUID string                         `json:"applicationUuid" example:"550e8400-e29b-41d4-a716-446655440001" validate:"required"`
 	GitRepository   *GitRepositoryDeploymentConfig `json:"gitRepository,omitempty"`
 }
 
@@ -107,15 +107,15 @@ func (d *Deployment) ToResponse() DeploymentResponse {
 func (req *DeploymentCreateRequest) Validate() *ValidationErrors {
 	var validationErrors []ValidationError
 
-	if req.ApplicationSlug == "" {
+	if req.ApplicationUUID == "" {
 		validationErrors = append(validationErrors, ValidationError{
-			Field:   "applicationSlug",
-			Message: "Application slug is required",
+			Field:   "applicationUuid",
+			Message: "Application UUID is required",
 		})
-	} else if !validation.ValidateSlug(req.ApplicationSlug) {
+	} else if !validation.ValidateUUID(req.ApplicationUUID) {
 		validationErrors = append(validationErrors, ValidationError{
-			Field:   "applicationSlug",
-			Message: "Application slug must be 8 characters long and contain only lowercase letters and numbers",
+			Field:   "applicationUuid",
+			Message: "Application UUID must be a valid UUID",
 		})
 	}
 

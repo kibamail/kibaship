@@ -500,13 +500,13 @@ func ApplyTektonResources() error {
 			return fmt.Errorf("failed to prepare kustomize: %w", err)
 		}
 		if cli != "" {
-			editCmd := exec.Command("bash", "-lc", fmt.Sprintf("cd config/tekton-resources && ../../bin/kustomize edit set image ghcr.io/kibamail/kibaship-railpack-cli=%s", cli))
+			editCmd := exec.Command("bash", "-lc", fmt.Sprintf("cd config/tekton-resources && ../../bin/kustomize edit set image kibamail/kibaship-railpack-cli=%s", cli))
 			if _, err := Run(editCmd); err != nil {
 				return fmt.Errorf("failed to set railpack cli image override to %q: %w", cli, err)
 			}
 		}
 		if build := os.Getenv("RAILPACK_BUILD_IMG"); build != "" {
-			editCmd := exec.Command("bash", "-lc", fmt.Sprintf("cd config/tekton-resources && ../../bin/kustomize edit set image ghcr.io/kibamail/kibaship-railpack-build=%s", build))
+			editCmd := exec.Command("bash", "-lc", fmt.Sprintf("cd config/tekton-resources && ../../bin/kustomize edit set image kibamail/kibaship-railpack-build=%s", build))
 			if _, err := Run(editCmd); err != nil {
 				return fmt.Errorf("failed to set railpack build image override to %q: %w", build, err)
 			}
@@ -1067,8 +1067,8 @@ func InstallBuildkitSharedDaemon() error {
 	if _, err := Run(cmd); err != nil {
 		return err
 	}
-	wait := exec.Command("kubectl", "-n", "buildkit", "rollout", "status", "deploy/buildkitd", "--timeout=5m")
-	if err := WaitWithPodLogging(wait, "buildkit", 5*time.Minute); err != nil {
+	wait := exec.Command("kubectl", "-n", "buildkit", "rollout", "status", "deploy/buildkitd", "--timeout=10m")
+	if err := WaitWithPodLogging(wait, "buildkit", 10*time.Minute); err != nil {
 		_, _ = fmt.Fprintf(GinkgoWriter, "\n❌ Timeout or error waiting for buildkitd rollout. Deployment describe:\n")
 		desc := exec.Command("kubectl", "-n", "buildkit", "describe", "deployment", "buildkitd")
 		_, _ = Run(desc)

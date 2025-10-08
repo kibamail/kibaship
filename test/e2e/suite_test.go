@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -58,6 +59,29 @@ func getKubernetesClient() (kubernetes.Interface, error) {
 	return clientset, nil
 }
 
+// namespaceExists checks if a namespace exists in the cluster
+func namespaceExists(namespace string) bool {
+	cmd := exec.Command("kubectl", "get", "namespace", namespace)
+	err := cmd.Run()
+	return err == nil
+}
+
+// clusterExists checks if the kind cluster exists
+func clusterExists(clusterName string) bool {
+	cmd := exec.Command("kind", "get", "clusters")
+	output, err := cmd.Output()
+	if err != nil {
+		return false
+	}
+	clusters := strings.Split(strings.TrimSpace(string(output)), "\n")
+	for _, cluster := range clusters {
+		if strings.TrimSpace(cluster) == clusterName {
+			return true
+		}
+	}
+	return false
+}
+
 func TestE2E(t *testing.T) {
 	RegisterFailHandler(Fail)
 	_, _ = fmt.Fprintf(GinkgoWriter, "Starting kibaship-operator integration test suite\n")
@@ -65,25 +89,60 @@ func TestE2E(t *testing.T) {
 }
 
 var _ = BeforeSuite(func() {
-	By("cleaning up any existing kind cluster")
-	cmd := exec.Command("make", "kind-delete")
-	_, _ = utils.Run(cmd) // Ignore errors if cluster doesn't exist
+	var err error
+	var cmd *exec.Cmd
 
-	By("creating fresh kind cluster")
-	cmd = exec.Command("make", "kind-create")
-	_, err := utils.Run(cmd)
-	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to create kind cluster")
-	By("installing Gateway API CRDs")
-	Expect(utils.InstallGatewayAPI()).To(Succeed(), "Failed to install Gateway API CRDs")
+	// Check if cluster exists, create if not
+	clusterName := os.Getenv("KIND_CLUSTER")
+	if clusterName == "" {
+		clusterName = "kibaship-operator"
+	}
 
-	By("installing Cilium (CNI) via Helm")
-	Expect(utils.InstallCiliumHelm("1.18.0")).To(Succeed(), "Failed to install Cilium via Helm")
+	if !clusterExists(clusterName) {
+		By("creating kind cluster (cluster does not exist)")
+		cmd = exec.Command("make", "kind-create")
+		_, err = utils.Run(cmd)
+		ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to create kind cluster")
+	} else {
+		By("using existing kind cluster: " + clusterName)
+	}
 
+	// Check if infrastructure is already installed by checking for tekton-pipelines namespace
+	infrastructureInstalled := namespaceExists("tekton-pipelines")
+
+	if !infrastructureInstalled {
+		By("installing Gateway API CRDs")
+		Expect(utils.InstallGatewayAPI()).To(Succeed(), "Failed to install Gateway API CRDs")
+
+		By("installing Cilium (CNI) via Helm")
+		Expect(utils.InstallCiliumHelm("1.18.0")).To(Succeed(), "Failed to install Cilium via Helm")
+
+		By("configuring CoreDNS to use public resolvers for e2e")
+		Expect(utils.ConfigureCoreDNSForwarders()).To(Succeed(), "Failed to configure CoreDNS forwarders")
+
+		By("installing CertManager")
+		Expect(utils.InstallCertManager()).To(Succeed(), "Failed to install CertManager")
+
+		By("installing Prometheus Operator")
+		Expect(utils.InstallPrometheusOperator()).To(Succeed(), "Failed to install Prometheus Operator")
+
+		By("installing Tekton Pipelines")
+		Expect(utils.InstallTektonPipelines()).To(Succeed(), "Failed to install Tekton Pipelines")
+
+		By("installing shared BuildKit daemon for cluster-wide builds")
+		Expect(utils.InstallBuildkitSharedDaemon()).To(Succeed(), "Failed to install BuildKit daemon")
+
+		By("installing Valkey Operator")
+		Expect(utils.InstallValkeyOperator()).To(Succeed(), "Failed to install Valkey Operator")
+
+		By("creating storage-replica-1 storage class for test environment")
+		Expect(utils.CreateStorageReplicaStorageClass()).To(Succeed(), "Failed to create storage-replica-1 storage class")
+	} else {
+		By("skipping infrastructure installation (tekton-pipelines namespace exists)")
+	}
+
+	// Always build and load images (these need to be refreshed on every test run)
 	By("building the manager(Operator) image")
-
-	By("configuring CoreDNS to use public resolvers for e2e")
-	Expect(utils.ConfigureCoreDNSForwarders()).To(Succeed(), "Failed to configure CoreDNS forwarders")
-
 	cmd = exec.Command("make", "docker-build", fmt.Sprintf("IMG=%s", projectImage))
 	_, err = utils.Run(cmd)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to build the manager(Operator) image")
@@ -91,18 +150,6 @@ var _ = BeforeSuite(func() {
 	By("loading the manager(Operator) image on Kind")
 	err = utils.LoadImageToKindClusterWithName(projectImage)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to load the manager(Operator) image into Kind")
-
-	By("installing CertManager")
-	Expect(utils.InstallCertManager()).To(Succeed(), "Failed to install CertManager")
-
-	By("installing Prometheus Operator")
-	Expect(utils.InstallPrometheusOperator()).To(Succeed(), "Failed to install Prometheus Operator")
-
-	By("installing Tekton Pipelines")
-	Expect(utils.InstallTektonPipelines()).To(Succeed(), "Failed to install Tekton Pipelines")
-
-	By("installing shared BuildKit daemon for cluster-wide builds")
-	Expect(utils.InstallBuildkitSharedDaemon()).To(Succeed(), "Failed to install BuildKit daemon")
 
 	By("building the railpack-cli image")
 	cmd = exec.Command("docker", "build", "-f", "build/railpack-cli/Dockerfile", "-t", projectImageRailpackCLI, "build/railpack-cli")
@@ -127,12 +174,6 @@ var _ = BeforeSuite(func() {
 	Expect(os.Setenv("RAILPACK_BUILD_IMG", projectImageRailpackBld)).To(Succeed(), "failed to set RAILPACK_BUILD_IMG env")
 	Expect(utils.ApplyTektonResources()).To(Succeed(), "Failed to apply Tekton custom tasks")
 
-	By("installing Valkey Operator")
-	Expect(utils.InstallValkeyOperator()).To(Succeed(), "Failed to install Valkey Operator")
-
-	By("creating storage-replica-1 storage class for test environment")
-	Expect(utils.CreateStorageReplicaStorageClass()).To(Succeed(), "Failed to create storage-replica-1 storage class")
-
 	By("building the registry-auth image")
 	cmd = exec.Command("make", "docker-build-registry-auth", fmt.Sprintf("IMG_REGISTRY_AUTH=%s", projectImageRegistryAuth))
 	_, err = utils.Run(cmd)
@@ -142,42 +183,70 @@ var _ = BeforeSuite(func() {
 	err = utils.LoadImageToKindClusterWithName(projectImageRegistryAuth)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to load the registry-auth image into Kind")
 
-	By("deploying test webhook receiver in-cluster")
-	Expect(utils.DeployWebhookReceiver()).To(Succeed(), "Failed to deploy test webhook receiver")
+	// Check if operator and registry are already deployed
+	operatorDeployed := namespaceExists("kibaship-operator")
+	registryDeployed := namespaceExists("registry")
 
-	By("setting WEBHOOK_TARGET_URL for operator deploy")
-	target := "http://webhook-receiver.kibaship-operator.svc.cluster.local:8080/webhook"
-	err = os.Setenv("WEBHOOK_TARGET_URL", target)
-	Expect(err).NotTo(HaveOccurred(), "failed to set WEBHOOK_TARGET_URL")
+	if !operatorDeployed {
+		By("deploying test webhook receiver in-cluster")
+		Expect(utils.DeployWebhookReceiver()).To(Succeed(), "Failed to deploy test webhook receiver")
 
-	By("creating registry namespace before operator deployment")
-	Expect(utils.CreateRegistryNamespace()).To(Succeed(), "Failed to create registry namespace")
+		By("setting WEBHOOK_TARGET_URL for operator deploy")
+		target := "http://webhook-receiver.kibaship-operator.svc.cluster.local:8080/webhook"
+		err = os.Setenv("WEBHOOK_TARGET_URL", target)
+		Expect(err).NotTo(HaveOccurred(), "failed to set WEBHOOK_TARGET_URL")
 
-	By("provisioning kibaship-operator")
-	Expect(utils.ProvisionKibashipOperator()).To(Succeed(), "Failed to provision kibaship-operator")
+		By("provisioning kibaship-operator")
+		Expect(utils.ProvisionKibashipOperator()).To(Succeed(), "Failed to provision kibaship-operator")
 
-	By("provisioning registry-auth Certificate for JWT signing keys")
-	Expect(utils.ProvisionRegistryAuthCertificate()).To(Succeed(), "Failed to provision registry-auth Certificate")
+		By("waiting for kibaship-operator to be ready")
+		Expect(utils.WaitForKibashipOperator()).To(Succeed(), "Failed to wait for kibaship-operator")
+	} else {
+		By("operator namespace exists - restarting deployments to pick up new images")
+		cmd = exec.Command("kubectl", "rollout", "restart", "deployment", "-n", "kibaship-operator")
+		_, err = utils.Run(cmd)
+		ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to restart operator deployments")
 
-	By("provisioning Docker Registry v3.0.0")
-	Expect(utils.ProvisionRegistry()).To(Succeed(), "Failed to provision Docker Registry")
+		By("waiting for operator deployments to complete rollout")
+		cmd = exec.Command("kubectl", "rollout", "status", "deployment", "-n", "kibaship-operator", "--timeout=5m")
+		_, err = utils.Run(cmd)
+		ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to wait for operator rollout")
+	}
 
-	By("waiting for registry-auth Certificate to be ready")
-	Expect(utils.WaitForRegistryAuthCertificate()).To(Succeed(), "Failed to wait for registry-auth Certificate")
+	if !registryDeployed {
+		By("creating registry namespace before registry deployment")
+		Expect(utils.CreateRegistryNamespace()).To(Succeed(), "Failed to create registry namespace")
 
-	By("waiting for Docker Registry to be ready")
-	Expect(utils.WaitForRegistry()).To(Succeed(), "Failed to wait for Docker Registry")
+		By("provisioning registry-auth Certificate for JWT signing keys")
+		Expect(utils.ProvisionRegistryAuthCertificate()).To(Succeed(), "Failed to provision registry-auth Certificate")
 
-	By("waiting for kibaship-operator to be ready")
-	Expect(utils.WaitForKibashipOperator()).To(Succeed(), "Failed to wait for kibaship-operator")
+		By("provisioning Docker Registry v3.0.0")
+		Expect(utils.ProvisionRegistry()).To(Succeed(), "Failed to provision Docker Registry")
 
-	By("verifying registry-auth pods are healthy")
-	Expect(utils.VerifyRegistryAuthHealthy()).To(Succeed(), "registry-auth pods are not healthy")
+		By("waiting for registry-auth Certificate to be ready")
+		Expect(utils.WaitForRegistryAuthCertificate()).To(Succeed(), "Failed to wait for registry-auth Certificate")
 
-	By("verifying registry pods are healthy")
-	Expect(utils.VerifyRegistryHealthy()).To(Succeed(), "registry pods are not healthy")
+		By("waiting for Docker Registry to be ready")
+		Expect(utils.WaitForRegistry()).To(Succeed(), "Failed to wait for Docker Registry")
 
-	By("re-applying Tekton custom tasks with local railpack image override (post-operator deploy)")
+		By("verifying registry-auth pods are healthy")
+		Expect(utils.VerifyRegistryAuthHealthy()).To(Succeed(), "registry-auth pods are not healthy")
+
+		By("verifying registry pods are healthy")
+		Expect(utils.VerifyRegistryHealthy()).To(Succeed(), "registry pods are not healthy")
+	} else {
+		By("registry namespace exists - restarting deployments to pick up new images")
+		cmd = exec.Command("kubectl", "rollout", "restart", "deployment", "-n", "registry")
+		_, err = utils.Run(cmd)
+		ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to restart registry deployments")
+
+		By("waiting for registry deployments to complete rollout")
+		cmd = exec.Command("kubectl", "rollout", "status", "deployment", "-n", "registry", "--timeout=5m")
+		_, err = utils.Run(cmd)
+		ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to wait for registry rollout")
+	}
+
+	By("re-applying Tekton custom tasks with local railpack image override (always applies)")
 	Expect(utils.ApplyTektonResources()).To(Succeed(), "Failed to re-apply Tekton custom tasks after operator deploy")
 
 	By("building the API server image")
@@ -189,7 +258,7 @@ var _ = BeforeSuite(func() {
 	err = utils.LoadImageToKindClusterWithName(projectImageAPIServer)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to load the API server image into Kind")
 
-	By("deploying API server into operator namespace")
+	By("deploying API server into operator namespace (always redeploys)")
 	Expect(utils.DeployAPIServer(projectImageAPIServer)).To(Succeed(), "Failed to deploy API server")
 
 	By("building the cert-manager webhook image")
@@ -201,7 +270,7 @@ var _ = BeforeSuite(func() {
 	err = utils.LoadImageToKindClusterWithName(projectImageCertWebhook)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to load the cert-manager webhook image into Kind")
 
-	By("deploying cert-manager webhook into operator namespace")
+	By("deploying cert-manager webhook into operator namespace (always redeploys)")
 	Expect(utils.DeployCertManagerWebhook(projectImageCertWebhook)).To(Succeed(), "Failed to deploy cert-manager webhook")
 })
 

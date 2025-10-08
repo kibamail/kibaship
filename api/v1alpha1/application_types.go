@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -63,6 +64,50 @@ const (
 	// GitProviderBitbucket represents Bitbucket provider
 	GitProviderBitbucket GitProvider = "bitbucket.com"
 )
+
+// HealthCheckConfig defines the health check configuration for an application
+type HealthCheckConfig struct {
+	// Path is the HTTP path to check for health (e.g., /health, /healthz, /api/health)
+	// +kubebuilder:validation:Pattern=`^/.*$`
+	// +optional
+	Path string `json:"path,omitempty"`
+
+	// Port is the port to use for health checks (optional, defaults to main container port)
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=65535
+	// +optional
+	Port int32 `json:"port,omitempty"`
+
+	// InitialDelaySeconds is the number of seconds after the container has started before health checks are initiated
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:default=30
+	// +optional
+	InitialDelaySeconds int32 `json:"initialDelaySeconds,omitempty"`
+
+	// PeriodSeconds specifies how often (in seconds) to perform the health check
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:default=10
+	// +optional
+	PeriodSeconds int32 `json:"periodSeconds,omitempty"`
+
+	// TimeoutSeconds is the number of seconds after which the health check times out
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:default=5
+	// +optional
+	TimeoutSeconds int32 `json:"timeoutSeconds,omitempty"`
+
+	// SuccessThreshold is the minimum consecutive successes for the health check to be considered successful
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:default=1
+	// +optional
+	SuccessThreshold int32 `json:"successThreshold,omitempty"`
+
+	// FailureThreshold is the minimum consecutive failures for the health check to be considered failed
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:default=3
+	// +optional
+	FailureThreshold int32 `json:"failureThreshold,omitempty"`
+}
 
 // GitRepositoryConfig defines the configuration for GitRepository applications
 type GitRepositoryConfig struct {
@@ -114,6 +159,10 @@ type GitRepositoryConfig struct {
 	// SpaOutputDirectory is the output directory for SPA builds (optional)
 	// +optional
 	SpaOutputDirectory string `json:"spaOutputDirectory,omitempty"`
+
+	// HealthCheck defines the health check configuration for this application (optional)
+	// +optional
+	HealthCheck *HealthCheckConfig `json:"healthCheck,omitempty"`
 }
 
 // DockerImageConfig defines the configuration for DockerImage applications
@@ -129,6 +178,14 @@ type DockerImageConfig struct {
 	// Tag is the image tag (optional if already specified in Image)
 	// +optional
 	Tag string `json:"tag,omitempty"`
+
+	// Env is a reference to a secret containing environment variables for this application (optional)
+	// +optional
+	Env *corev1.LocalObjectReference `json:"env,omitempty"`
+
+	// HealthCheck defines the health check configuration for this application (optional)
+	// +optional
+	HealthCheck *HealthCheckConfig `json:"healthCheck,omitempty"`
 }
 
 // MySQLConfig defines the configuration for MySQL applications
@@ -144,6 +201,10 @@ type MySQLConfig struct {
 	// SecretRef references the secret containing MySQL credentials
 	// +optional
 	SecretRef *corev1.LocalObjectReference `json:"secretRef,omitempty"`
+
+	// Env is a reference to a secret containing environment variables for this application (optional)
+	// +optional
+	Env *corev1.LocalObjectReference `json:"env,omitempty"`
 }
 
 // MySQLClusterConfig defines the configuration for MySQL cluster applications
@@ -164,6 +225,10 @@ type MySQLClusterConfig struct {
 	// SecretRef references the secret containing MySQL credentials
 	// +optional
 	SecretRef *corev1.LocalObjectReference `json:"secretRef,omitempty"`
+
+	// Env is a reference to a secret containing environment variables for this application (optional)
+	// +optional
+	Env *corev1.LocalObjectReference `json:"env,omitempty"`
 }
 
 // PostgresConfig defines the configuration for PostgreSQL applications
@@ -179,6 +244,10 @@ type PostgresConfig struct {
 	// SecretRef references the secret containing PostgreSQL credentials
 	// +optional
 	SecretRef *corev1.LocalObjectReference `json:"secretRef,omitempty"`
+
+	// Env is a reference to a secret containing environment variables for this application (optional)
+	// +optional
+	Env *corev1.LocalObjectReference `json:"env,omitempty"`
 }
 
 // PostgresClusterConfig defines the configuration for PostgreSQL cluster applications
@@ -199,6 +268,10 @@ type PostgresClusterConfig struct {
 	// SecretRef references the secret containing PostgreSQL credentials
 	// +optional
 	SecretRef *corev1.LocalObjectReference `json:"secretRef,omitempty"`
+
+	// Env is a reference to a secret containing environment variables for this application (optional)
+	// +optional
+	Env *corev1.LocalObjectReference `json:"env,omitempty"`
 }
 
 // ApplicationSpec defines the desired state of Application.
@@ -370,15 +443,31 @@ func (r *Application) validateApplication(ctx context.Context) error {
 		}
 	}
 
-	// Validate application name format: application-<slug>-kibaship-com
+	// Validate application name format: application-<uuid>
 	if !r.isValidApplicationName() {
-		errors = append(errors, fmt.Sprintf("application name '%s' must follow format 'application-<slug>-kibaship-com'", r.Name))
+		errors = append(errors, fmt.Sprintf("application name '%s' must follow format 'application-<uuid>'", r.Name))
 	}
 
 	// Validate GitRepository configuration
 	if r.Spec.Type == ApplicationTypeGitRepository && r.Spec.GitRepository != nil {
 		if err := r.validateGitRepository(); err != nil {
 			errors = append(errors, err.Error())
+		}
+		// Validate health check if configured for GitRepository
+		if r.Spec.GitRepository.HealthCheck != nil {
+			if err := r.validateHealthCheck(r.Spec.GitRepository.HealthCheck); err != nil {
+				errors = append(errors, err.Error())
+			}
+		}
+	}
+
+	// Validate DockerImage configuration
+	if r.Spec.Type == ApplicationTypeDockerImage && r.Spec.DockerImage != nil {
+		// Validate health check if configured for DockerImage
+		if r.Spec.DockerImage.HealthCheck != nil {
+			if err := r.validateHealthCheck(r.Spec.DockerImage.HealthCheck); err != nil {
+				errors = append(errors, err.Error())
+			}
 		}
 	}
 
@@ -408,11 +497,51 @@ func (r *Application) validateGitRepository() error {
 	return nil
 }
 
+// validateHealthCheck validates HealthCheck configuration
+func (r *Application) validateHealthCheck(healthCheck *HealthCheckConfig) error {
+	if healthCheck == nil {
+		return nil
+	}
+
+	// Validate Path - must start with / if provided
+	if healthCheck.Path != "" && !strings.HasPrefix(healthCheck.Path, "/") {
+		return fmt.Errorf("health check path must start with '/', got: %s", healthCheck.Path)
+	}
+
+	// Validate port range if specified
+	if healthCheck.Port != 0 && (healthCheck.Port < 1 || healthCheck.Port > 65535) {
+		return fmt.Errorf("health check port must be between 1 and 65535, got: %d", healthCheck.Port)
+	}
+
+	// Validate timing values if specified (greater than 0)
+	if healthCheck.InitialDelaySeconds < 0 {
+		return fmt.Errorf("health check initialDelaySeconds must be >= 0, got: %d", healthCheck.InitialDelaySeconds)
+	}
+
+	if healthCheck.PeriodSeconds != 0 && healthCheck.PeriodSeconds < 1 {
+		return fmt.Errorf("health check periodSeconds must be >= 1, got: %d", healthCheck.PeriodSeconds)
+	}
+
+	if healthCheck.TimeoutSeconds != 0 && healthCheck.TimeoutSeconds < 1 {
+		return fmt.Errorf("health check timeoutSeconds must be >= 1, got: %d", healthCheck.TimeoutSeconds)
+	}
+
+	if healthCheck.SuccessThreshold != 0 && healthCheck.SuccessThreshold < 1 {
+		return fmt.Errorf("health check successThreshold must be >= 1, got: %d", healthCheck.SuccessThreshold)
+	}
+
+	if healthCheck.FailureThreshold != 0 && healthCheck.FailureThreshold < 1 {
+		return fmt.Errorf("health check failureThreshold must be >= 1, got: %d", healthCheck.FailureThreshold)
+	}
+
+	return nil
+}
+
 // isValidApplicationName validates if the application name follows the required format
 func (r *Application) isValidApplicationName() bool {
-	// Pattern: application-<slug>-kibaship-com
-	// slug should be valid DNS label (lowercase alphanumeric with hyphens)
-	pattern := regexp.MustCompile(`^application-[a-z0-9]([a-z0-9-]*[a-z0-9])?-kibaship-com$`)
+	// Pattern: application-<uuid>
+	// UUID should be valid DNS label (lowercase alphanumeric with hyphens)
+	pattern := regexp.MustCompile(`^application-[a-z0-9]([a-z0-9-]*[a-z0-9])?$`)
 	return pattern.MatchString(r.Name)
 }
 
@@ -422,6 +551,14 @@ func (r *Application) GetSlug() string {
 		return ""
 	}
 	return r.Labels[validation.LabelResourceSlug]
+}
+
+// GetUUID returns the application UUID from labels
+func (r *Application) GetUUID() string {
+	if r.Labels == nil {
+		return ""
+	}
+	return r.Labels[validation.LabelResourceUUID]
 }
 
 // GetProjectUUID returns the project UUID from labels

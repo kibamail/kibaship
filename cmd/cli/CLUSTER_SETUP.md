@@ -117,12 +117,13 @@ The cluster creation process involves 9 major phases with 32 detailed steps, mir
     - Deploy webhook to operator namespace
 
 ### Phase 8: Ingress & Networking
-26. **Create ingress-gateway namespace**
-27. **Deploy Cilium Gateway**:
-    - Configure HTTP (port 30080) and HTTPS (port 30443) listeners
-    - Set node selector for ingress nodes
-28. **Create certificates namespace**
-29. **Set up wildcard certificate** for tenant domains
+26. **Gateway API resources** (created dynamically by operator on startup):
+    - gateway-api-system namespace
+    - certificates namespace
+    - Gateway with 5 listeners (HTTP, HTTPS, MySQL TLS, PostgreSQL TLS, Valkey TLS)
+    - ReferenceGrant for cross-namespace certificate access
+    - Wildcard certificate for web apps (*.apps.{domain})
+    - Note: Database certificates created per-instance in project namespaces
 
 ### Phase 9: Verification & Health Checks
 30. **Verify all components are healthy**:

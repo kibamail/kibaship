@@ -19,17 +19,15 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
-	certificatesNS   = "certificates"
-	ingressGatewayNS = "ingress-gateway"
-	issuerName       = "certmanager-acme-issuer"
-	wildcardCertName = "tenant-wildcard-certificate"
-	deploymentNFName = "deployment-not-found"
-	gatewayName      = "ingress-gateway"
+	certificatesNS     = "certificates"
+	gatewayAPISystemNS = "gateway-api-system"
+	issuerName         = "certmanager-acme-issuer"
+	wildcardCertName   = "tenant-wildcard-certificate"
+	gatewayName        = "kibaship-gateway"
 )
 
 // EnsureStorageClasses creates Longhorn-backed StorageClasses used by the platform.
@@ -72,7 +70,7 @@ func ProvisionIngressAndCertificates(ctx context.Context, c client.Client, baseD
 	}
 
 	// 1) Ensure namespaces exist (in case installer omitted them)
-	for _, ns := range []string{certificatesNS, ingressGatewayNS} {
+	for _, ns := range []string{certificatesNS, gatewayAPISystemNS} {
 		if err := ensureNamespace(ctx, c, ns); err != nil {
 			return fmt.Errorf("ensure namespace %s: %w", ns, err)
 		}
@@ -85,27 +83,22 @@ func ProvisionIngressAndCertificates(ctx context.Context, c client.Client, baseD
 		}
 	}
 
-	// 3) Wildcard Certificate (depends on issuer and domain)
+	// 3) Wildcard Certificate for web apps (depends on issuer and domain)
 	if acmeEmail != "" { // only create certificate if issuer/email provided
+		// Create wildcard certificate for web apps (*.apps.{domain})
 		if err := ensureWildcardCertificate(ctx, c, baseDomain); err != nil {
 			return fmt.Errorf("ensure wildcard Certificate: %w", err)
 		}
 	}
 
-	// 4) HTTPRoutes with hostnames derived from domain
-	if err := ensureHTTPRedirectRoute(ctx, c, baseDomain); err != nil {
-		return fmt.Errorf("ensure HTTP redirect HTTPRoute: %w", err)
-	}
-	if err := ensureHTTPSRoute(ctx, c, baseDomain); err != nil {
-		return fmt.Errorf("ensure HTTPS HTTPRoute: %w", err)
-	}
-	if err := ensureDeploymentNotFoundRoute(ctx, c, baseDomain); err != nil {
-		return fmt.Errorf("ensure 404 HTTPRoute: %w", err)
+	// 4) Gateway resource with multi-protocol listeners
+	if err := ensureGateway(ctx, c); err != nil {
+		return fmt.Errorf("ensure Gateway: %w", err)
 	}
 
-	// 5) Ensure static app (Deployment/Service) exists in case not installed via manifests
-	if err := ensureDeploymentNotFoundWorkload(ctx, c); err != nil {
-		return fmt.Errorf("ensure 404 workload: %w", err)
+	// 5) ReferenceGrant for Gateway to access certificates
+	if err := ensureGatewayReferenceGrant(ctx, c); err != nil {
+		return fmt.Errorf("ensure Gateway ReferenceGrant: %w", err)
 	}
 
 	return nil
@@ -167,130 +160,148 @@ func ensureWildcardCertificate(ctx context.Context, c client.Client, baseDomain 
 		obj.Object["spec"] = map[string]any{
 			"secretName": wildcardCertName,
 			"issuerRef":  map[string]any{"name": issuerName, "kind": "ClusterIssuer"},
-			"dnsNames":   []any{fmt.Sprintf("*.%s", baseDomain)},
+			"dnsNames":   []any{fmt.Sprintf("*.apps.%s", baseDomain)},
 		}
 		return c.Create(ctx, obj)
 	}
 	return nil
 }
 
-func ensureHTTPRedirectRoute(ctx context.Context, c client.Client, baseDomain string) error {
+func ensureGateway(ctx context.Context, c client.Client) error {
 	obj := &unstructured.Unstructured{}
-	obj.SetGroupVersionKind(schema.GroupVersionKind{Group: "gateway.networking.k8s.io", Version: "v1", Kind: "HTTPRoute"})
-	obj.SetNamespace(ingressGatewayNS)
-	obj.SetName("ingress")
-	if err := c.Get(ctx, client.ObjectKey{Namespace: ingressGatewayNS, Name: "ingress"}, obj); err != nil {
+	obj.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   "gateway.networking.k8s.io",
+		Version: "v1",
+		Kind:    "Gateway",
+	})
+	obj.SetNamespace(gatewayAPISystemNS)
+	obj.SetName(gatewayName)
+
+	if err := c.Get(ctx, client.ObjectKey{
+		Namespace: gatewayAPISystemNS,
+		Name:      gatewayName,
+	}, obj); err != nil {
 		if !errors.IsNotFound(err) {
 			return err
 		}
+
+		// Create Gateway with multi-protocol listeners
 		obj.Object["spec"] = map[string]any{
-			"parentRefs": []any{map[string]any{"name": gatewayName, "sectionName": "http"}},
-			"hostnames":  []any{fmt.Sprintf("*.%s", baseDomain)},
-			"rules": []any{
+			"gatewayClassName": "cilium",
+			"listeners": []any{
+				// HTTP listener
 				map[string]any{
-					"filters": []any{map[string]any{
-						"type":            "RequestRedirect",
-						"requestRedirect": map[string]any{"scheme": "https", "statusCode": int64(301)},
-					}},
+					"name":     "http",
+					"protocol": "HTTP",
+					"port":     int64(80),
+					"allowedRoutes": map[string]any{
+						"namespaces": map[string]any{"from": "All"},
+					},
 				},
-			},
-		}
-		return c.Create(ctx, obj)
-	}
-	return nil
-}
-
-func ensureHTTPSRoute(ctx context.Context, c client.Client, baseDomain string) error {
-	obj := &unstructured.Unstructured{}
-	obj.SetGroupVersionKind(schema.GroupVersionKind{Group: "gateway.networking.k8s.io", Version: "v1", Kind: "HTTPRoute"})
-	obj.SetNamespace(ingressGatewayNS)
-	obj.SetName("ingress-https")
-	if err := c.Get(ctx, client.ObjectKey{Namespace: ingressGatewayNS, Name: "ingress-https"}, obj); err != nil {
-		if !errors.IsNotFound(err) {
-			return err
-		}
-		obj.Object["spec"] = map[string]any{
-			"parentRefs": []any{map[string]any{"name": gatewayName, "sectionName": "https"}},
-			"hostnames":  []any{fmt.Sprintf("*.%s", baseDomain)},
-		}
-		return c.Create(ctx, obj)
-	}
-	return nil
-}
-
-func ensureDeploymentNotFoundRoute(ctx context.Context, c client.Client, baseDomain string) error {
-	obj := &unstructured.Unstructured{}
-	obj.SetGroupVersionKind(schema.GroupVersionKind{Group: "gateway.networking.k8s.io", Version: "v1", Kind: "HTTPRoute"})
-	obj.SetNamespace(ingressGatewayNS)
-	obj.SetName(deploymentNFName)
-	if err := c.Get(ctx, client.ObjectKey{Namespace: ingressGatewayNS, Name: deploymentNFName}, obj); err != nil {
-		if !errors.IsNotFound(err) {
-			return err
-		}
-		obj.Object["spec"] = map[string]any{
-			"parentRefs": []any{map[string]any{"name": gatewayName, "namespace": ingressGatewayNS}},
-			"hostnames":  []any{fmt.Sprintf("*.%s", baseDomain)},
-			"rules": []any{
+				// HTTPS listener
 				map[string]any{
-					"matches":     []any{map[string]any{"path": map[string]any{"type": "PathPrefix", "value": "/"}}},
-					"backendRefs": []any{map[string]any{"name": deploymentNFName, "namespace": ingressGatewayNS, "port": int64(80)}},
+					"name":     "https",
+					"protocol": "HTTPS",
+					"port":     int64(443),
+					"tls": map[string]any{
+						"mode": "Terminate",
+						"certificateRefs": []any{
+							map[string]any{
+								"name":      wildcardCertName,
+								"namespace": certificatesNS,
+								"kind":      "Secret",
+							},
+						},
+					},
+					"allowedRoutes": map[string]any{
+						"namespaces": map[string]any{"from": "All"},
+					},
+				},
+				// MySQL TLS listener
+				map[string]any{
+					"name":     "mysql-tls",
+					"protocol": "TLS",
+					"port":     int64(3306),
+					"tls":      map[string]any{"mode": "Passthrough"},
+					"allowedRoutes": map[string]any{
+						"namespaces": map[string]any{"from": "All"},
+						"kinds": []any{
+							map[string]any{"kind": "TLSRoute"},
+						},
+					},
+				},
+				// Valkey TLS listener
+				map[string]any{
+					"name":     "valkey-tls",
+					"protocol": "TLS",
+					"port":     int64(6379),
+					"tls":      map[string]any{"mode": "Passthrough"},
+					"allowedRoutes": map[string]any{
+						"namespaces": map[string]any{"from": "All"},
+						"kinds": []any{
+							map[string]any{"kind": "TLSRoute"},
+						},
+					},
+				},
+				// PostgreSQL TLS listener
+				map[string]any{
+					"name":     "postgres-tls",
+					"protocol": "TLS",
+					"port":     int64(5432),
+					"tls":      map[string]any{"mode": "Passthrough"},
+					"allowedRoutes": map[string]any{
+						"namespaces": map[string]any{"from": "All"},
+						"kinds": []any{
+							map[string]any{"kind": "TLSRoute"},
+						},
+					},
 				},
 			},
 		}
+
 		return c.Create(ctx, obj)
 	}
 	return nil
 }
 
-func ensureDeploymentNotFoundWorkload(ctx context.Context, c client.Client) error {
-	// Deployment
-	dep := &appsv1.Deployment{}
-	key := client.ObjectKey{Namespace: ingressGatewayNS, Name: deploymentNFName}
-	if err := c.Get(ctx, key, dep); err != nil {
+func ensureGatewayReferenceGrant(ctx context.Context, c client.Client) error {
+	obj := &unstructured.Unstructured{}
+	obj.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   "gateway.networking.k8s.io",
+		Version: "v1beta1",
+		Kind:    "ReferenceGrant",
+	})
+	obj.SetNamespace(certificatesNS)
+	obj.SetName("gateway-to-certificates")
+
+	if err := c.Get(ctx, client.ObjectKey{
+		Namespace: certificatesNS,
+		Name:      "gateway-to-certificates",
+	}, obj); err != nil {
 		if !errors.IsNotFound(err) {
 			return err
 		}
-		dep = &appsv1.Deployment{
-			ObjectMeta: metav1.ObjectMeta{Name: deploymentNFName, Namespace: ingressGatewayNS},
-			Spec: appsv1.DeploymentSpec{
-				Replicas: int32Ptr(3),
-				Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": deploymentNFName}},
-				Template: corev1.PodTemplateSpec{
-					ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": deploymentNFName}},
-					Spec: corev1.PodSpec{Containers: []corev1.Container{{
-						Name:      deploymentNFName,
-						Image:     "ghcr.io/kibamail/kibaship-404-deployment-not-found:latest",
-						Ports:     []corev1.ContainerPort{{ContainerPort: 3000}},
-						Resources: corev1.ResourceRequirements{},
-					}}},
+
+		obj.Object["spec"] = map[string]any{
+			"from": []any{
+				map[string]any{
+					"group":     "gateway.networking.k8s.io",
+					"kind":      "Gateway",
+					"namespace": gatewayAPISystemNS,
+				},
+			},
+			"to": []any{
+				map[string]any{
+					"group": "",
+					"kind":  "Secret",
 				},
 			},
 		}
-		if err := c.Create(ctx, dep); err != nil {
-			return err
-		}
-	}
-	// Service
-	svc := &corev1.Service{}
-	if err := c.Get(ctx, key, svc); err != nil {
-		if !errors.IsNotFound(err) {
-			return err
-		}
-		svc = &corev1.Service{
-			ObjectMeta: metav1.ObjectMeta{Name: deploymentNFName, Namespace: ingressGatewayNS},
-			Spec: corev1.ServiceSpec{
-				Selector: map[string]string{"app": deploymentNFName},
-				Ports:    []corev1.ServicePort{{Port: 80, TargetPort: intstr.FromInt(3000)}},
-			},
-		}
-		if err := c.Create(ctx, svc); err != nil {
-			return err
-		}
+
+		return c.Create(ctx, obj)
 	}
 	return nil
 }
-
-func int32Ptr(i int32) *int32 { return &i }
 
 // EnsureRegistryCredentials provisions the registry-registry-auth secret in the registry namespace.
 // This secret contains a randomly generated HTTP secret for the Docker registry.

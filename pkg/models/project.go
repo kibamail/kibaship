@@ -98,7 +98,7 @@ type ProjectResponse struct {
 	ResourceProfile         ResourceProfile         `json:"resourceProfile" example:"development"`
 	VolumeSettings          VolumeSettings          `json:"volumeSettings"`
 	Status                  string                  `json:"status" example:"Ready"`
-	NamespaceName           string                  `json:"namespaceName,omitempty" example:"project-abc123de"`
+	NamespaceName           string                  `json:"namespaceName,omitempty" example:"project-550e8400-e29b-41d4-a716-446655440000"`
 	CreatedAt               time.Time               `json:"createdAt" example:"2023-01-01T12:00:00Z"`
 	UpdatedAt               time.Time               `json:"updatedAt" example:"2023-01-01T12:00:00Z"`
 }
@@ -152,8 +152,10 @@ func NewProject(name, description, workspaceUUID, slug string,
 		volumeSettings = getDefaultVolumeSettings(*profile)
 	}
 
+	projectUUID := uuid.New().String()
+
 	return &Project{
-		UUID:                    uuid.New().String(),
+		UUID:                    projectUUID,
 		Name:                    name,
 		Slug:                    slug,
 		Description:             description,
@@ -162,7 +164,7 @@ func NewProject(name, description, workspaceUUID, slug string,
 		ResourceProfile:         *profile,
 		VolumeSettings:          *volumeSettings,
 		Status:                  "Pending",
-		NamespaceName:           fmt.Sprintf("project-%s", slug),
+		NamespaceName:           fmt.Sprintf("project-%s", projectUUID),
 		CreatedAt:               now,
 		UpdatedAt:               now,
 	}

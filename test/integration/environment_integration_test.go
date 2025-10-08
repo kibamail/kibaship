@@ -47,7 +47,7 @@ var _ = Describe("Environment Integration", func() {
 		jsonData, err := json.Marshal(projectPayload)
 		Expect(err).NotTo(HaveOccurred())
 
-		req, err := http.NewRequest("POST", "/projects", bytes.NewBuffer(jsonData))
+		req, err := http.NewRequest("POST", "/v1/projects", bytes.NewBuffer(jsonData))
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+apiKey)
@@ -68,7 +68,7 @@ var _ = Describe("Environment Integration", func() {
 		jsonData, err = json.Marshal(payload)
 		Expect(err).NotTo(HaveOccurred())
 
-		req, err = http.NewRequest("POST", "/projects/"+createdProject.Slug+"/environments", bytes.NewBuffer(jsonData))
+		req, err = http.NewRequest("POST", "/v1/projects/"+createdProject.UUID+"/environments", bytes.NewBuffer(jsonData))
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+apiKey)
@@ -94,7 +94,7 @@ var _ = Describe("Environment Integration", func() {
 		// Verify Environment CRD
 		var environment v1alpha1.Environment
 		err = k8sClient.Get(ctx, client.ObjectKey{
-			Name:      "environment-" + response.Slug + "-kibaship-com",
+			Name:      "environment-" + response.UUID + "",
 			Namespace: "default",
 		}, &environment)
 		Expect(err).NotTo(HaveOccurred())
@@ -107,7 +107,7 @@ var _ = Describe("Environment Integration", func() {
 		// Clean up
 		_ = k8sClient.Delete(ctx, &environment)
 		var project v1alpha1.Project
-		_ = k8sClient.Get(ctx, client.ObjectKey{Name: "project-" + createdProject.Slug}, &project)
+		_ = k8sClient.Get(ctx, client.ObjectKey{Name: "project-" + createdProject.UUID}, &project)
 		_ = k8sClient.Delete(ctx, &project)
 	})
 
@@ -124,7 +124,7 @@ var _ = Describe("Environment Integration", func() {
 		jsonData, err := json.Marshal(projectPayload)
 		Expect(err).NotTo(HaveOccurred())
 
-		req, err := http.NewRequest("POST", "/projects", bytes.NewBuffer(jsonData))
+		req, err := http.NewRequest("POST", "/v1/projects", bytes.NewBuffer(jsonData))
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+apiKey)
@@ -150,7 +150,7 @@ var _ = Describe("Environment Integration", func() {
 		jsonData, err = json.Marshal(payload)
 		Expect(err).NotTo(HaveOccurred())
 
-		req, err = http.NewRequest("POST", "/projects/"+createdProject.Slug+"/environments", bytes.NewBuffer(jsonData))
+		req, err = http.NewRequest("POST", "/v1/projects/"+createdProject.UUID+"/environments", bytes.NewBuffer(jsonData))
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+apiKey)
@@ -171,7 +171,7 @@ var _ = Describe("Environment Integration", func() {
 		// Verify in Kubernetes
 		var environment v1alpha1.Environment
 		err = k8sClient.Get(ctx, client.ObjectKey{
-			Name:      "environment-" + response.Slug + "-kibaship-com",
+			Name:      "environment-" + response.UUID + "",
 			Namespace: "default",
 		}, &environment)
 		Expect(err).NotTo(HaveOccurred())
@@ -183,7 +183,7 @@ var _ = Describe("Environment Integration", func() {
 		// Clean up
 		_ = k8sClient.Delete(ctx, &environment)
 		var project v1alpha1.Project
-		_ = k8sClient.Get(ctx, client.ObjectKey{Name: "project-" + createdProject.Slug}, &project)
+		_ = k8sClient.Get(ctx, client.ObjectKey{Name: "project-" + createdProject.UUID}, &project)
 		_ = k8sClient.Delete(ctx, &project)
 	})
 
@@ -200,7 +200,7 @@ var _ = Describe("Environment Integration", func() {
 		jsonData, err := json.Marshal(projectPayload)
 		Expect(err).NotTo(HaveOccurred())
 
-		req, err := http.NewRequest("POST", "/projects", bytes.NewBuffer(jsonData))
+		req, err := http.NewRequest("POST", "/v1/projects", bytes.NewBuffer(jsonData))
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+apiKey)
@@ -221,7 +221,7 @@ var _ = Describe("Environment Integration", func() {
 		jsonData, err = json.Marshal(payload)
 		Expect(err).NotTo(HaveOccurred())
 
-		req, err = http.NewRequest("POST", "/projects/"+createdProject.Slug+"/environments", bytes.NewBuffer(jsonData))
+		req, err = http.NewRequest("POST", "/v1/projects/"+createdProject.UUID+"/environments", bytes.NewBuffer(jsonData))
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+apiKey)
@@ -232,7 +232,7 @@ var _ = Describe("Environment Integration", func() {
 
 		// Clean up
 		var project v1alpha1.Project
-		_ = k8sClient.Get(ctx, client.ObjectKey{Name: "project-" + createdProject.Slug}, &project)
+		_ = k8sClient.Get(ctx, client.ObjectKey{Name: "project-" + createdProject.UUID}, &project)
 		_ = k8sClient.Delete(ctx, &project)
 	})
 
@@ -247,7 +247,7 @@ var _ = Describe("Environment Integration", func() {
 		jsonData, err := json.Marshal(payload)
 		Expect(err).NotTo(HaveOccurred())
 
-		req, err := http.NewRequest("POST", "/projects/notfound/environments", bytes.NewBuffer(jsonData))
+		req, err := http.NewRequest("POST", "/v1/projects/00000000-0000-0000-0000-000000000000/environments", bytes.NewBuffer(jsonData))
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+apiKey)
@@ -265,7 +265,7 @@ var _ = Describe("Environment Integration", func() {
 		createdProject, createdEnvironment := createTestEnvironment(router, apiKey)
 
 		// Retrieve environment
-		req, err := http.NewRequest("GET", "/environments/"+createdEnvironment.Slug, nil)
+		req, err := http.NewRequest("GET", "/v1/environments/"+createdEnvironment.UUID, nil)
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 
@@ -292,7 +292,7 @@ var _ = Describe("Environment Integration", func() {
 		createdProject, createdEnvironment := createTestEnvironment(router, apiKey)
 
 		// Retrieve environments by project
-		req, err := http.NewRequest("GET", "/projects/"+createdProject.Slug+"/environments", nil)
+		req, err := http.NewRequest("GET", "/v1/projects/"+createdProject.UUID+"/environments", nil)
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 
@@ -315,7 +315,7 @@ var _ = Describe("Environment Integration", func() {
 		apiKey := generateTestAPIKey()
 		router := setupIntegrationTestRouter(apiKey)
 
-		req, err := http.NewRequest("GET", "/environments/notfound", nil)
+		req, err := http.NewRequest("GET", "/v1/environments/00000000-0000-0000-0000-000000000000", nil)
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 
@@ -339,7 +339,7 @@ var _ = Describe("Environment Integration", func() {
 		jsonData, err := json.Marshal(updateReq)
 		Expect(err).NotTo(HaveOccurred())
 
-		req, err := http.NewRequest("PATCH", "/environments/"+createdEnvironment.Slug, bytes.NewBuffer(jsonData))
+		req, err := http.NewRequest("PATCH", "/v1/environments/"+createdEnvironment.UUID, bytes.NewBuffer(jsonData))
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+apiKey)
@@ -376,7 +376,7 @@ var _ = Describe("Environment Integration", func() {
 		jsonData, err := json.Marshal(updateReq)
 		Expect(err).NotTo(HaveOccurred())
 
-		req, err := http.NewRequest("PATCH", "/environments/"+createdEnvironment.Slug, bytes.NewBuffer(jsonData))
+		req, err := http.NewRequest("PATCH", "/v1/environments/"+createdEnvironment.UUID, bytes.NewBuffer(jsonData))
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+apiKey)
@@ -407,7 +407,7 @@ var _ = Describe("Environment Integration", func() {
 		jsonData, err := json.Marshal(updateReq)
 		Expect(err).NotTo(HaveOccurred())
 
-		req, err := http.NewRequest("PATCH", "/environments/notfound", bytes.NewBuffer(jsonData))
+		req, err := http.NewRequest("PATCH", "/v1/environments/00000000-0000-0000-0000-000000000000", bytes.NewBuffer(jsonData))
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+apiKey)
@@ -425,7 +425,7 @@ var _ = Describe("Environment Integration", func() {
 		createdProject, createdEnvironment := createTestEnvironment(router, apiKey)
 
 		// Delete environment
-		req, err := http.NewRequest("DELETE", "/environments/"+createdEnvironment.Slug, nil)
+		req, err := http.NewRequest("DELETE", "/v1/environments/"+createdEnvironment.UUID, nil)
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 
@@ -436,14 +436,14 @@ var _ = Describe("Environment Integration", func() {
 		// Verify deleted
 		var environment v1alpha1.Environment
 		err = k8sClient.Get(ctx, client.ObjectKey{
-			Name:      "environment-" + createdEnvironment.Slug + "-kibaship-com",
+			Name:      "environment-" + createdEnvironment.UUID + "",
 			Namespace: "default",
 		}, &environment)
 		Expect(err).To(HaveOccurred())
 
 		// Clean up project
 		var project v1alpha1.Project
-		_ = k8sClient.Get(ctx, client.ObjectKey{Name: "project-" + createdProject.Slug}, &project)
+		_ = k8sClient.Get(ctx, client.ObjectKey{Name: "project-" + createdProject.UUID}, &project)
 		_ = k8sClient.Delete(ctx, &project)
 	})
 
@@ -455,7 +455,7 @@ var _ = Describe("Environment Integration", func() {
 		createdProject, createdEnvironment := createTestEnvironment(router, apiKey)
 
 		// First delete
-		req, err := http.NewRequest("DELETE", "/environments/"+createdEnvironment.Slug, nil)
+		req, err := http.NewRequest("DELETE", "/v1/environments/"+createdEnvironment.UUID, nil)
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 
@@ -464,7 +464,7 @@ var _ = Describe("Environment Integration", func() {
 		Expect(w.Code).To(Equal(http.StatusNoContent))
 
 		// Try to delete again
-		req, err = http.NewRequest("DELETE", "/environments/"+createdEnvironment.Slug, nil)
+		req, err = http.NewRequest("DELETE", "/v1/environments/"+createdEnvironment.UUID, nil)
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 
@@ -474,15 +474,15 @@ var _ = Describe("Environment Integration", func() {
 
 		// Clean up project
 		var project v1alpha1.Project
-		_ = k8sClient.Get(ctx, client.ObjectKey{Name: "project-" + createdProject.Slug}, &project)
+		_ = k8sClient.Get(ctx, client.ObjectKey{Name: "project-" + createdProject.UUID}, &project)
 		_ = k8sClient.Delete(ctx, &project)
 	})
 
-	It("returns 404 for non-existent environment slug", NodeTimeout(30*time.Second), func(ctx SpecContext) {
+	It("returns 404 for non-existent environment UUID", NodeTimeout(30*time.Second), func(ctx SpecContext) {
 		apiKey := generateTestAPIKey()
 		router := setupIntegrationTestRouter(apiKey)
 
-		req, err := http.NewRequest("DELETE", "/environments/notfound", nil)
+		req, err := http.NewRequest("DELETE", "/v1/environments/00000000-0000-0000-0000-000000000000", nil)
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 
@@ -502,7 +502,7 @@ func createTestEnvironment(router http.Handler, apiKey string) (*models.ProjectR
 	jsonData, err := json.Marshal(projectPayload)
 	Expect(err).NotTo(HaveOccurred())
 
-	req, err := http.NewRequest("POST", "/projects", bytes.NewBuffer(jsonData))
+	req, err := http.NewRequest("POST", "/v1/projects", bytes.NewBuffer(jsonData))
 	Expect(err).NotTo(HaveOccurred())
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+apiKey)
@@ -522,7 +522,7 @@ func createTestEnvironment(router http.Handler, apiKey string) (*models.ProjectR
 	jsonData, err = json.Marshal(environmentPayload)
 	Expect(err).NotTo(HaveOccurred())
 
-	req, err = http.NewRequest("POST", "/projects/"+createdProject.Slug+"/environments", bytes.NewBuffer(jsonData))
+	req, err = http.NewRequest("POST", "/v1/projects/"+createdProject.UUID+"/environments", bytes.NewBuffer(jsonData))
 	Expect(err).NotTo(HaveOccurred())
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+apiKey)
@@ -541,7 +541,7 @@ func createTestEnvironment(router http.Handler, apiKey string) (*models.ProjectR
 func cleanupTestEnvironment(ctx context.Context, project *models.ProjectResponse, environment *models.EnvironmentResponse) {
 	var env v1alpha1.Environment
 	err := k8sClient.Get(ctx, client.ObjectKey{
-		Name:      "environment-" + environment.Slug + "-kibaship-com",
+		Name:      "environment-" + environment.UUID + "",
 		Namespace: "default",
 	}, &env)
 	if err == nil {
@@ -550,7 +550,7 @@ func cleanupTestEnvironment(ctx context.Context, project *models.ProjectResponse
 
 	var proj v1alpha1.Project
 	err = k8sClient.Get(ctx, client.ObjectKey{
-		Name: "project-" + project.Slug,
+		Name: "project-" + project.UUID,
 	}, &proj)
 	if err == nil {
 		_ = k8sClient.Delete(ctx, &proj)

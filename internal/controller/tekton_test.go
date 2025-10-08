@@ -170,7 +170,7 @@ var _ = Describe("Tekton Integration", func() {
 	Describe("Role Binding Creation", func() {
 		It("should create role binding from project service account to tekton role", func() {
 			By("Verifying the Tekton role binding was created")
-			roleBindingName := namespaceManager.generateTektonRoleBindingName(testProject.Name)
+			roleBindingName := namespaceManager.generateTektonRoleBindingName(testProject.Labels[validation.LabelResourceUUID])
 			roleBinding := &rbacv1.RoleBinding{}
 			err := k8sClient.Get(ctx, types.NamespacedName{
 				Name:      roleBindingName,
@@ -182,7 +182,7 @@ var _ = Describe("Tekton Integration", func() {
 			Expect(roleBinding.Subjects).To(HaveLen(1))
 			subject := roleBinding.Subjects[0]
 			Expect(subject.Kind).To(Equal("ServiceAccount"))
-			Expect(subject.Name).To(Equal(namespaceManager.generateServiceAccountName(testProject.Name)))
+			Expect(subject.Name).To(Equal(namespaceManager.generateServiceAccountName(testProject.Labels[validation.LabelResourceUUID])))
 			Expect(subject.Namespace).To(Equal(testNamespace.Name))
 
 			By("Verifying the role binding has correct role reference")
@@ -199,7 +199,7 @@ var _ = Describe("Tekton Integration", func() {
 	Describe("Resource Cleanup", func() {
 		It("should clean up Tekton role binding when deleting project resources", func() {
 			By("Verifying the Tekton role binding exists before cleanup")
-			roleBindingName := namespaceManager.generateTektonRoleBindingName(testProject.Name)
+			roleBindingName := namespaceManager.generateTektonRoleBindingName(testProject.Labels[validation.LabelResourceUUID])
 			roleBinding := &rbacv1.RoleBinding{}
 			err := k8sClient.Get(ctx, types.NamespacedName{
 				Name:      roleBindingName,

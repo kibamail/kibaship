@@ -287,6 +287,14 @@ func (r *Project) GetSlug() string {
 	return r.Labels[validation.LabelResourceSlug]
 }
 
+// GetUUID returns the project UUID from labels
+func (r *Project) GetUUID() string {
+	if r.Labels == nil {
+		return ""
+	}
+	return r.Labels[validation.LabelResourceUUID]
+}
+
 // SetupWebhookWithManager will setup the manager to manage the webhooks
 func (r *Project) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewWebhookManagedBy(mgr).

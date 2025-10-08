@@ -16,9 +16,9 @@ import (
 )
 
 var _ = Describe("API Server Application Domains Auto-Loading", func() {
-	It("creates a GitRepository application and GET /applications/{slug} returns its default domain", func() {
+	It("creates a GitRepository application and GET /v1/applications/{uuid} returns its default domain", func() {
 		By("fetching API key from api-server secret")
-		cmd := exec.Command("kubectl", "get", "secret", "api-server-api-key-kibaship-com", "-n", "kibaship-operator", "-o", "jsonpath={.data.api-key}")
+		cmd := exec.Command("kubectl", "get", "secret", "api-server-api-key", "-n", "kibaship-operator", "-o", "jsonpath={.data.api-key}")
 		output, err := cmd.CombinedOutput()
 		Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("failed to get api key secret: %s", string(output)))
 		encodedKey := strings.TrimSpace(string(output))
@@ -42,14 +42,14 @@ var _ = Describe("API Server Application Domains Auto-Loading", func() {
 			return resp.StatusCode == http.StatusOK
 		}, "60s", "1s").Should(BeTrue(), "API server did not become ready via /readyz")
 
-		By("creating a project via POST /projects to host the application")
+		By("creating a project via POST /v1/projects to host the application")
 		workspaceUUID := "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
 		projReqBody := map[string]any{
 			"name":          "test-project-app-domain-api-e2e",
 			"workspaceUuid": workspaceUUID,
 		}
 		projBytes, _ := json.Marshal(projReqBody)
-		reqProj, _ := http.NewRequest("POST", "http://127.0.0.1:18080/projects", bytes.NewReader(projBytes))
+		reqProj, _ := http.NewRequest("POST", "http://127.0.0.1:18080/v1/projects", bytes.NewReader(projBytes))
 		reqProj.Header.Set("Content-Type", "application/json")
 		reqProj.Header.Set("Authorization", "Bearer "+apiKey)
 		httpClient := &http.Client{Timeout: 30 * time.Second}
@@ -58,18 +58,18 @@ var _ = Describe("API Server Application Domains Auto-Loading", func() {
 		defer func() { _ = respProj.Body.Close() }()
 		Expect(respProj.StatusCode).To(Equal(http.StatusCreated))
 		var projResp struct {
-			Slug string `json:"slug"`
+			UUID string `json:"uuid"`
 		}
 		_ = json.NewDecoder(respProj.Body).Decode(&projResp)
-		Expect(projResp.Slug).NotTo(BeEmpty(), "project slug should be present")
+		Expect(projResp.UUID).NotTo(BeEmpty(), "project UUID should be present")
 
-		By("creating an environment via POST /projects/{slug}/environments")
+		By("creating an environment via POST /v1/projects/{uuid}/environments")
 		envReqBody := map[string]any{
 			"name":        "production",
 			"description": "Production environment",
 		}
 		envBytes, _ := json.Marshal(envReqBody)
-		reqEnv, _ := http.NewRequest("POST", fmt.Sprintf("http://127.0.0.1:18080/projects/%s/environments", projResp.Slug), bytes.NewReader(envBytes))
+		reqEnv, _ := http.NewRequest("POST", fmt.Sprintf("http://127.0.0.1:18080/v1/projects/%s/environments", projResp.UUID), bytes.NewReader(envBytes))
 		reqEnv.Header.Set("Content-Type", "application/json")
 		reqEnv.Header.Set("Authorization", "Bearer "+apiKey)
 		respEnv, err := httpClient.Do(reqEnv)
@@ -77,12 +77,12 @@ var _ = Describe("API Server Application Domains Auto-Loading", func() {
 		defer func() { _ = respEnv.Body.Close() }()
 		Expect(respEnv.StatusCode).To(Equal(http.StatusCreated))
 		var envResp struct {
-			Slug string `json:"slug"`
+			UUID string `json:"uuid"`
 		}
 		_ = json.NewDecoder(respEnv.Body).Decode(&envResp)
-		Expect(envResp.Slug).NotTo(BeEmpty())
+		Expect(envResp.UUID).NotTo(BeEmpty())
 
-		By("creating an application via POST /environments/{slug}/applications (type: GitRepository)")
+		By("creating an application via POST /v1/environments/{uuid}/applications (type: GitRepository)")
 		appReqBody := map[string]any{
 			"name": "my-web-app-e2e",
 			"type": "GitRepository",
@@ -95,7 +95,7 @@ var _ = Describe("API Server Application Domains Auto-Loading", func() {
 			},
 		}
 		appBytes, _ := json.Marshal(appReqBody)
-		reqApp, _ := http.NewRequest("POST", fmt.Sprintf("http://127.0.0.1:18080/environments/%s/applications", envResp.Slug), bytes.NewReader(appBytes))
+		reqApp, _ := http.NewRequest("POST", fmt.Sprintf("http://127.0.0.1:18080/v1/environments/%s/applications", envResp.UUID), bytes.NewReader(appBytes))
 		reqApp.Header.Set("Content-Type", "application/json")
 		reqApp.Header.Set("Authorization", "Bearer "+apiKey)
 		respApp, err := httpClient.Do(reqApp)
@@ -103,12 +103,14 @@ var _ = Describe("API Server Application Domains Auto-Loading", func() {
 		defer func() { _ = respApp.Body.Close() }()
 		Expect(respApp.StatusCode).To(Equal(http.StatusCreated))
 		var appResp struct {
+			UUID string `json:"uuid"`
 			Slug string `json:"slug"`
 		}
 		_ = json.NewDecoder(respApp.Body).Decode(&appResp)
-		Expect(appResp.Slug).NotTo(BeEmpty(), "application slug should be present")
+		Expect(appResp.UUID).NotTo(BeEmpty(), "application slug should be present")
+		Expect(appResp.UUID).NotTo(BeEmpty(), "application UUID should be present")
 
-		appCRName := fmt.Sprintf("application-%s-kibaship-com", appResp.Slug)
+		appCRName := fmt.Sprintf("application-%s", appResp.UUID)
 		By("waiting for Application CR to become Ready")
 		Eventually(func() bool {
 			cmd := exec.Command("kubectl", "-n", "default", "get", "application", appCRName, "-o", "jsonpath={.status.phase}")
@@ -119,10 +121,10 @@ var _ = Describe("API Server Application Domains Auto-Loading", func() {
 			return strings.TrimSpace(string(output)) == readyPhase
 		}, "4m", "5s").Should(BeTrue(), "Application should become Ready")
 
-		By("eventually fetching GET /applications/{slug} and seeing the default domain auto-loaded")
+		By("eventually fetching GET /v1/applications/{uuid} and seeing the default domain auto-loaded")
 		targetDomainSuffix := ".myapps.kibaship.com"
 		Eventually(func() error {
-			req, _ := http.NewRequest("GET", fmt.Sprintf("http://127.0.0.1:18080/application/%s", appResp.Slug), nil)
+			req, _ := http.NewRequest("GET", fmt.Sprintf("http://127.0.0.1:18080/v1/applications/%s", appResp.UUID), nil)
 			req.Header.Set("Authorization", "Bearer "+apiKey)
 			resp, err := httpClient.Do(req)
 			if err != nil {

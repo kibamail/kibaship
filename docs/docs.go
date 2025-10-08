@@ -23,7 +23,231 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
-        "/applications/{applicationSlug}/deployments": {
+        "/healthz": {
+            "get": {
+                "description": "Check if the API server is healthy",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "health"
+                ],
+                "summary": "Health check",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/main.HealthResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/openapi.yaml": {
+            "get": {
+                "description": "Get the OpenAPI specification in YAML format",
+                "produces": [
+                    "text/plain"
+                ],
+                "tags": [
+                    "documentation"
+                ],
+                "summary": "Get OpenAPI specification",
+                "responses": {
+                    "200": {
+                        "description": "OpenAPI YAML specification",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/readyz": {
+            "get": {
+                "description": "Check if the API server is ready to serve requests",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "health"
+                ],
+                "summary": "Readiness check",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/main.ReadyResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/applications/{uuid}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieve an application by its unique UUID or slug identifier",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "applications"
+                ],
+                "summary": "Get application by UUID",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Application UUID or slug",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Application details",
+                        "schema": {
+                            "$ref": "#/definitions/models.ApplicationResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Application not found",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Delete an application by its unique UUID or slug identifier",
+                "tags": [
+                    "applications"
+                ],
+                "summary": "Delete application by UUID",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Application UUID or slug",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "Application deleted successfully"
+                    },
+                    "401": {
+                        "description": "Authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Application not found",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Update an application by its unique UUID or slug identifier with partial updates",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "applications"
+                ],
+                "summary": "Update application by UUID",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Application UUID or slug",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Application update data",
+                        "name": "application",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.ApplicationUpdateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Updated application details",
+                        "schema": {
+                            "$ref": "#/definitions/models.ApplicationResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Validation errors in request data",
+                        "schema": {
+                            "$ref": "#/definitions/models.ValidationErrors"
+                        }
+                    },
+                    "401": {
+                        "description": "Authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Application not found",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/applications/{uuid}/deployments": {
             "get": {
                 "security": [
                     {
@@ -41,8 +265,8 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Application slug (8-character identifier)",
-                        "name": "applicationSlug",
+                        "description": "Application UUID or slug (8-character identifier)",
+                        "name": "uuid",
                         "in": "path",
                         "required": true
                     }
@@ -97,8 +321,8 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Application slug (8-character identifier)",
-                        "name": "applicationSlug",
+                        "description": "Application UUID or slug",
+                        "name": "uuid",
                         "in": "path",
                         "required": true
                     },
@@ -146,7 +370,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/applications/{applicationSlug}/domains": {
+        "/v1/applications/{uuid}/domains": {
             "post": {
                 "security": [
                     {
@@ -167,8 +391,8 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Application slug (8-character identifier)",
-                        "name": "applicationSlug",
+                        "description": "Application UUID or slug (8-character identifier)",
+                        "name": "uuid",
                         "in": "path",
                         "required": true
                     },
@@ -216,108 +440,14 @@ const docTemplate = `{
                 }
             }
         },
-        "/applications/{slug}": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Retrieve an application by its unique slug identifier",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "applications"
-                ],
-                "summary": "Get application by slug",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Application slug (8-character identifier)",
-                        "name": "slug",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Application details",
-                        "schema": {
-                            "$ref": "#/definitions/models.ApplicationResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Authentication required",
-                        "schema": {
-                            "$ref": "#/definitions/auth.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Application not found",
-                        "schema": {
-                            "$ref": "#/definitions/auth.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/auth.ErrorResponse"
-                        }
-                    }
-                }
-            },
-            "delete": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Delete an application by its unique slug identifier",
-                "tags": [
-                    "applications"
-                ],
-                "summary": "Delete application by slug",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Application slug (8-character identifier)",
-                        "name": "slug",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "204": {
-                        "description": "Application deleted successfully"
-                    },
-                    "401": {
-                        "description": "Authentication required",
-                        "schema": {
-                            "$ref": "#/definitions/auth.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Application not found",
-                        "schema": {
-                            "$ref": "#/definitions/auth.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/auth.ErrorResponse"
-                        }
-                    }
-                }
-            },
+        "/v1/applications/{uuid}/env": {
             "patch": {
                 "security": [
                     {
                         "BearerAuth": []
                     }
                 ],
-                "description": "Update an application by its unique slug identifier with partial updates",
+                "description": "Update environment variables for a GitRepository application by merging new variables with existing ones",
                 "consumes": [
                     "application/json"
                 ],
@@ -327,36 +457,36 @@ const docTemplate = `{
                 "tags": [
                     "applications"
                 ],
-                "summary": "Update application by slug",
+                "summary": "Update environment variables for an application",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Application slug (8-character identifier)",
-                        "name": "slug",
+                        "description": "Application UUID or slug",
+                        "name": "uuid",
                         "in": "path",
                         "required": true
                     },
                     {
-                        "description": "Application update data",
-                        "name": "application",
+                        "description": "Environment variables to set/update",
+                        "name": "variables",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/models.ApplicationUpdateRequest"
+                            "$ref": "#/definitions/models.ApplicationEnvUpdateRequest"
                         }
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "Updated application details",
+                        "description": "Environment variables updated successfully",
                         "schema": {
-                            "$ref": "#/definitions/models.ApplicationResponse"
+                            "type": "string"
                         }
                     },
                     "400": {
-                        "description": "Validation errors in request data",
+                        "description": "Invalid request data",
                         "schema": {
-                            "$ref": "#/definitions/models.ValidationErrors"
+                            "$ref": "#/definitions/auth.ErrorResponse"
                         }
                     },
                     "401": {
@@ -380,26 +510,26 @@ const docTemplate = `{
                 }
             }
         },
-        "/deployments/{slug}": {
+        "/v1/deployments/{uuid}": {
             "get": {
                 "security": [
                     {
                         "BearerAuth": []
                     }
                 ],
-                "description": "Retrieve a deployment by its unique slug identifier",
+                "description": "Retrieve a deployment by its unique UUID or slug identifier",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "deployments"
                 ],
-                "summary": "Get deployment by slug",
+                "summary": "Get deployment by UUID",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Deployment slug (8-character identifier)",
-                        "name": "slug",
+                        "description": "Deployment UUID or slug (8-character identifier)",
+                        "name": "uuid",
                         "in": "path",
                         "required": true
                     }
@@ -432,26 +562,26 @@ const docTemplate = `{
                 }
             }
         },
-        "/domains/{slug}": {
+        "/v1/domains/{uuid}": {
             "get": {
                 "security": [
                     {
                         "BearerAuth": []
                     }
                 ],
-                "description": "Retrieve an application domain by its unique slug identifier",
+                "description": "Retrieve an application domain by its unique UUID or slug identifier",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "application-domains"
                 ],
-                "summary": "Get application domain by slug",
+                "summary": "Get application domain by UUID",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Application domain slug (8-character identifier)",
-                        "name": "slug",
+                        "description": "Application domain UUID or slug (8-character identifier)",
+                        "name": "uuid",
                         "in": "path",
                         "required": true
                     }
@@ -489,16 +619,16 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Delete an application domain by its unique slug identifier",
+                "description": "Delete an application domain by its unique UUID or slug identifier",
                 "tags": [
                     "application-domains"
                 ],
-                "summary": "Delete application domain by slug",
+                "summary": "Delete application domain by UUID",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Application domain slug (8-character identifier)",
-                        "name": "slug",
+                        "description": "Application domain UUID or slug (8-character identifier)",
+                        "name": "uuid",
                         "in": "path",
                         "required": true
                     }
@@ -528,7 +658,171 @@ const docTemplate = `{
                 }
             }
         },
-        "/environments/{environmentSlug}/applications": {
+        "/v1/environments/{uuid}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieve an environment by its unique UUID or slug identifier",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "environments"
+                ],
+                "summary": "Get environment by UUID",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Environment UUID or slug (8-character identifier)",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Environment details",
+                        "schema": {
+                            "$ref": "#/definitions/models.EnvironmentResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Environment not found",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Delete an environment by its unique UUID or slug identifier",
+                "tags": [
+                    "environments"
+                ],
+                "summary": "Delete environment by UUID",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Environment UUID or slug (8-character identifier)",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "Environment deleted successfully"
+                    },
+                    "401": {
+                        "description": "Authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Environment not found",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Update an environment by its unique UUID or slug identifier with partial updates",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "environments"
+                ],
+                "summary": "Update environment by UUID",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Environment UUID or slug (8-character identifier)",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Environment update data",
+                        "name": "environment",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.EnvironmentUpdateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Updated environment details",
+                        "schema": {
+                            "$ref": "#/definitions/models.EnvironmentResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Validation errors in request data",
+                        "schema": {
+                            "$ref": "#/definitions/models.ValidationErrors"
+                        }
+                    },
+                    "401": {
+                        "description": "Authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Environment not found",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/environments/{uuid}/applications": {
             "get": {
                 "security": [
                     {
@@ -546,8 +840,8 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Environment slug (8-character identifier)",
-                        "name": "environmentSlug",
+                        "description": "Environment UUID or slug",
+                        "name": "uuid",
                         "in": "path",
                         "required": true
                     }
@@ -602,8 +896,8 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Environment slug (8-character identifier)",
-                        "name": "environmentSlug",
+                        "description": "Environment UUID or slug",
+                        "name": "uuid",
                         "in": "path",
                         "required": true
                     },
@@ -651,211 +945,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/environments/{slug}": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Retrieve an environment by its unique slug identifier",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "environments"
-                ],
-                "summary": "Get environment by slug",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Environment slug (8-character identifier)",
-                        "name": "slug",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Environment details",
-                        "schema": {
-                            "$ref": "#/definitions/models.EnvironmentResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Authentication required",
-                        "schema": {
-                            "$ref": "#/definitions/auth.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Environment not found",
-                        "schema": {
-                            "$ref": "#/definitions/auth.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/auth.ErrorResponse"
-                        }
-                    }
-                }
-            },
-            "delete": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Delete an environment by its unique slug identifier",
-                "tags": [
-                    "environments"
-                ],
-                "summary": "Delete environment by slug",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Environment slug (8-character identifier)",
-                        "name": "slug",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "204": {
-                        "description": "Environment deleted successfully"
-                    },
-                    "401": {
-                        "description": "Authentication required",
-                        "schema": {
-                            "$ref": "#/definitions/auth.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Environment not found",
-                        "schema": {
-                            "$ref": "#/definitions/auth.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/auth.ErrorResponse"
-                        }
-                    }
-                }
-            },
-            "patch": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Update an environment by its unique slug identifier with partial updates",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "environments"
-                ],
-                "summary": "Update environment by slug",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Environment slug (8-character identifier)",
-                        "name": "slug",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Environment update data",
-                        "name": "environment",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/models.EnvironmentUpdateRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Updated environment details",
-                        "schema": {
-                            "$ref": "#/definitions/models.EnvironmentResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Validation errors in request data",
-                        "schema": {
-                            "$ref": "#/definitions/models.ValidationErrors"
-                        }
-                    },
-                    "401": {
-                        "description": "Authentication required",
-                        "schema": {
-                            "$ref": "#/definitions/auth.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Environment not found",
-                        "schema": {
-                            "$ref": "#/definitions/auth.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/auth.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/healthz": {
-            "get": {
-                "description": "Check if the API server is healthy",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "health"
-                ],
-                "summary": "Health check",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/main.HealthResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/openapi.yaml": {
-            "get": {
-                "description": "Get the OpenAPI specification in YAML format",
-                "produces": [
-                    "text/plain"
-                ],
-                "tags": [
-                    "documentation"
-                ],
-                "summary": "Get OpenAPI specification",
-                "responses": {
-                    "200": {
-                        "description": "OpenAPI YAML specification",
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                }
-            }
-        },
-        "/projects": {
+        "/v1/projects": {
             "post": {
                 "security": [
                     {
@@ -912,7 +1002,171 @@ const docTemplate = `{
                 }
             }
         },
-        "/projects/{projectSlug}/applications": {
+        "/v1/projects/{uuid}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieve a project by its unique UUID or slug identifier",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "projects"
+                ],
+                "summary": "Get project by UUID",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Project UUID or slug (8-character identifier)",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Project details",
+                        "schema": {
+                            "$ref": "#/definitions/models.ProjectResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Project not found",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Delete a project by its unique UUID or slug identifier",
+                "tags": [
+                    "projects"
+                ],
+                "summary": "Delete project by UUID",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Project UUID or slug (8-character identifier)",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "Project deleted successfully"
+                    },
+                    "401": {
+                        "description": "Authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Project not found",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Update a project by its unique UUID or slug identifier with partial updates",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "projects"
+                ],
+                "summary": "Update project by UUID",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Project UUID or slug (8-character identifier)",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Project update data",
+                        "name": "project",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.ProjectUpdateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Updated project details",
+                        "schema": {
+                            "$ref": "#/definitions/models.ProjectResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Validation errors in request data",
+                        "schema": {
+                            "$ref": "#/definitions/models.ValidationErrors"
+                        }
+                    },
+                    "401": {
+                        "description": "Authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Project not found",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/projects/{uuid}/applications": {
             "get": {
                 "security": [
                     {
@@ -930,8 +1184,8 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Project slug (8-character identifier)",
-                        "name": "projectSlug",
+                        "description": "Project UUID or slug",
+                        "name": "uuid",
                         "in": "path",
                         "required": true
                     }
@@ -967,7 +1221,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/projects/{projectSlug}/environments": {
+        "/v1/projects/{uuid}/environments": {
             "get": {
                 "security": [
                     {
@@ -985,8 +1239,8 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Project slug (8-character identifier)",
-                        "name": "projectSlug",
+                        "description": "Project UUID or slug (8-character identifier)",
+                        "name": "uuid",
                         "in": "path",
                         "required": true
                     }
@@ -1041,8 +1295,8 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Project slug (8-character identifier)",
-                        "name": "projectSlug",
+                        "description": "Project UUID or slug (8-character identifier)",
+                        "name": "uuid",
                         "in": "path",
                         "required": true
                     },
@@ -1089,190 +1343,6 @@ const docTemplate = `{
                     }
                 }
             }
-        },
-        "/projects/{slug}": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Retrieve a project by its unique slug identifier",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "projects"
-                ],
-                "summary": "Get project by slug",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Project slug (8-character identifier)",
-                        "name": "slug",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Project details",
-                        "schema": {
-                            "$ref": "#/definitions/models.ProjectResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Authentication required",
-                        "schema": {
-                            "$ref": "#/definitions/auth.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Project not found",
-                        "schema": {
-                            "$ref": "#/definitions/auth.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/auth.ErrorResponse"
-                        }
-                    }
-                }
-            },
-            "delete": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Delete a project by its unique slug identifier",
-                "tags": [
-                    "projects"
-                ],
-                "summary": "Delete project by slug",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Project slug (8-character identifier)",
-                        "name": "slug",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "204": {
-                        "description": "Project deleted successfully"
-                    },
-                    "401": {
-                        "description": "Authentication required",
-                        "schema": {
-                            "$ref": "#/definitions/auth.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Project not found",
-                        "schema": {
-                            "$ref": "#/definitions/auth.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/auth.ErrorResponse"
-                        }
-                    }
-                }
-            },
-            "patch": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Update a project by its unique slug identifier with partial updates",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "projects"
-                ],
-                "summary": "Update project by slug",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Project slug (8-character identifier)",
-                        "name": "slug",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Project update data",
-                        "name": "project",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/models.ProjectUpdateRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Updated project details",
-                        "schema": {
-                            "$ref": "#/definitions/models.ProjectResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Validation errors in request data",
-                        "schema": {
-                            "$ref": "#/definitions/models.ValidationErrors"
-                        }
-                    },
-                    "401": {
-                        "description": "Authentication required",
-                        "schema": {
-                            "$ref": "#/definitions/auth.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Project not found",
-                        "schema": {
-                            "$ref": "#/definitions/auth.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/auth.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/readyz": {
-            "get": {
-                "description": "Check if the API server is ready to serve requests",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "health"
-                ],
-                "summary": "Readiness check",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/main.ReadyResponse"
-                        }
-                    }
-                }
-            }
         }
     },
     "definitions": {
@@ -1313,9 +1383,9 @@ const docTemplate = `{
                 "dockerImage": {
                     "$ref": "#/definitions/models.DockerImageConfig"
                 },
-                "environmentSlug": {
+                "environmentUuid": {
                     "type": "string",
-                    "example": "abc123de"
+                    "example": "123e4567-e89b-12d3-a456-426614174000"
                 },
                 "gitRepository": {
                     "$ref": "#/definitions/models.GitRepositoryConfig"
@@ -1486,6 +1556,21 @@ const docTemplate = `{
                 "ApplicationDomainTypeDefault",
                 "ApplicationDomainTypeCustom"
             ]
+        },
+        "models.ApplicationEnvUpdateRequest": {
+            "type": "object",
+            "properties": {
+                "variables": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    },
+                    "example": {
+                        "\"DB_HOST\"": "\"localhost\"}",
+                        "{\"API_KEY\"": "\"secret123\""
+                    }
+                }
+            }
         },
         "models.ApplicationResponse": {
             "type": "object",
@@ -1665,12 +1750,12 @@ const docTemplate = `{
         "models.DeploymentCreateRequest": {
             "type": "object",
             "required": [
-                "applicationSlug"
+                "applicationUuid"
             ],
             "properties": {
-                "applicationSlug": {
+                "applicationUuid": {
                     "type": "string",
-                    "example": "abc123de"
+                    "example": "550e8400-e29b-41d4-a716-446655440001"
                 },
                 "gitRepository": {
                     "$ref": "#/definitions/models.GitRepositoryDeploymentConfig"
@@ -1741,6 +1826,9 @@ const docTemplate = `{
         "models.DockerImageConfig": {
             "type": "object",
             "properties": {
+                "healthCheck": {
+                    "$ref": "#/definitions/models.HealthCheckConfig"
+                },
                 "image": {
                     "type": "string",
                     "example": "nginx:latest"
@@ -1766,9 +1854,9 @@ const docTemplate = `{
                     "type": "string",
                     "example": "production"
                 },
-                "projectSlug": {
+                "projectUuid": {
                     "type": "string",
-                    "example": "abc123de"
+                    "example": "123e4567-e89b-12d3-a456-426614174001"
                 },
                 "variables": {
                     "type": "object",
@@ -1864,9 +1952,8 @@ const docTemplate = `{
                     "type": "string",
                     "example": "npm run build"
                 },
-                "env": {
-                    "type": "string",
-                    "example": "app-env-vars"
+                "healthCheck": {
+                    "$ref": "#/definitions/models.HealthCheckConfig"
                 },
                 "path": {
                     "type": "string",
@@ -1919,6 +2006,39 @@ const docTemplate = `{
                 "commitSHA": {
                     "type": "string",
                     "example": "abc123def456"
+                }
+            }
+        },
+        "models.HealthCheckConfig": {
+            "type": "object",
+            "properties": {
+                "failureThreshold": {
+                    "type": "integer",
+                    "example": 3
+                },
+                "initialDelaySeconds": {
+                    "type": "integer",
+                    "example": 30
+                },
+                "path": {
+                    "type": "string",
+                    "example": "/health"
+                },
+                "periodSeconds": {
+                    "type": "integer",
+                    "example": 10
+                },
+                "port": {
+                    "type": "integer",
+                    "example": 3000
+                },
+                "successThreshold": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "timeoutSeconds": {
+                    "type": "integer",
+                    "example": 5
                 }
             }
         },
@@ -2052,7 +2172,7 @@ const docTemplate = `{
                 },
                 "namespaceName": {
                     "type": "string",
-                    "example": "project-abc123de"
+                    "example": "project-550e8400-e29b-41d4-a716-446655440000"
                 },
                 "resourceProfile": {
                     "allOf": [
@@ -2204,7 +2324,7 @@ const docTemplate = `{
 var SwaggerInfo = &swag.Spec{
 	Version:          "1.0",
 	Host:             "localhost:8080",
-	BasePath:         "/",
+	BasePath:         "/v1",
 	Schemes:          []string{},
 	Title:            "Kibaship Operator API",
 	Description:      "REST API server for managing Kibaship Operator resources",

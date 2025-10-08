@@ -55,6 +55,74 @@ spec:
               dockerImage:
                 description: DockerImage contains configuration for DockerImage applications
                 properties:
+                  env:
+                    description: Env is a reference to a secret containing environment
+                      variables for this application (optional)
+                    properties:
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                    type: object
+                    x-kubernetes-map-type: atomic
+                  healthCheck:
+                    description: HealthCheck defines the health check configuration
+                      for this application (optional)
+                    properties:
+                      failureThreshold:
+                        default: 3
+                        description: FailureThreshold is the minimum consecutive failures
+                          for the health check to be considered failed
+                        format: int32
+                        minimum: 1
+                        type: integer
+                      initialDelaySeconds:
+                        default: 30
+                        description: InitialDelaySeconds is the number of seconds
+                          after the container has started before health checks are
+                          initiated
+                        format: int32
+                        minimum: 0
+                        type: integer
+                      path:
+                        description: Path is the HTTP path to check for health (e.g.,
+                          /health, /healthz, /api/health)
+                        pattern: ^/.*$
+                        type: string
+                      periodSeconds:
+                        default: 10
+                        description: PeriodSeconds specifies how often (in seconds)
+                          to perform the health check
+                        format: int32
+                        minimum: 1
+                        type: integer
+                      port:
+                        description: Port is the port to use for health checks (optional,
+                          defaults to main container port)
+                        format: int32
+                        maximum: 65535
+                        minimum: 1
+                        type: integer
+                      successThreshold:
+                        default: 1
+                        description: SuccessThreshold is the minimum consecutive successes
+                          for the health check to be considered successful
+                        format: int32
+                        minimum: 1
+                        type: integer
+                      timeoutSeconds:
+                        default: 5
+                        description: TimeoutSeconds is the number of seconds after
+                          which the health check times out
+                        format: int32
+                        minimum: 1
+                        type: integer
+                    type: object
                   image:
                     description: Image is the Docker image reference (e.g., nginx:latest,
                       registry.com/org/image:tag)
@@ -123,6 +191,59 @@ spec:
                         type: string
                     type: object
                     x-kubernetes-map-type: atomic
+                  healthCheck:
+                    description: HealthCheck defines the health check configuration
+                      for this application (optional)
+                    properties:
+                      failureThreshold:
+                        default: 3
+                        description: FailureThreshold is the minimum consecutive failures
+                          for the health check to be considered failed
+                        format: int32
+                        minimum: 1
+                        type: integer
+                      initialDelaySeconds:
+                        default: 30
+                        description: InitialDelaySeconds is the number of seconds
+                          after the container has started before health checks are
+                          initiated
+                        format: int32
+                        minimum: 0
+                        type: integer
+                      path:
+                        description: Path is the HTTP path to check for health (e.g.,
+                          /health, /healthz, /api/health)
+                        pattern: ^/.*$
+                        type: string
+                      periodSeconds:
+                        default: 10
+                        description: PeriodSeconds specifies how often (in seconds)
+                          to perform the health check
+                        format: int32
+                        minimum: 1
+                        type: integer
+                      port:
+                        description: Port is the port to use for health checks (optional,
+                          defaults to main container port)
+                        format: int32
+                        maximum: 65535
+                        minimum: 1
+                        type: integer
+                      successThreshold:
+                        default: 1
+                        description: SuccessThreshold is the minimum consecutive successes
+                          for the health check to be considered successful
+                        format: int32
+                        minimum: 1
+                        type: integer
+                      timeoutSeconds:
+                        default: 5
+                        description: TimeoutSeconds is the number of seconds after
+                          which the health check times out
+                        format: int32
+                        minimum: 1
+                        type: integer
+                    type: object
                   path:
                     description: Path is the path within the repository (optional,
                       defaults to root)
@@ -184,6 +305,21 @@ spec:
                   database:
                     description: Database is the initial database name to create
                     type: string
+                  env:
+                    description: Env is a reference to a secret containing environment
+                      variables for this application (optional)
+                    properties:
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                    type: object
+                    x-kubernetes-map-type: atomic
                   secretRef:
                     description: SecretRef references the secret containing MySQL
                       credentials
@@ -210,6 +346,21 @@ spec:
                   database:
                     description: Database is the initial database name to create
                     type: string
+                  env:
+                    description: Env is a reference to a secret containing environment
+                      variables for this application (optional)
+                    properties:
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                    type: object
+                    x-kubernetes-map-type: atomic
                   replicas:
                     default: 3
                     description: Replicas is the number of MySQL instances in the
@@ -242,6 +393,21 @@ spec:
                   database:
                     description: Database is the initial database name to create
                     type: string
+                  env:
+                    description: Env is a reference to a secret containing environment
+                      variables for this application (optional)
+                    properties:
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                    type: object
+                    x-kubernetes-map-type: atomic
                   secretRef:
                     description: SecretRef references the secret containing PostgreSQL
                       credentials
@@ -268,6 +434,21 @@ spec:
                   database:
                     description: Database is the initial database name to create
                     type: string
+                  env:
+                    description: Env is a reference to a secret containing environment
+                      variables for this application (optional)
+                    properties:
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                    type: object
+                    x-kubernetes-map-type: atomic
                   replicas:
                     default: 3
                     description: Replicas is the number of PostgreSQL instances in

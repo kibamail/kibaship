@@ -1694,7 +1694,7 @@ spec:
           value: "3000"
         - name: KIBASHIP_ACME_EMAIL
           value: test@kibaship.com
-        image: ghcr.io/kibamail/kibaship-operator:v0.1.6
+        image: kibamail/kibaship-operator:v0.1.6
         livenessProbe:
           httpGet:
             path: /healthz
@@ -2030,7 +2030,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
-        image: ghcr.io/kibamail/kibaship-operator-apiserver:v0.1.6
+        image: kibamail/kibaship-operator-apiserver:v0.1.6
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
@@ -2195,7 +2195,7 @@ spec:
         - --tls-cert-file=/tls/tls.crt
         - --tls-private-key-file=/tls/tls.key
         - --secure-port=8443
-        image: ghcr.io/kibamail/kibaship-operator-cert-manager-webhook:v0.1.6
+        image: kibamail/kibaship-operator-cert-manager-webhook:v0.1.6
         imagePullPolicy: IfNotPresent
         name: webhook
         ports:
@@ -2417,14 +2417,14 @@ spec:
       as prepare)
     name: contextPath
     type: string
-  - default: ghcr.io/railwayapp/railpack-frontend:v0.7.2
+  - default: railwayapp/railpack-frontend:v0.7.2
     description: Railpack frontend gateway source for BuildKit (pin to CLI version)
     name: railpackFrontendSource
     type: string
   - description: Full image tag to push (e.g., registry.registry.svc.cluster.local/namespace/app-uuid:deployment-uuid)
     name: imageTag
     type: string
-  - default: ghcr.io/kibamail/kibaship-railpack-build:0.1.0
+  - default: kibamail/kibaship-railpack-build:0.1.0
     description: Image for buildctl client (for kustomize override convenience)
     name: buildImage
     type: string
@@ -2523,7 +2523,7 @@ spec:
   - description: Absolute path to the generated railpack-info.json in the workspace
     name: info
   steps:
-  - image: ghcr.io/kibamail/kibaship-railpack-cli:$(params.railpackVersion)
+  - image: kibamail/kibaship-railpack-cli:$(params.railpackVersion)
     name: prepare
     script: |
       #!/usr/bin/env sh
@@ -2674,102 +2674,6 @@ spec:
           secretName: registry-ca-cert
 ---
 apiVersion: v1
-kind: Namespace
-metadata:
-  name: certificates
----
-apiVersion: gateway.networking.k8s.io/v1beta1
-kind: ReferenceGrant
-metadata:
-  name: ingress-gateway-certificate-access
-  namespace: certificates
-spec:
-  from:
-  - group: gateway.networking.k8s.io
-    kind: Gateway
-    namespace: ingress-gateway
-  to:
-  - group: ""
-    kind: Secret
-    name: tenant-wildcard-certificate
----
-apiVersion: v1
-kind: Namespace
-metadata:
-  labels:
-    name: ingress-gateway
-  name: ingress-gateway
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: deployment-not-found
-  namespace: ingress-gateway
-spec:
-  ports:
-  - port: 80
-    protocol: TCP
-    targetPort: 3000
-  selector:
-    app: deployment-not-found
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: deployment-not-found
-  namespace: ingress-gateway
-spec:
-  replicas: 2
-  selector:
-    matchLabels:
-      app: deployment-not-found
-  template:
-    metadata:
-      labels:
-        app: deployment-not-found
-    spec:
-      containers:
-      - image: ghcr.io/kibamail/kibaship-404-deployment-not-found:latest
-        name: deployment-not-found
-        ports:
-        - containerPort: 3000
-        resources:
-          limits:
-            cpu: 200m
-            memory: 256Mi
-          requests:
-            cpu: 100m
-            memory: 128Mi
----
-apiVersion: gateway.networking.k8s.io/v1
-kind: Gateway
-metadata:
-  annotations:
-    io.cilium.gateway/node-selector: ingress.kibaship.com/ready=true
-  name: ingress-gateway
-  namespace: ingress-gateway
-spec:
-  gatewayClassName: cilium
-  listeners:
-  - allowedRoutes:
-      namespaces:
-        from: All
-    name: http
-    port: 30080
-    protocol: HTTP
-  - allowedRoutes:
-      namespaces:
-        from: All
-    name: https
-    port: 30443
-    protocol: HTTPS
-    tls:
-      certificateRefs:
-      - kind: Secret
-        name: tenant-wildcard-certificate
-        namespace: certificates
----
-apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: registry-auth
@@ -2835,7 +2739,7 @@ spec:
         app: registry-auth
     spec:
       containers:
-      - image: ghcr.io/kibamail/kibaship-operator-registry-auth:v0.1.6
+      - image: kibamail/kibaship-operator-registry-auth:v0.1.6
         imagePullPolicy: IfNotPresent
         livenessProbe:
           failureThreshold: 3

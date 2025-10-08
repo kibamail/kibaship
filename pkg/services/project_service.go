@@ -103,46 +103,46 @@ func (s *ProjectService) CreateProject(ctx context.Context, req *models.ProjectC
 	return project, nil
 }
 
-// GetProject retrieves a project by slug
-func (s *ProjectService) GetProject(ctx context.Context, slug string) (*models.Project, error) {
-	// List all projects and find by slug label
+// GetProject retrieves a project by UUID
+func (s *ProjectService) GetProject(ctx context.Context, uuid string) (*models.Project, error) {
+	// List all projects and find by UUID label
 	var projectList v1alpha1.ProjectList
 	err := s.client.List(ctx, &projectList, client.MatchingLabels{
-		validation.LabelResourceSlug: slug,
+		validation.LabelResourceUUID: uuid,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list projects: %w", err)
 	}
 
 	if len(projectList.Items) == 0 {
-		return nil, fmt.Errorf("project with slug %s not found", slug)
+		return nil, fmt.Errorf("project with UUID %s not found", uuid)
 	}
 
 	if len(projectList.Items) > 1 {
-		return nil, fmt.Errorf("multiple projects found with slug %s", slug)
+		return nil, fmt.Errorf("multiple projects found with UUID %s", uuid)
 	}
 
 	project := s.convertFromProjectCRD(&projectList.Items[0])
 	return project, nil
 }
 
-// DeleteProject deletes a project by slug
-func (s *ProjectService) DeleteProject(ctx context.Context, slug string) error {
+// DeleteProject deletes a project by UUID
+func (s *ProjectService) DeleteProject(ctx context.Context, uuid string) error {
 	// First check if project exists
 	var projectList v1alpha1.ProjectList
 	err := s.client.List(ctx, &projectList, client.MatchingLabels{
-		validation.LabelResourceSlug: slug,
+		validation.LabelResourceUUID: uuid,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to list projects: %w", err)
 	}
 
 	if len(projectList.Items) == 0 {
-		return fmt.Errorf("project with slug %s not found", slug)
+		return fmt.Errorf("project with UUID %s not found", uuid)
 	}
 
 	if len(projectList.Items) > 1 {
-		return fmt.Errorf("multiple projects found with slug %s", slug)
+		return fmt.Errorf("multiple projects found with UUID %s", uuid)
 	}
 
 	// Delete the project CRD
@@ -155,23 +155,23 @@ func (s *ProjectService) DeleteProject(ctx context.Context, slug string) error {
 	return nil
 }
 
-// UpdateProject updates a project by slug with partial updates (PATCH)
-func (s *ProjectService) UpdateProject(ctx context.Context, slug string, req *models.ProjectUpdateRequest) (*models.Project, error) {
+// UpdateProject updates a project by UUID with partial updates (PATCH)
+func (s *ProjectService) UpdateProject(ctx context.Context, uuid string, req *models.ProjectUpdateRequest) (*models.Project, error) {
 	// First get the existing project
 	var projectList v1alpha1.ProjectList
 	err := s.client.List(ctx, &projectList, client.MatchingLabels{
-		validation.LabelResourceSlug: slug,
+		validation.LabelResourceUUID: uuid,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list projects: %w", err)
 	}
 
 	if len(projectList.Items) == 0 {
-		return nil, fmt.Errorf("project with slug %s not found", slug)
+		return nil, fmt.Errorf("project with UUID %s not found", uuid)
 	}
 
 	if len(projectList.Items) > 1 {
-		return nil, fmt.Errorf("multiple projects found with slug %s", slug)
+		return nil, fmt.Errorf("multiple projects found with UUID %s", uuid)
 	}
 
 	// Get the existing CRD
@@ -332,7 +332,7 @@ func (s *ProjectService) convertToProjectCRD(project *models.Project, req *model
 			Kind:       "Project",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: fmt.Sprintf("project-%s", project.Slug),
+			Name: fmt.Sprintf("project-%s", project.UUID),
 			Labels: map[string]string{
 				validation.LabelResourceUUID:  project.UUID,
 				validation.LabelResourceSlug:  project.Slug,

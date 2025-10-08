@@ -104,13 +104,26 @@ func (r *ApplicationDomainReconciler) Reconcile(ctx context.Context, req ctrl.Re
 			fmt.Sprintf("Domain validation failed: %v", err))
 	}
 
-	// Ensure a dedicated Certificate exists for this ApplicationDomain and record its reference
-	certName, certNS, err := r.ensureCertificateForDomain(ctx, &appDomain)
-	if err != nil {
-		logger.Error(err, "Failed to provision Certificate for ApplicationDomain")
-		return r.updateStatus(ctx, &appDomain, platformv1alpha1.ApplicationDomainPhaseFailed,
-			fmt.Sprintf("Certificate provisioning failed: %v", err))
+	// Handle certificate provisioning based on domain type
+	var certName, certNS string
+	var err error
+
+	if appDomain.Spec.Type == platformv1alpha1.ApplicationDomainTypeCustom {
+		// Custom domains: provision individual certificate via ACME/Let's Encrypt
+		certName, certNS, err = r.ensureCertificateForDomain(ctx, &appDomain)
+		if err != nil {
+			logger.Error(err, "Failed to provision Certificate for custom ApplicationDomain")
+			return r.updateStatus(ctx, &appDomain, platformv1alpha1.ApplicationDomainPhaseFailed,
+				fmt.Sprintf("Certificate provisioning failed: %v", err))
+		}
+		logger.Info("Provisioned individual certificate for custom domain", "certificate", certName, "namespace", certNS)
+	} else {
+		// Default domains: reference the wildcard certificate
+		certName = "tenant-wildcard-certificate"
+		certNS = certificatesNamespace
+		logger.Info("Using wildcard certificate for default domain", "certificate", certName, "namespace", certNS)
 	}
+
 	appDomain.Status.CertificateRef = &platformv1alpha1.NamespacedRef{Name: certName, Namespace: certNS}
 
 	// Update status to indicate domain is ready (certificate issuance will progress asynchronously)

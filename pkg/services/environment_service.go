@@ -51,7 +51,7 @@ func NewEnvironmentService(k8sClient client.Client, scheme *runtime.Scheme, proj
 // CreateEnvironment creates a new environment
 func (s *EnvironmentService) CreateEnvironment(ctx context.Context, req *models.EnvironmentCreateRequest) (*models.Environment, error) {
 	// First, verify the project exists and get its details
-	project, err := s.projectService.GetProject(ctx, req.ProjectSlug)
+	project, err := s.projectService.GetProject(ctx, req.ProjectUUID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get project: %w", err)
 	}
@@ -113,23 +113,23 @@ func (s *EnvironmentService) CreateEnvironment(ctx context.Context, req *models.
 	return environment, nil
 }
 
-// GetEnvironment retrieves an environment by slug
-func (s *EnvironmentService) GetEnvironment(ctx context.Context, slug string) (*models.Environment, error) {
-	// List all environments and find by slug label
+// GetEnvironment retrieves an environment by UUID
+func (s *EnvironmentService) GetEnvironment(ctx context.Context, uuid string) (*models.Environment, error) {
+	// List all environments and find by UUID label
 	var environmentList v1alpha1.EnvironmentList
 	err := s.client.List(ctx, &environmentList, client.MatchingLabels{
-		validation.LabelResourceSlug: slug,
+		validation.LabelResourceUUID: uuid,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list environments: %w", err)
 	}
 
 	if len(environmentList.Items) == 0 {
-		return nil, fmt.Errorf("environment with slug %s not found", slug)
+		return nil, fmt.Errorf("environment with UUID %s not found", uuid)
 	}
 
 	if len(environmentList.Items) > 1 {
-		return nil, fmt.Errorf("multiple environments found with slug %s", slug)
+		return nil, fmt.Errorf("multiple environments found with UUID %s", uuid)
 	}
 
 	environment := s.convertFromEnvironmentCRD(&environmentList.Items[0])
@@ -147,17 +147,11 @@ func (s *EnvironmentService) GetEnvironment(ctx context.Context, slug string) (*
 }
 
 // GetEnvironmentsByProject retrieves all environments for a project
-func (s *EnvironmentService) GetEnvironmentsByProject(ctx context.Context, projectSlug string) ([]*models.Environment, error) {
-	// First get the project to get its UUID
-	project, err := s.projectService.GetProject(ctx, projectSlug)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get project: %w", err)
-	}
-
-	// List all environments for this project
+func (s *EnvironmentService) GetEnvironmentsByProject(ctx context.Context, projectUUID string) ([]*models.Environment, error) {
+	// List all environments for this project UUID
 	var environmentList v1alpha1.EnvironmentList
-	err = s.client.List(ctx, &environmentList, client.MatchingLabels{
-		validation.LabelProjectUUID: project.UUID,
+	err := s.client.List(ctx, &environmentList, client.MatchingLabels{
+		validation.LabelProjectUUID: projectUUID,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list environments: %w", err)
@@ -182,23 +176,23 @@ func (s *EnvironmentService) GetEnvironmentsByProject(ctx context.Context, proje
 	return environments, nil
 }
 
-// UpdateEnvironment updates an environment by slug with partial updates (PATCH)
-func (s *EnvironmentService) UpdateEnvironment(ctx context.Context, slug string, req *models.EnvironmentUpdateRequest) (*models.Environment, error) {
+// UpdateEnvironment updates an environment by UUID with partial updates (PATCH)
+func (s *EnvironmentService) UpdateEnvironment(ctx context.Context, uuid string, req *models.EnvironmentUpdateRequest) (*models.Environment, error) {
 	// First get the existing environment
 	var environmentList v1alpha1.EnvironmentList
 	err := s.client.List(ctx, &environmentList, client.MatchingLabels{
-		validation.LabelResourceSlug: slug,
+		validation.LabelResourceUUID: uuid,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list environments: %w", err)
 	}
 
 	if len(environmentList.Items) == 0 {
-		return nil, fmt.Errorf("environment with slug %s not found", slug)
+		return nil, fmt.Errorf("environment with UUID %s not found", uuid)
 	}
 
 	if len(environmentList.Items) > 1 {
-		return nil, fmt.Errorf("multiple environments found with slug %s", slug)
+		return nil, fmt.Errorf("multiple environments found with UUID %s", uuid)
 	}
 
 	// Get the existing CRD
@@ -247,23 +241,23 @@ func (s *EnvironmentService) UpdateEnvironment(ctx context.Context, slug string,
 	return updatedEnvironment, nil
 }
 
-// DeleteEnvironment deletes an environment by slug
-func (s *EnvironmentService) DeleteEnvironment(ctx context.Context, slug string) error {
+// DeleteEnvironment deletes an environment by UUID
+func (s *EnvironmentService) DeleteEnvironment(ctx context.Context, uuid string) error {
 	// First check if environment exists
 	var environmentList v1alpha1.EnvironmentList
 	err := s.client.List(ctx, &environmentList, client.MatchingLabels{
-		validation.LabelResourceSlug: slug,
+		validation.LabelResourceUUID: uuid,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to list environments: %w", err)
 	}
 
 	if len(environmentList.Items) == 0 {
-		return fmt.Errorf("environment with slug %s not found", slug)
+		return fmt.Errorf("environment with UUID %s not found", uuid)
 	}
 
 	if len(environmentList.Items) > 1 {
-		return fmt.Errorf("multiple environments found with slug %s", slug)
+		return fmt.Errorf("multiple environments found with UUID %s", uuid)
 	}
 
 	// Delete the environment CRD
@@ -298,7 +292,7 @@ func (s *EnvironmentService) convertToEnvironmentCRD(env *models.Environment) *v
 			Kind:       "Environment",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("environment-%s-kibaship-com", env.Slug),
+			Name:      fmt.Sprintf("environment-%s", env.UUID),
 			Namespace: "default",
 			Labels: map[string]string{
 				validation.LabelResourceUUID: env.UUID,
@@ -311,7 +305,7 @@ func (s *EnvironmentService) convertToEnvironmentCRD(env *models.Environment) *v
 		},
 		Spec: v1alpha1.EnvironmentSpec{
 			ProjectRef: corev1.LocalObjectReference{
-				Name: fmt.Sprintf("project-%s-kibaship-com", env.ProjectSlug),
+				Name: fmt.Sprintf("project-%s", env.ProjectUUID),
 			},
 		},
 	}

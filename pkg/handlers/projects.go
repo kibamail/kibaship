@@ -36,7 +36,7 @@ func NewProjectHandler(projectService *services.ProjectService) *ProjectHandler 
 	}
 }
 
-// CreateProject handles POST /projects
+// CreateProject handles POST /v1/projects
 // @Summary Create a new project
 // @Description Create a new project with comprehensive resource management and application type configuration. The project will be assigned a random 8-character slug and configured with the specified resource profile.
 // @Tags projects
@@ -48,7 +48,7 @@ func NewProjectHandler(projectService *services.ProjectService) *ProjectHandler 
 // @Failure 401 {object} auth.ErrorResponse "Authentication required"
 // @Failure 500 {object} auth.ErrorResponse "Internal server error"
 // @Security BearerAuth
-// @Router /projects [post]
+// @Router /v1/projects [post]
 func (h *ProjectHandler) CreateProject(c *gin.Context) {
 	var req models.ProjectCreateRequest
 
@@ -84,20 +84,20 @@ func (h *ProjectHandler) CreateProject(c *gin.Context) {
 	c.JSON(http.StatusCreated, project.ToResponse())
 }
 
-// GetProject handles GET /projects/:slug
-// @Summary Get project by slug
-// @Description Retrieve a project by its unique slug identifier
+// GetProject handles GET /v1/projects/:uuid
+// @Summary Get project by UUID
+// @Description Retrieve a project by its unique UUID or slug identifier
 // @Tags projects
 // @Produce json
-// @Param slug path string true "Project slug (8-character identifier)"
+// @Param uuid path string true "Project UUID or slug (8-character identifier)"
 // @Success 200 {object} models.ProjectResponse "Project details"
 // @Failure 401 {object} auth.ErrorResponse "Authentication required"
 // @Failure 404 {object} auth.ErrorResponse "Project not found"
 // @Failure 500 {object} auth.ErrorResponse "Internal server error"
 // @Security BearerAuth
-// @Router /projects/{slug} [get]
+// @Router /v1/projects/{uuid} [get]
 func (h *ProjectHandler) GetProject(c *gin.Context) {
-	slug := c.Param("slug")
+	slug := c.Param("uuid")
 
 	if slug == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -109,10 +109,10 @@ func (h *ProjectHandler) GetProject(c *gin.Context) {
 
 	project, err := h.projectService.GetProject(c.Request.Context(), slug)
 	if err != nil {
-		if err.Error() == "project with slug "+slug+" not found" {
+		if err.Error() == "project with UUID "+slug+" not found" {
 			c.JSON(http.StatusNotFound, gin.H{
 				"error":   "Not Found",
-				"message": "Project with slug '" + slug + "' was not found",
+				"message": "Project with UUID '" + slug + "' was not found",
 			})
 			return
 		}
@@ -127,19 +127,19 @@ func (h *ProjectHandler) GetProject(c *gin.Context) {
 	c.JSON(http.StatusOK, project.ToResponse())
 }
 
-// DeleteProject handles DELETE /projects/:slug
-// @Summary Delete project by slug
-// @Description Delete a project by its unique slug identifier
+// DeleteProject handles DELETE /v1/projects/:uuid
+// @Summary Delete project by UUID
+// @Description Delete a project by its unique UUID or slug identifier
 // @Tags projects
-// @Param slug path string true "Project slug (8-character identifier)"
+// @Param uuid path string true "Project UUID or slug (8-character identifier)"
 // @Success 204 "Project deleted successfully"
 // @Failure 401 {object} auth.ErrorResponse "Authentication required"
 // @Failure 404 {object} auth.ErrorResponse "Project not found"
 // @Failure 500 {object} auth.ErrorResponse "Internal server error"
 // @Security BearerAuth
-// @Router /projects/{slug} [delete]
+// @Router /v1/projects/{uuid} [delete]
 func (h *ProjectHandler) DeleteProject(c *gin.Context) {
-	slug := c.Param("slug")
+	slug := c.Param("uuid")
 
 	if slug == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -151,10 +151,10 @@ func (h *ProjectHandler) DeleteProject(c *gin.Context) {
 
 	err := h.projectService.DeleteProject(c.Request.Context(), slug)
 	if err != nil {
-		if err.Error() == "project with slug "+slug+" not found" {
+		if err.Error() == "project with UUID "+slug+" not found" {
 			c.JSON(http.StatusNotFound, gin.H{
 				"error":   "Not Found",
-				"message": "Project with slug '" + slug + "' was not found",
+				"message": "Project with UUID '" + slug + "' was not found",
 			})
 			return
 		}
@@ -169,13 +169,13 @@ func (h *ProjectHandler) DeleteProject(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-// UpdateProject handles PATCH /projects/:slug
-// @Summary Update project by slug
-// @Description Update a project by its unique slug identifier with partial updates
+// UpdateProject handles PATCH /v1/projects/:uuid
+// @Summary Update project by UUID
+// @Description Update a project by its unique UUID or slug identifier with partial updates
 // @Tags projects
 // @Accept json
 // @Produce json
-// @Param slug path string true "Project slug (8-character identifier)"
+// @Param uuid path string true "Project UUID or slug (8-character identifier)"
 // @Param project body models.ProjectUpdateRequest true "Project update data"
 // @Success 200 {object} models.ProjectResponse "Updated project details"
 // @Failure 400 {object} models.ValidationErrors "Validation errors in request data"
@@ -183,9 +183,9 @@ func (h *ProjectHandler) DeleteProject(c *gin.Context) {
 // @Failure 404 {object} auth.ErrorResponse "Project not found"
 // @Failure 500 {object} auth.ErrorResponse "Internal server error"
 // @Security BearerAuth
-// @Router /projects/{slug} [patch]
+// @Router /v1/projects/{uuid} [patch]
 func (h *ProjectHandler) UpdateProject(c *gin.Context) {
-	slug := c.Param("slug")
+	slug := c.Param("uuid")
 
 	if slug == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -212,10 +212,10 @@ func (h *ProjectHandler) UpdateProject(c *gin.Context) {
 
 	project, err := h.projectService.UpdateProject(c.Request.Context(), slug, &req)
 	if err != nil {
-		if err.Error() == "project with slug "+slug+" not found" {
+		if err.Error() == "project with UUID "+slug+" not found" {
 			c.JSON(http.StatusNotFound, gin.H{
 				"error":   "Not Found",
-				"message": "Project with slug '" + slug + "' was not found",
+				"message": "Project with UUID '" + slug + "' was not found",
 			})
 			return
 		}

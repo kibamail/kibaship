@@ -27,7 +27,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -337,6 +336,14 @@ func (r *ProjectReconciler) ensureRegistryCACertificate(ctx context.Context, nam
 	}, registryTLS)
 
 	if err != nil {
+		if errors.IsNotFound(err) {
+			// Registry TLS secret doesn't exist (e.g., in test environments)
+			// This is not a fatal error - just log and skip
+			log.Info("Registry TLS secret not found, skipping CA certificate setup",
+				"namespace", registryNamespace,
+				"secret", registryTLSSecret)
+			return nil
+		}
 		return fmt.Errorf("failed to get registry TLS secret: %w", err)
 	}
 
@@ -457,30 +464,32 @@ func (r *ProjectReconciler) ensureRegistryDockerConfig(ctx context.Context, name
 func (r *ProjectReconciler) ensureDefaultEnvironment(ctx context.Context, project *platformv1alpha1.Project, namespace string) error {
 	log := logf.FromContext(ctx)
 
-	productionEnvName := "environment-production-kibaship-com"
-	existingEnv := &platformv1alpha1.Environment{}
-	err := r.Get(ctx, types.NamespacedName{
-		Name:      productionEnvName,
-		Namespace: namespace,
-	}, existingEnv)
+	// Check if production environment already exists by label
+	projectUUID := project.Labels[validation.LabelResourceUUID]
+	envList := &platformv1alpha1.EnvironmentList{}
+	err := r.List(ctx, envList, client.InNamespace(namespace), client.MatchingLabels{
+		validation.LabelResourceSlug: "production",
+		validation.LabelProjectUUID:  projectUUID,
+	})
 
-	if err == nil {
+	if err != nil {
+		return fmt.Errorf("failed to check for production environment: %w", err)
+	}
+
+	if len(envList.Items) > 0 {
 		log.Info("Production environment already exists")
 		return nil
 	}
 
-	if !errors.IsNotFound(err) {
-		return fmt.Errorf("failed to check for production environment: %w", err)
-	}
-
 	// Create production environment
-	projectUUID := project.Labels[validation.LabelResourceUUID]
+	envUUID := validation.GenerateUUID()
+	productionEnvName := fmt.Sprintf("environment-%s", envUUID)
 	productionEnv := &platformv1alpha1.Environment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      productionEnvName,
 			Namespace: namespace,
 			Labels: map[string]string{
-				validation.LabelResourceUUID: validation.GenerateUUID(),
+				validation.LabelResourceUUID: envUUID,
 				validation.LabelResourceSlug: "production",
 				validation.LabelProjectUUID:  projectUUID,
 			},

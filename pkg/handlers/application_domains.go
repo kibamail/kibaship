@@ -37,13 +37,13 @@ func NewApplicationDomainHandler(applicationDomainService *services.ApplicationD
 	}
 }
 
-// CreateApplicationDomain handles POST /applications/{applicationSlug}/domains
+// CreateApplicationDomain handles POST /v1/applications/:uuid/domains
 // @Summary Create a new application domain
 // @Description Create a new domain for an application
 // @Tags application-domains
 // @Accept json
 // @Produce json
-// @Param applicationSlug path string true "Application slug (8-character identifier)"
+// @Param uuid path string true "Application UUID or slug (8-character identifier)"
 // @Param domain body models.ApplicationDomainCreateRequest true "Application domain creation data"
 // @Success 201 {object} models.ApplicationDomainResponse "Application domain created successfully"
 // @Failure 400 {object} models.ValidationErrors "Validation errors in request data"
@@ -51,9 +51,9 @@ func NewApplicationDomainHandler(applicationDomainService *services.ApplicationD
 // @Failure 404 {object} auth.ErrorResponse "Application not found"
 // @Failure 500 {object} auth.ErrorResponse "Internal server error"
 // @Security BearerAuth
-// @Router /applications/{applicationSlug}/domains [post]
+// @Router /v1/applications/{uuid}/domains [post]
 func (h *ApplicationDomainHandler) CreateApplicationDomain(c *gin.Context) {
-	applicationSlug := c.Param("applicationSlug")
+	applicationSlug := c.Param("uuid")
 
 	if applicationSlug == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -101,20 +101,20 @@ func (h *ApplicationDomainHandler) CreateApplicationDomain(c *gin.Context) {
 	c.JSON(http.StatusCreated, applicationDomain.ToResponse())
 }
 
-// GetApplicationDomain handles GET /domains/{slug}
-// @Summary Get application domain by slug
-// @Description Retrieve an application domain by its unique slug identifier
+// GetApplicationDomain handles GET /v1/domains/:uuid
+// @Summary Get application domain by UUID
+// @Description Retrieve an application domain by its unique UUID or slug identifier
 // @Tags application-domains
 // @Produce json
-// @Param slug path string true "Application domain slug (8-character identifier)"
+// @Param uuid path string true "Application domain UUID or slug (8-character identifier)"
 // @Success 200 {object} models.ApplicationDomainResponse "Application domain details"
 // @Failure 401 {object} auth.ErrorResponse "Authentication required"
 // @Failure 404 {object} auth.ErrorResponse "Application domain not found"
 // @Failure 500 {object} auth.ErrorResponse "Internal server error"
 // @Security BearerAuth
-// @Router /domains/{slug} [get]
+// @Router /v1/domains/{uuid} [get]
 func (h *ApplicationDomainHandler) GetApplicationDomain(c *gin.Context) {
-	slug := c.Param("slug")
+	slug := c.Param("uuid")
 
 	if slug == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -144,19 +144,19 @@ func (h *ApplicationDomainHandler) GetApplicationDomain(c *gin.Context) {
 	c.JSON(http.StatusOK, applicationDomain.ToResponse())
 }
 
-// DeleteApplicationDomain handles DELETE /domains/{slug}
-// @Summary Delete application domain by slug
-// @Description Delete an application domain by its unique slug identifier
+// DeleteApplicationDomain handles DELETE /v1/domains/:uuid
+// @Summary Delete application domain by UUID
+// @Description Delete an application domain by its unique UUID or slug identifier
 // @Tags application-domains
-// @Param slug path string true "Application domain slug (8-character identifier)"
+// @Param uuid path string true "Application domain UUID or slug (8-character identifier)"
 // @Success 204 "Application domain deleted successfully"
 // @Failure 401 {object} auth.ErrorResponse "Authentication required"
 // @Failure 404 {object} auth.ErrorResponse "Application domain not found"
 // @Failure 500 {object} auth.ErrorResponse "Internal server error"
 // @Security BearerAuth
-// @Router /domains/{slug} [delete]
+// @Router /v1/domains/{uuid} [delete]
 func (h *ApplicationDomainHandler) DeleteApplicationDomain(c *gin.Context) {
-	slug := c.Param("slug")
+	slug := c.Param("uuid")
 
 	if slug == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
