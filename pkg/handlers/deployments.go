@@ -192,3 +192,51 @@ func (h *DeploymentHandler) GetDeploymentsByApplication(c *gin.Context) {
 
 	c.JSON(http.StatusOK, responses)
 }
+
+// PromoteDeployment handles POST /v1/deployments/:uuid/promote
+// @Summary Promote a deployment
+// @Description Promote a deployment by updating the application's currentDeploymentRef to point to this deployment
+// @Tags deployments
+// @Produce json
+// @Param uuid path string true "Deployment UUID or slug"
+// @Success 200 {object} map[string]string "Deployment promoted successfully"
+// @Failure 401 {object} auth.ErrorResponse "Authentication required"
+// @Failure 404 {object} auth.ErrorResponse "Deployment not found"
+// @Failure 500 {object} auth.ErrorResponse "Internal server error"
+// @Security BearerAuth
+// @Router /v1/deployments/{uuid}/promote [post]
+func (h *DeploymentHandler) PromoteDeployment(c *gin.Context) {
+	deploymentUUID := c.Param("uuid")
+
+	if deploymentUUID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "Bad Request",
+			"message": "Deployment UUID is required",
+		})
+		return
+	}
+
+	err := h.deploymentService.PromoteDeployment(c.Request.Context(), deploymentUUID)
+	if err != nil {
+		// Check if deployment not found (checking for substring to handle wrapped errors)
+		errMsg := err.Error()
+		if errMsg == "failed to get deployment: deployment with UUID "+deploymentUUID+" not found" ||
+			errMsg == "deployment with UUID "+deploymentUUID+" not found" {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error":   "Not Found",
+				"message": "Deployment with UUID '" + deploymentUUID + "' was not found",
+			})
+			return
+		}
+
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "Internal Server Error",
+			"message": "Failed to promote deployment: " + err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Deployment promoted successfully",
+	})
+}

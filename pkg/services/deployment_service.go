@@ -95,7 +95,7 @@ func (s *DeploymentService) CreateDeployment(ctx context.Context, req *models.De
 	)
 
 	// Create Kubernetes Deployment CRD
-	crd := s.convertToDeploymentCRD(deployment, application)
+	crd := s.convertToDeploymentCRD(deployment, application, req.Promote)
 
 	err = s.client.Create(ctx, crd)
 	if err != nil {
@@ -171,6 +171,51 @@ func (s *DeploymentService) GetDeploymentsByApplication(ctx context.Context, app
 	}
 
 	return deployments, nil
+}
+
+// PromoteDeployment promotes a deployment by updating the application's currentDeploymentRef
+func (s *DeploymentService) PromoteDeployment(ctx context.Context, deploymentUUID string) error {
+	// Get the deployment
+	deployment, err := s.GetDeployment(ctx, deploymentUUID)
+	if err != nil {
+		return fmt.Errorf("failed to get deployment: %w", err)
+	}
+
+	// Get the application CRD
+	var applicationList v1alpha1.ApplicationList
+	err = s.client.List(ctx, &applicationList, client.MatchingLabels{
+		validation.LabelResourceUUID: deployment.ApplicationUUID,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to list applications: %w", err)
+	}
+
+	if len(applicationList.Items) == 0 {
+		return fmt.Errorf("application with UUID %s not found", deployment.ApplicationUUID)
+	}
+
+	if len(applicationList.Items) > 1 {
+		return fmt.Errorf("multiple applications found with UUID %s", deployment.ApplicationUUID)
+	}
+
+	application := &applicationList.Items[0]
+
+	// Check if already promoted
+	if application.Spec.CurrentDeploymentRef != nil &&
+		application.Spec.CurrentDeploymentRef.Name == fmt.Sprintf("deployment-%s", deploymentUUID) {
+		return nil // Already promoted
+	}
+
+	// Update the currentDeploymentRef
+	application.Spec.CurrentDeploymentRef = &corev1.LocalObjectReference{
+		Name: fmt.Sprintf("deployment-%s", deploymentUUID),
+	}
+
+	if err := s.client.Update(ctx, application); err != nil {
+		return fmt.Errorf("failed to update application currentDeploymentRef: %w", err)
+	}
+
+	return nil
 }
 
 // GetLatestDeploymentByApplicationUUID retrieves the most recent deployment for an application by UUID
@@ -251,7 +296,7 @@ func (s *DeploymentService) getApplicationByUUID(ctx context.Context, uuid strin
 }
 
 // convertToDeploymentCRD converts internal deployment model to Kubernetes Deployment CRD
-func (s *DeploymentService) convertToDeploymentCRD(deployment *models.Deployment, application *models.Application) *v1alpha1.Deployment {
+func (s *DeploymentService) convertToDeploymentCRD(deployment *models.Deployment, application *models.Application, promote bool) *v1alpha1.Deployment {
 	crd := &v1alpha1.Deployment{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "platform.operator.kibaship.com/v1alpha1",
@@ -275,6 +320,7 @@ func (s *DeploymentService) convertToDeploymentCRD(deployment *models.Deployment
 			ApplicationRef: corev1.LocalObjectReference{
 				Name: fmt.Sprintf("application-%s", deployment.ApplicationUUID),
 			},
+			Promote: promote,
 		},
 	}
 

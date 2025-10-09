@@ -43,6 +43,7 @@ type GitRepositoryDeploymentConfig struct {
 // DeploymentCreateRequest represents the request to create a new deployment
 type DeploymentCreateRequest struct {
 	ApplicationUUID string                         `json:"applicationUuid" example:"550e8400-e29b-41d4-a716-446655440001" validate:"required"`
+	Promote         bool                           `json:"promote,omitempty" example:"false"`
 	GitRepository   *GitRepositoryDeploymentConfig `json:"gitRepository,omitempty"`
 }
 

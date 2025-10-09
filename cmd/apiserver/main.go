@@ -165,6 +165,7 @@ func main() {
 		v1.POST("/applications/:uuid/deployments", deploymentHandler.CreateDeployment)
 		v1.GET("/applications/:uuid/deployments", deploymentHandler.GetDeploymentsByApplication)
 		v1.GET("/deployments/:uuid", deploymentHandler.GetDeployment)
+		v1.POST("/deployments/:uuid/promote", deploymentHandler.PromoteDeployment)
 
 		// Application Domain endpoints
 		v1.POST("/applications/:uuid/domains", applicationDomainHandler.CreateApplicationDomain)

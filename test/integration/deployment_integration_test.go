@@ -231,6 +231,60 @@ var _ = Describe("Deployment Integration", func() {
 		// Cleanup
 		cleanupTestDeployment(ctx, createdProject, createdApplication, createdDeployment)
 	})
+
+	It("promotes deployment successfully", NodeTimeout(30*time.Second), func(ctx SpecContext) {
+		apiKey := generateTestAPIKey()
+		router := setupIntegrationTestRouter(apiKey)
+
+		createdProject, createdApplication, createdDeployment := createTestDeployment(router, apiKey)
+
+		// Promote the deployment
+		req, err := http.NewRequest("POST", "/v1/deployments/"+createdDeployment.UUID+"/promote", nil)
+		Expect(err).NotTo(HaveOccurred())
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		Expect(w.Code).To(Equal(http.StatusOK))
+
+		var response map[string]string
+		err = json.Unmarshal(w.Body.Bytes(), &response)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(response["message"]).To(Equal("Deployment promoted successfully"))
+
+		// Verify that the application's currentDeploymentRef is updated
+		var application v1alpha1.Application
+		err = k8sClient.Get(ctx, client.ObjectKey{
+			Name:      "application-" + createdApplication.UUID + "",
+			Namespace: "default",
+		}, &application)
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(application.Spec.CurrentDeploymentRef).NotTo(BeNil())
+		Expect(application.Spec.CurrentDeploymentRef.Name).To(Equal("deployment-" + createdDeployment.UUID))
+
+		// Cleanup
+		cleanupTestDeployment(ctx, createdProject, createdApplication, createdDeployment)
+	})
+
+	It("returns 404 when promoting non-existent deployment", NodeTimeout(30*time.Second), func(ctx SpecContext) {
+		apiKey := generateTestAPIKey()
+		router := setupIntegrationTestRouter(apiKey)
+
+		// Try to promote non-existent deployment
+		req, err := http.NewRequest("POST", "/v1/deployments/nonexistent-uuid/promote", nil)
+		Expect(err).NotTo(HaveOccurred())
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		Expect(w.Code).To(Equal(http.StatusNotFound))
+
+		var response map[string]string
+		err = json.Unmarshal(w.Body.Bytes(), &response)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(response["error"]).To(Equal("Not Found"))
+	})
 })
 
 // Helper function to create a test deployment
