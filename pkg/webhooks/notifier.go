@@ -117,7 +117,9 @@ func (n NoopNotifier) NotifyApplicationDomainStatusChange(ctx context.Context, e
 func (n NoopNotifier) NotifyDeploymentStatusChange(ctx context.Context, evt DeploymentStatusEvent) error {
 	return nil
 }
-func (n NoopNotifier) NotifyOptimizedDeploymentStatusChange(ctx context.Context, evt OptimizedDeploymentStatusEvent) error {
+func (n NoopNotifier) NotifyOptimizedDeploymentStatusChange(
+	ctx context.Context, evt OptimizedDeploymentStatusEvent,
+) error {
 	return nil
 }
 
@@ -225,6 +227,8 @@ func (n *HTTPNotifier) NotifyDeploymentStatusChange(ctx context.Context, evt Dep
 	return n.postSigned(ctx, evt)
 }
 
-func (n *HTTPNotifier) NotifyOptimizedDeploymentStatusChange(ctx context.Context, evt OptimizedDeploymentStatusEvent) error {
+func (n *HTTPNotifier) NotifyOptimizedDeploymentStatusChange(
+	ctx context.Context, evt OptimizedDeploymentStatusEvent,
+) error {
 	return n.postSigned(ctx, evt)
 }

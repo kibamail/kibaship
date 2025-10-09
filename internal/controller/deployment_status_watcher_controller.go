@@ -36,6 +36,11 @@ import (
 	platformv1alpha1 "github.com/kibamail/kibaship-operator/api/v1alpha1"
 )
 
+const (
+	// CrashLoopBackOffReason represents the reason for crash loop back off state
+	CrashLoopBackOffReason = "CrashLoopBackOff"
+)
+
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch
 // +kubebuilder:rbac:groups=platform.operator.kibaship.com,resources=deployments,verbs=get;list;watch
@@ -110,7 +115,7 @@ func (r *DeploymentStatusWatcherReconciler) Reconcile(ctx context.Context, req c
 	if crashLooping {
 		// Pods are crash looping - mark as failed
 		conditionStatus = metav1.ConditionFalse
-		reason = "CrashLoopBackOff"
+		reason = CrashLoopBackOffReason
 		message = crashMessage
 	} else if k8sDep.Status.ReadyReplicas > 0 {
 		conditionStatus = metav1.ConditionTrue
@@ -182,7 +187,7 @@ func (r *DeploymentStatusWatcherReconciler) isPodsCrashLooping(ctx context.Conte
 			}
 
 			// Check if currently in CrashLoopBackOff state
-			if containerStatus.State.Waiting != nil && containerStatus.State.Waiting.Reason == "CrashLoopBackOff" {
+			if containerStatus.State.Waiting != nil && containerStatus.State.Waiting.Reason == CrashLoopBackOffReason {
 				return true, fmt.Sprintf("Container %s is in CrashLoopBackOff state", containerStatus.Name)
 			}
 		}

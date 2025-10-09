@@ -38,6 +38,11 @@ import (
 	"github.com/kibamail/kibaship-operator/pkg/utils"
 )
 
+const (
+	// ResourceProfileStandard represents the standard resource profile
+	ResourceProfileStandard = "standard"
+)
+
 // DeploymentProgressController manages phase transitions and K8s resource creation
 type DeploymentProgressController struct {
 	client.Client
@@ -279,7 +284,7 @@ func (r *DeploymentProgressController) ensureKubernetesDeployment(
 	containerPort := int32(3000)
 
 	// Resource profile (default to standard)
-	resourceProfile := "standard"
+	resourceProfile := ResourceProfileStandard
 
 	// Define resource requirements
 	var resourceRequirements corev1.ResourceRequirements
@@ -306,7 +311,7 @@ func (r *DeploymentProgressController) ensureKubernetesDeployment(
 				corev1.ResourceMemory: resource.MustParse("2Gi"),
 			},
 		}
-	default: // "standard"
+	default: // ResourceProfileStandard
 		resourceRequirements = corev1.ResourceRequirements{
 			Requests: corev1.ResourceList{
 				corev1.ResourceCPU:    resource.MustParse("250m"),
