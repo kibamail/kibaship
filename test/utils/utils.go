@@ -553,6 +553,18 @@ func ApplyTektonResources() error {
 		time.Sleep(2 * time.Second)
 	}
 
+	// Wait for the dockerfile build task to be visible
+	for {
+		cmd := exec.Command("kubectl", "-n", "tekton-pipelines", "get", "task", "tekton-task-dockerfile-build-kibaship-com")
+		if _, err := Run(cmd); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("timeout waiting for tekton-task-dockerfile-build-kibaship-com to be available")
+		}
+		time.Sleep(2 * time.Second)
+	}
+
 	// If local override images set, patch the Tasks in-cluster to use them (ensures override even if kustomize miss)
 	if cli := os.Getenv("RAILPACK_CLI_IMG"); cli != "" {
 		patch := fmt.Sprintf(`[{"op":"replace","path":"/spec/steps/0/image","value":"%s"}]`, cli)

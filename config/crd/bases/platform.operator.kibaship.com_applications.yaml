@@ -190,8 +190,34 @@ spec:
                     type: string
                   buildCommand:
                     description: BuildCommand is the command to build the application
-                      (optional)
+                      (optional, for Railpack builds)
                     type: string
+                  buildType:
+                    default: Railpack
+                    description: BuildType defines how the application should be built
+                      (Railpack or Dockerfile)
+                    enum:
+                    - Railpack
+                    - Dockerfile
+                    type: string
+                  dockerfileBuild:
+                    description: |-
+                      DockerfileBuild contains configuration for Dockerfile builds
+                      Required when BuildType is Dockerfile
+                    properties:
+                      buildContext:
+                        default: .
+                        description: BuildContext is the build context path relative
+                          to the repository root
+                        type: string
+                      dockerfilePath:
+                        default: Dockerfile
+                        description: DockerfilePath is the path to the Dockerfile
+                          relative to the repository root
+                        type: string
+                    required:
+                    - dockerfilePath
+                    type: object
                   env:
                     description: Env is a reference to a secret containing environment
                       variables for this application (optional)
@@ -305,11 +331,11 @@ spec:
                     x-kubernetes-map-type: atomic
                   spaOutputDirectory:
                     description: SpaOutputDirectory is the output directory for SPA
-                      builds (optional)
+                      builds (optional, for Railpack builds)
                     type: string
                   startCommand:
                     description: StartCommand is the command to start the application
-                      (optional)
+                      (optional, for Railpack builds)
                     type: string
                 required:
                 - provider

@@ -764,6 +764,28 @@ func (s *ApplicationService) convertHealthCheckConfigFromCRD(config *v1alpha1.He
 	}
 }
 
+func (s *ApplicationService) convertDockerfileBuildConfig(config *models.DockerfileBuildConfig) *v1alpha1.DockerfileBuildConfig {
+	if config == nil {
+		return nil
+	}
+
+	return &v1alpha1.DockerfileBuildConfig{
+		DockerfilePath: config.DockerfilePath,
+		BuildContext:   config.BuildContext,
+	}
+}
+
+func (s *ApplicationService) convertDockerfileBuildConfigFromCRD(config *v1alpha1.DockerfileBuildConfig) *models.DockerfileBuildConfig {
+	if config == nil {
+		return nil
+	}
+
+	return &models.DockerfileBuildConfig{
+		DockerfilePath: config.DockerfilePath,
+		BuildContext:   config.BuildContext,
+	}
+}
+
 func (s *ApplicationService) convertGitRepositoryConfig(config *models.GitRepositoryConfig) *v1alpha1.GitRepositoryConfig {
 	if config == nil {
 		return nil
@@ -785,6 +807,8 @@ func (s *ApplicationService) convertGitRepositoryConfig(config *models.GitReposi
 		BuildCommand:       config.BuildCommand,
 		StartCommand:       config.StartCommand,
 		SpaOutputDirectory: config.SpaOutputDirectory,
+		BuildType:          v1alpha1.BuildType(config.BuildType),
+		DockerfileBuild:    s.convertDockerfileBuildConfig(config.DockerfileBuild),
 		HealthCheck:        s.convertHealthCheckConfig(config.HealthCheck),
 		// Env is automatically set by the application controller
 	}
@@ -811,6 +835,8 @@ func (s *ApplicationService) convertGitRepositoryConfigFromCRD(config *v1alpha1.
 		BuildCommand:       config.BuildCommand,
 		StartCommand:       config.StartCommand,
 		SpaOutputDirectory: config.SpaOutputDirectory,
+		BuildType:          models.BuildType(config.BuildType),
+		DockerfileBuild:    s.convertDockerfileBuildConfigFromCRD(config.DockerfileBuild),
 		HealthCheck:        s.convertHealthCheckConfigFromCRD(config.HealthCheck),
 		// Env is automatically managed by the application controller
 	}

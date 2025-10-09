@@ -65,6 +65,17 @@ const (
 	GitProviderBitbucket GitProvider = "bitbucket.com"
 )
 
+// BuildType defines the build type for GitRepository applications
+// +kubebuilder:validation:Enum=Railpack;Dockerfile
+type BuildType string
+
+const (
+	// BuildTypeRailpack uses Railpack to build the application
+	BuildTypeRailpack BuildType = "Railpack"
+	// BuildTypeDockerfile uses a Dockerfile to build the application
+	BuildTypeDockerfile BuildType = "Dockerfile"
+)
+
 // HealthCheckConfig defines the health check configuration for an application
 type HealthCheckConfig struct {
 	// Path is the HTTP path to check for health (e.g., /health, /healthz, /api/health)
@@ -109,6 +120,19 @@ type HealthCheckConfig struct {
 	FailureThreshold int32 `json:"failureThreshold,omitempty"`
 }
 
+// DockerfileBuildConfig defines the configuration for Dockerfile builds
+type DockerfileBuildConfig struct {
+	// DockerfilePath is the path to the Dockerfile relative to the repository root
+	// +kubebuilder:validation:Required
+	// +kubebuilder:default="Dockerfile"
+	DockerfilePath string `json:"dockerfilePath"`
+
+	// BuildContext is the build context path relative to the repository root
+	// +kubebuilder:default="."
+	// +optional
+	BuildContext string `json:"buildContext,omitempty"`
+}
+
 // GitRepositoryConfig defines the configuration for GitRepository applications
 type GitRepositoryConfig struct {
 	// Provider is the Git provider (github.com, gitlab.com, bitbucket.com)
@@ -144,11 +168,21 @@ type GitRepositoryConfig struct {
 	// +optional
 	RootDirectory string `json:"rootDirectory,omitempty"`
 
-	// BuildCommand is the command to build the application (optional)
+	// BuildType defines how the application should be built (Railpack or Dockerfile)
+	// +kubebuilder:default="Railpack"
+	// +optional
+	BuildType BuildType `json:"buildType,omitempty"`
+
+	// DockerfileBuild contains configuration for Dockerfile builds
+	// Required when BuildType is Dockerfile
+	// +optional
+	DockerfileBuild *DockerfileBuildConfig `json:"dockerfileBuild,omitempty"`
+
+	// BuildCommand is the command to build the application (optional, for Railpack builds)
 	// +optional
 	BuildCommand string `json:"buildCommand,omitempty"`
 
-	// StartCommand is the command to start the application (optional)
+	// StartCommand is the command to start the application (optional, for Railpack builds)
 	// +optional
 	StartCommand string `json:"startCommand,omitempty"`
 
@@ -156,7 +190,7 @@ type GitRepositoryConfig struct {
 	// +optional
 	Env *corev1.LocalObjectReference `json:"env,omitempty"`
 
-	// SpaOutputDirectory is the output directory for SPA builds (optional)
+	// SpaOutputDirectory is the output directory for SPA builds (optional, for Railpack builds)
 	// +optional
 	SpaOutputDirectory string `json:"spaOutputDirectory,omitempty"`
 
@@ -499,6 +533,31 @@ func (r *Application) validateGitRepository() error {
 		// The actual secret existence validation should be done in the controller reconcile loop
 	}
 
+	// Default BuildType to Railpack if not specified
+	buildType := gitRepo.BuildType
+	if buildType == "" {
+		buildType = BuildTypeRailpack
+	}
+
+	// Validate BuildType and DockerfileBuild configuration
+	if buildType == BuildTypeDockerfile {
+		if gitRepo.DockerfileBuild == nil {
+			return fmt.Errorf("DockerfileBuild configuration is required when BuildType is Dockerfile")
+		}
+
+		// Validate DockerfilePath
+		if err := r.validateDockerfilePath(gitRepo.DockerfileBuild.DockerfilePath); err != nil {
+			return err
+		}
+
+		// Validate BuildContext if specified
+		if gitRepo.DockerfileBuild.BuildContext != "" {
+			if err := r.validateBuildContext(gitRepo.DockerfileBuild.BuildContext); err != nil {
+				return err
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -537,6 +596,44 @@ func (r *Application) validateHealthCheck(healthCheck *HealthCheckConfig) error 
 
 	if healthCheck.FailureThreshold != 0 && healthCheck.FailureThreshold < 1 {
 		return fmt.Errorf("health check failureThreshold must be >= 1, got: %d", healthCheck.FailureThreshold)
+	}
+
+	return nil
+}
+
+// validateDockerfilePath validates the Dockerfile path for security
+func (r *Application) validateDockerfilePath(path string) error {
+	if path == "" {
+		return fmt.Errorf("DockerfilePath cannot be empty")
+	}
+
+	// Prevent path traversal attacks
+	if strings.Contains(path, "..") {
+		return fmt.Errorf("DockerfilePath cannot contain '..' for security reasons: %s", path)
+	}
+
+	// Ensure it's a relative path (doesn't start with /)
+	if strings.HasPrefix(path, "/") {
+		return fmt.Errorf("DockerfilePath must be a relative path, not absolute: %s", path)
+	}
+
+	return nil
+}
+
+// validateBuildContext validates the build context path for security
+func (r *Application) validateBuildContext(context string) error {
+	if context == "" {
+		return nil // Empty is valid, will default to "."
+	}
+
+	// Prevent path traversal attacks
+	if strings.Contains(context, "..") {
+		return fmt.Errorf("BuildContext cannot contain '..' for security reasons: %s", context)
+	}
+
+	// Ensure it's a relative path (doesn't start with /)
+	if strings.HasPrefix(context, "/") {
+		return fmt.Errorf("BuildContext must be a relative path, not absolute: %s", context)
 	}
 
 	return nil

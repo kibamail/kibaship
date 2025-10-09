@@ -1,0 +1,94 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: tekton-task-dockerfile-build-kibaship-com
+  annotations:
+    tekton.dev/displayName: "Dockerfile Build and Push"
+    platform.kibaship.com/created-by: "kibaship-operator"
+  labels:
+    app.kubernetes.io/part-of: kibaship-operator
+spec:
+  description: |
+    Build an OCI image using BuildKit with the standard Dockerfile frontend.
+    The image is built from a Dockerfile in the repository and pushed to the registry.
+  params:
+    - name: dockerfilePath
+      type: string
+      description: Relative path to the Dockerfile within the repo workspace (e.g., 'Dockerfile' or 'app/Dockerfile')
+      default: "Dockerfile"
+    - name: contextPath
+      type: string
+      description: Build context path relative to the repository root (e.g., '.' or 'app')
+      default: "."
+    - name: imageTag
+      type: string
+      description: Full image tag to push (e.g., registry.registry.svc.cluster.local/namespace/app-uuid:deployment-uuid)
+    - name: buildImage
+      type: string
+      description: Image for buildctl client (for kustomize override convenience)
+      default: "moby/buildkit:v0.25.1-rootless"
+  workspaces:
+    - name: output
+      description: Shared workspace containing the cloned repository
+    - name: docker-config
+      description: Docker config for registry authentication
+    - name: registry-ca
+      description: Registry CA certificate for TLS trust
+    - name: app-env-vars
+      description: Application environment variables from secret
+      optional: true
+  results:
+    - name: buildOutput
+      description: Full image tag that was pushed
+    - name: imageDigest
+      description: Image digest (SHA256)
+  stepTemplate:
+    env:
+      - name: BUILDKIT_HOST
+        value: tcp://buildkitd.buildkit.svc:1234
+      - name: DOCKER_CONFIG
+        value: /workspace/docker-config
+  steps:
+    - name: build
+      image: $(params.buildImage)
+      workingDir: $(workspaces.output.path)
+      script: |
+        #!/usr/bin/env sh
+        set -eu
+
+        REPO_DIR="$(workspaces.output.path)/repo"
+        DOCKERFILE_PATH="$REPO_DIR/$(params.dockerfilePath)"
+        CONTEXT_DIR="$REPO_DIR/$(params.contextPath)"
+
+        # Validate Dockerfile exists
+        if [ ! -f "$DOCKERFILE_PATH" ]; then
+          echo "Dockerfile not found at $DOCKERFILE_PATH" >&2
+          echo "Available files in REPO_DIR:" >&2
+          ls -la "$REPO_DIR" >&2
+          exit 1
+        fi
+
+        # Validate context directory exists
+        if [ ! -d "$CONTEXT_DIR" ]; then
+          echo "Build context directory not found at $CONTEXT_DIR" >&2
+          exit 1
+        fi
+
+        echo "Building image from Dockerfile: $(params.dockerfilePath)"
+        echo "Build context: $(params.contextPath)"
+        echo "Pushing to: $(params.imageTag)"
+
+        # Build with standard Dockerfile frontend and push to registry
+        buildctl build \
+          --progress=plain \
+          --local context="$CONTEXT_DIR" \
+          --local dockerfile="$(dirname "$DOCKERFILE_PATH")" \
+          --frontend dockerfile.v0 \
+          --opt filename="$(basename "$DOCKERFILE_PATH")" \
+          --output type=image,name=$(params.imageTag),push=true
+
+        # Emit image tag as result
+        printf "%s" "$(params.imageTag)" > "$(results.buildOutput.path)"
+
+        # TODO: Extract and emit image digest
+        echo "" > "$(results.imageDigest.path)"

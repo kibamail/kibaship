@@ -1,0 +1,526 @@
+# Dockerfile Build Type Implementation Plan
+# This file outlines all tasks required to implement Dockerfile-based builds
+
+api_changes:
+  description: "Updates to API and CRD definitions"
+
+  application_crd:
+    - task: "✅ Add BuildType field to Application CRD"
+      file: "api/v1alpha1/application_types.go"
+      details:
+        - "Create BuildType enum with values: Railpack, Dockerfile"
+        - "Add BuildType field to ApplicationSpec"
+        - "Set default to Railpack for backward compatibility"
+        - "Add kubebuilder validation tags"
+      validation:
+        - "BuildType must be one of: Railpack, Dockerfile"
+        - "Default should be Railpack"
+
+    - task: "✅ Add DockerfileBuildConfig struct"
+      file: "api/v1alpha1/application_types.go"
+      details:
+        - "Create DockerfileBuildConfig struct with DockerfilePath field"
+        - "DockerfilePath should be relative to repository root"
+        - "Default to 'Dockerfile' if not specified"
+        - "Add validation for path format"
+        - "Add optional BuildContext field (defaults to repository root)"
+        - "Add optional BuildArgs map for docker build arguments"
+      validation:
+        - "DockerfilePath cannot be empty when BuildType is Dockerfile"
+        - "DockerfilePath must be a valid relative path"
+        - "DockerfilePath cannot contain '..' for security"
+
+    - task: "✅ Update ApplicationSpec to include build configs"
+      file: "api/v1alpha1/application_types.go"
+      details:
+        - "Add DockerfileBuild *DockerfileBuildConfig field (optional)"
+        - "Add validation: DockerfileBuild required when BuildType=Dockerfile"
+
+    - task: "✅ Add webhook validation for BuildType combinations"
+      file: "api/v1alpha1/application_types.go"
+      details:
+        - "Validate BuildType=Dockerfile requires GitRepository application type"
+        - "Validate BuildType=Dockerfile requires DockerfileBuild config"
+        - "Validate BuildType=Railpack requires GitRepository application type"
+
+    - task: "✅ Generate updated CRDs"
+      command: "make manifests"
+      details:
+        - "Run controller-gen to update CRD manifests"
+        - "Verify new fields appear in config/crd/bases/"
+        - "Check OpenAPI schema validation is correct"
+
+    - task: "✅ Add conversion functions for BuildType"
+      file: "pkg/services/application_service.go"
+      details:
+        - "Added BuildType and DockerfileBuild fields to convertGitRepositoryConfig"
+        - "Added BuildType and DockerfileBuild fields to convertGitRepositoryConfigFromCRD"
+        - "Created convertDockerfileBuildConfig function"
+        - "Created convertDockerfileBuildConfigFromCRD function"
+
+    - task: "✅ Add integration tests for BuildType"
+      file: "test/integration/application_integration_test.go"
+      details:
+        - "Created test for GitRepository application with Dockerfile BuildType"
+        - "Verifies API creates application with correct BuildType"
+        - "Verifies CRD contains BuildType and DockerfileBuild fields"
+        - "All tests passing (47/47)"
+
+  rest_api_models:
+    - task: "✅ Add BuildType to API models"
+      file: "pkg/models/application.go"
+      details:
+        - "✅ Add BuildType field to ApplicationCreateRequest"
+        - "✅ Add BuildType field to ApplicationUpdateRequest"
+        - "✅ Add BuildType field to ApplicationResponse"
+        - "✅ Add DockerfileBuildConfig to models"
+        - "✅ Add JSON tags and validation"
+
+    - task: "✅ Update application validation"
+      file: "pkg/models/application.go"
+      details:
+        - "✅ Validate BuildType is valid enum value (isValidBuildType function)"
+        - "✅ Validate DockerfilePath when BuildType=Dockerfile"
+        - "✅ Add validation helper functions (validateDockerfileBuild)"
+        - "✅ Add comprehensive error messages"
+        - "✅ Security validation: prevent path traversal with '..'"
+        - "✅ Security validation: reject absolute paths"
+
+pipeline_changes:
+  description: "Tekton pipeline modifications for Dockerfile builds"
+
+  pipeline_templates:
+    - task: "✅ Create Dockerfile build task template"
+      file: "config/tekton-resources/tasks/platform.operator.kibaship.com_dockerfile_build_tasks.yaml"
+      details:
+        - "✅ Create new Tekton Task for building Dockerfiles"
+        - "✅ Follow same pattern as railpack build task"
+        - "✅ Use existing buildkit daemon: tcp://buildkitd.buildkit.svc:1234"
+        - "✅ Use buildctl build command with standard Dockerfile frontend"
+        - "✅ Accept parameters: dockerfile-path, context-path, image-tag, build-image"
+        - "✅ Use stepTemplate to set BUILDKIT_HOST env var"
+        - "✅ Use stepTemplate to set DOCKER_CONFIG=/workspace/docker-config"
+      workspaces:
+        - "✅ output: shared workspace containing cloned repository"
+        - "✅ docker-config: registry authentication (NOT optional)"
+        - "✅ registry-ca: registry CA certificate (NOT optional)"
+        - "✅ app-env-vars: application environment variables (optional)"
+      params:
+        - "✅ dockerfilePath: relative path to Dockerfile (default: 'Dockerfile')"
+        - "✅ contextPath: build context path relative to repo root (default '.')"
+        - "✅ imageTag: full image tag to push"
+        - "✅ buildImage: buildctl client image (default: moby/buildkit:v0.25.1-rootless)"
+      results:
+        - "✅ buildOutput: full image tag that was pushed"
+        - "✅ imageDigest: image digest (SHA256)"
+      steps:
+        - "✅ Verify Dockerfile exists at specified path"
+        - "✅ Verify build context directory exists"
+        - "✅ Build image using: buildctl build --frontend dockerfile.v0 --local context=... --local dockerfile=..."
+        - "✅ Push to registry with --output type=image,name=...,push=true"
+        - "✅ Emit image tag and digest as results"
+
+    - task: "✅ Update pipeline generator for Dockerfile builds"
+      file: "internal/controller/pipeline_utils.go"
+      details:
+        - "✅ Added generateDockerfilePipeline() function"
+        - "✅ Pipeline structure:"
+        - "  1. git-clone task (reused from existing)"
+        - "  2. build-dockerfile task (new, using DockerfileBuildTaskName)"
+        - "✅ Pass application BuildType to determine pipeline type"
+        - "✅ Pass DockerfilePath and BuildContext as parameters to build task"
+        - "✅ Configure workspace sharing between tasks (output, docker-config, registry-ca, app-env-vars)"
+
+    - task: "✅ Update existing pipeline generator"
+      file: "internal/controller/pipeline_utils.go"
+      details:
+        - "✅ Extracted Railpack logic into generateRailpackPipeline() function"
+        - "✅ Created new generatePipeline() wrapper that switches based on BuildType"
+        - "✅ Switch cases:"
+        - "  - Railpack: calls generateRailpackPipeline()"
+        - "  - Dockerfile: calls generateDockerfilePipeline()"
+        - "✅ Backward compatibility ensured (defaults to Railpack if BuildType not specified)"
+        - "✅ Updated deployment_controller.go to use new generatePipeline()"
+
+controller_changes:
+  description: "Controller updates to handle different build types"
+
+  deployment_controller:
+    - task: "✅ Update DeploymentReconciler to detect BuildType"
+      file: "internal/controller/deployment_controller.go"
+      details:
+        - "✅ Application CRD is fetched in reconcile loop (already done in handleGitRepositoryDeployment)"
+        - "✅ BuildType is read from Application spec in generatePipeline()"
+        - "✅ BuildType is passed to pipeline generation via generatePipeline()"
+        - "✅ Added logging for BuildType detection in handleGitRepositoryDeployment (lines 279-291)"
+        - "✅ Added logging for Dockerfile configuration (dockerfilePath, buildContext)"
+
+    - task: "✅ Pass BuildType context to pipeline creation"
+      file: "internal/controller/deployment_controller.go"
+      details:
+        - "✅ createPipelineRun doesn't need modification (PipelineRun references the Pipeline which already has correct tasks)"
+        - "✅ DockerfilePath is passed via pipeline generation in generateDockerfilePipeline()"
+        - "✅ All parameters (dockerfilePath, contextPath, imageTag) are properly passed to Tekton tasks"
+        - "✅ Pipeline generation in pipeline_utils.go handles all BuildType-specific configuration"
+
+  deployment_progress_controller:
+    - task: "✅ Update phase detection for Dockerfile builds"
+      file: "internal/controller/deployment_controller.go"
+      details:
+        - "✅ Updated determineDeploymentPhase to recognize both 'build' and 'build-dockerfile' task names (lines 854-859)"
+        - "✅ Task name checking now supports both BuildTypes:"
+        - "  - Railpack: 'prepare' -> Preparing, 'build' -> Building"
+        - "  - Dockerfile: 'clone-repository' -> Preparing, 'build-dockerfile' -> Building"
+        - "✅ Backward compatible with existing Railpack deployments"
+
+    - task: "✅ Update condition messages for Dockerfile builds"
+      file: "internal/controller/deployment_controller.go"
+      details:
+        - "✅ Updated emitPhaseEventWithTracker to remove BuildType-specific references (line 899)"
+        - "✅ Changed 'Preparing deployment with railpack' to 'Preparing deployment' (generic)"
+        - "✅ 'Building container image with BuildKit' works for both BuildTypes"
+        - "✅ All event messages are now BuildType-agnostic"
+
+    - task: "✅ Handle Dockerfile build failures"
+      file: "internal/controller/deployment_controller.go"
+      details:
+        - "✅ Existing error handling in emitTaskRunEventsWithTracker works for all task types"
+        - "✅ Task failure events are emitted with task condition reason and message"
+        - "✅ No BuildType-specific error handling needed - Tekton provides detailed errors"
+
+  application_controller:
+    - task: "✅ Update ApplicationReconciler validation"
+      file: "internal/controller/application_controller.go"
+      details:
+        - "✅ Validation handled at CRD level via kubebuilder markers in api/v1alpha1/application_types.go"
+        - "✅ API server validates BuildType enum and DockerfileBuild configuration"
+        - "✅ Controller assumes resources are pre-validated by API server"
+        - "✅ No additional validation needed in ApplicationReconciler"
+
+registry_and_auth:
+  description: "Registry authentication and configuration"
+
+  registry_auth:
+    - task: "Ensure registry auth works for Dockerfile builds"
+      file: "internal/registryauth/server.go"
+      details:
+        - "Verify existing registry auth supports buildkit"
+        - "Test with Docker Hub and GHCR"
+        - "Ensure credentials are properly mounted to build task"
+        - "Add logging for auth debugging"
+
+    - task: "Update registry secret handling"
+      file: "internal/controller/deployment_controller.go"
+      details:
+        - "Ensure registry secret is mounted to build-dockerfile task"
+        - "Use same secret format as railpack builds"
+        - "Verify buildkit can use dockerconfig.json"
+
+service_layer:
+  description: "REST API service layer updates"
+
+  application_service:
+    - task: "Update CreateApplication to handle BuildType"
+      file: "pkg/services/application_service.go"
+      details:
+        - "Accept BuildType in create request"
+        - "Validate BuildType and build config"
+        - "Convert API model to CRD spec"
+        - "Set default BuildType to Railpack if not specified"
+
+    - task: "Update UpdateApplication to handle BuildType changes"
+      file: "pkg/services/application_service.go"
+      details:
+        - "Allow updating BuildType"
+        - "Validate new BuildType configuration"
+        - "Handle migration from one BuildType to another"
+        - "Warn if changing BuildType for app with deployments"
+
+    - task: "Update GetApplication to return BuildType"
+      file: "pkg/services/application_service.go"
+      details:
+        - "Include BuildType in response"
+        - "Include DockerfileBuildConfig if present"
+        - "Convert CRD spec to API response model"
+
+  deployment_service:
+    - task: "Update deployment creation to check BuildType"
+      file: "pkg/services/deployment_service.go"
+      details:
+        - "Fetch application's BuildType"
+        - "Validate deployment request matches BuildType"
+        - "For Dockerfile builds, verify DockerfilePath exists"
+        - "Add BuildType to deployment metadata/labels"
+
+handlers:
+  description: "REST API handler updates"
+
+  application_handlers:
+    - task: "Update CreateApplication handler"
+      file: "pkg/handlers/applications.go"
+      details:
+        - "Accept BuildType in request body"
+        - "Accept DockerfileBuild config"
+        - "Validate request"
+        - "Return BuildType in response"
+
+    - task: "Update UpdateApplication handler"
+      file: "pkg/handlers/applications.go"
+      details:
+        - "Accept BuildType in update request"
+        - "Allow updating DockerfilePath"
+        - "Validate changes"
+        - "Return updated BuildType in response"
+
+testing:
+  description: "Tests for Dockerfile build functionality"
+
+  unit_tests:
+    - task: "Test Application CRD validation"
+      file: "api/v1alpha1/application_types_test.go"
+      details:
+        - "Test BuildType validation"
+        - "Test DockerfilePath validation"
+        - "Test BuildType + config combinations"
+        - "Test webhook validation for invalid combinations"
+
+    - task: "Test pipeline generation for Dockerfile builds"
+      file: "internal/controller/pipeline_utils_test.go"
+      details:
+        - "Test generateDockerfilePipeline()"
+        - "Verify correct tasks are generated"
+        - "Verify parameters are passed correctly"
+        - "Test workspace configuration"
+
+    - task: "Test progress tracking for Dockerfile builds"
+      file: "internal/controller/deployment_progress_controller_test.go"
+      details:
+        - "Test phase detection for Dockerfile pipeline"
+        - "Test condition messages"
+        - "Test error handling"
+
+  integration_tests:
+    - task: "Test Dockerfile application creation via API"
+      file: "test/integration/application_integration_test.go"
+      details:
+        - "Create application with BuildType=Dockerfile"
+        - "Verify CRD is created correctly"
+        - "Verify BuildType and DockerfilePath are set"
+        - "Test validation errors"
+
+    - task: "Test deployment with Dockerfile build"
+      file: "test/integration/deployment_integration_test.go"
+      details:
+        - "Create Dockerfile-based application"
+        - "Create deployment"
+        - "Verify deployment CRD is created"
+        - "Mock/stub pipeline creation"
+
+  e2e_tests:
+    - task: "Create E2E test for Dockerfile deployment"
+      file: "test/e2e/dockerfile_deployment_test.go"
+      details:
+        - "Create application with BuildType=Dockerfile"
+        - "Point to examples/dockerfiles/todos-api-flask"
+        - "Set DockerfilePath to 'Dockerfile'"
+        - "Create deployment"
+        - "Wait for pipeline to run"
+        - "Verify image is built"
+        - "Verify deployment succeeds"
+        - "Test application is accessible"
+        - "Verify logs show Dockerfile build steps"
+
+    - task: "Test Dockerfile build failures"
+      file: "test/e2e/dockerfile_deployment_test.go"
+      details:
+        - "Test with invalid Dockerfile path"
+        - "Test with Dockerfile syntax errors"
+        - "Verify error messages are helpful"
+        - "Verify deployment phase is Failed"
+
+documentation:
+  description: "Documentation updates"
+
+  api_docs:
+    - task: "Update API documentation"
+      file: "docs/api.md"
+      details:
+        - "Document BuildType field"
+        - "Document DockerfileBuildConfig"
+        - "Add examples for Dockerfile builds"
+        - "Update OpenAPI/Swagger specs"
+
+    - task: "Update CRD documentation"
+      file: "docs/crds.md"
+      details:
+        - "Document new Application CRD fields"
+        - "Provide YAML examples"
+        - "Explain BuildType options"
+        - "Show DockerfilePath configuration"
+
+  user_guides:
+    - task: "Create Dockerfile deployment guide"
+      file: "docs/guides/dockerfile-deployments.md"
+      details:
+        - "Step-by-step guide for Dockerfile deployments"
+        - "Example using todos-api-flask"
+        - "Explain DockerfilePath configuration"
+        - "Show how to use build args"
+        - "Troubleshooting common issues"
+
+    - task: "Update deployment guide"
+      file: "docs/guides/deployments.md"
+      details:
+        - "Add section on BuildType selection"
+        - "Compare Railpack vs Dockerfile builds"
+        - "When to use each BuildType"
+
+examples:
+  description: "Example applications and configurations"
+
+  example_apps:
+    - task: "Organize Flask todo API example"
+      details:
+        - "Move examples/dockerfiles to examples/dockerfiles/todos-api-flask/"
+        - "Add README.md explaining the example"
+        - "Add sample Application CRD YAML"
+        - "Add sample Deployment CRD YAML"
+        - "Document how to deploy this example"
+
+    - task: "Create additional Dockerfile examples"
+      details:
+        - "Create examples/dockerfiles/nodejs-api/"
+        - "Create examples/dockerfiles/golang-api/"
+        - "Each with Dockerfile, README, and sample YAMLs"
+        - "Show different Dockerfile patterns"
+
+  sample_yamls:
+    - task: "Create sample Application YAML for Dockerfile"
+      file: "config/samples/application_dockerfile.yaml"
+      details:
+        - "Complete example Application with BuildType=Dockerfile"
+        - "Include all required fields"
+        - "Add helpful comments"
+
+    - task: "Create sample Deployment YAML for Dockerfile"
+      file: "config/samples/deployment_dockerfile.yaml"
+      details:
+        - "Example deployment for Dockerfile application"
+        - "Show commit SHA and branch configuration"
+
+migration:
+  description: "Migration and backward compatibility"
+
+  backward_compatibility:
+    - task: "Ensure existing applications work"
+      details:
+        - "Default BuildType to Railpack for existing apps"
+        - "Existing deployments should continue to work"
+        - "No breaking changes to API"
+        - "CRD upgrade is backward compatible"
+
+    - task: "Create migration guide"
+      file: "docs/migration/build-type.md"
+      details:
+        - "How to migrate from implicit Railpack to explicit BuildType"
+        - "Steps to convert app to Dockerfile build"
+        - "What changes when BuildType is specified"
+
+observability:
+  description: "Logging, metrics, and debugging"
+
+  logging:
+    - task: "Add structured logging for BuildType"
+      details:
+        - "Log BuildType on deployment creation"
+        - "Log pipeline type being created"
+        - "Log Dockerfile path being used"
+        - "Add BuildType to all relevant log messages"
+
+    - task: "Improve error messages"
+      details:
+        - "BuildType-specific error messages"
+        - "Dockerfile build failure messages"
+        - "Path validation errors"
+
+  metrics:
+    - task: "Add metrics for BuildType usage (optional)"
+      details:
+        - "Track deployments by BuildType"
+        - "Track build success/failure rates per BuildType"
+        - "Track build duration per BuildType"
+
+security:
+  description: "Security considerations"
+
+  validation:
+    - task: "Validate Dockerfile path for security"
+      details:
+        - "Prevent path traversal (../ not allowed)"
+        - "Ensure path is within repository"
+        - "Validate path format"
+        - "Add security notes to documentation"
+
+    - task: "Review buildkit security"
+      details:
+        - "Ensure buildkit runs in rootless mode"
+        - "Review network policies"
+        - "Validate registry authentication is secure"
+
+implementation_order:
+  description: "Suggested order of implementation"
+
+  phase_1_foundation:
+    - "Add BuildType and DockerfileBuildConfig to CRD"
+    - "Update API models"
+    - "Add webhook validation"
+    - "Generate CRDs"
+    - "Update REST API services and handlers"
+    - "Add unit tests for API validation"
+
+  phase_2_pipeline:
+    - "Create platform.operator.kibaship.com_dockerfile_build_tasks.yaml Tekton task"
+    - "Implement generateDockerfilePipeline()"
+    - "Update DeploymentReconciler to use BuildType"
+    - "Test pipeline generation"
+
+  phase_3_progress_tracking:
+    - "Update DeploymentProgressController for Dockerfile"
+    - "Add BuildType-aware phase detection"
+    - "Improve error messages"
+    - "Add unit tests for progress tracking"
+
+  phase_4_integration:
+    - "Add integration tests"
+    - "Organize example applications"
+    - "Create sample YAMLs"
+
+  phase_5_e2e:
+    - "Add E2E test for Dockerfile deployment"
+    - "Test with todos-api-flask example"
+    - "Test failure scenarios"
+    - "Verify in actual cluster"
+
+  phase_6_polish:
+    - "Add documentation"
+    - "Improve logging"
+    - "Add metrics (optional)"
+    - "Create migration guide"
+
+notes:
+  - "Existing Railpack builds should not be affected"
+  - "All changes should be backward compatible"
+  - "Focus on GitRepository + Dockerfile combination"
+  - "Registry auth should reuse existing infrastructure"
+  - "Pipeline structure mirrors Railpack but with different build task"
+  - "DeploymentProgressController is key for proper status reporting"
+  - "Examples are critical for user adoption"
+  - "ImageRegistry will be a separate application type, not a BuildType"
+
+dependencies:
+  - "Buildkit daemon already running at buildkitd.buildkit.svc:1234 (reuse)"
+  - "Registry authentication already configured (reuse docker-config workspace)"
+  - "Tekton Pipelines already installed"
+  - "Git clone task already exists (reuse)"
+  - "Deploy task already exists (reuse)"
+  - "Railpack build task pattern already exists (follow same conventions)"

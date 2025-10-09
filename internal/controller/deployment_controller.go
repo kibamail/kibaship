@@ -276,6 +276,20 @@ func (r *DeploymentReconciler) handleGitRepositoryDeployment(ctx context.Context
 		return fmt.Errorf("GitRepository configuration is required for GitRepository application deployments")
 	}
 
+	// Detect and log BuildType for debugging
+	buildType := app.Spec.GitRepository.BuildType
+	if buildType == "" {
+		buildType = platformv1alpha1.BuildTypeRailpack // Default
+	}
+	log.Info("Handling GitRepository deployment", "buildType", buildType)
+
+	// Log Dockerfile configuration if BuildType is Dockerfile
+	if buildType == platformv1alpha1.BuildTypeDockerfile && app.Spec.GitRepository.DockerfileBuild != nil {
+		log.Info("Dockerfile build configuration",
+			"dockerfilePath", app.Spec.GitRepository.DockerfileBuild.DockerfilePath,
+			"buildContext", app.Spec.GitRepository.DockerfileBuild.BuildContext)
+	}
+
 	// Generate the pipeline name
 	pipelineName := r.generateGitRepositoryPipelineName(ctx, deployment, app)
 
@@ -435,8 +449,6 @@ func (r *DeploymentReconciler) generateGitRepositoryPipelineName(_ context.Conte
 func (r *DeploymentReconciler) createGitRepositoryPipeline(ctx context.Context, deployment *platformv1alpha1.Deployment, app *platformv1alpha1.Application, pipelineName string) error {
 	log := logf.FromContext(ctx)
 
-	deploymentSlug := deployment.GetSlug()
-	deploymentUUID := deployment.GetUUID()
 	projectUUID := deployment.GetProjectUUID()
 
 	// Get project slug for labels
@@ -445,212 +457,10 @@ func (r *DeploymentReconciler) createGitRepositoryPipeline(ctx context.Context, 
 		return fmt.Errorf("failed to get project slug: %w", err)
 	}
 
-	// Get git configuration from application
-	gitConfig := app.Spec.GitRepository
-	if gitConfig == nil {
-		return fmt.Errorf("GitRepository configuration is nil")
-	}
-
-	// Construct git URL from provider and repository
-	gitURL := fmt.Sprintf("https://%s/%s", gitConfig.Provider, gitConfig.Repository)
-
-	// Get branch (use default if empty)
-	gitBranch := gitConfig.Branch
-	if gitBranch == "" {
-		gitBranch = "main" // Default branch
-	}
-
-	// Get secret name (only if not public access)
-	var tokenSecret string
-	if !gitConfig.PublicAccess && gitConfig.SecretRef != nil {
-		tokenSecret = gitConfig.SecretRef.Name
-	}
-
-	// Generate workspace name based on deployment UUID
-	workspaceName := fmt.Sprintf("workspace-%s", deploymentUUID)
-
-	pipeline := &tektonv1.Pipeline{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      pipelineName,
-			Namespace: deployment.Namespace,
-			Labels: map[string]string{
-				"app.kubernetes.io/name":                 fmt.Sprintf("project-%s", projectUUID),
-				"app.kubernetes.io/managed-by":           "kibaship-operator",
-				"app.kubernetes.io/component":            "ci-cd-pipeline",
-				"tekton.dev/pipeline":                    "git-repository-clone",
-				"project.kibaship.com/slug":              projectSlug,
-				"platform.kibaship.com/deployment-uuid":  deployment.Labels["platform.kibaship.com/uuid"],
-				"platform.kibaship.com/application-uuid": deployment.Labels["platform.kibaship.com/application-uuid"],
-				"platform.kibaship.com/project-uuid":     deployment.Labels["platform.kibaship.com/project-uuid"],
-			},
-			Annotations: map[string]string{
-				"description":                fmt.Sprintf("CI/CD pipeline for deployment %s that clones source code from git repository", deploymentSlug),
-				"project.kibaship.com/usage": "Clones repository code for build and deployment processes",
-				"tekton.dev/displayName":     fmt.Sprintf("Deployment %s GitRepository Pipeline", deploymentSlug),
-			},
-		},
-		Spec: tektonv1.PipelineSpec{
-			Description: "Pipeline that clones source code from a Git repository using an access token. This is the foundation pipeline that can be extended with build, test, and deploy tasks.",
-			Params: []tektonv1.ParamSpec{
-				{
-					Name:        "git-commit",
-					Description: "Specific commit hash to checkout",
-					Type:        tektonv1.ParamTypeString,
-				},
-				{
-					Name:        "git-branch",
-					Description: "Git branch to checkout (optional, defaults to configured branch)",
-					Type:        tektonv1.ParamTypeString,
-					Default:     &tektonv1.ParamValue{Type: tektonv1.ParamTypeString, StringVal: gitBranch},
-				},
-			},
-			Workspaces: []tektonv1.PipelineWorkspaceDeclaration{
-				{
-					Name:        workspaceName,
-					Description: "Workspace where the cloned source code will be stored",
-				},
-				{
-					Name:        "registry-docker-config",
-					Description: "Docker config for registry authentication",
-					Optional:    true,
-				},
-				{
-					Name:        "registry-ca-cert",
-					Description: "Registry CA certificate for TLS trust",
-					Optional:    true,
-				},
-				{
-					Name:        "app-env-vars",
-					Description: "Application environment variables from secret",
-					Optional:    true,
-				},
-			},
-			Tasks: []tektonv1.PipelineTask{
-				{
-					Name: "clone-repository",
-					TaskRef: &tektonv1.TaskRef{
-						ResolverRef: tektonv1.ResolverRef{
-							Resolver: "cluster",
-							Params: []tektonv1.Param{
-								{
-									Name:  "kind",
-									Value: tektonv1.ParamValue{Type: tektonv1.ParamTypeString, StringVal: "task"},
-								},
-								{
-									Name:  "name",
-									Value: tektonv1.ParamValue{Type: tektonv1.ParamTypeString, StringVal: GitCloneTaskName},
-								},
-								{
-									Name:  "namespace",
-									Value: tektonv1.ParamValue{Type: tektonv1.ParamTypeString, StringVal: "tekton-pipelines"},
-								},
-							},
-						},
-					},
-					Params: []tektonv1.Param{
-						{
-							Name:  "url",
-							Value: tektonv1.ParamValue{Type: tektonv1.ParamTypeString, StringVal: gitURL},
-						},
-						{
-							Name:  "branch",
-							Value: tektonv1.ParamValue{Type: tektonv1.ParamTypeString, StringVal: "$(params.git-branch)"},
-						},
-						{
-							Name:  "commit",
-							Value: tektonv1.ParamValue{Type: tektonv1.ParamTypeString, StringVal: "$(params.git-commit)"},
-						},
-						{
-							Name:  "token-secret",
-							Value: tektonv1.ParamValue{Type: tektonv1.ParamTypeString, StringVal: tokenSecret},
-						},
-						{
-							Name:  "public-access",
-							Value: tektonv1.ParamValue{Type: tektonv1.ParamTypeString, StringVal: fmt.Sprintf("%t", gitConfig.PublicAccess)},
-						},
-					},
-					Workspaces: []tektonv1.WorkspacePipelineTaskBinding{
-						{
-							Name:      "output",
-							Workspace: workspaceName,
-						},
-					},
-				},
-				{
-					Name:     "prepare",
-					RunAfter: []string{"clone-repository"},
-					TaskRef: &tektonv1.TaskRef{
-						ResolverRef: tektonv1.ResolverRef{
-							Resolver: "cluster",
-							Params: []tektonv1.Param{
-								{Name: "kind", Value: tektonv1.ParamValue{Type: tektonv1.ParamTypeString, StringVal: "task"}},
-								{Name: "name", Value: tektonv1.ParamValue{Type: tektonv1.ParamTypeString, StringVal: RailpackPrepareTaskName}},
-								{Name: "namespace", Value: tektonv1.ParamValue{Type: tektonv1.ParamTypeString, StringVal: "tekton-pipelines"}},
-							},
-						},
-					},
-					Params: []tektonv1.Param{
-						{Name: "contextPath", Value: tektonv1.ParamValue{Type: tektonv1.ParamTypeString, StringVal: func() string {
-							if gitConfig.RootDirectory == "" {
-								return "."
-							}
-							return gitConfig.RootDirectory
-						}()}},
-						{Name: "railpackVersion", Value: tektonv1.ParamValue{Type: tektonv1.ParamTypeString, StringVal: "0.1.2"}},
-					},
-					Workspaces: []tektonv1.WorkspacePipelineTaskBinding{
-						{Name: "output", Workspace: workspaceName},
-					},
-				},
-				{
-					Name:     "build",
-					RunAfter: []string{"prepare"},
-					TaskRef: &tektonv1.TaskRef{
-						ResolverRef: tektonv1.ResolverRef{
-							Resolver: "cluster",
-							Params: []tektonv1.Param{
-								{Name: "kind", Value: tektonv1.ParamValue{Type: tektonv1.ParamTypeString, StringVal: "task"}},
-								{Name: "name", Value: tektonv1.ParamValue{Type: tektonv1.ParamTypeString, StringVal: RailpackBuildTaskName}},
-								{Name: "namespace", Value: tektonv1.ParamValue{Type: tektonv1.ParamTypeString, StringVal: "tekton-pipelines"}},
-							},
-						},
-					},
-					Params: []tektonv1.Param{
-						{Name: "contextPath", Value: tektonv1.ParamValue{Type: tektonv1.ParamTypeString, StringVal: func() string {
-							if gitConfig.RootDirectory == "" {
-								return "."
-							}
-							return gitConfig.RootDirectory
-						}()}},
-						{Name: "railpackFrontendSource", Value: tektonv1.ParamValue{Type: tektonv1.ParamTypeString, StringVal: "ghcr.io/railwayapp/railpack-frontend:v0.9.0"}},
-						{Name: "imageTag", Value: tektonv1.ParamValue{Type: tektonv1.ParamTypeString, StringVal: fmt.Sprintf("registry.registry.svc.cluster.local/%s/%s:%s", deployment.Namespace, deployment.Labels["platform.kibaship.com/application-uuid"], deployment.Labels["platform.kibaship.com/uuid"])}},
-					},
-					Workspaces: []tektonv1.WorkspacePipelineTaskBinding{
-						{Name: "output", Workspace: workspaceName},
-						{Name: "docker-config", Workspace: "registry-docker-config"},
-						{Name: "registry-ca", Workspace: "registry-ca-cert"},
-						{Name: "app-env-vars", Workspace: "app-env-vars"},
-					},
-				},
-			},
-			Results: []tektonv1.PipelineResult{
-				{
-					Name:        "commit-sha",
-					Description: "The actual commit SHA that was checked out",
-					Value:       tektonv1.ParamValue{Type: tektonv1.ParamTypeString, StringVal: "$(tasks.clone-repository.results.commit)"},
-				},
-				{
-					Name:        "repository-url",
-					Description: "The repository URL that was cloned",
-					Value:       tektonv1.ParamValue{Type: tektonv1.ParamTypeString, StringVal: "$(tasks.clone-repository.results.url)"},
-				},
-			},
-		},
-	}
-
-	// Set owner reference to the deployment
-	if err := controllerutil.SetControllerReference(deployment, pipeline, r.Scheme); err != nil {
-		return fmt.Errorf("failed to set controller reference: %w", err)
+	// Generate pipeline using the new unified pipeline generator
+	pipeline, err := r.generatePipeline(ctx, deployment, app, pipelineName, projectSlug)
+	if err != nil {
+		return fmt.Errorf("failed to generate pipeline: %w", err)
 	}
 
 	if err := r.Create(ctx, pipeline); err != nil {
@@ -1032,6 +842,7 @@ func (r *DeploymentReconciler) determineDeploymentPhase(ctx context.Context, pip
 
 			taskCondition := taskRun.Status.GetCondition("Succeeded")
 
+			// Check for Railpack prepare task
 			if taskName == "prepare" {
 				if taskCondition != nil && taskCondition.Status == corev1.ConditionTrue {
 					prepareCompleted = true
@@ -1040,7 +851,8 @@ func (r *DeploymentReconciler) determineDeploymentPhase(ctx context.Context, pip
 				}
 			}
 
-			if taskName == "build" {
+			// Check for Railpack build task or Dockerfile build task
+			if taskName == "build" || taskName == "build-dockerfile" {
 				if taskCondition != nil && taskCondition.Status == corev1.ConditionUnknown {
 					buildRunning = true
 				}
@@ -1084,7 +896,7 @@ func (r *DeploymentReconciler) emitPhaseEventWithTracker(deployment *platformv1a
 	case platformv1alpha1.DeploymentPhaseInitializing:
 		r.Recorder.Event(deployment, corev1.EventTypeNormal, "deployment.initializing", "Deployment is being initialized")
 	case platformv1alpha1.DeploymentPhasePreparing:
-		r.Recorder.Event(deployment, corev1.EventTypeNormal, "deployment.preparing", "Preparing deployment with railpack")
+		r.Recorder.Event(deployment, corev1.EventTypeNormal, "deployment.preparing", "Preparing deployment")
 	case platformv1alpha1.DeploymentPhaseBuilding:
 		r.Recorder.Event(deployment, corev1.EventTypeNormal, "deployment.building", "Building container image with BuildKit")
 	case platformv1alpha1.DeploymentPhaseDeploying:

@@ -47,6 +47,14 @@ const (
 	GitProviderBitbucket GitProvider = "bitbucket.com"
 )
 
+// BuildType represents the build type for GitRepository applications
+type BuildType string
+
+const (
+	BuildTypeRailpack   BuildType = "Railpack"
+	BuildTypeDockerfile BuildType = "Dockerfile"
+)
+
 // HealthCheckConfig defines the health check configuration for an application
 type HealthCheckConfig struct {
 	Path                string `json:"path,omitempty" example:"/health"`
@@ -58,19 +66,27 @@ type HealthCheckConfig struct {
 	FailureThreshold    int32  `json:"failureThreshold,omitempty" example:"3"`
 }
 
+// DockerfileBuildConfig defines configuration for Dockerfile builds
+type DockerfileBuildConfig struct {
+	DockerfilePath string `json:"dockerfilePath" example:"Dockerfile"`
+	BuildContext   string `json:"buildContext,omitempty" example:"."`
+}
+
 // GitRepositoryConfig defines configuration for GitRepository applications
 type GitRepositoryConfig struct {
-	Provider           GitProvider        `json:"provider" example:"github.com"`
-	Repository         string             `json:"repository" example:"myorg/myapp"`
-	PublicAccess       bool               `json:"publicAccess,omitempty" example:"false"`
-	SecretRef          *string            `json:"secretRef,omitempty" example:"git-credentials"`
-	Branch             string             `json:"branch,omitempty" example:"main"`
-	Path               string             `json:"path,omitempty" example:""`
-	RootDirectory      string             `json:"rootDirectory,omitempty" example:"./"`
-	BuildCommand       string             `json:"buildCommand,omitempty" example:"npm run build"`
-	StartCommand       string             `json:"startCommand,omitempty" example:"npm start"`
-	SpaOutputDirectory string             `json:"spaOutputDirectory,omitempty" example:"dist"`
-	HealthCheck        *HealthCheckConfig `json:"healthCheck,omitempty"`
+	Provider           GitProvider            `json:"provider" example:"github.com"`
+	Repository         string                 `json:"repository" example:"myorg/myapp"`
+	PublicAccess       bool                   `json:"publicAccess,omitempty" example:"false"`
+	SecretRef          *string                `json:"secretRef,omitempty" example:"git-credentials"`
+	Branch             string                 `json:"branch,omitempty" example:"main"`
+	Path               string                 `json:"path,omitempty" example:""`
+	RootDirectory      string                 `json:"rootDirectory,omitempty" example:"./"`
+	BuildType          BuildType              `json:"buildType,omitempty" example:"Railpack"`
+	DockerfileBuild    *DockerfileBuildConfig `json:"dockerfileBuild,omitempty"`
+	BuildCommand       string                 `json:"buildCommand,omitempty" example:"npm run build"`
+	StartCommand       string                 `json:"startCommand,omitempty" example:"npm start"`
+	SpaOutputDirectory string                 `json:"spaOutputDirectory,omitempty" example:"dist"`
+	HealthCheck        *HealthCheckConfig     `json:"healthCheck,omitempty"`
 }
 
 // DockerImageConfig defines configuration for DockerImage applications
@@ -385,6 +401,11 @@ func isValidGitProvider(provider GitProvider) bool {
 		provider == GitProviderBitbucket
 }
 
+func isValidBuildType(buildType BuildType) bool {
+	return buildType == BuildTypeRailpack ||
+		buildType == BuildTypeDockerfile
+}
+
 func validateGitRepository(config *GitRepositoryConfig) []ValidationError {
 	var errors []ValidationError
 
@@ -411,6 +432,26 @@ func validateGitRepository(config *GitRepositoryConfig) []ValidationError {
 			Field:   "gitRepository.secretRef",
 			Message: "SecretRef is required when PublicAccess is false",
 		})
+	}
+
+	// Validate BuildType if specified
+	if config.BuildType != "" && !isValidBuildType(config.BuildType) {
+		errors = append(errors, ValidationError{
+			Field:   "gitRepository.buildType",
+			Message: "BuildType must be one of: Railpack, Dockerfile",
+		})
+	}
+
+	// Validate Dockerfile build configuration
+	if config.BuildType == BuildTypeDockerfile {
+		if config.DockerfileBuild == nil {
+			errors = append(errors, ValidationError{
+				Field:   "gitRepository.dockerfileBuild",
+				Message: "DockerfileBuild configuration is required when BuildType is Dockerfile",
+			})
+		} else {
+			errors = append(errors, validateDockerfileBuild(config.DockerfileBuild)...)
+		}
 	}
 
 	return errors
@@ -465,6 +506,55 @@ func validatePostgresCluster(config *PostgresClusterConfig) []ValidationError {
 			Field:   "postgresCluster.replicas",
 			Message: "Replicas must be at least 1",
 		})
+	}
+
+	return errors
+}
+
+func validateDockerfileBuild(config *DockerfileBuildConfig) []ValidationError {
+	var errors []ValidationError
+
+	// Validate DockerfilePath
+	if strings.TrimSpace(config.DockerfilePath) == "" {
+		errors = append(errors, ValidationError{
+			Field:   "gitRepository.dockerfileBuild.dockerfilePath",
+			Message: "DockerfilePath is required when BuildType is Dockerfile",
+		})
+	} else {
+		// Validate path format - must not contain path traversal
+		if strings.Contains(config.DockerfilePath, "..") {
+			errors = append(errors, ValidationError{
+				Field:   "gitRepository.dockerfileBuild.dockerfilePath",
+				Message: "DockerfilePath cannot contain '..' for security reasons",
+			})
+		}
+
+		// Validate path is not absolute
+		if strings.HasPrefix(config.DockerfilePath, "/") {
+			errors = append(errors, ValidationError{
+				Field:   "gitRepository.dockerfileBuild.dockerfilePath",
+				Message: "DockerfilePath must be a relative path",
+			})
+		}
+	}
+
+	// Validate BuildContext if specified
+	if config.BuildContext != "" {
+		// Validate context path format - must not contain path traversal
+		if strings.Contains(config.BuildContext, "..") {
+			errors = append(errors, ValidationError{
+				Field:   "gitRepository.dockerfileBuild.buildContext",
+				Message: "BuildContext cannot contain '..' for security reasons",
+			})
+		}
+
+		// Validate context is not absolute
+		if strings.HasPrefix(config.BuildContext, "/") {
+			errors = append(errors, ValidationError{
+				Field:   "gitRepository.dockerfileBuild.buildContext",
+				Message: "BuildContext must be a relative path",
+			})
+		}
 	}
 
 	return errors

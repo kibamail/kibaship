@@ -10,6 +10,7 @@ resources:
 - tasks/platform.operator.kibaship.com_git_clone_tasks.yaml
 - tasks/platform.operator.kibaship.com_railpack_prepare_tasks.yaml
 - tasks/platform.operator.kibaship.com_railpack_build_tasks.yaml
+- tasks/platform.operator.kibaship.com_dockerfile_build_tasks.yaml
 
 # Labels to add to all Tekton resources
 labels:

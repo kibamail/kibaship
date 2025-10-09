@@ -1184,4 +1184,118 @@ var _ = Describe("Application Integration", func() {
 			_ = k8sClient.Delete(ctx, &project)
 		}
 	})
+
+	It("creates GitRepository application with Dockerfile BuildType successfully", NodeTimeout(30*time.Second), func(ctx SpecContext) {
+		apiKey := generateTestAPIKey()
+		router := setupIntegrationTestRouter(apiKey)
+
+		// Create project
+		projectPayload := models.ProjectCreateRequest{
+			Name:          "Test Project for Dockerfile App",
+			WorkspaceUUID: "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+		}
+
+		jsonData, err := json.Marshal(projectPayload)
+		Expect(err).NotTo(HaveOccurred())
+
+		req, err := http.NewRequest("POST", "/v1/projects", bytes.NewBuffer(jsonData))
+		Expect(err).NotTo(HaveOccurred())
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		Expect(w.Code).To(Equal(http.StatusCreated))
+
+		var createdProject models.ProjectResponse
+		err = json.Unmarshal(w.Body.Bytes(), &createdProject)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Create production environment via API
+		envPayload := models.EnvironmentCreateRequest{
+			Name:        "production",
+			Description: "Production environment",
+		}
+
+		jsonData, err = json.Marshal(envPayload)
+		Expect(err).NotTo(HaveOccurred())
+
+		req, err = http.NewRequest("POST", "/v1/projects/"+createdProject.UUID+"/environments", bytes.NewBuffer(jsonData))
+		Expect(err).NotTo(HaveOccurred())
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+
+		w = httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		Expect(w.Code).To(Equal(http.StatusCreated))
+
+		var createdEnvironment models.EnvironmentResponse
+		err = json.Unmarshal(w.Body.Bytes(), &createdEnvironment)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Create application with Dockerfile BuildType
+		payload := models.ApplicationCreateRequest{
+			Name: "My Dockerfile App",
+			Type: models.ApplicationTypeGitRepository,
+			GitRepository: &models.GitRepositoryConfig{
+				Provider:     models.GitProviderGitHub,
+				Repository:   "kibamail/todos-api-flask",
+				PublicAccess: true,
+				Branch:       "main",
+				BuildType:    models.BuildTypeDockerfile,
+				DockerfileBuild: &models.DockerfileBuildConfig{
+					DockerfilePath: "Dockerfile",
+					BuildContext:   ".",
+				},
+			},
+		}
+
+		jsonData, err = json.Marshal(payload)
+		Expect(err).NotTo(HaveOccurred())
+
+		req, err = http.NewRequest("POST", "/v1/environments/"+createdEnvironment.UUID+"/applications", bytes.NewBuffer(jsonData))
+		Expect(err).NotTo(HaveOccurred())
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+
+		w = httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		Expect(w.Code).To(Equal(http.StatusCreated), "Response: %s", w.Body.String())
+
+		var response models.ApplicationResponse
+		err = json.Unmarshal(w.Body.Bytes(), &response)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Verify response
+		Expect(response.Name).To(Equal("My Dockerfile App"))
+		Expect(response.Type).To(Equal(models.ApplicationTypeGitRepository))
+		Expect(response.GitRepository).NotTo(BeNil())
+		Expect(response.GitRepository.BuildType).To(Equal(models.BuildTypeDockerfile))
+		Expect(response.GitRepository.DockerfileBuild).NotTo(BeNil())
+		Expect(response.GitRepository.DockerfileBuild.DockerfilePath).To(Equal("Dockerfile"))
+		Expect(response.GitRepository.DockerfileBuild.BuildContext).To(Equal("."))
+
+		// Verify CRD
+		var application v1alpha1.Application
+		err = k8sClient.Get(ctx, client.ObjectKey{
+			Name:      "application-" + response.UUID + "",
+			Namespace: "default",
+		}, &application)
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(application.Spec.Type).To(Equal(v1alpha1.ApplicationTypeGitRepository))
+		Expect(application.Spec.GitRepository).NotTo(BeNil())
+		Expect(application.Spec.GitRepository.BuildType).To(Equal(v1alpha1.BuildTypeDockerfile))
+		Expect(application.Spec.GitRepository.DockerfileBuild).NotTo(BeNil())
+		Expect(application.Spec.GitRepository.DockerfileBuild.DockerfilePath).To(Equal("Dockerfile"))
+		Expect(application.Spec.GitRepository.DockerfileBuild.BuildContext).To(Equal("."))
+
+		// Cleanup
+		_ = k8sClient.Delete(ctx, &application)
+		var project v1alpha1.Project
+		err = k8sClient.Get(ctx, client.ObjectKey{Name: "project-" + createdProject.UUID}, &project)
+		if err == nil {
+			_ = k8sClient.Delete(ctx, &project)
+		}
+	})
 })

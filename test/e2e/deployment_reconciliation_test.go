@@ -575,5 +575,267 @@ spec:
 
 			By("✅ All post-build resource creation tests passed - 3-controller architecture working correctly")
 		})
+
+		It("should successfully reconcile Dockerfile deployment with all controller side effects", func() {
+			By("Creating the test project first with inline manifest")
+			projectManifest := fmt.Sprintf(`apiVersion: platform.operator.kibaship.com/v1alpha1
+kind: Project
+metadata:
+  name: %s
+  labels:
+    platform.kibaship.com/uuid: "%s"
+    platform.kibaship.com/slug: "%s"
+    platform.kibaship.com/workspace-uuid: "%s"
+spec:
+  applicationTypes:
+    dockerImage:
+      enabled: true
+    gitRepository:
+      enabled: true
+    mysql:
+      enabled: true
+    postgres:
+      enabled: true
+    mysqlCluster:
+      enabled: false
+    postgresCluster:
+      enabled: false
+`, projectName, projectUUID, projectName, workspaceUUIDConst)
+
+			cmd := exec.Command("kubectl", "apply", "-f", "-")
+			cmd.Stdin = strings.NewReader(projectManifest)
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Waiting for project to be ready")
+			Eventually(func() bool {
+				cmd := exec.Command("kubectl", "get", "project", projectName, "-o", "jsonpath={.status.phase}")
+				output, err := cmd.CombinedOutput()
+				if err != nil {
+					return false
+				}
+				return strings.TrimSpace(string(output)) == readyPhase
+			}, "1m", "5s").Should(BeTrue(), "Project should be Ready")
+
+			By("Waiting for default production environment to be ready")
+			Eventually(func() bool {
+				cmd := exec.Command("kubectl", "get", "environment", "-n", projectNS, "-l", "platform.kibaship.com/slug=production", "-o", "jsonpath={.items[0].metadata.name}")
+				output, err := cmd.CombinedOutput()
+				if err != nil {
+					return false
+				}
+				envName = strings.TrimSpace(string(output))
+				return envName != ""
+			}, "5s", "1s").Should(BeTrue(), "Should find default production environment")
+
+			Eventually(func() bool {
+				cmd := exec.Command("kubectl", "get", "environment", envName, "-n", projectNS, "-o", "jsonpath={.status.phase}")
+				output, err := cmd.CombinedOutput()
+				if err != nil {
+					return false
+				}
+				return strings.TrimSpace(string(output)) == readyPhase
+			}, "5s", "1s").Should(BeTrue(), "Default production environment should be Ready before creating Application")
+
+			By("Fetching the environment UUID")
+			cmd = exec.Command("kubectl", "get", "environment", envName, "-n", projectNS, "-o", "jsonpath={.metadata.labels.platform\\.kibaship\\.com/uuid}")
+			output, err := cmd.CombinedOutput()
+			Expect(err).NotTo(HaveOccurred())
+			envUUID = strings.TrimSpace(string(output))
+			Expect(envUUID).NotTo(BeEmpty(), "Environment should have UUID label")
+
+			By("Creating the test application with Dockerfile BuildType")
+			applicationManifest := fmt.Sprintf(`apiVersion: platform.operator.kibaship.com/v1alpha1
+kind: Application
+metadata:
+  name: %s
+  namespace: %s
+  labels:
+    platform.kibaship.com/uuid: "%s"
+    platform.kibaship.com/slug: "%s"
+    platform.kibaship.com/project-uuid: "%s"
+    platform.kibaship.com/workspace-uuid: "%s"
+    platform.kibaship.com/environment-uuid: "%s"
+spec:
+  type: GitRepository
+  environmentRef:
+    name: %s
+  gitRepository:
+    provider: github.com
+    repository: kibamail/kibaship-operator
+    publicAccess: true
+    branch: main
+    buildType: Dockerfile
+    dockerfileBuild:
+      dockerfilePath: "examples/dockerfiles/todos-api-flask/Dockerfile"
+      buildContext: "examples/dockerfiles/todos-api-flask"
+`, applicationName, projectNS, applicationUUID, applicationName, projectUUID, workspaceUUIDConst, envUUID, envName)
+
+			cmd = exec.Command("kubectl", "apply", "-f", "-")
+			cmd.Stdin = strings.NewReader(applicationManifest)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Waiting for application to be ready")
+			Eventually(func() bool {
+				cmd := exec.Command("kubectl", "get", "application", applicationName, "-n", projectNS, "-o", "jsonpath={.status.phase}")
+				output, err := cmd.CombinedOutput()
+				if err != nil {
+					return false
+				}
+				return strings.TrimSpace(string(output)) == readyPhase
+			}, "2m", "5s").Should(BeTrue(), "Application should be Ready before creating Deployment")
+
+			By("Verifying Application has BuildType=Dockerfile")
+			Eventually(func() bool {
+				cmd := exec.Command("kubectl", "get", "application", applicationName, "-n", projectNS, "-o", "jsonpath={.spec.gitRepository.buildType}")
+				output, err := cmd.CombinedOutput()
+				if err != nil {
+					return false
+				}
+				return strings.TrimSpace(string(output)) == "Dockerfile"
+			}, "30s", "2s").Should(BeTrue(), "Application should have BuildType=Dockerfile")
+
+			By("Creating the test deployment with inline manifest")
+			deploymentManifest := fmt.Sprintf(`apiVersion: platform.operator.kibaship.com/v1alpha1
+kind: Deployment
+metadata:
+  name: %s
+  namespace: %s
+  labels:
+    platform.kibaship.com/uuid: "%s"
+    platform.kibaship.com/slug: "%s"
+    platform.kibaship.com/project-uuid: "%s"
+    platform.kibaship.com/application-uuid: "%s"
+    platform.kibaship.com/workspace-uuid: "%s"
+    platform.kibaship.com/environment-uuid: "%s"
+spec:
+  applicationRef:
+    name: %s
+  promote: true
+  gitRepository:
+    commitSHA: "80243e8b34fed099f6b0288b396bcda9a3776e9f"
+    branch: "main"
+`, deploymentName, projectNS, deploymentUUID, deploymentName, projectUUID, applicationUUID, workspaceUUIDConst, envUUID, applicationName)
+
+			cmd = exec.Command("kubectl", "apply", "-f", "-")
+			cmd.Stdin = strings.NewReader(deploymentManifest)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Verifying Deployment resource exists and passes validation")
+			Eventually(func() bool {
+				cmd := exec.Command("kubectl", "get", deploymentResourceType, deploymentName, "-n", projectNS)
+				_, err := utils.Run(cmd)
+				return err == nil
+			}, "30s", "2s").Should(BeTrue(), "Deployment should be created successfully")
+
+			By("Verifying Tekton Pipeline is created for the deployment")
+			deploymentUUIDLabel := fmt.Sprintf("platform.kibaship.com/deployment-uuid=%s", deploymentUUID)
+			Eventually(func() error {
+				cmd := exec.Command("kubectl", "get", "pipeline", "-n", projectNS, "-l", deploymentUUIDLabel)
+				_, err := cmd.CombinedOutput()
+				return err
+			}, "1m", "5s").Should(Succeed(), "Tekton Pipeline should be created for deployment")
+
+			By("Verifying PipelineRun is created for the deployment")
+			Eventually(func() error {
+				cmd := exec.Command("kubectl", "get", "pipelinerun", "-n", projectNS, "-l", deploymentUUIDLabel)
+				_, err := cmd.CombinedOutput()
+				return err
+			}, "1m", "5s").Should(Succeed(), "PipelineRun should be created for deployment")
+
+			By("Verifying the pipeline run was successfully created")
+			var prName string
+			Eventually(func() error {
+				cmd := exec.Command("kubectl", "get", "pipelinerun", "-n", projectNS, "-l", deploymentUUIDLabel, "-o", "jsonpath={.items[0].metadata.name}")
+				out, err := cmd.CombinedOutput()
+				if err != nil {
+					return err
+				}
+				prName = strings.TrimSpace(string(out))
+				if prName == "" {
+					return fmt.Errorf("no pipelinerun name yet")
+				}
+				return nil
+			}, "2m", "5s").Should(Succeed(), "Should fetch PipelineRun name")
+
+			By("Verifying the 'clone-repository' Tekton task ran and succeeded")
+			Eventually(func() (string, error) {
+				cmd := exec.Command(
+					"kubectl", "get", "taskrun", "-n", projectNS,
+					"-l", fmt.Sprintf("tekton.dev/pipelineRun=%s,tekton.dev/pipelineTask=clone-repository", prName),
+					"-o", "jsonpath={.items[0].status.conditions[?(@.type=='Succeeded')].status}",
+				)
+				out, err := cmd.CombinedOutput()
+				return strings.TrimSpace(string(out)), err
+			}, "5m", "10s").Should(Equal("True"), "clone-repository task should succeed")
+
+			By("Verifying the 'build-dockerfile' Tekton task ran and succeeded")
+			Eventually(func() (string, error) {
+				cmd := exec.Command(
+					"kubectl", "get", "taskrun", "-n", projectNS,
+					"-l", fmt.Sprintf("tekton.dev/pipelineRun=%s,tekton.dev/pipelineTask=build-dockerfile", prName),
+					"-o", "jsonpath={.items[0].status.conditions[?(@.type=='Succeeded')].status}",
+				)
+				out, err := cmd.CombinedOutput()
+				return strings.TrimSpace(string(out)), err
+			}, "5m", "10s").Should(Equal("True"), "build-dockerfile task should succeed")
+
+			By("Verifying Deployment phase transitions to Deploying or Succeeded after build succeeds")
+			Eventually(func() string {
+				cmd := exec.Command("kubectl", "get", deploymentResourceType, deploymentName, "-n", projectNS, "-o", "jsonpath={.status.phase}")
+				output, err := cmd.CombinedOutput()
+				if err != nil {
+					return ""
+				}
+				return strings.TrimSpace(string(output))
+			}, "2m", "5s").Should(Or(Equal("Deploying"), Equal("Succeeded")), "Deployment should transition to Deploying or Succeeded phase after build succeeds")
+
+			By("Verifying Kubernetes Deployment resource is created by DeploymentProgressController")
+			k8sDeploymentName := fmt.Sprintf("deployment-%s", deploymentUUID)
+			Eventually(func() error {
+				cmd := exec.Command("kubectl", "get", "deployment", k8sDeploymentName, "-n", projectNS)
+				_, err := cmd.CombinedOutput()
+				return err
+			}, "2m", "5s").Should(Succeed(), "Kubernetes Deployment should be created after build succeeds")
+
+			By("Verifying Kubernetes Service resource is created by DeploymentProgressController")
+			k8sServiceName := fmt.Sprintf("service-%s", applicationUUID)
+			Eventually(func() error {
+				cmd := exec.Command("kubectl", "get", "service", k8sServiceName, "-n", projectNS)
+				_, err := cmd.CombinedOutput()
+				return err
+			}, "2m", "5s").Should(Succeed(), "Kubernetes Service should be created after build succeeds")
+
+			By("Verifying pods are created and becoming ready")
+			Eventually(func() int {
+				cmd := exec.Command("kubectl", "get", "pods", "-n", projectNS, "-l", fmt.Sprintf("platform.kibaship.com/deployment-uuid=%s", deploymentUUID), "-o", "jsonpath={.items[*].status.containerStatuses[0].ready}")
+				output, err := cmd.CombinedOutput()
+				if err != nil {
+					return 0
+				}
+				readyStates := strings.Fields(string(output))
+				readyCount := 0
+				for _, state := range readyStates {
+					if state == "true" {
+						readyCount++
+					}
+				}
+				return readyCount
+			}, "5m", "10s").Should(BeNumerically(">=", 1), "At least one pod should be ready")
+
+			By("Verifying Deployment phase transitions to Succeeded after pods are ready")
+			Eventually(func() string {
+				cmd := exec.Command("kubectl", "get", deploymentResourceType, deploymentName, "-n", projectNS, "-o", "jsonpath={.status.phase}")
+				output, err := cmd.CombinedOutput()
+				if err != nil {
+					return ""
+				}
+				return strings.TrimSpace(string(output))
+			}, "3m", "5s").Should(Equal("Succeeded"), "Deployment should transition to Succeeded phase after pods are ready")
+
+			By("✅ All Dockerfile deployment tests passed - BuildType=Dockerfile working correctly")
+		})
 	})
 })
