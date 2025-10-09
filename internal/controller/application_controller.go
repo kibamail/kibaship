@@ -223,33 +223,7 @@ func (r *ApplicationReconciler) ensureApplicationEnvSecret(ctx context.Context, 
 	secretName := fmt.Sprintf("env-%s", appUUID)
 
 	// Get current env ref based on application type
-	var currentEnvRef *corev1.LocalObjectReference
-	switch app.Spec.Type {
-	case platformv1alpha1.ApplicationTypeGitRepository:
-		if app.Spec.GitRepository != nil {
-			currentEnvRef = app.Spec.GitRepository.Env
-		}
-	case platformv1alpha1.ApplicationTypeDockerImage:
-		if app.Spec.DockerImage != nil {
-			currentEnvRef = app.Spec.DockerImage.Env
-		}
-	case platformv1alpha1.ApplicationTypeMySQL:
-		if app.Spec.MySQL != nil {
-			currentEnvRef = app.Spec.MySQL.Env
-		}
-	case platformv1alpha1.ApplicationTypeMySQLCluster:
-		if app.Spec.MySQLCluster != nil {
-			currentEnvRef = app.Spec.MySQLCluster.Env
-		}
-	case platformv1alpha1.ApplicationTypePostgres:
-		if app.Spec.Postgres != nil {
-			currentEnvRef = app.Spec.Postgres.Env
-		}
-	case platformv1alpha1.ApplicationTypePostgresCluster:
-		if app.Spec.PostgresCluster != nil {
-			currentEnvRef = app.Spec.PostgresCluster.Env
-		}
-	}
+	currentEnvRef := r.getCurrentEnvRef(app)
 
 	// Check if secret ref is already set correctly
 	if currentEnvRef != nil && currentEnvRef.Name == secretName {
@@ -302,9 +276,48 @@ func (r *ApplicationReconciler) ensureApplicationEnvSecret(ctx context.Context, 
 	}
 
 	// Set the secret ref on the application based on type
-	updated := false
 	secretRef := &corev1.LocalObjectReference{Name: secretName}
+	updated, err := r.setEnvRefOnApplication(app, secretRef, secretName)
+	if err != nil {
+		return false, err
+	}
 
+	return updated, nil
+}
+
+// getCurrentEnvRef returns the current environment secret reference for the application
+func (r *ApplicationReconciler) getCurrentEnvRef(app *platformv1alpha1.Application) *corev1.LocalObjectReference {
+	switch app.Spec.Type {
+	case platformv1alpha1.ApplicationTypeGitRepository:
+		if app.Spec.GitRepository != nil {
+			return app.Spec.GitRepository.Env
+		}
+	case platformv1alpha1.ApplicationTypeDockerImage:
+		if app.Spec.DockerImage != nil {
+			return app.Spec.DockerImage.Env
+		}
+	case platformv1alpha1.ApplicationTypeMySQL:
+		if app.Spec.MySQL != nil {
+			return app.Spec.MySQL.Env
+		}
+	case platformv1alpha1.ApplicationTypeMySQLCluster:
+		if app.Spec.MySQLCluster != nil {
+			return app.Spec.MySQLCluster.Env
+		}
+	case platformv1alpha1.ApplicationTypePostgres:
+		if app.Spec.Postgres != nil {
+			return app.Spec.Postgres.Env
+		}
+	case platformv1alpha1.ApplicationTypePostgresCluster:
+		if app.Spec.PostgresCluster != nil {
+			return app.Spec.PostgresCluster.Env
+		}
+	}
+	return nil
+}
+
+// setEnvRefOnApplication sets the environment secret reference on the application and returns whether it was updated
+func (r *ApplicationReconciler) setEnvRefOnApplication(app *platformv1alpha1.Application, secretRef *corev1.LocalObjectReference, secretName string) (bool, error) {
 	switch app.Spec.Type {
 	case platformv1alpha1.ApplicationTypeGitRepository:
 		if app.Spec.GitRepository == nil {
@@ -312,7 +325,7 @@ func (r *ApplicationReconciler) ensureApplicationEnvSecret(ctx context.Context, 
 		}
 		if app.Spec.GitRepository.Env == nil || app.Spec.GitRepository.Env.Name != secretName {
 			app.Spec.GitRepository.Env = secretRef
-			updated = true
+			return true, nil
 		}
 	case platformv1alpha1.ApplicationTypeDockerImage:
 		if app.Spec.DockerImage == nil {
@@ -320,7 +333,7 @@ func (r *ApplicationReconciler) ensureApplicationEnvSecret(ctx context.Context, 
 		}
 		if app.Spec.DockerImage.Env == nil || app.Spec.DockerImage.Env.Name != secretName {
 			app.Spec.DockerImage.Env = secretRef
-			updated = true
+			return true, nil
 		}
 	case platformv1alpha1.ApplicationTypeMySQL:
 		if app.Spec.MySQL == nil {
@@ -328,7 +341,7 @@ func (r *ApplicationReconciler) ensureApplicationEnvSecret(ctx context.Context, 
 		}
 		if app.Spec.MySQL.Env == nil || app.Spec.MySQL.Env.Name != secretName {
 			app.Spec.MySQL.Env = secretRef
-			updated = true
+			return true, nil
 		}
 	case platformv1alpha1.ApplicationTypeMySQLCluster:
 		if app.Spec.MySQLCluster == nil {
@@ -336,7 +349,7 @@ func (r *ApplicationReconciler) ensureApplicationEnvSecret(ctx context.Context, 
 		}
 		if app.Spec.MySQLCluster.Env == nil || app.Spec.MySQLCluster.Env.Name != secretName {
 			app.Spec.MySQLCluster.Env = secretRef
-			updated = true
+			return true, nil
 		}
 	case platformv1alpha1.ApplicationTypePostgres:
 		if app.Spec.Postgres == nil {
@@ -344,7 +357,7 @@ func (r *ApplicationReconciler) ensureApplicationEnvSecret(ctx context.Context, 
 		}
 		if app.Spec.Postgres.Env == nil || app.Spec.Postgres.Env.Name != secretName {
 			app.Spec.Postgres.Env = secretRef
-			updated = true
+			return true, nil
 		}
 	case platformv1alpha1.ApplicationTypePostgresCluster:
 		if app.Spec.PostgresCluster == nil {
@@ -352,11 +365,10 @@ func (r *ApplicationReconciler) ensureApplicationEnvSecret(ctx context.Context, 
 		}
 		if app.Spec.PostgresCluster.Env == nil || app.Spec.PostgresCluster.Env.Name != secretName {
 			app.Spec.PostgresCluster.Env = secretRef
-			updated = true
+			return true, nil
 		}
 	}
-
-	return updated, nil
+	return false, nil
 }
 
 // ensureUUIDLabels ensures that the Application has the correct UUID and slug labels

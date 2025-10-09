@@ -66,6 +66,13 @@ func namespaceExists(namespace string) bool {
 	return err == nil
 }
 
+// deploymentExists checks if a deployment exists in the specified namespace
+func deploymentExists(namespace, deploymentName string) bool {
+	cmd := exec.Command("kubectl", "get", "deployment", deploymentName, "-n", namespace)
+	err := cmd.Run()
+	return err == nil
+}
+
 // clusterExists checks if the kind cluster exists
 func clusterExists(clusterName string) bool {
 	cmd := exec.Command("kind", "get", "clusters")
@@ -185,7 +192,7 @@ var _ = BeforeSuite(func() {
 
 	// Check if operator and registry are already deployed
 	operatorDeployed := namespaceExists("kibaship-operator")
-	registryDeployed := namespaceExists("registry")
+	registryDeployed := deploymentExists("registry", "registry") && deploymentExists("registry", "registry-auth")
 
 	if !operatorDeployed {
 		By("deploying test webhook receiver in-cluster")
@@ -214,20 +221,17 @@ var _ = BeforeSuite(func() {
 	}
 
 	if !registryDeployed {
-		By("creating registry namespace before registry deployment")
-		Expect(utils.CreateRegistryNamespace()).To(Succeed(), "Failed to create registry namespace")
-
-		By("provisioning registry-auth Certificate for JWT signing keys")
-		Expect(utils.ProvisionRegistryAuthCertificate()).To(Succeed(), "Failed to provision registry-auth Certificate")
-
 		By("provisioning Docker Registry v3.0.0")
 		Expect(utils.ProvisionRegistry()).To(Succeed(), "Failed to provision Docker Registry")
 
-		By("waiting for registry-auth Certificate to be ready")
-		Expect(utils.WaitForRegistryAuthCertificate()).To(Succeed(), "Failed to wait for registry-auth Certificate")
+		By("provisioning Registry Auth service")
+		Expect(utils.ProvisionRegistryAuth()).To(Succeed(), "Failed to provision Registry Auth service")
 
 		By("waiting for Docker Registry to be ready")
 		Expect(utils.WaitForRegistry()).To(Succeed(), "Failed to wait for Docker Registry")
+
+		By("waiting for Registry Auth service to be ready")
+		Expect(utils.WaitForRegistryAuth()).To(Succeed(), "Failed to wait for Registry Auth service")
 
 		By("verifying registry-auth pods are healthy")
 		Expect(utils.VerifyRegistryAuthHealthy()).To(Succeed(), "registry-auth pods are not healthy")

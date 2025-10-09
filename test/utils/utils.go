@@ -905,48 +905,6 @@ func CheckValkeyStatus(operatorNamespace string) {
 		return
 	}
 	_, _ = fmt.Fprintf(GinkgoWriter, "  ✅ Valkey CRD exists\n")
-
-	// List ALL Valkey resources in the namespace first
-	_, _ = fmt.Fprintf(GinkgoWriter, "\nAll Valkey resources in namespace %s:\n", operatorNamespace)
-	cmd = exec.Command("kubectl", "get", "valkey", "-n", operatorNamespace, "-o", "wide")
-	if _, err := Run(cmd); err != nil {
-		_, _ = fmt.Fprintf(GinkgoWriter, "  No Valkey resources found or error: %v\n", err)
-	}
-
-	// Check if expected Valkey cluster resource exists
-	expectedValkeyName := "kibaship-valkey-cluster-kibaship-com"
-	_, _ = fmt.Fprintf(GinkgoWriter, "\nChecking expected Valkey cluster resource '%s':\n", expectedValkeyName)
-	cmd = exec.Command("kubectl", "get", "valkey", expectedValkeyName, "-n", operatorNamespace, "-o", "yaml")
-	if _, err := Run(cmd); err != nil {
-		_, _ = fmt.Fprintf(GinkgoWriter, "  ❌ Expected Valkey cluster resource not found: %v\n", err)
-	} else {
-		_, _ = fmt.Fprintf(GinkgoWriter, "  ✅ Valkey cluster resource exists (YAML above shows full status)\n")
-	}
-
-	// Show recent events related to Valkey
-	_, _ = fmt.Fprintf(GinkgoWriter, "\n--- Recent Events (may show Valkey cluster status) ---\n")
-	cmd = exec.Command("kubectl", "get", "events", "-n", operatorNamespace,
-		"--sort-by=.metadata.creationTimestamp", "--field-selector=involvedObject.kind=Valkey")
-	if _, err := Run(cmd); err != nil {
-		_, _ = fmt.Fprintf(GinkgoWriter, "  No Valkey-specific events or error: %v\n", err)
-	}
-
-	// Check all secrets (including Valkey secret)
-	_, _ = fmt.Fprintf(GinkgoWriter, "\n--- All Secrets in Namespace ---\n")
-	cmd = exec.Command("kubectl", "get", "secrets", "-n", operatorNamespace, "-o", "wide")
-	if _, err := Run(cmd); err != nil {
-		_, _ = fmt.Fprintf(GinkgoWriter, "    Error listing secrets: %v\n", err)
-	}
-
-	// Check expected Valkey secret specifically
-	expectedSecretName := "kibaship-valkey-cluster-kibaship-com"
-	_, _ = fmt.Fprintf(GinkgoWriter, "\nChecking expected Valkey authentication secret '%s':\n", expectedSecretName)
-	cmd = exec.Command("kubectl", "describe", "secret", expectedSecretName, "-n", operatorNamespace)
-	if _, err := Run(cmd); err != nil {
-		_, _ = fmt.Fprintf(GinkgoWriter, "  ❌ Expected Valkey secret not found: %v\n", err)
-	} else {
-		_, _ = fmt.Fprintf(GinkgoWriter, "  ✅ Valkey secret exists (details above)\n")
-	}
 }
 
 // MonitorOperatorStartup waits for the operator deployment to roll out, logging pods every 30s.
@@ -1078,47 +1036,6 @@ func InstallBuildkitSharedDaemon() error {
 	return nil
 }
 
-// CreateRegistryNamespace creates the registry namespace.
-func CreateRegistryNamespace() error {
-	cmd := exec.Command("kubectl", "create", "namespace", "registry")
-	_, err := Run(cmd)
-	if err != nil {
-		// Check if it already exists (ignore AlreadyExists error)
-		if !strings.Contains(err.Error(), "AlreadyExists") && !strings.Contains(err.Error(), "already exists") {
-			return err
-		}
-	}
-
-	_, _ = fmt.Fprintf(GinkgoWriter, "✅ registry namespace created\n")
-	return nil
-}
-
-// ProvisionRegistryAuthCertificate applies the registry-auth Certificate resource without waiting
-func ProvisionRegistryAuthCertificate() error {
-	cmd := exec.Command("kubectl", "apply", "-k", "config/registry-auth/overlays/e2e")
-	if _, err := Run(cmd); err != nil {
-		return err
-	}
-
-	_, _ = fmt.Fprintf(GinkgoWriter, "✅ registry-auth-keys Certificate provisioned\n")
-	return nil
-}
-
-// WaitForRegistryAuthCertificate waits for the registry-auth certificate to be ready
-func WaitForRegistryAuthCertificate() error {
-	// Wait for cert-manager to create the Secret
-	wait := exec.Command("kubectl", "-n", "registry", "wait", "--for=condition=Ready", "certificate/registry-auth-keys", "--timeout=2m")
-	if _, err := Run(wait); err != nil {
-		_, _ = fmt.Fprintf(GinkgoWriter, "\n❌ Timeout or error waiting for registry-auth-keys certificate. Certificate describe:\n")
-		desc := exec.Command("kubectl", "-n", "registry", "describe", "certificate", "registry-auth-keys")
-		_, _ = Run(desc)
-		return err
-	}
-
-	_, _ = fmt.Fprintf(GinkgoWriter, "✅ registry-auth-keys Certificate is ready!\n")
-	return nil
-}
-
 // ProvisionRegistry applies the registry deployment without waiting
 func ProvisionRegistry() error {
 	cmd := exec.Command("kubectl", "apply", "-k", "config/registry/overlays/e2e")
@@ -1127,6 +1044,17 @@ func ProvisionRegistry() error {
 	}
 
 	_, _ = fmt.Fprintf(GinkgoWriter, "✅ Registry resources provisioned\n")
+	return nil
+}
+
+// ProvisionRegistryAuth applies the registry-auth deployment without waiting
+func ProvisionRegistryAuth() error {
+	cmd := exec.Command("kubectl", "apply", "-k", "config/registry-auth/overlays/e2e")
+	if _, err := Run(cmd); err != nil {
+		return err
+	}
+
+	_, _ = fmt.Fprintf(GinkgoWriter, "✅ Registry-auth resources provisioned\n")
 	return nil
 }
 
@@ -1153,6 +1081,32 @@ func WaitForRegistry() error {
 	}
 
 	_, _ = fmt.Fprintf(GinkgoWriter, "✅ Registry is ready!\n")
+	return nil
+}
+
+// WaitForRegistryAuth waits for the registry-auth to be ready
+func WaitForRegistryAuth() error {
+	// Wait for registry-auth-keys certificate
+	waitCert := exec.Command("kubectl", "-n", "registry", "wait", "--for=condition=Ready", "certificate/registry-auth-keys", "--timeout=5m")
+	if _, err := Run(waitCert); err != nil {
+		_, _ = fmt.Fprintf(GinkgoWriter, "\n❌ Timeout waiting for registry-auth-keys certificate\n")
+		desc := exec.Command("kubectl", "-n", "registry", "describe", "certificate", "registry-auth-keys")
+		_, _ = Run(desc)
+		return err
+	}
+
+	// Wait for registry-auth deployment to be ready
+	waitDep := exec.Command("kubectl", "-n", "registry", "wait", "--for=condition=Available", "deployment/registry-auth", "--timeout=5m")
+	if _, err := Run(waitDep); err != nil {
+		_, _ = fmt.Fprintf(GinkgoWriter, "\n❌ Timeout waiting for registry-auth deployment\n")
+		desc := exec.Command("kubectl", "-n", "registry", "describe", "deployment", "registry-auth")
+		_, _ = Run(desc)
+		logs := exec.Command("kubectl", "-n", "registry", "logs", "deployment/registry-auth", "--tail=50", "--all-containers=true")
+		_, _ = Run(logs)
+		return err
+	}
+
+	_, _ = fmt.Fprintf(GinkgoWriter, "✅ Registry-auth is ready!\n")
 	return nil
 }
 

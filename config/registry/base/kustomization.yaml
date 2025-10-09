@@ -5,8 +5,6 @@ namespace: registry
 
 resources:
   - namespace.yaml
-  - issuer.yaml
-  - certificate.yaml
   - serviceaccount.yaml
   - role.yaml
   - rolebinding.yaml

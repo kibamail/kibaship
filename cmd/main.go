@@ -136,11 +136,17 @@ func main() {
 	}
 
 	// Bootstrap: ensure storage classes first, then provision dynamic ingress/cert-manager resources
+	setupLog.Info("Starting bootstrap process")
+	setupLog.Info("Bootstrap step 1: Ensuring storage classes")
 	if err := bootstrap.EnsureStorageClasses(context.Background(), uncachedClient); err != nil {
 		setupLog.Error(err, "bootstrap storage classes failed (continuing)")
+	} else {
+		setupLog.Info("Bootstrap step 1: Storage classes completed successfully")
 	}
+
 	acmeEmail := opConfig.ACMEEmail
 	baseDomain := opConfig.Domain
+	setupLog.Info("Bootstrap step 2: Provisioning ingress and certificates", "domain", baseDomain, "acmeEmail", acmeEmail)
 	if err := bootstrap.ProvisionIngressAndCertificates(
 		context.Background(),
 		uncachedClient,
@@ -148,22 +154,35 @@ func main() {
 		acmeEmail,
 	); err != nil {
 		setupLog.Error(err, "bootstrap provisioning failed (continuing)")
+	} else {
+		setupLog.Info("Bootstrap step 2: Ingress and certificates completed successfully")
 	}
 
 	// Bootstrap: ensure registry credentials are provisioned
+	setupLog.Info("Bootstrap step 3: Ensuring registry credentials")
 	if err := bootstrap.EnsureRegistryCredentials(context.Background(), uncachedClient); err != nil {
 		setupLog.Error(err, "bootstrap registry credentials failed (continuing)")
+	} else {
+		setupLog.Info("Bootstrap step 3: Registry credentials completed successfully")
 	}
 
 	// Bootstrap: ensure registry JWKS secret is provisioned
+	setupLog.Info("Bootstrap step 4: Ensuring registry JWKS secret")
 	if err := bootstrap.EnsureRegistryJWKS(context.Background(), uncachedClient); err != nil {
 		setupLog.Error(err, "bootstrap registry JWKS failed (continuing)")
+	} else {
+		setupLog.Info("Bootstrap step 4: Registry JWKS completed successfully")
 	}
 
 	// Bootstrap: copy registry CA certificate to buildkit namespace
+	setupLog.Info("Bootstrap step 5: Ensuring registry CA certificate in buildkit namespace")
 	if err := bootstrap.EnsureRegistryCACertificateInBuildkit(context.Background(), uncachedClient); err != nil {
 		setupLog.Error(err, "bootstrap registry CA certificate in buildkit failed (continuing)")
+	} else {
+		setupLog.Info("Bootstrap step 5: Registry CA certificate in buildkit completed successfully")
 	}
+
+	setupLog.Info("Bootstrap process completed")
 
 	// Webhook configuration: ensure signing Secret exists
 	webhookURL := opConfig.WebhookURL

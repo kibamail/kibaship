@@ -59,11 +59,10 @@ func (h *Handler) ServeAuth(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var accessGrants []AccessEntry
-	var authenticatedNamespace string
 
 	// Determine the authenticated namespace from the username
 	// The username should match the namespace that owns the credentials
-	authenticatedNamespace = username
+	authenticatedNamespace := username
 
 	log.Printf("auth: authenticated namespace=%s", authenticatedNamespace)
 

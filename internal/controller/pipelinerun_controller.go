@@ -89,10 +89,31 @@ func (r *PipelineRunWatcherReconciler) Reconcile(ctx context.Context, req ctrl.R
 		return ctrl.Result{}, err
 	}
 
+	// Check if we've already processed this PipelineRun status to avoid infinite loops
+	lastProcessedGeneration := ""
+	if dep.Annotations != nil {
+		lastProcessedGeneration = dep.Annotations["platform.kibaship.com/last-processed-pipelinerun-generation"]
+	}
+	currentGeneration := fmt.Sprintf("%d", u.GetGeneration())
+
+	// Extract current PipelineRun status for comparison
+	currentStatus, currentReason, currentMessage := extractPRSucceeded(u)
+	lastProcessedStatus := ""
+	if dep.Annotations != nil {
+		lastProcessedStatus = dep.Annotations["platform.kibaship.com/last-processed-pipelinerun-status"]
+	}
+
+	// Skip processing if we've already handled this generation and status hasn't changed
+	if lastProcessedGeneration == currentGeneration && lastProcessedStatus == currentStatus {
+		logger.V(1).Info("Skipping PipelineRun processing - already processed this generation and status",
+			"generation", currentGeneration, "status", currentStatus)
+		return ctrl.Result{}, nil
+	}
+
 	prev := string(dep.Status.Phase)
 
 	// Derive deployment phase from PipelineRun condition Succeeded
-	status, reason, message := extractPRSucceeded(u)
+	status, reason, message := currentStatus, currentReason, currentMessage
 	switch status {
 	case condTrue:
 		dep.Status.Phase = platformv1alpha1.DeploymentPhaseSucceeded
@@ -112,23 +133,50 @@ func (r *PipelineRunWatcherReconciler) Reconcile(ctx context.Context, req ctrl.R
 	}
 	upsertCondition(&dep.Status.Conditions, cond)
 
+	// Mark this generation and status as processed to prevent infinite loops
+	if dep.Annotations == nil {
+		dep.Annotations = make(map[string]string)
+	}
+	dep.Annotations["platform.kibaship.com/last-processed-pipelinerun-generation"] = currentGeneration
+	dep.Annotations["platform.kibaship.com/last-processed-pipelinerun-status"] = status
+
 	// Persist status
 	if err := r.Status().Update(ctx, &dep); err != nil {
 		logger.Error(err, "update Deployment status failed", "dep", fmt.Sprintf("%s/%s", dep.Namespace, dep.Name))
 		return ctrl.Result{}, err
 	}
 
-	// Emit webhook if phase changed; include the PipelineRun inline
+	// Emit optimized webhook if phase changed
 	if r.Notifier != nil && prev != string(dep.Status.Phase) {
-		evt := webhooks.DeploymentStatusEvent{
+		evt := webhooks.OptimizedDeploymentStatusEvent{
 			Type:          "deployment.status.changed",
 			PreviousPhase: prev,
 			NewPhase:      string(dep.Status.Phase),
-			Deployment:    dep,
-			PipelineRun:   u.Object,
-			Timestamp:     time.Now().UTC(),
+			DeploymentRef: struct {
+				Name      string `json:"name"`
+				Namespace string `json:"namespace"`
+				UUID      string `json:"uuid"`
+				Phase     string `json:"phase"`
+				Slug      string `json:"slug"`
+			}{
+				Name:      dep.Name,
+				Namespace: dep.Namespace,
+				UUID:      dep.GetUUID(),
+				Phase:     string(dep.Status.Phase),
+				Slug:      dep.GetSlug(),
+			},
+			PipelineRunRef: &struct {
+				Name   string `json:"name"`
+				Status string `json:"status"`
+				Reason string `json:"reason"`
+			}{
+				Name:   u.GetName(),
+				Status: status,
+				Reason: reason,
+			},
+			Timestamp: time.Now().UTC(),
 		}
-		_ = r.Notifier.NotifyDeploymentStatusChange(ctx, evt)
+		_ = r.Notifier.NotifyOptimizedDeploymentStatusChange(ctx, evt)
 	}
 
 	return ctrl.Result{}, nil

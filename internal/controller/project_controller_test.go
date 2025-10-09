@@ -120,7 +120,7 @@ var _ = Describe("Project Controller", func() {
 				validation.LabelProjectUUID:  projectUUID,
 			})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(len(envList.Items)).To(Equal(1))
+			Expect(envList.Items).To(HaveLen(1))
 			productionEnv := &envList.Items[0]
 
 			By("Verifying environment has correct labels")

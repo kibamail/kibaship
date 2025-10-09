@@ -511,6 +511,9 @@ func (r *DeploymentReconciler) createKubernetesDeployment(ctx context.Context, d
 					},
 				},
 				Spec: corev1.PodSpec{
+					ImagePullSecrets: []corev1.LocalObjectReference{
+						{Name: "registry-docker-config"},
+					},
 					Containers: []corev1.Container{
 						func() corev1.Container {
 							container := corev1.Container{
@@ -539,6 +542,14 @@ func (r *DeploymentReconciler) createKubernetesDeployment(ctx context.Context, d
 										},
 									}
 								}(),
+								VolumeMounts: []corev1.VolumeMount{
+									{
+										Name:      "registry-ca-cert",
+										MountPath: "/etc/ssl/certs/registry-ca.crt",
+										SubPath:   "ca.crt",
+										ReadOnly:  true,
+									},
+								},
 							}
 
 							// Add health check probes if configured
@@ -551,6 +562,16 @@ func (r *DeploymentReconciler) createKubernetesDeployment(ctx context.Context, d
 
 							return container
 						}(),
+					},
+					Volumes: []corev1.Volume{
+						{
+							Name: "registry-ca-cert",
+							VolumeSource: corev1.VolumeSource{
+								Secret: &corev1.SecretVolumeSource{
+									SecretName: "registry-ca-cert",
+								},
+							},
+						},
 					},
 					RestartPolicy: corev1.RestartPolicyAlways,
 				},
@@ -1557,15 +1578,36 @@ func (r *DeploymentReconciler) checkPipelineRunStatusAndEmitWebhook(ctx context.
 		return fmt.Errorf("failed to update deployment annotation: %w", err)
 	}
 
-	// Emit webhook about PipelineRun status change
-	evt := webhooks.DeploymentStatusEvent{
+	// Emit optimized webhook about PipelineRun status change
+	optimizedEvt := webhooks.OptimizedDeploymentStatusEvent{
 		Type:          "deployment.pipelinerun.status.changed",
 		PreviousPhase: previousStatus,
 		NewPhase:      currentStatus,
-		Deployment:    *deployment,
-		Timestamp:     time.Now().UTC(),
+		DeploymentRef: struct {
+			Name      string `json:"name"`
+			Namespace string `json:"namespace"`
+			UUID      string `json:"uuid"`
+			Phase     string `json:"phase"`
+			Slug      string `json:"slug"`
+		}{
+			Name:      deployment.Name,
+			Namespace: deployment.Namespace,
+			UUID:      deployment.GetUUID(),
+			Phase:     string(deployment.Status.Phase),
+			Slug:      deployment.GetSlug(),
+		},
+		PipelineRunRef: &struct {
+			Name   string `json:"name"`
+			Status string `json:"status"`
+			Reason string `json:"reason"`
+		}{
+			Name:   pipelineRun.Name,
+			Status: currentStatus,
+			Reason: succeededCondition.Reason,
+		},
+		Timestamp: time.Now().UTC(),
 	}
-	_ = r.Notifier.NotifyDeploymentStatusChange(ctx, evt)
+	_ = r.Notifier.NotifyOptimizedDeploymentStatusChange(ctx, optimizedEvt)
 
 	return nil
 }
@@ -1578,14 +1620,49 @@ func (r *DeploymentReconciler) emitDeploymentPhaseChange(ctx context.Context, de
 	if prev == next {
 		return
 	}
-	evt := webhooks.DeploymentStatusEvent{
+	// Use optimized webhook event to reduce memory usage
+	optimizedEvt := r.createOptimizedWebhookEvent(deployment, prev, next, nil)
+	_ = r.Notifier.NotifyOptimizedDeploymentStatusChange(ctx, optimizedEvt)
+}
+
+// createOptimizedWebhookEvent creates a memory-optimized webhook event with only essential fields
+func (r *DeploymentReconciler) createOptimizedWebhookEvent(deployment *platformv1alpha1.Deployment, prev, next string, pipelineRun *tektonv1.PipelineRun) webhooks.OptimizedDeploymentStatusEvent {
+	evt := webhooks.OptimizedDeploymentStatusEvent{
 		Type:          "deployment.status.changed",
 		PreviousPhase: prev,
 		NewPhase:      next,
-		Deployment:    *deployment,
-		Timestamp:     time.Now().UTC(),
+		DeploymentRef: struct {
+			Name      string `json:"name"`
+			Namespace string `json:"namespace"`
+			UUID      string `json:"uuid"`
+			Phase     string `json:"phase"`
+			Slug      string `json:"slug"`
+		}{
+			Name:      deployment.Name,
+			Namespace: deployment.Namespace,
+			UUID:      deployment.GetUUID(),
+			Phase:     string(deployment.Status.Phase),
+			Slug:      deployment.GetSlug(),
+		},
+		Timestamp: time.Now().UTC(),
 	}
-	_ = r.Notifier.NotifyDeploymentStatusChange(ctx, evt)
+
+	if pipelineRun != nil {
+		condition := pipelineRun.Status.GetCondition("Succeeded")
+		if condition != nil {
+			evt.PipelineRunRef = &struct {
+				Name   string `json:"name"`
+				Status string `json:"status"`
+				Reason string `json:"reason"`
+			}{
+				Name:   pipelineRun.Name,
+				Status: string(condition.Status),
+				Reason: condition.Reason,
+			}
+		}
+	}
+
+	return evt
 }
 
 // SetupWithManager sets up the controller with the Manager.

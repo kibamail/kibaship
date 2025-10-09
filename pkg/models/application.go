@@ -379,12 +379,6 @@ func isValidApplicationType(appType ApplicationType) bool {
 		appType == ApplicationTypeGitRepository
 }
 
-func isValidSlug(slug string) bool {
-	// Validate 8-character alphanumeric slug
-	slugRegex := regexp.MustCompile(`^[a-z0-9]{8}$`)
-	return slugRegex.MatchString(slug)
-}
-
 func isValidGitProvider(provider GitProvider) bool {
 	return provider == GitProviderGitHub ||
 		provider == GitProviderGitLab ||

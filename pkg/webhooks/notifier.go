@@ -23,6 +23,8 @@ type Notifier interface {
 	NotifyApplicationStatusChange(ctx context.Context, evt ApplicationStatusEvent) error
 	NotifyApplicationDomainStatusChange(ctx context.Context, evt ApplicationDomainStatusEvent) error
 	NotifyDeploymentStatusChange(ctx context.Context, evt DeploymentStatusEvent) error
+	// NotifyOptimizedDeploymentStatusChange sends memory-optimized deployment status notifications
+	NotifyOptimizedDeploymentStatusChange(ctx context.Context, evt OptimizedDeploymentStatusEvent) error
 }
 
 // ProjectStatusEvent is the payload for project status change notifications.
@@ -74,6 +76,29 @@ type DeploymentStatusEvent struct {
 	Timestamp   time.Time `json:"timestamp"`
 }
 
+// OptimizedDeploymentStatusEvent is a memory-optimized version of DeploymentStatusEvent
+// that contains only essential fields to reduce webhook payload size and memory usage.
+type OptimizedDeploymentStatusEvent struct {
+	Type          string `json:"type"`
+	PreviousPhase string `json:"previousPhase"`
+	NewPhase      string `json:"newPhase"`
+	// Only essential deployment fields
+	DeploymentRef struct {
+		Name      string `json:"name"`
+		Namespace string `json:"namespace"`
+		UUID      string `json:"uuid"`
+		Phase     string `json:"phase"`
+		Slug      string `json:"slug"`
+	} `json:"deploymentRef"`
+	// Only essential PipelineRun fields
+	PipelineRunRef *struct {
+		Name   string `json:"name"`
+		Status string `json:"status"`
+		Reason string `json:"reason"`
+	} `json:"pipelineRunRef,omitempty"`
+	Timestamp time.Time `json:"timestamp"`
+}
+
 // NoopNotifier is a drop-in that does nothing.
 type NoopNotifier struct{}
 
@@ -90,6 +115,9 @@ func (n NoopNotifier) NotifyApplicationDomainStatusChange(ctx context.Context, e
 	return nil
 }
 func (n NoopNotifier) NotifyDeploymentStatusChange(ctx context.Context, evt DeploymentStatusEvent) error {
+	return nil
+}
+func (n NoopNotifier) NotifyOptimizedDeploymentStatusChange(ctx context.Context, evt OptimizedDeploymentStatusEvent) error {
 	return nil
 }
 
@@ -194,5 +222,9 @@ func (n *HTTPNotifier) NotifyDeploymentStatusChange(ctx context.Context, evt Dep
 			evt.PipelineRun = latest.Object
 		}
 	}
+	return n.postSigned(ctx, evt)
+}
+
+func (n *HTTPNotifier) NotifyOptimizedDeploymentStatusChange(ctx context.Context, evt OptimizedDeploymentStatusEvent) error {
 	return n.postSigned(ctx, evt)
 }
