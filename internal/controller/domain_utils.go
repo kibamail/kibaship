@@ -98,13 +98,14 @@ func generateRandomString(length int) (string, error) {
 }
 
 // GenerateFullDomain creates the full domain name by combining subdomain with operator domain
+// For web applications, this produces domains in the format: <subdomain>.apps.<baseDomain>
 func GenerateFullDomain(subdomain string) (string, error) {
 	config, err := GetOperatorConfig()
 	if err != nil {
 		return "", fmt.Errorf("failed to get operator configuration: %v", err)
 	}
 
-	fullDomain := fmt.Sprintf("%s.%s", subdomain, config.Domain)
+	fullDomain := fmt.Sprintf("%s.apps.%s", subdomain, config.Domain)
 
 	// Validate total domain length (DNS limit is 253 characters)
 	if len(fullDomain) > 253 {

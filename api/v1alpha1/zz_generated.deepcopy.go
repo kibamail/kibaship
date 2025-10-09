@@ -195,6 +195,11 @@ func (in *ApplicationList) DeepCopyObject() runtime.Object {
 func (in *ApplicationSpec) DeepCopyInto(out *ApplicationSpec) {
 	*out = *in
 	out.EnvironmentRef = in.EnvironmentRef
+	if in.CurrentDeploymentRef != nil {
+		in, out := &in.CurrentDeploymentRef, &out.CurrentDeploymentRef
+		*out = new(v1.LocalObjectReference)
+		**out = **in
+	}
 	if in.GitRepository != nil {
 		in, out := &in.GitRepository, &out.GitRepository
 		*out = new(GitRepositoryConfig)

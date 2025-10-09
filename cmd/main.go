@@ -336,6 +336,34 @@ func main() {
 		os.Exit(1)
 	}
 
+	// New: PipelineRunStatusController - watches PipelineRun status and updates Deployment conditions
+	if err := (&controller.PipelineRunStatusController{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "PipelineRunStatus")
+		os.Exit(1)
+	}
+
+	// New: DeploymentProgressController - manages phase transitions and K8s resource creation
+	if err := (&controller.DeploymentProgressController{
+		Client:           mgr.GetClient(),
+		Scheme:           mgr.GetScheme(),
+		NamespaceManager: controller.NewNamespaceManager(mgr.GetClient()),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "DeploymentProgress")
+		os.Exit(1)
+	}
+
+	// New: DeploymentStatusWatcherReconciler - watches K8s Deployments and updates Deployment CR conditions
+	if err := (&controller.DeploymentStatusWatcherReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "DeploymentStatusWatcher")
+		os.Exit(1)
+	}
+
 	if err := (&platformv1alpha1.ApplicationDomain{}).SetupWebhookWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create webhook", "webhook", "ApplicationDomain")
 		os.Exit(1)

@@ -316,13 +316,13 @@ var _ = Describe("Application Domain Integration", func() {
 		Expect(w.Code).To(Equal(http.StatusNotFound))
 	})
 
-	It("retrieves application domain by slug", NodeTimeout(30*time.Second), func(ctx SpecContext) {
+	It("retrieves application domain by UUID", NodeTimeout(30*time.Second), func(ctx SpecContext) {
 		apiKey := generateTestAPIKey()
 		router := setupIntegrationTestRouter(apiKey)
 
 		createdProject, createdApplication, createdDomain := createTestApplicationDomain(router, apiKey)
 
-		req, err := http.NewRequest("GET", "/v1/domains/"+createdDomain.Slug, nil)
+		req, err := http.NewRequest("GET", "/v1/domains/"+createdDomain.UUID, nil)
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 
@@ -362,7 +362,7 @@ var _ = Describe("Application Domain Integration", func() {
 
 		createdProject, createdApplication, createdDomain := createTestApplicationDomain(router, apiKey)
 
-		req, err := http.NewRequest("DELETE", "/v1/domains/"+createdDomain.Slug, nil)
+		req, err := http.NewRequest("DELETE", "/v1/domains/"+createdDomain.UUID, nil)
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 
@@ -401,7 +401,7 @@ var _ = Describe("Application Domain Integration", func() {
 		createdProject, createdApplication, createdDomain := createTestApplicationDomain(router, apiKey)
 
 		// First delete
-		req, err := http.NewRequest("DELETE", "/v1/domains/"+createdDomain.Slug, nil)
+		req, err := http.NewRequest("DELETE", "/v1/domains/"+createdDomain.UUID, nil)
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 
@@ -410,7 +410,7 @@ var _ = Describe("Application Domain Integration", func() {
 		Expect(w.Code).To(Equal(http.StatusNoContent))
 
 		// Try to delete again
-		req, err = http.NewRequest("DELETE", "/v1/domains/"+createdDomain.Slug, nil)
+		req, err = http.NewRequest("DELETE", "/v1/domains/"+createdDomain.UUID, nil)
 		Expect(err).NotTo(HaveOccurred())
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 

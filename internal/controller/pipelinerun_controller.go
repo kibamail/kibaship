@@ -125,7 +125,7 @@ func (r *PipelineRunWatcherReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 	// Update a condition reflecting PR state
 	cond := metav1.Condition{
-		Type:               "PipelineRun",
+		Type:               "PipelineRunReady",
 		Status:             toConditionStatus(status),
 		LastTransitionTime: metav1.Now(),
 		Reason:             reason,

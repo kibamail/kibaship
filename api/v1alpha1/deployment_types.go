@@ -71,6 +71,12 @@ type DeploymentSpec struct {
 	// +kubebuilder:validation:Required
 	ApplicationRef corev1.LocalObjectReference `json:"applicationRef"`
 
+	// Promote indicates whether to promote this deployment as the current deployment on the application
+	// When true and deployment succeeds, Application.spec.currentDeploymentRef will be updated to reference this deployment
+	// +kubebuilder:default=false
+	// +optional
+	Promote bool `json:"promote,omitempty"`
+
 	// GitRepository contains configuration for GitRepository deployments
 	// Required when ApplicationRef points to a GitRepository application
 	// +optional

@@ -103,10 +103,10 @@ func (h *ApplicationDomainHandler) CreateApplicationDomain(c *gin.Context) {
 
 // GetApplicationDomain handles GET /v1/domains/:uuid
 // @Summary Get application domain by UUID
-// @Description Retrieve an application domain by its unique UUID or slug identifier
+// @Description Retrieve an application domain by its unique UUID identifier
 // @Tags application-domains
 // @Produce json
-// @Param uuid path string true "Application domain UUID or slug (8-character identifier)"
+// @Param uuid path string true "Application domain UUID"
 // @Success 200 {object} models.ApplicationDomainResponse "Application domain details"
 // @Failure 401 {object} auth.ErrorResponse "Authentication required"
 // @Failure 404 {object} auth.ErrorResponse "Application domain not found"
@@ -114,22 +114,22 @@ func (h *ApplicationDomainHandler) CreateApplicationDomain(c *gin.Context) {
 // @Security BearerAuth
 // @Router /v1/domains/{uuid} [get]
 func (h *ApplicationDomainHandler) GetApplicationDomain(c *gin.Context) {
-	slug := c.Param("uuid")
+	uuid := c.Param("uuid")
 
-	if slug == "" {
+	if uuid == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error":   "Bad Request",
-			"message": "Application domain slug is required",
+			"message": "Application domain UUID is required",
 		})
 		return
 	}
 
-	applicationDomain, err := h.applicationDomainService.GetApplicationDomain(c.Request.Context(), slug)
+	applicationDomain, err := h.applicationDomainService.GetApplicationDomain(c.Request.Context(), uuid)
 	if err != nil {
-		if err.Error() == "application domain with slug "+slug+" not found" {
+		if err.Error() == "application domain with UUID "+uuid+" not found" {
 			c.JSON(http.StatusNotFound, gin.H{
 				"error":   "Not Found",
-				"message": "Application domain with slug '" + slug + "' was not found",
+				"message": "Application domain with UUID '" + uuid + "' was not found",
 			})
 			return
 		}
@@ -146,9 +146,9 @@ func (h *ApplicationDomainHandler) GetApplicationDomain(c *gin.Context) {
 
 // DeleteApplicationDomain handles DELETE /v1/domains/:uuid
 // @Summary Delete application domain by UUID
-// @Description Delete an application domain by its unique UUID or slug identifier
+// @Description Delete an application domain by its unique UUID identifier
 // @Tags application-domains
-// @Param uuid path string true "Application domain UUID or slug (8-character identifier)"
+// @Param uuid path string true "Application domain UUID"
 // @Success 204 "Application domain deleted successfully"
 // @Failure 401 {object} auth.ErrorResponse "Authentication required"
 // @Failure 404 {object} auth.ErrorResponse "Application domain not found"
@@ -156,22 +156,22 @@ func (h *ApplicationDomainHandler) GetApplicationDomain(c *gin.Context) {
 // @Security BearerAuth
 // @Router /v1/domains/{uuid} [delete]
 func (h *ApplicationDomainHandler) DeleteApplicationDomain(c *gin.Context) {
-	slug := c.Param("uuid")
+	uuid := c.Param("uuid")
 
-	if slug == "" {
+	if uuid == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error":   "Bad Request",
-			"message": "Application domain slug is required",
+			"message": "Application domain UUID is required",
 		})
 		return
 	}
 
-	err := h.applicationDomainService.DeleteApplicationDomain(c.Request.Context(), slug)
+	err := h.applicationDomainService.DeleteApplicationDomain(c.Request.Context(), uuid)
 	if err != nil {
-		if err.Error() == "application domain with slug "+slug+" not found" {
+		if err.Error() == "application domain with UUID "+uuid+" not found" {
 			c.JSON(http.StatusNotFound, gin.H{
 				"error":   "Not Found",
-				"message": "Application domain with slug '" + slug + "' was not found",
+				"message": "Application domain with UUID '" + uuid + "' was not found",
 			})
 			return
 		}

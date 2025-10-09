@@ -166,6 +166,7 @@ metadata:
 spec:
   applicationRef:
     name: %s
+  promote: true
   gitRepository:
     commitSHA: "960ef4fb6190de6aa8b394bf2f0d552ee67675c3"
     branch: "main"
@@ -340,6 +341,239 @@ spec:
 				}
 				return nil
 			}, "1m", "5s").Should(Succeed(), "Pipeline resources should have correct tracking labels")
+
+			// ===================================================================
+			// POST-BUILD RESOURCE CREATION TESTS
+			// Tests for deployment_progress_controller_resource_creation task
+			// ===================================================================
+
+			By("Verifying Deployment phase transitions to Deploying or Succeeded after build succeeds")
+			Eventually(func() string {
+				cmd := exec.Command("kubectl", "get", deploymentResourceType, deploymentName, "-n", projectNS, "-o", "jsonpath={.status.phase}")
+				output, err := cmd.CombinedOutput()
+				if err != nil {
+					return ""
+				}
+				return strings.TrimSpace(string(output))
+			}, "2m", "5s").Should(Or(Equal("Deploying"), Equal("Succeeded")), "Deployment should transition to Deploying or Succeeded phase after build succeeds (fast pod startup may skip Deploying)")
+
+			By("Verifying Kubernetes Deployment resource is created by DeploymentProgressController")
+			k8sDeploymentName := fmt.Sprintf("deployment-%s", deploymentUUID)
+			Eventually(func() error {
+				cmd := exec.Command("kubectl", "get", "deployment", k8sDeploymentName, "-n", projectNS)
+				_, err := cmd.CombinedOutput()
+				return err
+			}, "2m", "5s").Should(Succeed(), "Kubernetes Deployment should be created after build succeeds")
+
+			By("Verifying K8s Deployment has correct labels")
+			Eventually(func() bool {
+				cmd := exec.Command("kubectl", "get", "deployment", k8sDeploymentName, "-n", projectNS, "-o", "jsonpath={.metadata.labels}")
+				output, err := cmd.CombinedOutput()
+				if err != nil {
+					return false
+				}
+				labels := string(output)
+				// jsonpath returns labels in JSON format: {"key":"value",...}
+				return strings.Contains(labels, fmt.Sprintf("\"app.kubernetes.io/name\":\"app-%s\"", applicationUUID)) &&
+					strings.Contains(labels, "\"app.kubernetes.io/managed-by\":\"kibaship-operator\"") &&
+					strings.Contains(labels, fmt.Sprintf("\"platform.kibaship.com/deployment-uuid\":\"%s\"", deploymentUUID)) &&
+					strings.Contains(labels, fmt.Sprintf("\"platform.kibaship.com/application-uuid\":\"%s\"", applicationUUID))
+			}, "30s", "2s").Should(BeTrue(), "K8s Deployment should have correct labels")
+
+			By("Verifying K8s Deployment has correct image from registry")
+			expectedImage := fmt.Sprintf("registry.registry.svc.cluster.local/%s/%s:%s", projectNS, applicationUUID, deploymentUUID)
+			Eventually(func() string {
+				cmd := exec.Command("kubectl", "get", "deployment", k8sDeploymentName, "-n", projectNS, "-o", "jsonpath={.spec.template.spec.containers[0].image}")
+				output, err := cmd.CombinedOutput()
+				if err != nil {
+					return ""
+				}
+				return strings.TrimSpace(string(output))
+			}, "30s", "2s").Should(Equal(expectedImage), "K8s Deployment should use correct image from registry")
+
+			By("Verifying K8s Deployment has resource limits configured")
+			Eventually(func() bool {
+				cmd := exec.Command("kubectl", "get", "deployment", k8sDeploymentName, "-n", projectNS, "-o", "jsonpath={.spec.template.spec.containers[0].resources}")
+				output, err := cmd.CombinedOutput()
+				if err != nil {
+					return false
+				}
+				resources := string(output)
+				return strings.Contains(resources, "limits") && strings.Contains(resources, "requests")
+			}, "30s", "2s").Should(BeTrue(), "K8s Deployment should have resource limits configured")
+
+			By("Verifying K8s Deployment has registry image pull secret configured")
+			Eventually(func() bool {
+				cmd := exec.Command("kubectl", "get", "deployment", k8sDeploymentName, "-n", projectNS, "-o", "jsonpath={.spec.template.spec.imagePullSecrets[0].name}")
+				output, err := cmd.CombinedOutput()
+				if err != nil {
+					return false
+				}
+				return strings.TrimSpace(string(output)) == "registry-image-pull-secret"
+			}, "30s", "2s").Should(BeTrue(), "K8s Deployment should have registry image pull secret")
+
+			By("Verifying Kubernetes Service resource is created by DeploymentProgressController")
+			k8sServiceName := fmt.Sprintf("service-%s", applicationUUID)
+			Eventually(func() error {
+				cmd := exec.Command("kubectl", "get", "service", k8sServiceName, "-n", projectNS)
+				_, err := cmd.CombinedOutput()
+				return err
+			}, "2m", "5s").Should(Succeed(), "Kubernetes Service should be created after build succeeds")
+
+			By("Verifying K8s Service has correct type (ClusterIP)")
+			Eventually(func() string {
+				cmd := exec.Command("kubectl", "get", "service", k8sServiceName, "-n", projectNS, "-o", "jsonpath={.spec.type}")
+				output, err := cmd.CombinedOutput()
+				if err != nil {
+					return ""
+				}
+				return strings.TrimSpace(string(output))
+			}, "30s", "2s").Should(Equal("ClusterIP"), "Service should be of type ClusterIP")
+
+			By("Verifying K8s Service has correct selector to match Deployment pods")
+			Eventually(func() bool {
+				cmd := exec.Command("kubectl", "get", "service", k8sServiceName, "-n", projectNS, "-o", "jsonpath={.spec.selector}")
+				output, err := cmd.CombinedOutput()
+				if err != nil {
+					return false
+				}
+				selector := string(output)
+				// jsonpath returns selector in JSON format: {"key":"value",...}
+				return strings.Contains(selector, fmt.Sprintf("\"app.kubernetes.io/name\":\"app-%s\"", applicationUUID)) &&
+					strings.Contains(selector, fmt.Sprintf("\"platform.kibaship.com/application-uuid\":\"%s\"", applicationUUID))
+			}, "30s", "2s").Should(BeTrue(), "Service selector should match Deployment pod labels")
+
+			By("Verifying K8s Service has correct port configuration")
+			Eventually(func() bool {
+				cmd := exec.Command("kubectl", "get", "service", k8sServiceName, "-n", projectNS, "-o", "jsonpath={.spec.ports[0]}")
+				output, err := cmd.CombinedOutput()
+				if err != nil {
+					return false
+				}
+				port := string(output)
+				// jsonpath returns port in JSON format: {"name":"http","port":3000,"protocol":"TCP"}
+				return strings.Contains(port, "\"name\":\"http\"") &&
+					strings.Contains(port, "\"port\":3000") &&
+					strings.Contains(port, "\"protocol\":\"TCP\"")
+			}, "30s", "2s").Should(BeTrue(), "Service should have correct port configuration")
+
+			By("Verifying K8s Service endpoints are populated (pods are discovered)")
+			Eventually(func() bool {
+				cmd := exec.Command("kubectl", "get", "endpoints", k8sServiceName, "-n", projectNS, "-o", "jsonpath={.subsets[0].addresses}")
+				output, err := cmd.CombinedOutput()
+				if err != nil {
+					return false
+				}
+				addresses := strings.TrimSpace(string(output))
+				return addresses != "" && addresses != "[]"
+			}, "5m", "10s").Should(BeTrue(), "Service endpoints should be populated with pod IPs")
+
+			By("Verifying pods are created and becoming ready")
+			Eventually(func() int {
+				cmd := exec.Command("kubectl", "get", "pods", "-n", projectNS, "-l", fmt.Sprintf("platform.kibaship.com/deployment-uuid=%s", deploymentUUID), "-o", "jsonpath={.items[*].status.containerStatuses[0].ready}")
+				output, err := cmd.CombinedOutput()
+				if err != nil {
+					return 0
+				}
+				readyStates := strings.Fields(string(output))
+				readyCount := 0
+				for _, state := range readyStates {
+					if state == "true" {
+						readyCount++
+					}
+				}
+				return readyCount
+			}, "5m", "10s").Should(BeNumerically(">=", 1), "At least one pod should be ready")
+
+			By("Verifying Deployment phase transitions to Succeeded after pods are ready")
+			Eventually(func() string {
+				cmd := exec.Command("kubectl", "get", deploymentResourceType, deploymentName, "-n", projectNS, "-o", "jsonpath={.status.phase}")
+				output, err := cmd.CombinedOutput()
+				if err != nil {
+					return ""
+				}
+				return strings.TrimSpace(string(output))
+			}, "3m", "5s").Should(Equal("Succeeded"), "Deployment should transition to Succeeded phase after pods are ready")
+
+			// ===================================================================
+			// APPLICATION DOMAIN CREATION TESTS
+			// Tests for deployment_reconciler_domain_creation task
+			// REQUIRED: ApplicationDomain MUST be created for deployments
+			// ===================================================================
+
+			By("Verifying default ApplicationDomain was created for the application")
+			var domainName string
+			Eventually(func() bool {
+				cmd := exec.Command("kubectl", "get", "applicationdomains", "-n", projectNS, "-l", fmt.Sprintf("platform.kibaship.com/application-uuid=%s", applicationUUID), "-o", "jsonpath={.items[?(@.spec.default==true)].metadata.name}")
+				output, err := cmd.CombinedOutput()
+				if err != nil {
+					return false
+				}
+				domainName = strings.TrimSpace(string(output))
+				return domainName != ""
+			}, "1m", "5s").Should(BeTrue(), "ApplicationDomain MUST be created - test will fail if not created")
+
+			By("Verifying ApplicationDomain has correct properties")
+			Eventually(func() bool {
+				cmd := exec.Command("kubectl", "get", "applicationdomains", "-n", projectNS, "-l", fmt.Sprintf("platform.kibaship.com/application-uuid=%s", applicationUUID), "-o", "jsonpath={.items[?(@.spec.default==true)].spec}")
+				output, err := cmd.CombinedOutput()
+				if err != nil {
+					return false
+				}
+				spec := string(output)
+				// jsonpath returns spec in JSON format: {"key":"value",...}
+				return strings.Contains(spec, "\"type\":\"default\"") &&
+					strings.Contains(spec, "\"default\":true") &&
+					strings.Contains(spec, "\"tlsEnabled\":true") &&
+					strings.Contains(spec, "\"port\":3000")
+			}, "30s", "2s").Should(BeTrue(), "ApplicationDomain should have correct default properties")
+
+			By("Verifying ApplicationDomain domain follows pattern *.apps.<baseDomain>")
+			Eventually(func() bool {
+				cmd := exec.Command("kubectl", "get", "applicationdomains", "-n", projectNS, "-l", fmt.Sprintf("platform.kibaship.com/application-uuid=%s", applicationUUID), "-o", "jsonpath={.items[?(@.spec.default==true)].spec.domain}")
+				output, err := cmd.CombinedOutput()
+				if err != nil {
+					return false
+				}
+				domain := strings.TrimSpace(string(output))
+				return strings.Contains(domain, ".apps.") && len(domain) > 0
+			}, "30s", "2s").Should(BeTrue(), "ApplicationDomain should follow *.apps.<baseDomain> pattern")
+
+			By("Verifying K8s resources have OwnerReferences for cascading deletion")
+			Eventually(func() bool {
+				cmd := exec.Command("kubectl", "get", "deployment", k8sDeploymentName, "-n", projectNS, "-o", "jsonpath={.metadata.ownerReferences[0].kind}")
+				output, err := cmd.CombinedOutput()
+				if err != nil {
+					return false
+				}
+				return strings.TrimSpace(string(output)) == "Deployment"
+			}, "30s", "2s").Should(BeTrue(), "K8s Deployment should have OwnerReference to Deployment CR")
+
+			Eventually(func() bool {
+				cmd := exec.Command("kubectl", "get", "service", k8sServiceName, "-n", projectNS, "-o", "jsonpath={.metadata.ownerReferences[0].kind}")
+				output, err := cmd.CombinedOutput()
+				if err != nil {
+					return false
+				}
+				return strings.TrimSpace(string(output)) == "Deployment"
+			}, "30s", "2s").Should(BeTrue(), "K8s Service should have OwnerReference to Deployment CR")
+
+			// ===================================================================
+			// PROMOTION TESTS
+			// Tests for deployment promotion to Application.spec.currentDeploymentRef
+			// ===================================================================
+
+			By("Verifying Application.spec.currentDeploymentRef is updated after deployment succeeds with promote=true")
+			Eventually(func() string {
+				cmd := exec.Command("kubectl", "get", "application", applicationName, "-n", projectNS, "-o", "jsonpath={.spec.currentDeploymentRef.name}")
+				output, err := cmd.CombinedOutput()
+				if err != nil {
+					return ""
+				}
+				return strings.TrimSpace(string(output))
+			}, "1m", "5s").Should(Equal(deploymentName), "Application.spec.currentDeploymentRef should be set to the promoted deployment")
+
+			By("✅ All post-build resource creation tests passed - 3-controller architecture working correctly")
 		})
 	})
 })

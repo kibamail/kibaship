@@ -284,6 +284,11 @@ type ApplicationSpec struct {
 	// +kubebuilder:validation:Required
 	Type ApplicationType `json:"type"`
 
+	// CurrentDeploymentRef references the currently promoted deployment for this application
+	// This field is automatically updated when a deployment with promote=true succeeds
+	// +optional
+	CurrentDeploymentRef *corev1.LocalObjectReference `json:"currentDeploymentRef,omitempty"`
+
 	// GitRepository contains configuration for GitRepository applications
 	// +optional
 	GitRepository *GitRepositoryConfig `json:"gitRepository,omitempty"`

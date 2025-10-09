@@ -141,12 +141,13 @@ var _ = BeforeSuite(func() {
 
 		By("installing Valkey Operator")
 		Expect(utils.InstallValkeyOperator()).To(Succeed(), "Failed to install Valkey Operator")
-
-		By("creating storage-replica-1 storage class for test environment")
-		Expect(utils.CreateStorageReplicaStorageClass()).To(Succeed(), "Failed to create storage-replica-1 storage class")
 	} else {
 		By("skipping infrastructure installation (tekton-pipelines namespace exists)")
 	}
+
+	// Always create storage classes (needed for every test run)
+	By("creating storage classes for test environment")
+	Expect(utils.CreateStorageClasses()).To(Succeed(), "Failed to create storage classes")
 
 	// Always build and load images (these need to be refreshed on every test run)
 	By("building the manager(Operator) image")
@@ -249,6 +250,53 @@ var _ = BeforeSuite(func() {
 		_, err = utils.Run(cmd)
 		ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to wait for registry rollout")
 	}
+
+	// Fix OrbStack DNS issue: add registry services to Kind node /etc/hosts
+	// OrbStack's DNS (0.250.250.254) cannot resolve cluster-internal service names,
+	// so containerd fails to pull images from the cluster registry.
+	By("configuring Kind node /etc/hosts for registry DNS resolution (OrbStack workaround)")
+	cmd = exec.Command("kubectl", "get", "svc", "-n", "registry", "registry", "-o", "jsonpath={.spec.clusterIP}")
+	registryIP, err := cmd.CombinedOutput()
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to get registry service IP")
+
+	cmd = exec.Command("kubectl", "get", "svc", "-n", "registry", "registry-auth", "-o", "jsonpath={.spec.clusterIP}")
+	registryAuthIP, err := cmd.CombinedOutput()
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to get registry-auth service IP")
+
+	clusterName = os.Getenv("KIND_CLUSTER")
+	if clusterName == "" {
+		clusterName = "kibaship-operator"
+	}
+
+	By("adding registry service DNS entries to Kind node /etc/hosts")
+	cmd = exec.Command("docker", "exec", fmt.Sprintf("%s-control-plane", clusterName), "bash", "-c",
+		fmt.Sprintf("grep -q 'registry.registry.svc.cluster.local' /etc/hosts || echo '%s registry.registry.svc.cluster.local' >> /etc/hosts", strings.TrimSpace(string(registryIP))))
+	_, err = cmd.CombinedOutput()
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to add registry DNS entry to Kind node")
+
+	cmd = exec.Command("docker", "exec", fmt.Sprintf("%s-control-plane", clusterName), "bash", "-c",
+		fmt.Sprintf("grep -q 'registry-auth.registry.svc.cluster.local' /etc/hosts || echo '%s registry-auth.registry.svc.cluster.local' >> /etc/hosts", strings.TrimSpace(string(registryAuthIP))))
+	_, err = cmd.CombinedOutput()
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to add registry-auth DNS entry to Kind node")
+
+	By("installing registry CA certificate on Kind node")
+	cmd = exec.Command("kubectl", "get", "secret", "-n", "registry", "registry-tls", "-o", "jsonpath={.data.ca\\.crt}")
+	caCertB64, err := cmd.CombinedOutput()
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to get registry CA certificate")
+
+	cmd = exec.Command("bash", "-c", fmt.Sprintf("echo '%s' | base64 -d | docker exec -i %s-control-plane tee /usr/local/share/ca-certificates/registry-ca.crt", strings.TrimSpace(string(caCertB64)), clusterName))
+	_, err = cmd.CombinedOutput()
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to copy CA certificate to Kind node")
+
+	By("updating CA certificates on Kind node")
+	cmd = exec.Command("docker", "exec", fmt.Sprintf("%s-control-plane", clusterName), "update-ca-certificates")
+	_, err = cmd.CombinedOutput()
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to update CA certificates on Kind node")
+
+	By("restarting containerd to pick up DNS and TLS fixes")
+	cmd = exec.Command("docker", "exec", fmt.Sprintf("%s-control-plane", clusterName), "systemctl", "restart", "containerd")
+	_, err = cmd.CombinedOutput()
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to restart containerd on Kind node")
 
 	By("re-applying Tekton custom tasks with local railpack image override (always applies)")
 	Expect(utils.ApplyTektonResources()).To(Succeed(), "Failed to re-apply Tekton custom tasks after operator deploy")

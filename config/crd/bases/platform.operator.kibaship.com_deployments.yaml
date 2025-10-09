@@ -79,6 +79,12 @@ spec:
                 required:
                 - commitSHA
                 type: object
+              promote:
+                default: false
+                description: |-
+                  Promote indicates whether to promote this deployment as the current deployment on the application
+                  When true and deployment succeeds, Application.spec.currentDeploymentRef will be updated to reference this deployment
+                type: boolean
             required:
             - applicationRef
             type: object

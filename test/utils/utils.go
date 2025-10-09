@@ -661,31 +661,49 @@ func IsValkeyOperatorCRDsInstalled() bool {
 	return false
 }
 
-// CreateStorageReplicaStorageClass creates the storage-replica-1 storage class
-// that duplicates the default 'standard' storage class for test environments
-func CreateStorageReplicaStorageClass() error {
-	storageClassYAML := fmt.Sprintf(`apiVersion: storage.k8s.io/v1
+// CreateStorageClasses creates storage-replica-1 and storage-replica-2 storage classes
+// for test environments using the Kind default provisioner
+func CreateStorageClasses() error {
+	storageClasses := []string{config.StorageClassReplica1, config.StorageClassReplica2}
+
+	for _, scName := range storageClasses {
+		// Check if storage class already exists (idempotent)
+		checkCmd := exec.Command("kubectl", "get", "storageclass", scName)
+		if err := checkCmd.Run(); err == nil {
+			// Storage class already exists, skip creation
+			_, _ = fmt.Fprintf(GinkgoWriter, "Storage class %s already exists, skipping creation\n", scName)
+			continue
+		}
+
+		storageClassYAML := fmt.Sprintf(`apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
   name: %s
   annotations:
-    description: "Test environment storage class that mirrors standard storage class"
+    description: "Test environment storage class for Kind"
 provisioner: rancher.io/local-path
 reclaimPolicy: Delete
 volumeBindingMode: WaitForFirstConsumer
-allowVolumeExpansion: false`, config.StorageClassReplica1)
+allowVolumeExpansion: false`, scName)
 
-	cmd := exec.Command("kubectl", "apply", "-f", "-")
-	cmd.Stdin = strings.NewReader(storageClassYAML)
-	_, err := Run(cmd)
-	return err
+		cmd := exec.Command("kubectl", "create", "-f", "-")
+		cmd.Stdin = strings.NewReader(storageClassYAML)
+		if _, err := Run(cmd); err != nil {
+			return fmt.Errorf("failed to create storage class %s: %w", scName, err)
+		}
+		_, _ = fmt.Fprintf(GinkgoWriter, "✅ Created storage class %s\n", scName)
+	}
+	return nil
 }
 
-// CleanupStorageReplicaStorageClass removes the storage-replica-1 storage class
-func CleanupStorageReplicaStorageClass() {
-	cmd := exec.Command("kubectl", "delete", "storageclass", config.StorageClassReplica1, "--ignore-not-found")
-	if _, err := Run(cmd); err != nil {
-		warnError(err)
+// CleanupStorageClasses removes the storage classes
+func CleanupStorageClasses() {
+	storageClasses := []string{config.StorageClassReplica1, config.StorageClassReplica2}
+	for _, scName := range storageClasses {
+		cmd := exec.Command("kubectl", "delete", "storageclass", scName, "--ignore-not-found")
+		if _, err := Run(cmd); err != nil {
+			warnError(err)
+		}
 	}
 }
 

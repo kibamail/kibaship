@@ -379,52 +379,49 @@ func (r *ProjectReconciler) ensureRegistryCACertificate(ctx context.Context, nam
 	return nil
 }
 
-// ensureRegistryDockerConfig creates Docker config secret for registry authentication
+// ensureRegistryDockerConfig creates Docker config secrets for registry authentication
+// Creates two secrets: one for Tekton (volume mounting) and one for Deployments (imagePullSecrets)
 func (r *ProjectReconciler) ensureRegistryDockerConfig(ctx context.Context, namespaceName string) error {
 	log := logf.FromContext(ctx)
 
 	const (
-		dockerConfigSecretName = "registry-docker-config"
+		dockerConfigSecretName = "registry-docker-config"     // For Tekton volume mounting
+		imagePullSecretName    = "registry-image-pull-secret" // For Kubernetes imagePullSecrets
 		registryURL            = "registry.registry.svc.cluster.local"
 	)
 
-	// Check if Docker config secret already exists
-	existingSecret := &corev1.Secret{}
-	err := r.Get(ctx, client.ObjectKey{
-		Namespace: namespaceName,
-		Name:      dockerConfigSecretName,
-	}, existingSecret)
+	// Check if both secrets already exist
+	dockerConfigExists := r.secretExists(ctx, namespaceName, dockerConfigSecretName)
+	imagePullSecretExists := r.secretExists(ctx, namespaceName, imagePullSecretName)
 
-	if err == nil {
-		// Secret already exists
-		log.Info("Registry Docker config secret already exists", "namespace", namespaceName)
+	if dockerConfigExists && imagePullSecretExists {
+		log.Info("Both registry secrets already exist", "namespace", namespaceName)
 		return nil
 	}
 
-	if !errors.IsNotFound(err) {
-		return fmt.Errorf("failed to check registry Docker config secret: %w", err)
-	}
+	// Only fetch credentials if we need to create at least one secret
+	var dockerConfigJSON string
+	if !dockerConfigExists || !imagePullSecretExists {
+		// Get the registry credentials secret to extract username and password
+		credentialsSecretName := fmt.Sprintf("%s-registry-credentials", namespaceName)
+		credentialsSecret := &corev1.Secret{}
+		err := r.Get(ctx, client.ObjectKey{
+			Namespace: namespaceName,
+			Name:      credentialsSecretName,
+		}, credentialsSecret)
 
-	// Get the registry credentials secret to extract username and password
-	credentialsSecretName := fmt.Sprintf("%s-registry-credentials", namespaceName)
-	credentialsSecret := &corev1.Secret{}
-	err = r.Get(ctx, client.ObjectKey{
-		Namespace: namespaceName,
-		Name:      credentialsSecretName,
-	}, credentialsSecret)
+		if err != nil {
+			return fmt.Errorf("failed to get registry credentials secret: %w", err)
+		}
 
-	if err != nil {
-		return fmt.Errorf("failed to get registry credentials secret: %w", err)
-	}
+		username := string(credentialsSecret.Data["username"])
+		password := string(credentialsSecret.Data["password"])
 
-	username := string(credentialsSecret.Data["username"])
-	password := string(credentialsSecret.Data["password"])
+		// Generate base64-encoded auth string (username:password)
+		authString := base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", username, password)))
 
-	// Generate base64-encoded auth string (username:password)
-	authString := base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", username, password)))
-
-	// Create Docker config JSON
-	dockerConfigJSON := fmt.Sprintf(`{
+		// Create Docker config JSON
+		dockerConfigJSON = fmt.Sprintf(`{
   "auths": {
     "%s": {
       "username": "%s",
@@ -433,31 +430,71 @@ func (r *ProjectReconciler) ensureRegistryDockerConfig(ctx context.Context, name
     }
   }
 }`, registryURL, username, password, authString)
+	}
 
-	// Create Docker config secret with key "config.json" for BuildKit compatibility
-	dockerConfigSecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      dockerConfigSecretName,
-			Namespace: namespaceName,
-			Labels: map[string]string{
-				"app.kubernetes.io/managed-by": "kibaship-operator",
-				"app.kubernetes.io/component":  "registry-docker-config",
+	// Create Docker config secret for Tekton (volume mounting) if it doesn't exist
+	if !dockerConfigExists {
+		dockerConfigSecret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      dockerConfigSecretName,
+				Namespace: namespaceName,
+				Labels: map[string]string{
+					"app.kubernetes.io/managed-by": "kibaship-operator",
+					"app.kubernetes.io/component":  "registry-docker-config",
+				},
 			},
-		},
-		Type: corev1.SecretTypeOpaque,
-		StringData: map[string]string{
-			"config.json": dockerConfigJSON,
-		},
+			Type: corev1.SecretTypeOpaque,
+			StringData: map[string]string{
+				"config.json": dockerConfigJSON,
+			},
+		}
+
+		if err := r.Create(ctx, dockerConfigSecret); err != nil {
+			return fmt.Errorf("failed to create registry Docker config secret: %w", err)
+		}
+
+		log.Info("Created registry Docker config secret for Tekton",
+			"namespace", namespaceName,
+			"secret", dockerConfigSecretName)
 	}
 
-	if err := r.Create(ctx, dockerConfigSecret); err != nil {
-		return fmt.Errorf("failed to create registry Docker config secret: %w", err)
+	// Create image pull secret for Kubernetes deployments if it doesn't exist
+	if !imagePullSecretExists {
+		imagePullSecret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      imagePullSecretName,
+				Namespace: namespaceName,
+				Labels: map[string]string{
+					"app.kubernetes.io/managed-by": "kibaship-operator",
+					"app.kubernetes.io/component":  "registry-image-pull-secret",
+				},
+			},
+			Type: corev1.SecretTypeDockerConfigJson,
+			StringData: map[string]string{
+				".dockerconfigjson": dockerConfigJSON,
+			},
+		}
+
+		if err := r.Create(ctx, imagePullSecret); err != nil {
+			return fmt.Errorf("failed to create registry image pull secret: %w", err)
+		}
+
+		log.Info("Created registry image pull secret for Deployments",
+			"namespace", namespaceName,
+			"secret", imagePullSecretName)
 	}
 
-	log.Info("Created registry Docker config secret",
-		"namespace", namespaceName,
-		"secret", dockerConfigSecretName)
 	return nil
+}
+
+// secretExists checks if a secret exists in the given namespace
+func (r *ProjectReconciler) secretExists(ctx context.Context, namespace, name string) bool {
+	secret := &corev1.Secret{}
+	err := r.Get(ctx, client.ObjectKey{
+		Namespace: namespace,
+		Name:      name,
+	}, secret)
+	return err == nil
 }
 
 // ensureDefaultEnvironment ensures a default production environment exists for the project
