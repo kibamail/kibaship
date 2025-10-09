@@ -58,6 +58,8 @@ const (
 	RailpackBuildTaskName = "tekton-task-railpack-build-kibaship-com"
 	// eventEmittedValue is the value used to mark events as emitted in annotations
 	eventEmittedValue = "true"
+	// DefaultGitBranch is the default git branch when none is specified
+	DefaultGitBranch = "main"
 )
 
 // annotationTracker tracks annotation changes to batch updates and prevent unnecessary reconciliations
@@ -558,7 +560,7 @@ func (r *DeploymentReconciler) createPipelineRun(ctx context.Context, deployment
 	if gitBranch == "" {
 		gitBranch = gitConfig.Branch
 		if gitBranch == "" {
-			gitBranch = "main" // Final fallback
+			gitBranch = DefaultGitBranch // Final fallback
 		}
 	}
 

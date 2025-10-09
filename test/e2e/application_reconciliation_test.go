@@ -12,6 +12,11 @@ import (
 	"github.com/kibamail/kibaship-operator/test/utils"
 )
 
+const (
+	// TrueString represents the string "true" used in kubectl output comparisons
+	TrueString = "true"
+)
+
 var _ = Describe("Application Reconciliation", func() {
 	var (
 		projectUUID     string
@@ -195,7 +200,7 @@ spec:
 				if err != nil {
 					return false
 				}
-				return strings.TrimSpace(string(output)) == "true"
+				return strings.TrimSpace(string(output)) == TrueString
 			}, "30s", "2s").Should(BeTrue(), "Application should have publicAccess set to true")
 
 			Eventually(func() bool {

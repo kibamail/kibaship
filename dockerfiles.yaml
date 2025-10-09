@@ -197,25 +197,6 @@ controller_changes:
         - "✅ Controller assumes resources are pre-validated by API server"
         - "✅ No additional validation needed in ApplicationReconciler"
 
-registry_and_auth:
-  description: "Registry authentication and configuration"
-
-  registry_auth:
-    - task: "Ensure registry auth works for Dockerfile builds"
-      file: "internal/registryauth/server.go"
-      details:
-        - "Verify existing registry auth supports buildkit"
-        - "Test with Docker Hub and GHCR"
-        - "Ensure credentials are properly mounted to build task"
-        - "Add logging for auth debugging"
-
-    - task: "Update registry secret handling"
-      file: "internal/controller/deployment_controller.go"
-      details:
-        - "Ensure registry secret is mounted to build-dockerfile task"
-        - "Use same secret format as railpack builds"
-        - "Verify buildkit can use dockerconfig.json"
-
 service_layer:
   description: "REST API service layer updates"
 

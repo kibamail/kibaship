@@ -621,19 +621,19 @@ func (r *Application) validateDockerfilePath(path string) error {
 }
 
 // validateBuildContext validates the build context path for security
-func (r *Application) validateBuildContext(context string) error {
-	if context == "" {
+func (r *Application) validateBuildContext(buildContext string) error {
+	if buildContext == "" {
 		return nil // Empty is valid, will default to "."
 	}
 
 	// Prevent path traversal attacks
-	if strings.Contains(context, "..") {
-		return fmt.Errorf("BuildContext cannot contain '..' for security reasons: %s", context)
+	if strings.Contains(buildContext, "..") {
+		return fmt.Errorf("BuildContext cannot contain '..' for security reasons: %s", buildContext)
 	}
 
 	// Ensure it's a relative path (doesn't start with /)
-	if strings.HasPrefix(context, "/") {
-		return fmt.Errorf("BuildContext must be a relative path, not absolute: %s", context)
+	if strings.HasPrefix(buildContext, "/") {
+		return fmt.Errorf("BuildContext must be a relative path, not absolute: %s", buildContext)
 	}
 
 	return nil

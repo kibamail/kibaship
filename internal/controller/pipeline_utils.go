@@ -61,9 +61,9 @@ func (r *DeploymentReconciler) generatePipeline(
 	// Generate pipeline based on BuildType
 	switch buildType {
 	case platformv1alpha1.BuildTypeRailpack:
-		return r.generateRailpackPipeline(ctx, deployment, app, pipelineName, projectSlug, gitConfig)
+		return r.generateRailpackPipeline(ctx, deployment, pipelineName, projectSlug, gitConfig)
 	case platformv1alpha1.BuildTypeDockerfile:
-		return r.generateDockerfilePipeline(ctx, deployment, app, pipelineName, projectSlug, gitConfig)
+		return r.generateDockerfilePipeline(ctx, deployment, pipelineName, projectSlug, gitConfig)
 	default:
 		return nil, fmt.Errorf("unsupported BuildType: %s", buildType)
 	}
@@ -73,7 +73,6 @@ func (r *DeploymentReconciler) generatePipeline(
 func (r *DeploymentReconciler) generateRailpackPipeline(
 	ctx context.Context,
 	deployment *platformv1alpha1.Deployment,
-	app *platformv1alpha1.Application,
 	pipelineName string,
 	projectSlug string,
 	gitConfig *platformv1alpha1.GitRepositoryConfig,
@@ -90,7 +89,7 @@ func (r *DeploymentReconciler) generateRailpackPipeline(
 	// Get branch (use default if empty)
 	gitBranch := gitConfig.Branch
 	if gitBranch == "" {
-		gitBranch = "main"
+		gitBranch = DefaultGitBranch
 	}
 
 	// Get secret name (only if not public access)
@@ -295,7 +294,6 @@ func (r *DeploymentReconciler) generateRailpackPipeline(
 func (r *DeploymentReconciler) generateDockerfilePipeline(
 	ctx context.Context,
 	deployment *platformv1alpha1.Deployment,
-	app *platformv1alpha1.Application,
 	pipelineName string,
 	projectSlug string,
 	gitConfig *platformv1alpha1.GitRepositoryConfig,
@@ -328,7 +326,7 @@ func (r *DeploymentReconciler) generateDockerfilePipeline(
 	// Get branch (use default if empty)
 	gitBranch := gitConfig.Branch
 	if gitBranch == "" {
-		gitBranch = "main"
+		gitBranch = DefaultGitBranch
 	}
 
 	// Get secret name (only if not public access)

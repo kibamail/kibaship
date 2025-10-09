@@ -478,7 +478,7 @@ spec:
 				readyStates := strings.Fields(string(output))
 				readyCount := 0
 				for _, state := range readyStates {
-					if state == "true" {
+					if state == TrueString {
 						readyCount++
 					}
 				}
@@ -818,7 +818,7 @@ spec:
 				readyStates := strings.Fields(string(output))
 				readyCount := 0
 				for _, state := range readyStates {
-					if state == "true" {
+					if state == TrueString {
 						readyCount++
 					}
 				}
