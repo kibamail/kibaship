@@ -151,6 +151,10 @@ func (r *DeploymentProgressController) computeTargetPhase(
 		return r.computeTargetPhaseForImageFromRegistry(deployment)
 	case platformv1alpha1.ApplicationTypeMySQL:
 		return r.computeTargetPhaseForMySQL(deployment)
+	case platformv1alpha1.ApplicationTypeValkey:
+		return r.computeTargetPhaseForValkey(deployment)
+	case platformv1alpha1.ApplicationTypeValkeyCluster:
+		return r.computeTargetPhaseForValkeyCluster(deployment)
 	default:
 		// Unknown application type - stay in initializing
 		return platformv1alpha1.DeploymentPhaseInitializing
@@ -243,6 +247,72 @@ func (r *DeploymentProgressController) computeTargetPhaseForMySQL(
 	// For MySQL deployments, we could check StatefulSet status in the future
 	// For now, just return Succeeded if the deployment exists (MySQL is simpler)
 	return platformv1alpha1.DeploymentPhaseSucceeded
+}
+
+// computeTargetPhaseForValkey handles Valkey applications by checking ValkeyReady condition
+func (r *DeploymentProgressController) computeTargetPhaseForValkey(
+	deployment *platformv1alpha1.Deployment,
+) platformv1alpha1.DeploymentPhase {
+	// Check ValkeyReady condition set by ValkeyStatusWatcherReconciler
+	valkeyCondition := meta.FindStatusCondition(deployment.Status.Conditions, "ValkeyReady")
+
+	if valkeyCondition == nil {
+		// No condition set yet - still deploying
+		return platformv1alpha1.DeploymentPhaseDeploying
+	}
+
+	// Determine phase based on Valkey condition
+	switch valkeyCondition.Status {
+	case metav1.ConditionTrue:
+		// Valkey is ready - deployment succeeded
+		return platformv1alpha1.DeploymentPhaseSucceeded
+
+	case metav1.ConditionFalse:
+		// Check if this is a permanent failure or just deploying
+		if valkeyCondition.Reason == "ValkeyNotReady" {
+			// Still deploying - Valkey not ready yet
+			return platformv1alpha1.DeploymentPhaseDeploying
+		}
+		// Other false conditions might indicate failure
+		return platformv1alpha1.DeploymentPhaseFailed
+
+	default:
+		// Unknown status - still deploying
+		return platformv1alpha1.DeploymentPhaseDeploying
+	}
+}
+
+// computeTargetPhaseForValkeyCluster handles ValkeyCluster applications by checking ValkeyReady condition
+func (r *DeploymentProgressController) computeTargetPhaseForValkeyCluster(
+	deployment *platformv1alpha1.Deployment,
+) platformv1alpha1.DeploymentPhase {
+	// Check ValkeyReady condition set by ValkeyStatusWatcherReconciler
+	valkeyCondition := meta.FindStatusCondition(deployment.Status.Conditions, "ValkeyReady")
+
+	if valkeyCondition == nil {
+		// No condition set yet - still deploying
+		return platformv1alpha1.DeploymentPhaseDeploying
+	}
+
+	// Determine phase based on Valkey condition
+	switch valkeyCondition.Status {
+	case metav1.ConditionTrue:
+		// Valkey cluster is ready - deployment succeeded
+		return platformv1alpha1.DeploymentPhaseSucceeded
+
+	case metav1.ConditionFalse:
+		// Check if this is a permanent failure or just deploying
+		if valkeyCondition.Reason == "ValkeyNotReady" {
+			// Still deploying - Valkey cluster not ready yet
+			return platformv1alpha1.DeploymentPhaseDeploying
+		}
+		// Other false conditions might indicate failure
+		return platformv1alpha1.DeploymentPhaseFailed
+
+	default:
+		// Unknown status - still deploying
+		return platformv1alpha1.DeploymentPhaseDeploying
+	}
 }
 
 // promoteDeployment updates the Application's CurrentDeploymentRef to point to this deployment
@@ -602,16 +672,8 @@ func (r *DeploymentProgressController) ensureApplicationDomain(ctx context.Conte
 	case platformv1alpha1.ApplicationTypeGitRepository, platformv1alpha1.ApplicationTypeDockerImage:
 		// Web applications use <deployment-uuid>.apps.<baseDomain>
 		domain = fmt.Sprintf("%s.apps.%s", deploymentUUID, opConfig.Domain)
-	case platformv1alpha1.ApplicationTypeMySQL, platformv1alpha1.ApplicationTypeMySQLCluster:
-		// MySQL databases use <deployment-uuid>.mysql.<baseDomain>
-		domain = fmt.Sprintf("%s.mysql.%s", deploymentUUID, opConfig.Domain)
-		port = 3306
-	case platformv1alpha1.ApplicationTypePostgres, platformv1alpha1.ApplicationTypePostgresCluster:
-		// PostgreSQL databases use <deployment-uuid>.postgres.<baseDomain>
-		domain = fmt.Sprintf("%s.postgres.%s", deploymentUUID, opConfig.Domain)
-		port = 5432
 	default:
-		return fmt.Errorf("unsupported application type for domain creation: %s", app.Spec.Type)
+		return fmt.Errorf("unsupported application type for per-deployment domain creation: %s", app.Spec.Type)
 	}
 
 	// Generate slug for ApplicationDomain

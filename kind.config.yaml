@@ -13,3 +13,13 @@ nodes:
         nodeRegistration:
           kubeletExtraArgs:
             node-labels: "ingress.kibaship.com/ready=true"
+      - |
+        kind: KubeletConfiguration
+        # Increase memory pressure thresholds for test environment
+        evictionHard:
+          memory.available: "1Gi"
+          nodefs.available: "5%"
+        evictionSoft:
+          memory.available: "2Gi"
+        evictionSoftGracePeriod:
+          memory.available: "30s"

@@ -537,6 +537,155 @@ spec:
                     required:
                     - enabled
                     type: object
+                  valkey:
+                    description: Valkey single-instance database configuration
+                    properties:
+                      defaultLimits:
+                        description: Default resource limits for applications of this
+                          type
+                        properties:
+                          cpu:
+                            description: CPU limit in cores (e.g., "2", "0.5")
+                            pattern: ^[0-9]+(\.[0-9]+)?$
+                            type: string
+                          memory:
+                            description: Memory limit (e.g., "4Gi", "512Mi")
+                            pattern: ^[0-9]+(\.[0-9]+)?(Mi|Gi|Ti)$
+                            type: string
+                          storage:
+                            description: Storage limit (e.g., "20Gi", "100Mi")
+                            pattern: ^[0-9]+(\.[0-9]+)?(Mi|Gi|Ti)$
+                            type: string
+                        type: object
+                      enabled:
+                        default: true
+                        description: Whether this application type is enabled in the
+                          project
+                        type: boolean
+                      resourceBounds:
+                        description: Resource bounds (min/max) for applications of
+                          this type
+                        properties:
+                          max:
+                            description: Maximum resource limits
+                            properties:
+                              cpu:
+                                description: CPU limit in cores (e.g., "2", "0.5")
+                                pattern: ^[0-9]+(\.[0-9]+)?$
+                                type: string
+                              memory:
+                                description: Memory limit (e.g., "4Gi", "512Mi")
+                                pattern: ^[0-9]+(\.[0-9]+)?(Mi|Gi|Ti)$
+                                type: string
+                              storage:
+                                description: Storage limit (e.g., "20Gi", "100Mi")
+                                pattern: ^[0-9]+(\.[0-9]+)?(Mi|Gi|Ti)$
+                                type: string
+                            type: object
+                          min:
+                            description: Minimum resource limits
+                            properties:
+                              cpu:
+                                description: CPU limit in cores (e.g., "2", "0.5")
+                                pattern: ^[0-9]+(\.[0-9]+)?$
+                                type: string
+                              memory:
+                                description: Memory limit (e.g., "4Gi", "512Mi")
+                                pattern: ^[0-9]+(\.[0-9]+)?(Mi|Gi|Ti)$
+                                type: string
+                              storage:
+                                description: Storage limit (e.g., "20Gi", "100Mi")
+                                pattern: ^[0-9]+(\.[0-9]+)?(Mi|Gi|Ti)$
+                                type: string
+                            type: object
+                        type: object
+                    required:
+                    - enabled
+                    type: object
+                  valkeyCluster:
+                    description: Valkey cluster configuration (disabled by default)
+                    properties:
+                      defaultLimits:
+                        description: Default resource limits for cluster applications
+                          of this type
+                        properties:
+                          cpu:
+                            description: CPU limit per node in cores (e.g., "2", "0.5")
+                            pattern: ^[0-9]+(\.[0-9]+)?$
+                            type: string
+                          memory:
+                            description: Memory limit per node (e.g., "4Gi", "512Mi")
+                            pattern: ^[0-9]+(\.[0-9]+)?(Mi|Gi|Ti)$
+                            type: string
+                          nodes:
+                            description: Default number of nodes in the cluster
+                            format: int32
+                            minimum: 1
+                            type: integer
+                          storage:
+                            description: Storage limit per node (e.g., "20Gi", "100Mi")
+                            pattern: ^[0-9]+(\.[0-9]+)?(Mi|Gi|Ti)$
+                            type: string
+                        type: object
+                      enabled:
+                        default: false
+                        description: Whether this application type is enabled in the
+                          project
+                        type: boolean
+                      resourceBounds:
+                        description: Resource bounds (min/max) for cluster applications
+                          of this type
+                        properties:
+                          max:
+                            description: Maximum resource limits per node
+                            properties:
+                              cpu:
+                                description: CPU limit per node in cores (e.g., "2",
+                                  "0.5")
+                                pattern: ^[0-9]+(\.[0-9]+)?$
+                                type: string
+                              memory:
+                                description: Memory limit per node (e.g., "4Gi", "512Mi")
+                                pattern: ^[0-9]+(\.[0-9]+)?(Mi|Gi|Ti)$
+                                type: string
+                              nodes:
+                                description: Default number of nodes in the cluster
+                                format: int32
+                                minimum: 1
+                                type: integer
+                              storage:
+                                description: Storage limit per node (e.g., "20Gi",
+                                  "100Mi")
+                                pattern: ^[0-9]+(\.[0-9]+)?(Mi|Gi|Ti)$
+                                type: string
+                            type: object
+                          min:
+                            description: Minimum resource limits per node
+                            properties:
+                              cpu:
+                                description: CPU limit per node in cores (e.g., "2",
+                                  "0.5")
+                                pattern: ^[0-9]+(\.[0-9]+)?$
+                                type: string
+                              memory:
+                                description: Memory limit per node (e.g., "4Gi", "512Mi")
+                                pattern: ^[0-9]+(\.[0-9]+)?(Mi|Gi|Ti)$
+                                type: string
+                              nodes:
+                                description: Default number of nodes in the cluster
+                                format: int32
+                                minimum: 1
+                                type: integer
+                              storage:
+                                description: Storage limit per node (e.g., "20Gi",
+                                  "100Mi")
+                                pattern: ^[0-9]+(\.[0-9]+)?(Mi|Gi|Ti)$
+                                type: string
+                            type: object
+                        type: object
+                    required:
+                    - enabled
+                    type: object
                 type: object
               volumes:
                 description: Volume configuration for the project

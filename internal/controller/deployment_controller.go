@@ -81,6 +81,7 @@ type DeploymentReconciler struct {
 // +kubebuilder:rbac:groups=tekton.dev,resources=pipelineruns,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=tekton.dev,resources=taskruns,verbs=get;list;watch
 // +kubebuilder:rbac:groups=mysql.oracle.com,resources=innodbclusters,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=hyperspike.io,resources=valkeys,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
@@ -158,6 +159,22 @@ func (r *DeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	if app.Spec.Type == platformv1alpha1.ApplicationTypeMySQL {
 		if err := r.handleMySQLDeployment(ctx, &deployment, &app); err != nil {
 			log.Error(err, "Failed to handle MySQL deployment")
+			return ctrl.Result{}, err
+		}
+	}
+
+	// Check if Application is of type Valkey
+	if app.Spec.Type == platformv1alpha1.ApplicationTypeValkey {
+		if err := r.handleValkeyDeployment(ctx, &deployment, &app); err != nil {
+			log.Error(err, "Failed to handle Valkey deployment")
+			return ctrl.Result{}, err
+		}
+	}
+
+	// Check if Application is of type ValkeyCluster
+	if app.Spec.Type == platformv1alpha1.ApplicationTypeValkeyCluster {
+		if err := r.handleValkeyClusterDeployment(ctx, &deployment, &app); err != nil {
+			log.Error(err, "Failed to handle ValkeyCluster deployment")
 			return ctrl.Result{}, err
 		}
 	}
@@ -1208,6 +1225,224 @@ func (r *DeploymentReconciler) createOptimizedWebhookEvent(deployment *platformv
 	}
 
 	return evt
+}
+
+// handleValkeyDeployment handles deployments for Valkey applications
+func (r *DeploymentReconciler) handleValkeyDeployment(ctx context.Context, deployment *platformv1alpha1.Deployment, app *platformv1alpha1.Application) error {
+	log := logf.FromContext(ctx).WithValues("deployment", deployment.Name, "application", app.Name)
+
+	// Validate Valkey configuration
+	if err := validateValkeyConfiguration(app); err != nil {
+		return fmt.Errorf("invalid Valkey configuration: %w", err)
+	}
+
+	// Get project for resource metadata
+	var project platformv1alpha1.Project
+	if err := r.Get(ctx, types.NamespacedName{
+		Name: fmt.Sprintf("project-%s", deployment.GetProjectUUID()),
+	}, &project); err != nil {
+		return fmt.Errorf("failed to get project: %w", err)
+	}
+
+	// Get project and app slugs from labels
+	projectSlug, err := r.getProjectSlug(ctx, deployment.GetProjectUUID())
+	if err != nil {
+		return fmt.Errorf("failed to get project slug: %w", err)
+	}
+	appSlug, err := r.getApplicationSlug(ctx, deployment.GetApplicationUUID(), deployment.Namespace)
+	if err != nil {
+		return fmt.Errorf("failed to get application slug: %w", err)
+	}
+
+	// Generate resource names
+	secretName, instanceName := generateValkeyResourceNames(deployment, projectSlug, appSlug)
+
+	// Check if secret already exists
+	existingSecret := &corev1.Secret{}
+	err = r.Get(ctx, types.NamespacedName{
+		Name:      secretName,
+		Namespace: deployment.Namespace,
+	}, existingSecret)
+
+	if err != nil && !errors.IsNotFound(err) {
+		return fmt.Errorf("failed to check for existing secret: %w", err)
+	}
+
+	// Create secret if it doesn't exist
+	if errors.IsNotFound(err) {
+		log.Info("Creating Valkey credentials secret", "secretName", secretName)
+		secret, err := generateValkeyCredentialsSecret(deployment, project.Name, projectSlug, appSlug, deployment.Namespace)
+		if err != nil {
+			return fmt.Errorf("failed to generate Valkey credentials secret: %w", err)
+		}
+
+		// Set owner reference to the deployment
+		if err := controllerutil.SetControllerReference(deployment, secret, r.Scheme); err != nil {
+			return fmt.Errorf("failed to set controller reference on secret: %w", err)
+		}
+
+		if err := r.Create(ctx, secret); err != nil {
+			return fmt.Errorf("failed to create Valkey credentials secret: %w", err)
+		}
+		log.Info("Successfully created Valkey credentials secret", "secretName", secretName)
+	} else {
+		log.Info("Valkey credentials secret already exists", "secretName", secretName)
+	}
+
+	// Check if Valkey instance already exists
+	existingInstance := &unstructured.Unstructured{}
+	existingInstance.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   "hyperspike.io",
+		Version: "v1",
+		Kind:    "Valkey",
+	})
+	err = r.Get(ctx, types.NamespacedName{
+		Name:      instanceName,
+		Namespace: deployment.Namespace,
+	}, existingInstance)
+
+	if err != nil && !errors.IsNotFound(err) {
+		return fmt.Errorf("failed to check for existing Valkey instance: %w", err)
+	}
+
+	if errors.IsNotFound(err) {
+		// Create new Valkey instance
+		log.Info("Creating Valkey instance", "instanceName", instanceName)
+		instance := generateValkeyInstance(deployment, app, project.Name, projectSlug, appSlug, secretName, deployment.Namespace)
+
+		// Set owner reference to the deployment
+		if err := controllerutil.SetControllerReference(deployment, instance, r.Scheme); err != nil {
+			return fmt.Errorf("failed to set controller reference on Valkey instance: %w", err)
+		}
+
+		if err := r.Create(ctx, instance); err != nil {
+			return fmt.Errorf("failed to create Valkey instance: %w", err)
+		}
+		log.Info("Successfully created Valkey instance", "instanceName", instanceName)
+	} else {
+		// Update existing Valkey instance with new configuration
+		log.Info("Updating existing Valkey instance", "instanceName", instanceName)
+		updatedInstance := generateValkeyInstance(deployment, app, project.Name, projectSlug, appSlug, secretName, deployment.Namespace)
+
+		// Preserve the existing metadata but update spec
+		existingInstance.Object["spec"] = updatedInstance.Object["spec"]
+
+		if err := r.Update(ctx, existingInstance); err != nil {
+			return fmt.Errorf("failed to update Valkey instance: %w", err)
+		}
+		log.Info("Successfully updated Valkey instance", "instanceName", instanceName)
+	}
+
+	return nil
+}
+
+// handleValkeyClusterDeployment handles deployments for ValkeyCluster applications
+func (r *DeploymentReconciler) handleValkeyClusterDeployment(ctx context.Context, deployment *platformv1alpha1.Deployment, app *platformv1alpha1.Application) error {
+	log := logf.FromContext(ctx).WithValues("deployment", deployment.Name, "application", app.Name)
+
+	// Validate ValkeyCluster configuration
+	if err := validateValkeyClusterConfiguration(app); err != nil {
+		return fmt.Errorf("invalid ValkeyCluster configuration: %w", err)
+	}
+
+	// Get project for resource metadata
+	var project platformv1alpha1.Project
+	if err := r.Get(ctx, types.NamespacedName{
+		Name: fmt.Sprintf("project-%s", deployment.GetProjectUUID()),
+	}, &project); err != nil {
+		return fmt.Errorf("failed to get project: %w", err)
+	}
+
+	// Get project and app slugs from labels
+	projectSlug, err := r.getProjectSlug(ctx, deployment.GetProjectUUID())
+	if err != nil {
+		return fmt.Errorf("failed to get project slug: %w", err)
+	}
+	appSlug, err := r.getApplicationSlug(ctx, deployment.GetApplicationUUID(), deployment.Namespace)
+	if err != nil {
+		return fmt.Errorf("failed to get application slug: %w", err)
+	}
+
+	// Generate resource names
+	secretName, clusterName := generateValkeyClusterResourceNames(deployment, projectSlug, appSlug)
+
+	// Check if secret already exists
+	existingSecret := &corev1.Secret{}
+	err = r.Get(ctx, types.NamespacedName{
+		Name:      secretName,
+		Namespace: deployment.Namespace,
+	}, existingSecret)
+
+	if err != nil && !errors.IsNotFound(err) {
+		return fmt.Errorf("failed to check for existing secret: %w", err)
+	}
+
+	// Create secret if it doesn't exist
+	if errors.IsNotFound(err) {
+		log.Info("Creating ValkeyCluster credentials secret", "secretName", secretName)
+		secret, err := generateValkeyCredentialsSecret(deployment, project.Name, projectSlug, appSlug, deployment.Namespace)
+		if err != nil {
+			return fmt.Errorf("failed to generate ValkeyCluster credentials secret: %w", err)
+		}
+
+		// Set owner reference to the deployment
+		if err := controllerutil.SetControllerReference(deployment, secret, r.Scheme); err != nil {
+			return fmt.Errorf("failed to set controller reference on secret: %w", err)
+		}
+
+		if err := r.Create(ctx, secret); err != nil {
+			return fmt.Errorf("failed to create ValkeyCluster credentials secret: %w", err)
+		}
+		log.Info("Successfully created ValkeyCluster credentials secret", "secretName", secretName)
+	} else {
+		log.Info("ValkeyCluster credentials secret already exists", "secretName", secretName)
+	}
+
+	// Check if ValkeyCluster already exists
+	existingCluster := &unstructured.Unstructured{}
+	existingCluster.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   "hyperspike.io",
+		Version: "v1",
+		Kind:    "Valkey",
+	})
+	err = r.Get(ctx, types.NamespacedName{
+		Name:      clusterName,
+		Namespace: deployment.Namespace,
+	}, existingCluster)
+
+	if err != nil && !errors.IsNotFound(err) {
+		return fmt.Errorf("failed to check for existing ValkeyCluster: %w", err)
+	}
+
+	if errors.IsNotFound(err) {
+		// Create new ValkeyCluster
+		log.Info("Creating ValkeyCluster", "clusterName", clusterName)
+		cluster := generateValkeyCluster(deployment, app, project.Name, projectSlug, appSlug, secretName, deployment.Namespace)
+
+		// Set owner reference to the deployment
+		if err := controllerutil.SetControllerReference(deployment, cluster, r.Scheme); err != nil {
+			return fmt.Errorf("failed to set controller reference on ValkeyCluster: %w", err)
+		}
+
+		if err := r.Create(ctx, cluster); err != nil {
+			return fmt.Errorf("failed to create ValkeyCluster: %w", err)
+		}
+		log.Info("Successfully created ValkeyCluster", "clusterName", clusterName)
+	} else {
+		// Update existing ValkeyCluster with new configuration
+		log.Info("Updating existing ValkeyCluster", "clusterName", clusterName)
+		updatedCluster := generateValkeyCluster(deployment, app, project.Name, projectSlug, appSlug, secretName, deployment.Namespace)
+
+		// Preserve the existing metadata but update spec
+		existingCluster.Object["spec"] = updatedCluster.Object["spec"]
+
+		if err := r.Update(ctx, existingCluster); err != nil {
+			return fmt.Errorf("failed to update ValkeyCluster: %w", err)
+		}
+		log.Info("Successfully updated ValkeyCluster", "clusterName", clusterName)
+	}
+
+	return nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

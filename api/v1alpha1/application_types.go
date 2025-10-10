@@ -34,7 +34,7 @@ import (
 )
 
 // ApplicationType defines the type of application
-// +kubebuilder:validation:Enum=MySQL;MySQLCluster;Postgres;PostgresCluster;DockerImage;GitRepository;ImageFromRegistry
+// +kubebuilder:validation:Enum=MySQL;MySQLCluster;Postgres;PostgresCluster;Valkey;ValkeyCluster;DockerImage;GitRepository;ImageFromRegistry
 type ApplicationType string
 
 const (
@@ -46,6 +46,10 @@ const (
 	ApplicationTypePostgres ApplicationType = "Postgres"
 	// ApplicationTypePostgresCluster represents a PostgreSQL cluster application
 	ApplicationTypePostgresCluster ApplicationType = "PostgresCluster"
+	// ApplicationTypeValkey represents a Valkey database application
+	ApplicationTypeValkey ApplicationType = "Valkey"
+	// ApplicationTypeValkeyCluster represents a Valkey cluster application
+	ApplicationTypeValkeyCluster ApplicationType = "ValkeyCluster"
 	// ApplicationTypeDockerImage represents a Docker image application
 	ApplicationTypeDockerImage ApplicationType = "DockerImage"
 	// ApplicationTypeGitRepository represents a Git repository application
@@ -357,6 +361,55 @@ type PostgresClusterConfig struct {
 	Env *corev1.LocalObjectReference `json:"env,omitempty"`
 }
 
+// ValkeyConfig defines the configuration for Valkey applications
+type ValkeyConfig struct {
+	// Version is the Valkey version to deploy
+	// +optional
+	Version string `json:"version,omitempty"`
+
+	// Database is the initial database number to select (0-15)
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=15
+	// +kubebuilder:default=0
+	// +optional
+	Database int32 `json:"database,omitempty"`
+
+	// SecretRef references the secret containing Valkey credentials
+	// +optional
+	SecretRef *corev1.LocalObjectReference `json:"secretRef,omitempty"`
+
+	// Env is a reference to a secret containing environment variables for this application (optional)
+	// +optional
+	Env *corev1.LocalObjectReference `json:"env,omitempty"`
+}
+
+// ValkeyClusterConfig defines the configuration for Valkey cluster applications
+type ValkeyClusterConfig struct {
+	// Version is the Valkey version to deploy
+	// +optional
+	Version string `json:"version,omitempty"`
+
+	// Replicas is the number of Valkey instances in the cluster
+	// +kubebuilder:validation:Minimum=3
+	// +kubebuilder:default=6
+	Replicas int32 `json:"replicas,omitempty"`
+
+	// Database is the initial database number to select (0-15)
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=15
+	// +kubebuilder:default=0
+	// +optional
+	Database int32 `json:"database,omitempty"`
+
+	// SecretRef references the secret containing Valkey credentials
+	// +optional
+	SecretRef *corev1.LocalObjectReference `json:"secretRef,omitempty"`
+
+	// Env is a reference to a secret containing environment variables for this application (optional)
+	// +optional
+	Env *corev1.LocalObjectReference `json:"env,omitempty"`
+}
+
 // ApplicationSpec defines the desired state of Application.
 type ApplicationSpec struct {
 	// EnvironmentRef references the Environment this application belongs to
@@ -399,6 +452,14 @@ type ApplicationSpec struct {
 	// PostgresCluster contains configuration for PostgresCluster applications
 	// +optional
 	PostgresCluster *PostgresClusterConfig `json:"postgresCluster,omitempty"`
+
+	// Valkey contains configuration for Valkey applications
+	// +optional
+	Valkey *ValkeyConfig `json:"valkey,omitempty"`
+
+	// ValkeyCluster contains configuration for ValkeyCluster applications
+	// +optional
+	ValkeyCluster *ValkeyClusterConfig `json:"valkeyCluster,omitempty"`
 }
 
 // ApplicationStatus defines the observed state of Application.

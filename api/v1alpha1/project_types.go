@@ -142,6 +142,12 @@ type ApplicationTypesConfig struct {
 	// PostgreSQL cluster configuration (disabled by default)
 	PostgresCluster ClusterApplicationTypeConfig `json:"postgresCluster,omitempty"`
 
+	// Valkey single-instance database configuration
+	Valkey ApplicationTypeConfig `json:"valkey,omitempty"`
+
+	// Valkey cluster configuration (disabled by default)
+	ValkeyCluster ClusterApplicationTypeConfig `json:"valkeyCluster,omitempty"`
+
 	// Docker image application configuration
 	DockerImage ApplicationTypeConfig `json:"dockerImage,omitempty"`
 

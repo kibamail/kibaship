@@ -478,9 +478,11 @@ func (r *ApplicationReconciler) updateApplicationStatus(ctx context.Context, app
 func (r *ApplicationReconciler) handleApplicationDomains(ctx context.Context, app *platformv1alpha1.Application) error {
 	log := logf.FromContext(ctx).WithValues("application", app.Name, "namespace", app.Namespace)
 
-	// Only handle domains for GitRepository applications
-	if app.Spec.Type != platformv1alpha1.ApplicationTypeGitRepository {
-		log.V(1).Info("Skipping domain creation for non-GitRepository application", "type", app.Spec.Type)
+	// Handle domains for applications that need them
+	if app.Spec.Type != platformv1alpha1.ApplicationTypeGitRepository &&
+		app.Spec.Type != platformv1alpha1.ApplicationTypeValkey &&
+		app.Spec.Type != platformv1alpha1.ApplicationTypeValkeyCluster {
+		log.V(1).Info("Skipping domain creation for application type", "type", app.Spec.Type)
 		return nil
 	}
 
@@ -535,8 +537,8 @@ func (r *ApplicationReconciler) createDefaultDomain(ctx context.Context, app *pl
 		return fmt.Errorf("failed to generate subdomain: %v", err)
 	}
 
-	// Generate full domain
-	fullDomain, err := GenerateFullDomain(subdomain)
+	// Generate full domain based on application type
+	fullDomain, port, err := GenerateFullDomainForApplicationType(subdomain, app.Spec.Type)
 	if err != nil {
 		return fmt.Errorf("failed to generate full domain: %v", err)
 	}
@@ -572,7 +574,7 @@ func (r *ApplicationReconciler) createDefaultDomain(ctx context.Context, app *pl
 		Spec: platformv1alpha1.ApplicationDomainSpec{
 			ApplicationRef: corev1.LocalObjectReference{Name: app.Name},
 			Domain:         fullDomain,
-			Port:           config.DefaultPort,
+			Port:           port,
 			Type:           platformv1alpha1.ApplicationDomainTypeDefault,
 			Default:        true,
 			TLSEnabled:     true,

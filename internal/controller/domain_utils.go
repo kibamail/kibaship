@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"math/big"
 	"strings"
+
+	platformv1alpha1 "github.com/kibamail/kibaship-operator/api/v1alpha1"
 )
 
 const (
@@ -113,6 +115,41 @@ func GenerateFullDomain(subdomain string) (string, error) {
 	}
 
 	return fullDomain, nil
+}
+
+// GenerateFullDomainForApplicationType creates the full domain name based on application type
+func GenerateFullDomainForApplicationType(subdomain string, appType platformv1alpha1.ApplicationType) (string, int32, error) {
+	config, err := GetOperatorConfig()
+	if err != nil {
+		return "", 0, fmt.Errorf("failed to get operator configuration: %v", err)
+	}
+
+	var fullDomain string
+	var port int32
+
+	switch appType {
+	case platformv1alpha1.ApplicationTypeGitRepository, platformv1alpha1.ApplicationTypeDockerImage:
+		fullDomain = fmt.Sprintf("%s.apps.%s", subdomain, config.Domain)
+		port = 3000
+	case platformv1alpha1.ApplicationTypeValkey, platformv1alpha1.ApplicationTypeValkeyCluster:
+		fullDomain = fmt.Sprintf("%s.valkey.%s", subdomain, config.Domain)
+		port = 6379
+	case platformv1alpha1.ApplicationTypeMySQL, platformv1alpha1.ApplicationTypeMySQLCluster:
+		fullDomain = fmt.Sprintf("%s.mysql.%s", subdomain, config.Domain)
+		port = 3306
+	case platformv1alpha1.ApplicationTypePostgres, platformv1alpha1.ApplicationTypePostgresCluster:
+		fullDomain = fmt.Sprintf("%s.postgres.%s", subdomain, config.Domain)
+		port = 5432
+	default:
+		return "", 0, fmt.Errorf("unsupported application type for domain generation: %s", appType)
+	}
+
+	// Validate total domain length (DNS limit is 253 characters)
+	if len(fullDomain) > 253 {
+		return "", 0, fmt.Errorf("generated domain %s exceeds maximum length of 253 characters", fullDomain)
+	}
+
+	return fullDomain, port, nil
 }
 
 // isAlphanumeric checks if a character is alphanumeric

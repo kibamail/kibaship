@@ -825,10 +825,110 @@ spec:
                 - MySQLCluster
                 - Postgres
                 - PostgresCluster
+                - Valkey
+                - ValkeyCluster
                 - DockerImage
                 - GitRepository
                 - ImageFromRegistry
                 type: string
+              valkey:
+                description: Valkey contains configuration for Valkey applications
+                properties:
+                  database:
+                    default: 0
+                    description: Database is the initial database number to select
+                      (0-15)
+                    format: int32
+                    maximum: 15
+                    minimum: 0
+                    type: integer
+                  env:
+                    description: Env is a reference to a secret containing environment
+                      variables for this application (optional)
+                    properties:
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                    type: object
+                    x-kubernetes-map-type: atomic
+                  secretRef:
+                    description: SecretRef references the secret containing Valkey
+                      credentials
+                    properties:
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                    type: object
+                    x-kubernetes-map-type: atomic
+                  version:
+                    description: Version is the Valkey version to deploy
+                    type: string
+                type: object
+              valkeyCluster:
+                description: ValkeyCluster contains configuration for ValkeyCluster
+                  applications
+                properties:
+                  database:
+                    default: 0
+                    description: Database is the initial database number to select
+                      (0-15)
+                    format: int32
+                    maximum: 15
+                    minimum: 0
+                    type: integer
+                  env:
+                    description: Env is a reference to a secret containing environment
+                      variables for this application (optional)
+                    properties:
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                    type: object
+                    x-kubernetes-map-type: atomic
+                  replicas:
+                    default: 6
+                    description: Replicas is the number of Valkey instances in the
+                      cluster
+                    format: int32
+                    minimum: 3
+                    type: integer
+                  secretRef:
+                    description: SecretRef references the secret containing Valkey
+                      credentials
+                    properties:
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                    type: object
+                    x-kubernetes-map-type: atomic
+                  version:
+                    description: Version is the Valkey version to deploy
+                    type: string
+                type: object
             required:
             - environmentRef
             - type

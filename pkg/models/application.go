@@ -41,6 +41,8 @@ const (
 	ApplicationTypeMySQLCluster      ApplicationType = "MySQLCluster"
 	ApplicationTypePostgres          ApplicationType = "Postgres"
 	ApplicationTypePostgresCluster   ApplicationType = "PostgresCluster"
+	ApplicationTypeValkey            ApplicationType = "Valkey"
+	ApplicationTypeValkeyCluster     ApplicationType = "ValkeyCluster"
 	ApplicationTypeDockerImage       ApplicationType = "DockerImage"
 	ApplicationTypeGitRepository     ApplicationType = "GitRepository"
 	ApplicationTypeImageFromRegistry ApplicationType = "ImageFromRegistry"
@@ -146,6 +148,21 @@ type PostgresClusterConfig struct {
 	SecretRef *string `json:"secretRef,omitempty" example:"postgres-cluster-credentials"`
 }
 
+// ValkeyConfig defines configuration for Valkey applications
+type ValkeyConfig struct {
+	Version   string  `json:"version,omitempty" example:"7.2"`
+	Database  int32   `json:"database,omitempty" example:"0"`
+	SecretRef *string `json:"secretRef,omitempty" example:"valkey-credentials"`
+}
+
+// ValkeyClusterConfig defines configuration for Valkey cluster applications
+type ValkeyClusterConfig struct {
+	Version   string  `json:"version,omitempty" example:"7.2"`
+	Replicas  int32   `json:"replicas,omitempty" example:"6"`
+	Database  int32   `json:"database,omitempty" example:"0"`
+	SecretRef *string `json:"secretRef,omitempty" example:"valkey-cluster-credentials"`
+}
+
 // ApplicationCreateRequest represents a request to create an application
 type ApplicationCreateRequest struct {
 	Name              string                   `json:"name" example:"my-web-app"`
@@ -158,6 +175,8 @@ type ApplicationCreateRequest struct {
 	MySQLCluster      *MySQLClusterConfig      `json:"mysqlCluster,omitempty"`
 	Postgres          *PostgresConfig          `json:"postgres,omitempty"`
 	PostgresCluster   *PostgresClusterConfig   `json:"postgresCluster,omitempty"`
+	Valkey            *ValkeyConfig            `json:"valkey,omitempty"`
+	ValkeyCluster     *ValkeyClusterConfig     `json:"valkeyCluster,omitempty"`
 }
 
 // ApplicationUpdateRequest represents a request to update an application
@@ -170,6 +189,8 @@ type ApplicationUpdateRequest struct {
 	MySQLCluster      *MySQLClusterConfig      `json:"mysqlCluster,omitempty"`
 	Postgres          *PostgresConfig          `json:"postgres,omitempty"`
 	PostgresCluster   *PostgresClusterConfig   `json:"postgresCluster,omitempty"`
+	Valkey            *ValkeyConfig            `json:"valkey,omitempty"`
+	ValkeyCluster     *ValkeyClusterConfig     `json:"valkeyCluster,omitempty"`
 }
 
 // ApplicationEnvUpdateRequest represents a request to update environment variables
@@ -193,6 +214,8 @@ type Application struct {
 	MySQLCluster      *MySQLClusterConfig      `json:"mysqlCluster,omitempty"`
 	Postgres          *PostgresConfig          `json:"postgres,omitempty"`
 	PostgresCluster   *PostgresClusterConfig   `json:"postgresCluster,omitempty"`
+	Valkey            *ValkeyConfig            `json:"valkey,omitempty"`
+	ValkeyCluster     *ValkeyClusterConfig     `json:"valkeyCluster,omitempty"`
 	Status            string                   `json:"status"`
 	Domains           []*ApplicationDomain     `json:"domains,omitempty"`
 	LatestDeployment  *Deployment              `json:"latestDeployment,omitempty"`
@@ -215,6 +238,8 @@ type ApplicationResponse struct {
 	MySQLCluster      *MySQLClusterConfig         `json:"mysqlCluster,omitempty"`
 	Postgres          *PostgresConfig             `json:"postgres,omitempty"`
 	PostgresCluster   *PostgresClusterConfig      `json:"postgresCluster,omitempty"`
+	Valkey            *ValkeyConfig               `json:"valkey,omitempty"`
+	ValkeyCluster     *ValkeyClusterConfig        `json:"valkeyCluster,omitempty"`
 	Status            string                      `json:"status" example:"Running"`
 	Domains           []ApplicationDomainResponse `json:"domains,omitempty"`
 	LatestDeployment  *DeploymentResponse         `json:"latestDeployment,omitempty"`
@@ -274,7 +299,7 @@ func (req *ApplicationCreateRequest) Validate() *ValidationErrors {
 	if !isValidApplicationType(req.Type) {
 		errors = append(errors, ValidationError{
 			Field:   "type",
-			Message: "Application type must be one of: MySQL, MySQLCluster, Postgres, PostgresCluster, DockerImage, GitRepository, ImageFromRegistry",
+			Message: "Application type must be one of: MySQL, MySQLCluster, Postgres, PostgresCluster, Valkey, ValkeyCluster, DockerImage, GitRepository, ImageFromRegistry",
 		})
 	}
 
@@ -322,6 +347,14 @@ func (req *ApplicationCreateRequest) Validate() *ValidationErrors {
 	case ApplicationTypePostgresCluster:
 		if req.PostgresCluster != nil {
 			errors = append(errors, validatePostgresCluster(req.PostgresCluster)...)
+		}
+	case ApplicationTypeValkey:
+		if req.Valkey != nil {
+			errors = append(errors, validateValkey(req.Valkey)...)
+		}
+	case ApplicationTypeValkeyCluster:
+		if req.ValkeyCluster != nil {
+			errors = append(errors, validateValkeyCluster(req.ValkeyCluster)...)
 		}
 	}
 
@@ -373,6 +406,12 @@ func (req *ApplicationUpdateRequest) ValidateUpdate() *ValidationErrors {
 	}
 	if req.PostgresCluster != nil {
 		errors = append(errors, validatePostgresCluster(req.PostgresCluster)...)
+	}
+	if req.Valkey != nil {
+		errors = append(errors, validateValkey(req.Valkey)...)
+	}
+	if req.ValkeyCluster != nil {
+		errors = append(errors, validateValkeyCluster(req.ValkeyCluster)...)
 	}
 
 	if len(errors) > 0 {
@@ -426,6 +465,8 @@ func isValidApplicationType(appType ApplicationType) bool {
 		appType == ApplicationTypeMySQLCluster ||
 		appType == ApplicationTypePostgres ||
 		appType == ApplicationTypePostgresCluster ||
+		appType == ApplicationTypeValkey ||
+		appType == ApplicationTypeValkeyCluster ||
 		appType == ApplicationTypeDockerImage ||
 		appType == ApplicationTypeGitRepository ||
 		appType == ApplicationTypeImageFromRegistry
@@ -602,6 +643,42 @@ func validatePostgresCluster(config *PostgresClusterConfig) []ValidationError {
 	return errors
 }
 
+func validateValkey(config *ValkeyConfig) []ValidationError {
+	var errors []ValidationError
+
+	// Validate database number (0-15 for Redis/Valkey)
+	if config.Database < 0 || config.Database > 15 {
+		errors = append(errors, ValidationError{
+			Field:   "valkey.database",
+			Message: "Database must be between 0 and 15",
+		})
+	}
+
+	return errors
+}
+
+func validateValkeyCluster(config *ValkeyClusterConfig) []ValidationError {
+	var errors []ValidationError
+
+	// Validate replicas (minimum 3 for cluster)
+	if config.Replicas < 3 {
+		errors = append(errors, ValidationError{
+			Field:   "valkeyCluster.replicas",
+			Message: "Replicas must be at least 3 for cluster mode",
+		})
+	}
+
+	// Validate database number (0-15 for Redis/Valkey)
+	if config.Database < 0 || config.Database > 15 {
+		errors = append(errors, ValidationError{
+			Field:   "valkeyCluster.database",
+			Message: "Database must be between 0 and 15",
+		})
+	}
+
+	return errors
+}
+
 func validateDockerfileBuild(config *DockerfileBuildConfig) []ValidationError {
 	var errors []ValidationError
 
@@ -724,6 +801,29 @@ func (a *Application) ConvertFromCRD(crd *v1alpha1.Application) {
 				postgresClusterConfig.SecretRef = &crd.Spec.PostgresCluster.SecretRef.Name
 			}
 			a.PostgresCluster = postgresClusterConfig
+		}
+	case v1alpha1.ApplicationTypeValkey:
+		if crd.Spec.Valkey != nil {
+			valkeyConfig := &ValkeyConfig{
+				Version:  crd.Spec.Valkey.Version,
+				Database: crd.Spec.Valkey.Database,
+			}
+			if crd.Spec.Valkey.SecretRef != nil {
+				valkeyConfig.SecretRef = &crd.Spec.Valkey.SecretRef.Name
+			}
+			a.Valkey = valkeyConfig
+		}
+	case v1alpha1.ApplicationTypeValkeyCluster:
+		if crd.Spec.ValkeyCluster != nil {
+			valkeyClusterConfig := &ValkeyClusterConfig{
+				Version:  crd.Spec.ValkeyCluster.Version,
+				Database: crd.Spec.ValkeyCluster.Database,
+				Replicas: crd.Spec.ValkeyCluster.Replicas,
+			}
+			if crd.Spec.ValkeyCluster.SecretRef != nil {
+				valkeyClusterConfig.SecretRef = &crd.Spec.ValkeyCluster.SecretRef.Name
+			}
+			a.ValkeyCluster = valkeyClusterConfig
 		}
 	}
 }

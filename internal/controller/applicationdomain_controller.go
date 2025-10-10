@@ -222,6 +222,8 @@ func (r *ApplicationDomainReconciler) validateApplicationReference(ctx context.C
 	supportedTypes := []platformv1alpha1.ApplicationType{
 		platformv1alpha1.ApplicationTypeGitRepository,
 		platformv1alpha1.ApplicationTypeImageFromRegistry,
+		platformv1alpha1.ApplicationTypeValkey,
+		platformv1alpha1.ApplicationTypeValkeyCluster,
 	}
 
 	isSupported := false
