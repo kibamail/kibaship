@@ -4,12 +4,12 @@ kind: Kustomization
 namespace: registry
 
 resources:
-  - serviceaccount.yaml
-  - clusterrole.yaml
-  - clusterrolebinding.yaml
-  - deployment.yaml
-  - service.yaml
+- serviceaccount.yaml
+- clusterrole.yaml
+- clusterrolebinding.yaml
+- deployment.yaml
+- service.yaml
 images:
-  - name: registry-auth
-    newName: kibamail/kibaship-operator-registry-auth
-    newTag: v0.1.6
+- name: registry-auth
+  newName: kibamail/kibaship-operator-registry-auth
+  newTag: v0.1.6

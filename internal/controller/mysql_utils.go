@@ -123,7 +123,7 @@ func generateInnoDBCluster(deployment *platformv1alpha1.Deployment, app *platfor
 						"storageClassName": config.StorageClassReplica2,
 						"resources": map[string]interface{}{
 							"requests": map[string]interface{}{
-								"storage": "512Mi",
+								"storage": "1Gi",
 							},
 						},
 					},

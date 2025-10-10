@@ -40,37 +40,47 @@ type GitRepositoryDeploymentConfig struct {
 	Branch    string `json:"branch,omitempty" example:"main"`
 }
 
+// ImageFromRegistryDeploymentConfig defines deployment-specific config for registry images
+type ImageFromRegistryDeploymentConfig struct {
+	Tag       string                `json:"tag" example:"1.22" validate:"required"`
+	Env       []EnvironmentVariable `json:"env,omitempty"`
+	Resources *ResourceRequirements `json:"resources,omitempty"`
+}
+
 // DeploymentCreateRequest represents the request to create a new deployment
 type DeploymentCreateRequest struct {
-	ApplicationUUID string                         `json:"applicationUuid" example:"550e8400-e29b-41d4-a716-446655440001" validate:"required"`
-	Promote         bool                           `json:"promote,omitempty" example:"false"`
-	GitRepository   *GitRepositoryDeploymentConfig `json:"gitRepository,omitempty"`
+	ApplicationUUID   string                             `json:"applicationUuid" example:"550e8400-e29b-41d4-a716-446655440001" validate:"required"`
+	Promote           bool                               `json:"promote,omitempty" example:"false"`
+	GitRepository     *GitRepositoryDeploymentConfig     `json:"gitRepository,omitempty"`
+	ImageFromRegistry *ImageFromRegistryDeploymentConfig `json:"imageFromRegistry,omitempty"`
 }
 
 // DeploymentResponse represents the deployment data returned to clients
 type DeploymentResponse struct {
-	UUID            string                         `json:"uuid" example:"550e8400-e29b-41d4-a716-446655440000"`
-	Slug            string                         `json:"slug" example:"def456gh"`
-	ApplicationUUID string                         `json:"applicationUuid" example:"550e8400-e29b-41d4-a716-446655440001"`
-	ApplicationSlug string                         `json:"applicationSlug" example:"abc123de"`
-	ProjectUUID     string                         `json:"projectUuid" example:"550e8400-e29b-41d4-a716-446655440002"`
-	Phase           DeploymentPhase                `json:"phase" example:"Initializing"`
-	GitRepository   *GitRepositoryDeploymentConfig `json:"gitRepository,omitempty"`
-	CreatedAt       time.Time                      `json:"createdAt" example:"2023-01-01T12:00:00Z"`
-	UpdatedAt       time.Time                      `json:"updatedAt" example:"2023-01-01T12:00:00Z"`
+	UUID              string                             `json:"uuid" example:"550e8400-e29b-41d4-a716-446655440000"`
+	Slug              string                             `json:"slug" example:"def456gh"`
+	ApplicationUUID   string                             `json:"applicationUuid" example:"550e8400-e29b-41d4-a716-446655440001"`
+	ApplicationSlug   string                             `json:"applicationSlug" example:"abc123de"`
+	ProjectUUID       string                             `json:"projectUuid" example:"550e8400-e29b-41d4-a716-446655440002"`
+	Phase             DeploymentPhase                    `json:"phase" example:"Initializing"`
+	GitRepository     *GitRepositoryDeploymentConfig     `json:"gitRepository,omitempty"`
+	ImageFromRegistry *ImageFromRegistryDeploymentConfig `json:"imageFromRegistry,omitempty"`
+	CreatedAt         time.Time                          `json:"createdAt" example:"2023-01-01T12:00:00Z"`
+	UpdatedAt         time.Time                          `json:"updatedAt" example:"2023-01-01T12:00:00Z"`
 }
 
 // Deployment represents the internal deployment model
 type Deployment struct {
-	UUID            string
-	Slug            string
-	ApplicationUUID string
-	ApplicationSlug string
-	ProjectUUID     string
-	Phase           DeploymentPhase
-	GitRepository   *GitRepositoryDeploymentConfig
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
+	UUID              string
+	Slug              string
+	ApplicationUUID   string
+	ApplicationSlug   string
+	ProjectUUID       string
+	Phase             DeploymentPhase
+	GitRepository     *GitRepositoryDeploymentConfig
+	ImageFromRegistry *ImageFromRegistryDeploymentConfig
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
 }
 
 // NewDeployment creates a new deployment with the given parameters
@@ -92,15 +102,16 @@ func NewDeployment(applicationUUID, applicationSlug, projectUUID, slug string, g
 // ToResponse converts the internal deployment to a response model
 func (d *Deployment) ToResponse() DeploymentResponse {
 	return DeploymentResponse{
-		UUID:            d.UUID,
-		Slug:            d.Slug,
-		ApplicationUUID: d.ApplicationUUID,
-		ApplicationSlug: d.ApplicationSlug,
-		ProjectUUID:     d.ProjectUUID,
-		Phase:           d.Phase,
-		GitRepository:   d.GitRepository,
-		CreatedAt:       d.CreatedAt,
-		UpdatedAt:       d.UpdatedAt,
+		UUID:              d.UUID,
+		Slug:              d.Slug,
+		ApplicationUUID:   d.ApplicationUUID,
+		ApplicationSlug:   d.ApplicationSlug,
+		ProjectUUID:       d.ProjectUUID,
+		Phase:             d.Phase,
+		GitRepository:     d.GitRepository,
+		ImageFromRegistry: d.ImageFromRegistry,
+		CreatedAt:         d.CreatedAt,
+		UpdatedAt:         d.UpdatedAt,
 	}
 }
 
@@ -155,6 +166,29 @@ func (d *Deployment) ConvertFromCRD(crd *v1alpha1.Deployment, applicationSlug st
 		d.GitRepository = &GitRepositoryDeploymentConfig{
 			CommitSHA: crd.Spec.GitRepository.CommitSHA,
 			Branch:    crd.Spec.GitRepository.Branch,
+		}
+	}
+
+	// Convert ImageFromRegistry config if present
+	if crd.Spec.ImageFromRegistry != nil {
+		d.ImageFromRegistry = &ImageFromRegistryDeploymentConfig{
+			Tag: crd.Spec.ImageFromRegistry.Tag,
+		}
+
+		// Convert environment variables
+		if len(crd.Spec.ImageFromRegistry.Env) > 0 {
+			d.ImageFromRegistry.Env = make([]EnvironmentVariable, len(crd.Spec.ImageFromRegistry.Env))
+			for i, env := range crd.Spec.ImageFromRegistry.Env {
+				d.ImageFromRegistry.Env[i] = EnvironmentVariable{
+					Name:  env.Name,
+					Value: env.Value,
+				}
+			}
+		}
+
+		// Convert resource requirements
+		if crd.Spec.ImageFromRegistry.Resources != nil {
+			d.ImageFromRegistry.Resources = crd.Spec.ImageFromRegistry.Resources.DeepCopy()
 		}
 	}
 }

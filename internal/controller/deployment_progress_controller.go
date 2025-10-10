@@ -84,8 +84,18 @@ func (r *DeploymentProgressController) Reconcile(ctx context.Context, req ctrl.R
 	// Capture current phase immediately after Get() to avoid cache inconsistencies in logs
 	currentPhase := deployment.Status.Phase
 
-	// State machine: Determine target phase based on conditions
-	targetPhase := r.computeTargetPhase(&deployment)
+	// Get the Application to determine type
+	var app platformv1alpha1.Application
+	if err := r.Get(ctx, client.ObjectKey{
+		Name:      deployment.Spec.ApplicationRef.Name,
+		Namespace: deployment.Namespace,
+	}, &app); err != nil {
+		log.Error(err, "Failed to get Application")
+		return ctrl.Result{}, err
+	}
+
+	// State machine: Determine target phase based on application type and conditions
+	targetPhase := r.computeTargetPhase(&deployment, &app)
 
 	if currentPhase == targetPhase {
 		// Already in correct phase
@@ -128,8 +138,27 @@ func (r *DeploymentProgressController) Reconcile(ctx context.Context, req ctrl.R
 	return ctrl.Result{}, nil
 }
 
-// computeTargetPhase - State machine logic
+// computeTargetPhase - State machine logic based on application type
 func (r *DeploymentProgressController) computeTargetPhase(
+	deployment *platformv1alpha1.Deployment,
+	app *platformv1alpha1.Application,
+) platformv1alpha1.DeploymentPhase {
+	// Handle different application types
+	switch app.Spec.Type {
+	case platformv1alpha1.ApplicationTypeGitRepository:
+		return r.computeTargetPhaseForGitRepository(deployment)
+	case platformv1alpha1.ApplicationTypeImageFromRegistry:
+		return r.computeTargetPhaseForImageFromRegistry(deployment)
+	case platformv1alpha1.ApplicationTypeMySQL:
+		return r.computeTargetPhaseForMySQL(deployment)
+	default:
+		// Unknown application type - stay in initializing
+		return platformv1alpha1.DeploymentPhaseInitializing
+	}
+}
+
+// computeTargetPhaseForGitRepository handles GitRepository applications (existing logic)
+func (r *DeploymentProgressController) computeTargetPhaseForGitRepository(
 	deployment *platformv1alpha1.Deployment,
 ) platformv1alpha1.DeploymentPhase {
 	// Check PipelineRun condition
@@ -166,6 +195,54 @@ func (r *DeploymentProgressController) computeTargetPhase(
 		// PipelineRun running
 		return platformv1alpha1.DeploymentPhaseBuilding
 	}
+}
+
+// computeTargetPhaseForImageFromRegistry handles ImageFromRegistry applications
+func (r *DeploymentProgressController) computeTargetPhaseForImageFromRegistry(
+	deployment *platformv1alpha1.Deployment,
+) platformv1alpha1.DeploymentPhase {
+	// For ImageFromRegistry, we only need to check K8s Deployment readiness
+	// No PipelineRun is involved
+	k8sCondition := meta.FindStatusCondition(deployment.Status.Conditions, "K8sDeploymentReady")
+
+	if k8sCondition == nil {
+		// No condition set yet - still initializing
+		return platformv1alpha1.DeploymentPhaseInitializing
+	}
+
+	// Check for crash loop - if detected, mark as Failed
+	if k8sCondition.Reason == "CrashLoopBackOff" {
+		return platformv1alpha1.DeploymentPhaseFailed
+	}
+
+	// Determine phase based on K8s Deployment condition
+	switch k8sCondition.Status {
+	case metav1.ConditionTrue:
+		// Pods are ready - deployment succeeded
+		return platformv1alpha1.DeploymentPhaseSucceeded
+
+	case metav1.ConditionFalse:
+		// Check if this is a permanent failure or just deploying
+		if k8sCondition.Reason == "DeploymentNotReady" || k8sCondition.Reason == "PodsNotReady" {
+			// Still deploying - pods not ready yet
+			return platformv1alpha1.DeploymentPhaseDeploying
+		}
+		// Other false conditions might indicate failure
+		return platformv1alpha1.DeploymentPhaseFailed
+
+	default:
+		// Unknown status - still deploying
+		return platformv1alpha1.DeploymentPhaseDeploying
+	}
+}
+
+// computeTargetPhaseForMySQL handles MySQL applications (simplified for now)
+func (r *DeploymentProgressController) computeTargetPhaseForMySQL(
+	deployment *platformv1alpha1.Deployment,
+) platformv1alpha1.DeploymentPhase {
+	// For MySQL deployments, we could check StatefulSet status in the future
+	// For now, just return Succeeded if the deployment exists (MySQL is simpler)
+	return platformv1alpha1.DeploymentPhaseSucceeded
 }
 
 // promoteDeployment updates the Application's CurrentDeploymentRef to point to this deployment

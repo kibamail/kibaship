@@ -218,9 +218,22 @@ func (r *ApplicationDomainReconciler) validateApplicationReference(ctx context.C
 		return fmt.Errorf("failed to get referenced application: %v", err)
 	}
 
-	// Validate that the application is of type GitRepository (for now)
-	if app.Spec.Type != platformv1alpha1.ApplicationTypeGitRepository {
-		return fmt.Errorf("ApplicationDomain is currently only supported for GitRepository applications, got %s", app.Spec.Type)
+	// Validate that the application is of a supported type
+	supportedTypes := []platformv1alpha1.ApplicationType{
+		platformv1alpha1.ApplicationTypeGitRepository,
+		platformv1alpha1.ApplicationTypeImageFromRegistry,
+	}
+
+	isSupported := false
+	for _, supportedType := range supportedTypes {
+		if app.Spec.Type == supportedType {
+			isSupported = true
+			break
+		}
+	}
+
+	if !isSupported {
+		return fmt.Errorf("ApplicationDomain is currently only supported for GitRepository and ImageFromRegistry applications, got %s", app.Spec.Type)
 	}
 
 	return nil

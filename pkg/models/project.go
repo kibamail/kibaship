@@ -36,12 +36,13 @@ const (
 
 // ApplicationTypeSettings represents the enablement settings for application types
 type ApplicationTypeSettings struct {
-	MySQL           *bool `json:"mysql,omitempty" example:"true"`
-	MySQLCluster    *bool `json:"mysqlCluster,omitempty" example:"false"`
-	Postgres        *bool `json:"postgres,omitempty" example:"true"`
-	PostgresCluster *bool `json:"postgresCluster,omitempty" example:"false"`
-	DockerImage     *bool `json:"dockerImage,omitempty" example:"true"`
-	GitRepository   *bool `json:"gitRepository,omitempty" example:"true"`
+	MySQL             *bool `json:"mysql,omitempty" example:"true"`
+	MySQLCluster      *bool `json:"mysqlCluster,omitempty" example:"false"`
+	Postgres          *bool `json:"postgres,omitempty" example:"true"`
+	PostgresCluster   *bool `json:"postgresCluster,omitempty" example:"false"`
+	DockerImage       *bool `json:"dockerImage,omitempty" example:"true"`
+	GitRepository     *bool `json:"gitRepository,omitempty" example:"true"`
+	ImageFromRegistry *bool `json:"imageFromRegistry,omitempty" example:"true"`
 }
 
 // ResourceLimitsSpec represents resource limit configuration
@@ -65,10 +66,11 @@ type ApplicationTypeResourceConfig struct {
 
 // CustomResourceLimits represents custom resource limits for all application types
 type CustomResourceLimits struct {
-	MySQL         *ApplicationTypeResourceConfig `json:"mysql,omitempty"`
-	Postgres      *ApplicationTypeResourceConfig `json:"postgres,omitempty"`
-	DockerImage   *ApplicationTypeResourceConfig `json:"dockerImage,omitempty"`
-	GitRepository *ApplicationTypeResourceConfig `json:"gitRepository,omitempty"`
+	MySQL             *ApplicationTypeResourceConfig `json:"mysql,omitempty"`
+	Postgres          *ApplicationTypeResourceConfig `json:"postgres,omitempty"`
+	DockerImage       *ApplicationTypeResourceConfig `json:"dockerImage,omitempty"`
+	GitRepository     *ApplicationTypeResourceConfig `json:"gitRepository,omitempty"`
+	ImageFromRegistry *ApplicationTypeResourceConfig `json:"imageFromRegistry,omitempty"`
 }
 
 // VolumeSettings represents volume-related settings
@@ -267,12 +269,13 @@ func (p *Project) ToResponse() ProjectResponse {
 
 func getDefaultApplicationTypes() *ApplicationTypeSettings {
 	return &ApplicationTypeSettings{
-		MySQL:           boolPtr(true),
-		MySQLCluster:    boolPtr(false),
-		Postgres:        boolPtr(true),
-		PostgresCluster: boolPtr(false),
-		DockerImage:     boolPtr(true),
-		GitRepository:   boolPtr(true),
+		MySQL:             boolPtr(true),
+		MySQLCluster:      boolPtr(false),
+		Postgres:          boolPtr(true),
+		PostgresCluster:   boolPtr(false),
+		DockerImage:       boolPtr(true),
+		GitRepository:     boolPtr(true),
+		ImageFromRegistry: boolPtr(true),
 	}
 }
 
@@ -326,6 +329,9 @@ func validateCustomResourceLimits(limits *CustomResourceLimits) []ValidationErro
 	}
 	if limits.GitRepository != nil {
 		errors = append(errors, validateApplicationTypeResourceConfig("customResourceLimits.gitRepository", limits.GitRepository)...)
+	}
+	if limits.ImageFromRegistry != nil {
+		errors = append(errors, validateApplicationTypeResourceConfig("customResourceLimits.imageFromRegistry", limits.ImageFromRegistry)...)
 	}
 
 	return errors

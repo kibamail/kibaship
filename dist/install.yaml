@@ -288,9 +288,93 @@ spec:
           spec:
             description: ApplicationSpec defines the desired state of Application.
             properties:
+              currentDeploymentRef:
+                description: |-
+                  CurrentDeploymentRef references the currently promoted deployment for this application
+                  This field is automatically updated when a deployment with promote=true succeeds
+                properties:
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
               dockerImage:
                 description: DockerImage contains configuration for DockerImage applications
                 properties:
+                  env:
+                    description: Env is a reference to a secret containing environment
+                      variables for this application (optional)
+                    properties:
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                    type: object
+                    x-kubernetes-map-type: atomic
+                  healthCheck:
+                    description: HealthCheck defines the health check configuration
+                      for this application (optional)
+                    properties:
+                      failureThreshold:
+                        default: 3
+                        description: FailureThreshold is the minimum consecutive failures
+                          for the health check to be considered failed
+                        format: int32
+                        minimum: 1
+                        type: integer
+                      initialDelaySeconds:
+                        default: 30
+                        description: InitialDelaySeconds is the number of seconds
+                          after the container has started before health checks are
+                          initiated
+                        format: int32
+                        minimum: 0
+                        type: integer
+                      path:
+                        description: Path is the HTTP path to check for health (e.g.,
+                          /health, /healthz, /api/health)
+                        pattern: ^/.*$
+                        type: string
+                      periodSeconds:
+                        default: 10
+                        description: PeriodSeconds specifies how often (in seconds)
+                          to perform the health check
+                        format: int32
+                        minimum: 1
+                        type: integer
+                      port:
+                        description: Port is the port to use for health checks (optional,
+                          defaults to main container port)
+                        format: int32
+                        maximum: 65535
+                        minimum: 1
+                        type: integer
+                      successThreshold:
+                        default: 1
+                        description: SuccessThreshold is the minimum consecutive successes
+                          for the health check to be considered successful
+                        format: int32
+                        minimum: 1
+                        type: integer
+                      timeoutSeconds:
+                        default: 5
+                        description: TimeoutSeconds is the number of seconds after
+                          which the health check times out
+                        format: int32
+                        minimum: 1
+                        type: integer
+                    type: object
                   image:
                     description: Image is the Docker image reference (e.g., nginx:latest,
                       registry.com/org/image:tag)
@@ -342,8 +426,34 @@ spec:
                     type: string
                   buildCommand:
                     description: BuildCommand is the command to build the application
-                      (optional)
+                      (optional, for Railpack builds)
                     type: string
+                  buildType:
+                    default: Railpack
+                    description: BuildType defines how the application should be built
+                      (Railpack or Dockerfile)
+                    enum:
+                    - Railpack
+                    - Dockerfile
+                    type: string
+                  dockerfileBuild:
+                    description: |-
+                      DockerfileBuild contains configuration for Dockerfile builds
+                      Required when BuildType is Dockerfile
+                    properties:
+                      buildContext:
+                        default: .
+                        description: BuildContext is the build context path relative
+                          to the repository root
+                        type: string
+                      dockerfilePath:
+                        default: Dockerfile
+                        description: DockerfilePath is the path to the Dockerfile
+                          relative to the repository root
+                        type: string
+                    required:
+                    - dockerfilePath
+                    type: object
                   env:
                     description: Env is a reference to a secret containing environment
                       variables for this application (optional)
@@ -359,6 +469,59 @@ spec:
                         type: string
                     type: object
                     x-kubernetes-map-type: atomic
+                  healthCheck:
+                    description: HealthCheck defines the health check configuration
+                      for this application (optional)
+                    properties:
+                      failureThreshold:
+                        default: 3
+                        description: FailureThreshold is the minimum consecutive failures
+                          for the health check to be considered failed
+                        format: int32
+                        minimum: 1
+                        type: integer
+                      initialDelaySeconds:
+                        default: 30
+                        description: InitialDelaySeconds is the number of seconds
+                          after the container has started before health checks are
+                          initiated
+                        format: int32
+                        minimum: 0
+                        type: integer
+                      path:
+                        description: Path is the HTTP path to check for health (e.g.,
+                          /health, /healthz, /api/health)
+                        pattern: ^/.*$
+                        type: string
+                      periodSeconds:
+                        default: 10
+                        description: PeriodSeconds specifies how often (in seconds)
+                          to perform the health check
+                        format: int32
+                        minimum: 1
+                        type: integer
+                      port:
+                        description: Port is the port to use for health checks (optional,
+                          defaults to main container port)
+                        format: int32
+                        maximum: 65535
+                        minimum: 1
+                        type: integer
+                      successThreshold:
+                        default: 1
+                        description: SuccessThreshold is the minimum consecutive successes
+                          for the health check to be considered successful
+                        format: int32
+                        minimum: 1
+                        type: integer
+                      timeoutSeconds:
+                        default: 5
+                        description: TimeoutSeconds is the number of seconds after
+                          which the health check times out
+                        format: int32
+                        minimum: 1
+                        type: integer
+                    type: object
                   path:
                     description: Path is the path within the repository (optional,
                       defaults to root)
@@ -404,14 +567,315 @@ spec:
                     x-kubernetes-map-type: atomic
                   spaOutputDirectory:
                     description: SpaOutputDirectory is the output directory for SPA
-                      builds (optional)
+                      builds (optional, for Railpack builds)
                     type: string
                   startCommand:
                     description: StartCommand is the command to start the application
-                      (optional)
+                      (optional, for Railpack builds)
                     type: string
                 required:
                 - provider
+                - repository
+                type: object
+              imageFromRegistry:
+                description: ImageFromRegistry contains configuration for ImageFromRegistry
+                  applications
+                properties:
+                  defaultTag:
+                    default: latest
+                    description: DefaultTag specifies the default image tag/version
+                    type: string
+                  env:
+                    description: Env defines environment variables for the container
+                    items:
+                      description: EnvVar represents an environment variable present
+                        in a Container.
+                      properties:
+                        name:
+                          description: |-
+                            Name of the environment variable.
+                            May consist of any printable ASCII characters except '='.
+                          type: string
+                        value:
+                          description: |-
+                            Variable references $(VAR_NAME) are expanded
+                            using the previously defined environment variables in the container and
+                            any service environment variables. If a variable cannot be resolved,
+                            the reference in the input string will be unchanged. Double $$ are reduced
+                            to a single $, which allows for escaping the $(VAR_NAME) syntax: i.e.
+                            "$$(VAR_NAME)" will produce the string literal "$(VAR_NAME)".
+                            Escaped references will never be expanded, regardless of whether the variable
+                            exists or not.
+                            Defaults to "".
+                          type: string
+                        valueFrom:
+                          description: Source for the environment variable's value.
+                            Cannot be used if value is not empty.
+                          properties:
+                            configMapKeyRef:
+                              description: Selects a key of a ConfigMap.
+                              properties:
+                                key:
+                                  description: The key to select.
+                                  type: string
+                                name:
+                                  default: ""
+                                  description: |-
+                                    Name of the referent.
+                                    This field is effectively required, but due to backwards compatibility is
+                                    allowed to be empty. Instances of this type with an empty value here are
+                                    almost certainly wrong.
+                                    More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                  type: string
+                                optional:
+                                  description: Specify whether the ConfigMap or its
+                                    key must be defined
+                                  type: boolean
+                              required:
+                              - key
+                              type: object
+                              x-kubernetes-map-type: atomic
+                            fieldRef:
+                              description: |-
+                                Selects a field of the pod: supports metadata.name, metadata.namespace, `metadata.labels['<KEY>']`, `metadata.annotations['<KEY>']`,
+                                spec.nodeName, spec.serviceAccountName, status.hostIP, status.podIP, status.podIPs.
+                              properties:
+                                apiVersion:
+                                  description: Version of the schema the FieldPath
+                                    is written in terms of, defaults to "v1".
+                                  type: string
+                                fieldPath:
+                                  description: Path of the field to select in the
+                                    specified API version.
+                                  type: string
+                              required:
+                              - fieldPath
+                              type: object
+                              x-kubernetes-map-type: atomic
+                            fileKeyRef:
+                              description: |-
+                                FileKeyRef selects a key of the env file.
+                                Requires the EnvFiles feature gate to be enabled.
+                              properties:
+                                key:
+                                  description: |-
+                                    The key within the env file. An invalid key will prevent the pod from starting.
+                                    The keys defined within a source may consist of any printable ASCII characters except '='.
+                                    During Alpha stage of the EnvFiles feature gate, the key size is limited to 128 characters.
+                                  type: string
+                                optional:
+                                  default: false
+                                  description: |-
+                                    Specify whether the file or its key must be defined. If the file or key
+                                    does not exist, then the env var is not published.
+                                    If optional is set to true and the specified key does not exist,
+                                    the environment variable will not be set in the Pod's containers.
+
+                                    If optional is set to false and the specified key does not exist,
+                                    an error will be returned during Pod creation.
+                                  type: boolean
+                                path:
+                                  description: |-
+                                    The path within the volume from which to select the file.
+                                    Must be relative and may not contain the '..' path or start with '..'.
+                                  type: string
+                                volumeName:
+                                  description: The name of the volume mount containing
+                                    the env file.
+                                  type: string
+                              required:
+                              - key
+                              - path
+                              - volumeName
+                              type: object
+                              x-kubernetes-map-type: atomic
+                            resourceFieldRef:
+                              description: |-
+                                Selects a resource of the container: only resources limits and requests
+                                (limits.cpu, limits.memory, limits.ephemeral-storage, requests.cpu, requests.memory and requests.ephemeral-storage) are currently supported.
+                              properties:
+                                containerName:
+                                  description: 'Container name: required for volumes,
+                                    optional for env vars'
+                                  type: string
+                                divisor:
+                                  anyOf:
+                                  - type: integer
+                                  - type: string
+                                  description: Specifies the output format of the
+                                    exposed resources, defaults to "1"
+                                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                  x-kubernetes-int-or-string: true
+                                resource:
+                                  description: 'Required: resource to select'
+                                  type: string
+                              required:
+                              - resource
+                              type: object
+                              x-kubernetes-map-type: atomic
+                            secretKeyRef:
+                              description: Selects a key of a secret in the pod's
+                                namespace
+                              properties:
+                                key:
+                                  description: The key of the secret to select from.  Must
+                                    be a valid secret key.
+                                  type: string
+                                name:
+                                  default: ""
+                                  description: |-
+                                    Name of the referent.
+                                    This field is effectively required, but due to backwards compatibility is
+                                    allowed to be empty. Instances of this type with an empty value here are
+                                    almost certainly wrong.
+                                    More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                  type: string
+                                optional:
+                                  description: Specify whether the Secret or its key
+                                    must be defined
+                                  type: boolean
+                              required:
+                              - key
+                              type: object
+                              x-kubernetes-map-type: atomic
+                          type: object
+                      required:
+                      - name
+                      type: object
+                    type: array
+                  healthCheck:
+                    description: HealthCheck defines the health check configuration
+                    properties:
+                      failureThreshold:
+                        default: 3
+                        description: FailureThreshold is the minimum consecutive failures
+                          for the health check to be considered failed
+                        format: int32
+                        minimum: 1
+                        type: integer
+                      initialDelaySeconds:
+                        default: 30
+                        description: InitialDelaySeconds is the number of seconds
+                          after the container has started before health checks are
+                          initiated
+                        format: int32
+                        minimum: 0
+                        type: integer
+                      path:
+                        description: Path is the HTTP path to check for health (e.g.,
+                          /health, /healthz, /api/health)
+                        pattern: ^/.*$
+                        type: string
+                      periodSeconds:
+                        default: 10
+                        description: PeriodSeconds specifies how often (in seconds)
+                          to perform the health check
+                        format: int32
+                        minimum: 1
+                        type: integer
+                      port:
+                        description: Port is the port to use for health checks (optional,
+                          defaults to main container port)
+                        format: int32
+                        maximum: 65535
+                        minimum: 1
+                        type: integer
+                      successThreshold:
+                        default: 1
+                        description: SuccessThreshold is the minimum consecutive successes
+                          for the health check to be considered successful
+                        format: int32
+                        minimum: 1
+                        type: integer
+                      timeoutSeconds:
+                        default: 5
+                        description: TimeoutSeconds is the number of seconds after
+                          which the health check times out
+                        format: int32
+                        minimum: 1
+                        type: integer
+                    type: object
+                  port:
+                    default: 3000
+                    description: Port specifies the container port the application
+                      listens on
+                    format: int32
+                    maximum: 65535
+                    minimum: 1
+                    type: integer
+                  registry:
+                    description: Registry specifies the container registry (dockerhub,
+                      ghcr)
+                    enum:
+                    - dockerhub
+                    - ghcr
+                    type: string
+                  repository:
+                    description: Repository specifies the image repository in format
+                      "org/repo"
+                    pattern: ^[a-z0-9]+(?:[._-][a-z0-9]+)*\/[a-z0-9]+(?:[._-][a-z0-9]+)*$
+                    type: string
+                  resources:
+                    description: Resources defines resource requirements for the container
+                    properties:
+                      claims:
+                        description: |-
+                          Claims lists the names of resources, defined in spec.resourceClaims,
+                          that are used by this container.
+
+                          This field depends on the
+                          DynamicResourceAllocation feature gate.
+
+                          This field is immutable. It can only be set for containers.
+                        items:
+                          description: ResourceClaim references one entry in PodSpec.ResourceClaims.
+                          properties:
+                            name:
+                              description: |-
+                                Name must match the name of one entry in pod.spec.resourceClaims of
+                                the Pod where this field is used. It makes that resource available
+                                inside a container.
+                              type: string
+                            request:
+                              description: |-
+                                Request is the name chosen for a request in the referenced claim.
+                                If empty, everything from the claim is made available, otherwise
+                                only the result of this request.
+                              type: string
+                          required:
+                          - name
+                          type: object
+                        type: array
+                        x-kubernetes-list-map-keys:
+                        - name
+                        x-kubernetes-list-type: map
+                      limits:
+                        additionalProperties:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        description: |-
+                          Limits describes the maximum amount of compute resources allowed.
+                          More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                        type: object
+                      requests:
+                        additionalProperties:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        description: |-
+                          Requests describes the minimum amount of compute resources required.
+                          If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                          otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                          More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                        type: object
+                    type: object
+                required:
+                - registry
                 - repository
                 type: object
               mysql:
@@ -420,6 +884,21 @@ spec:
                   database:
                     description: Database is the initial database name to create
                     type: string
+                  env:
+                    description: Env is a reference to a secret containing environment
+                      variables for this application (optional)
+                    properties:
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                    type: object
+                    x-kubernetes-map-type: atomic
                   secretRef:
                     description: SecretRef references the secret containing MySQL
                       credentials
@@ -446,6 +925,21 @@ spec:
                   database:
                     description: Database is the initial database name to create
                     type: string
+                  env:
+                    description: Env is a reference to a secret containing environment
+                      variables for this application (optional)
+                    properties:
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                    type: object
+                    x-kubernetes-map-type: atomic
                   replicas:
                     default: 3
                     description: Replicas is the number of MySQL instances in the
@@ -478,6 +972,21 @@ spec:
                   database:
                     description: Database is the initial database name to create
                     type: string
+                  env:
+                    description: Env is a reference to a secret containing environment
+                      variables for this application (optional)
+                    properties:
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                    type: object
+                    x-kubernetes-map-type: atomic
                   secretRef:
                     description: SecretRef references the secret containing PostgreSQL
                       credentials
@@ -504,6 +1013,21 @@ spec:
                   database:
                     description: Database is the initial database name to create
                     type: string
+                  env:
+                    description: Env is a reference to a secret containing environment
+                      variables for this application (optional)
+                    properties:
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                    type: object
+                    x-kubernetes-map-type: atomic
                   replicas:
                     default: 3
                     description: Replicas is the number of PostgreSQL instances in
@@ -539,6 +1063,7 @@ spec:
                 - PostgresCluster
                 - DockerImage
                 - GitRepository
+                - ImageFromRegistry
                 type: string
             required:
             - environmentRef
@@ -705,6 +1230,243 @@ spec:
                 required:
                 - commitSHA
                 type: object
+              imageFromRegistry:
+                description: |-
+                  ImageFromRegistry contains configuration for ImageFromRegistry deployments
+                  Required when ApplicationRef points to an ImageFromRegistry application
+                properties:
+                  env:
+                    description: Env defines environment variable overrides for this
+                      deployment
+                    items:
+                      description: EnvVar represents an environment variable present
+                        in a Container.
+                      properties:
+                        name:
+                          description: |-
+                            Name of the environment variable.
+                            May consist of any printable ASCII characters except '='.
+                          type: string
+                        value:
+                          description: |-
+                            Variable references $(VAR_NAME) are expanded
+                            using the previously defined environment variables in the container and
+                            any service environment variables. If a variable cannot be resolved,
+                            the reference in the input string will be unchanged. Double $$ are reduced
+                            to a single $, which allows for escaping the $(VAR_NAME) syntax: i.e.
+                            "$$(VAR_NAME)" will produce the string literal "$(VAR_NAME)".
+                            Escaped references will never be expanded, regardless of whether the variable
+                            exists or not.
+                            Defaults to "".
+                          type: string
+                        valueFrom:
+                          description: Source for the environment variable's value.
+                            Cannot be used if value is not empty.
+                          properties:
+                            configMapKeyRef:
+                              description: Selects a key of a ConfigMap.
+                              properties:
+                                key:
+                                  description: The key to select.
+                                  type: string
+                                name:
+                                  default: ""
+                                  description: |-
+                                    Name of the referent.
+                                    This field is effectively required, but due to backwards compatibility is
+                                    allowed to be empty. Instances of this type with an empty value here are
+                                    almost certainly wrong.
+                                    More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                  type: string
+                                optional:
+                                  description: Specify whether the ConfigMap or its
+                                    key must be defined
+                                  type: boolean
+                              required:
+                              - key
+                              type: object
+                              x-kubernetes-map-type: atomic
+                            fieldRef:
+                              description: |-
+                                Selects a field of the pod: supports metadata.name, metadata.namespace, `metadata.labels['<KEY>']`, `metadata.annotations['<KEY>']`,
+                                spec.nodeName, spec.serviceAccountName, status.hostIP, status.podIP, status.podIPs.
+                              properties:
+                                apiVersion:
+                                  description: Version of the schema the FieldPath
+                                    is written in terms of, defaults to "v1".
+                                  type: string
+                                fieldPath:
+                                  description: Path of the field to select in the
+                                    specified API version.
+                                  type: string
+                              required:
+                              - fieldPath
+                              type: object
+                              x-kubernetes-map-type: atomic
+                            fileKeyRef:
+                              description: |-
+                                FileKeyRef selects a key of the env file.
+                                Requires the EnvFiles feature gate to be enabled.
+                              properties:
+                                key:
+                                  description: |-
+                                    The key within the env file. An invalid key will prevent the pod from starting.
+                                    The keys defined within a source may consist of any printable ASCII characters except '='.
+                                    During Alpha stage of the EnvFiles feature gate, the key size is limited to 128 characters.
+                                  type: string
+                                optional:
+                                  default: false
+                                  description: |-
+                                    Specify whether the file or its key must be defined. If the file or key
+                                    does not exist, then the env var is not published.
+                                    If optional is set to true and the specified key does not exist,
+                                    the environment variable will not be set in the Pod's containers.
+
+                                    If optional is set to false and the specified key does not exist,
+                                    an error will be returned during Pod creation.
+                                  type: boolean
+                                path:
+                                  description: |-
+                                    The path within the volume from which to select the file.
+                                    Must be relative and may not contain the '..' path or start with '..'.
+                                  type: string
+                                volumeName:
+                                  description: The name of the volume mount containing
+                                    the env file.
+                                  type: string
+                              required:
+                              - key
+                              - path
+                              - volumeName
+                              type: object
+                              x-kubernetes-map-type: atomic
+                            resourceFieldRef:
+                              description: |-
+                                Selects a resource of the container: only resources limits and requests
+                                (limits.cpu, limits.memory, limits.ephemeral-storage, requests.cpu, requests.memory and requests.ephemeral-storage) are currently supported.
+                              properties:
+                                containerName:
+                                  description: 'Container name: required for volumes,
+                                    optional for env vars'
+                                  type: string
+                                divisor:
+                                  anyOf:
+                                  - type: integer
+                                  - type: string
+                                  description: Specifies the output format of the
+                                    exposed resources, defaults to "1"
+                                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                  x-kubernetes-int-or-string: true
+                                resource:
+                                  description: 'Required: resource to select'
+                                  type: string
+                              required:
+                              - resource
+                              type: object
+                              x-kubernetes-map-type: atomic
+                            secretKeyRef:
+                              description: Selects a key of a secret in the pod's
+                                namespace
+                              properties:
+                                key:
+                                  description: The key of the secret to select from.  Must
+                                    be a valid secret key.
+                                  type: string
+                                name:
+                                  default: ""
+                                  description: |-
+                                    Name of the referent.
+                                    This field is effectively required, but due to backwards compatibility is
+                                    allowed to be empty. Instances of this type with an empty value here are
+                                    almost certainly wrong.
+                                    More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                  type: string
+                                optional:
+                                  description: Specify whether the Secret or its key
+                                    must be defined
+                                  type: boolean
+                              required:
+                              - key
+                              type: object
+                              x-kubernetes-map-type: atomic
+                          type: object
+                      required:
+                      - name
+                      type: object
+                    type: array
+                  resources:
+                    description: Resources defines resource requirement overrides
+                      for this deployment
+                    properties:
+                      claims:
+                        description: |-
+                          Claims lists the names of resources, defined in spec.resourceClaims,
+                          that are used by this container.
+
+                          This field depends on the
+                          DynamicResourceAllocation feature gate.
+
+                          This field is immutable. It can only be set for containers.
+                        items:
+                          description: ResourceClaim references one entry in PodSpec.ResourceClaims.
+                          properties:
+                            name:
+                              description: |-
+                                Name must match the name of one entry in pod.spec.resourceClaims of
+                                the Pod where this field is used. It makes that resource available
+                                inside a container.
+                              type: string
+                            request:
+                              description: |-
+                                Request is the name chosen for a request in the referenced claim.
+                                If empty, everything from the claim is made available, otherwise
+                                only the result of this request.
+                              type: string
+                          required:
+                          - name
+                          type: object
+                        type: array
+                        x-kubernetes-list-map-keys:
+                        - name
+                        x-kubernetes-list-type: map
+                      limits:
+                        additionalProperties:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        description: |-
+                          Limits describes the maximum amount of compute resources allowed.
+                          More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                        type: object
+                      requests:
+                        additionalProperties:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        description: |-
+                          Requests describes the minimum amount of compute resources required.
+                          If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                          otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                          More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                        type: object
+                    type: object
+                  tag:
+                    description: Tag specifies the specific image tag to deploy (overrides
+                      application default)
+                    type: string
+                required:
+                - tag
+                type: object
+              promote:
+                default: false
+                description: |-
+                  Promote indicates whether to promote this deployment as the current deployment on the application
+                  When true and deployment succeeds, Application.spec.currentDeploymentRef will be updated to reference this deployment
+                type: boolean
             required:
             - applicationRef
             type: object
@@ -1067,6 +1829,71 @@ spec:
                     type: object
                   gitRepository:
                     description: Git repository application configuration
+                    properties:
+                      defaultLimits:
+                        description: Default resource limits for applications of this
+                          type
+                        properties:
+                          cpu:
+                            description: CPU limit in cores (e.g., "2", "0.5")
+                            pattern: ^[0-9]+(\.[0-9]+)?$
+                            type: string
+                          memory:
+                            description: Memory limit (e.g., "4Gi", "512Mi")
+                            pattern: ^[0-9]+(\.[0-9]+)?(Mi|Gi|Ti)$
+                            type: string
+                          storage:
+                            description: Storage limit (e.g., "20Gi", "100Mi")
+                            pattern: ^[0-9]+(\.[0-9]+)?(Mi|Gi|Ti)$
+                            type: string
+                        type: object
+                      enabled:
+                        default: true
+                        description: Whether this application type is enabled in the
+                          project
+                        type: boolean
+                      resourceBounds:
+                        description: Resource bounds (min/max) for applications of
+                          this type
+                        properties:
+                          max:
+                            description: Maximum resource limits
+                            properties:
+                              cpu:
+                                description: CPU limit in cores (e.g., "2", "0.5")
+                                pattern: ^[0-9]+(\.[0-9]+)?$
+                                type: string
+                              memory:
+                                description: Memory limit (e.g., "4Gi", "512Mi")
+                                pattern: ^[0-9]+(\.[0-9]+)?(Mi|Gi|Ti)$
+                                type: string
+                              storage:
+                                description: Storage limit (e.g., "20Gi", "100Mi")
+                                pattern: ^[0-9]+(\.[0-9]+)?(Mi|Gi|Ti)$
+                                type: string
+                            type: object
+                          min:
+                            description: Minimum resource limits
+                            properties:
+                              cpu:
+                                description: CPU limit in cores (e.g., "2", "0.5")
+                                pattern: ^[0-9]+(\.[0-9]+)?$
+                                type: string
+                              memory:
+                                description: Memory limit (e.g., "4Gi", "512Mi")
+                                pattern: ^[0-9]+(\.[0-9]+)?(Mi|Gi|Ti)$
+                                type: string
+                              storage:
+                                description: Storage limit (e.g., "20Gi", "100Mi")
+                                pattern: ^[0-9]+(\.[0-9]+)?(Mi|Gi|Ti)$
+                                type: string
+                            type: object
+                        type: object
+                    required:
+                    - enabled
+                    type: object
+                  imageFromRegistry:
+                    description: Image from registry application configuration
                     properties:
                       defaultLimits:
                         description: Default resource limits for applications of this
@@ -1715,10 +2542,10 @@ spec:
         resources:
           limits:
             cpu: 500m
-            memory: 128Mi
+            memory: 512Mi
           requests:
             cpu: 10m
-            memory: 64Mi
+            memory: 256Mi
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
@@ -2275,6 +3102,107 @@ kind: Task
 metadata:
   annotations:
     platform.kibaship.com/created-by: kibaship-operator
+    tekton.dev/displayName: Dockerfile Build and Push
+  labels:
+    app.kubernetes.io/component: tekton-integration
+    app.kubernetes.io/managed-by: kibaship-operator
+    app.kubernetes.io/name: kibaship-operator
+    app.kubernetes.io/part-of: kibaship-operator
+  name: tekton-task-dockerfile-build-kibaship-com
+  namespace: tekton-pipelines
+spec:
+  description: |
+    Build an OCI image using BuildKit with the standard Dockerfile frontend.
+    The image is built from a Dockerfile in the repository and pushed to the registry.
+  params:
+  - default: Dockerfile
+    description: Relative path to the Dockerfile within the repo workspace (e.g.,
+      'Dockerfile' or 'app/Dockerfile')
+    name: dockerfilePath
+    type: string
+  - default: .
+    description: Build context path relative to the repository root (e.g., '.' or
+      'app')
+    name: contextPath
+    type: string
+  - description: Full image tag to push (e.g., registry.registry.svc.cluster.local/namespace/app-uuid:deployment-uuid)
+    name: imageTag
+    type: string
+  - default: moby/buildkit:v0.25.1-rootless
+    description: Image for buildctl client (for kustomize override convenience)
+    name: buildImage
+    type: string
+  results:
+  - description: Full image tag that was pushed
+    name: buildOutput
+  - description: Image digest (SHA256)
+    name: imageDigest
+  stepTemplate:
+    env:
+    - name: BUILDKIT_HOST
+      value: tcp://buildkitd.buildkit.svc:1234
+    - name: DOCKER_CONFIG
+      value: /workspace/docker-config
+  steps:
+  - image: $(params.buildImage)
+    name: build
+    script: |
+      #!/usr/bin/env sh
+      set -eu
+
+      REPO_DIR="$(workspaces.output.path)/repo"
+      DOCKERFILE_PATH="$REPO_DIR/$(params.dockerfilePath)"
+      CONTEXT_DIR="$REPO_DIR/$(params.contextPath)"
+
+      # Validate Dockerfile exists
+      if [ ! -f "$DOCKERFILE_PATH" ]; then
+        echo "Dockerfile not found at $DOCKERFILE_PATH" >&2
+        echo "Available files in REPO_DIR:" >&2
+        ls -la "$REPO_DIR" >&2
+        exit 1
+      fi
+
+      # Validate context directory exists
+      if [ ! -d "$CONTEXT_DIR" ]; then
+        echo "Build context directory not found at $CONTEXT_DIR" >&2
+        exit 1
+      fi
+
+      echo "Building image from Dockerfile: $(params.dockerfilePath)"
+      echo "Build context: $(params.contextPath)"
+      echo "Pushing to: $(params.imageTag)"
+
+      # Build with standard Dockerfile frontend and push to registry
+      buildctl build \
+        --progress=plain \
+        --local context="$CONTEXT_DIR" \
+        --local dockerfile="$(dirname "$DOCKERFILE_PATH")" \
+        --frontend dockerfile.v0 \
+        --opt filename="$(basename "$DOCKERFILE_PATH")" \
+        --output type=image,name=$(params.imageTag),push=true
+
+      # Emit image tag as result
+      printf "%s" "$(params.imageTag)" > "$(results.buildOutput.path)"
+
+      # TODO: Extract and emit image digest
+      echo "" > "$(results.imageDigest.path)"
+    workingDir: $(workspaces.output.path)
+  workspaces:
+  - description: Shared workspace containing the cloned repository
+    name: output
+  - description: Docker config for registry authentication
+    name: docker-config
+  - description: Registry CA certificate for TLS trust
+    name: registry-ca
+  - description: Application environment variables from secret
+    name: app-env-vars
+    optional: true
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  annotations:
+    platform.kibaship.com/created-by: kibaship-operator
     tekton.dev/displayName: Simple Git Clone with Token
   labels:
     app.kubernetes.io/component: tekton-integration
@@ -2417,7 +3345,7 @@ spec:
       as prepare)
     name: contextPath
     type: string
-  - default: railwayapp/railpack-frontend:v0.7.2
+  - default: ghcr.io/railwayapp/railpack-frontend:v0.9.0
     description: Railpack frontend gateway source for BuildKit (pin to CLI version)
     name: railpackFrontendSource
     type: string
@@ -2484,6 +3412,9 @@ spec:
     optional: true
   - description: Registry CA certificate for TLS trust
     name: registry-ca
+    optional: true
+  - description: Application environment variables from secret
+    name: app-env-vars
     optional: true
 ---
 apiVersion: tekton.dev/v1
@@ -2792,37 +3723,6 @@ spec:
             path: tls.crt
           secretName: registry-auth-keys
 ---
-apiVersion: cert-manager.io/v1
-kind: Certificate
-metadata:
-  name: registry-auth-keys
-  namespace: registry
-spec:
-  commonName: registry-auth-jwt-signer
-  duration: 87600h
-  issuerRef:
-    kind: Issuer
-    name: registry-selfsigned-issuer
-  privateKey:
-    algorithm: RSA
-    size: 4096
-  renewBefore: 720h
-  secretName: registry-auth-keys
-  subject:
-    organizations:
-    - kibaship
-  usages:
-  - digital signature
-  - key encipherment
----
-apiVersion: cert-manager.io/v1
-kind: Issuer
-metadata:
-  name: registry-selfsigned-issuer
-  namespace: registry
-spec:
-  selfSigned: {}
----
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -3036,43 +3936,6 @@ spec:
       - name: registry-auth-keys-jwks
         secret:
           secretName: registry-auth-keys-jwks
----
-apiVersion: cert-manager.io/v1
-kind: Certificate
-metadata:
-  name: registry-tls
-  namespace: registry
-spec:
-  commonName: registry.registry.svc.cluster.local
-  dnsNames:
-  - registry.registry.svc.cluster.local
-  - registry.registry.svc
-  - registry.registry
-  - registry
-  duration: 87600h
-  issuerRef:
-    kind: Issuer
-    name: registry-selfsigned-issuer
-  privateKey:
-    algorithm: RSA
-    size: 4096
-  renewBefore: 720h
-  secretName: registry-tls
-  subject:
-    organizations:
-    - kibaship
-  usages:
-  - digital signature
-  - key encipherment
-  - server auth
----
-apiVersion: cert-manager.io/v1
-kind: Issuer
-metadata:
-  name: registry-selfsigned-issuer
-  namespace: registry
-spec:
-  selfSigned: {}
 ---
 allowVolumeExpansion: true
 apiVersion: storage.k8s.io/v1

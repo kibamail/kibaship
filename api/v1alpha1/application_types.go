@@ -34,7 +34,7 @@ import (
 )
 
 // ApplicationType defines the type of application
-// +kubebuilder:validation:Enum=MySQL;MySQLCluster;Postgres;PostgresCluster;DockerImage;GitRepository
+// +kubebuilder:validation:Enum=MySQL;MySQLCluster;Postgres;PostgresCluster;DockerImage;GitRepository;ImageFromRegistry
 type ApplicationType string
 
 const (
@@ -50,6 +50,8 @@ const (
 	ApplicationTypeDockerImage ApplicationType = "DockerImage"
 	// ApplicationTypeGitRepository represents a Git repository application
 	ApplicationTypeGitRepository ApplicationType = "GitRepository"
+	// ApplicationTypeImageFromRegistry represents a pre-built image from a container registry
+	ApplicationTypeImageFromRegistry ApplicationType = "ImageFromRegistry"
 )
 
 // GitProvider defines the Git provider
@@ -75,6 +77,53 @@ const (
 	// BuildTypeDockerfile uses a Dockerfile to build the application
 	BuildTypeDockerfile BuildType = "Dockerfile"
 )
+
+// RegistryType defines the container registry type
+// +kubebuilder:validation:Enum=dockerhub;ghcr
+type RegistryType string
+
+const (
+	// RegistryTypeDockerHub represents Docker Hub registry
+	RegistryTypeDockerHub RegistryType = "dockerhub"
+	// RegistryTypeGHCR represents GitHub Container Registry
+	RegistryTypeGHCR RegistryType = "ghcr"
+)
+
+// ImageFromRegistryConfig defines configuration for pre-built container images from registries
+type ImageFromRegistryConfig struct {
+	// Registry specifies the container registry (dockerhub, ghcr)
+	// +kubebuilder:validation:Required
+	Registry RegistryType `json:"registry"`
+
+	// Repository specifies the image repository in format "org/repo"
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Pattern=`^[a-z0-9]+(?:[._-][a-z0-9]+)*\/[a-z0-9]+(?:[._-][a-z0-9]+)*$`
+	Repository string `json:"repository"`
+
+	// DefaultTag specifies the default image tag/version
+	// +kubebuilder:default="latest"
+	// +optional
+	DefaultTag string `json:"defaultTag,omitempty"`
+
+	// Port specifies the container port the application listens on
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=65535
+	// +kubebuilder:default=3000
+	// +optional
+	Port int32 `json:"port,omitempty"`
+
+	// Env defines environment variables for the container
+	// +optional
+	Env []corev1.EnvVar `json:"env,omitempty"`
+
+	// Resources defines resource requirements for the container
+	// +optional
+	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
+
+	// HealthCheck defines the health check configuration
+	// +optional
+	HealthCheck *HealthCheckConfig `json:"healthCheck,omitempty"`
+}
 
 // HealthCheckConfig defines the health check configuration for an application
 type HealthCheckConfig struct {
@@ -331,6 +380,10 @@ type ApplicationSpec struct {
 	// +optional
 	DockerImage *DockerImageConfig `json:"dockerImage,omitempty"`
 
+	// ImageFromRegistry contains configuration for ImageFromRegistry applications
+	// +optional
+	ImageFromRegistry *ImageFromRegistryConfig `json:"imageFromRegistry,omitempty"`
+
 	// MySQL contains configuration for MySQL applications
 	// +optional
 	MySQL *MySQLConfig `json:"mysql,omitempty"`
@@ -510,6 +563,13 @@ func (r *Application) validateApplication(ctx context.Context) error {
 		}
 	}
 
+	// Validate ImageFromRegistry configuration
+	if r.Spec.Type == ApplicationTypeImageFromRegistry {
+		if err := r.validateImageFromRegistry(); err != nil {
+			errors = append(errors, err.Error())
+		}
+	}
+
 	if len(errors) > 0 {
 		return fmt.Errorf("validation failed: %v", errors)
 	}
@@ -637,6 +697,69 @@ func (r *Application) validateBuildContext(buildContext string) error {
 	}
 
 	return nil
+}
+
+// validateImageFromRegistry validates ImageFromRegistry configuration
+func (r *Application) validateImageFromRegistry() error {
+	if r.Spec.ImageFromRegistry == nil {
+		return fmt.Errorf("ImageFromRegistry configuration is required when Type is ImageFromRegistry")
+	}
+
+	config := r.Spec.ImageFromRegistry
+
+	// Validate registry type
+	validRegistries := []RegistryType{RegistryTypeDockerHub, RegistryTypeGHCR}
+	isValidRegistry := false
+	for _, validRegistry := range validRegistries {
+		if config.Registry == validRegistry {
+			isValidRegistry = true
+			break
+		}
+	}
+	if !isValidRegistry {
+		return fmt.Errorf("registry must be one of: dockerhub, ghcr")
+	}
+
+	// Validate repository format (org/repo)
+	if config.Repository == "" {
+		return fmt.Errorf("repository is required")
+	}
+	if !r.isValidRepositoryFormat(config.Repository) {
+		return fmt.Errorf("repository must be in format 'org/repo' with valid characters")
+	}
+
+	// Validate port if specified
+	if config.Port != 0 && (config.Port < 1 || config.Port > 65535) {
+		return fmt.Errorf("port must be between 1 and 65535")
+	}
+
+	// Validate default tag if specified
+	if config.DefaultTag != "" && !r.isValidImageTag(config.DefaultTag) {
+		return fmt.Errorf("defaultTag contains invalid characters")
+	}
+
+	// Validate health check if configured
+	if config.HealthCheck != nil {
+		if err := r.validateHealthCheck(config.HealthCheck); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// isValidRepositoryFormat validates repository format (org/repo)
+func (r *Application) isValidRepositoryFormat(repo string) bool {
+	// Pattern: org/repo where both parts contain valid characters
+	pattern := regexp.MustCompile(`^[a-z0-9]+(?:[._-][a-z0-9]+)*\/[a-z0-9]+(?:[._-][a-z0-9]+)*$`)
+	return pattern.MatchString(repo)
+}
+
+// isValidImageTag validates image tag format
+func (r *Application) isValidImageTag(tag string) bool {
+	// Basic tag validation - alphanumeric, dots, hyphens, underscores
+	pattern := regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
+	return pattern.MatchString(tag)
 }
 
 // isValidApplicationName validates if the application name follows the required format

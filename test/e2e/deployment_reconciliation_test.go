@@ -837,5 +837,234 @@ spec:
 
 			By("✅ All Dockerfile deployment tests passed - BuildType=Dockerfile working correctly")
 		})
+
+		It("should successfully reconcile ImageFromRegistry deployment with all controller side effects", func() {
+			By("Creating the test project first with inline manifest")
+			projectManifest := fmt.Sprintf(`apiVersion: platform.operator.kibaship.com/v1alpha1
+kind: Project
+metadata:
+  name: %s
+  labels:
+    platform.kibaship.com/uuid: "%s"
+    platform.kibaship.com/slug: "%s"
+    platform.kibaship.com/workspace-uuid: "%s"
+spec:
+  applicationTypes:
+    dockerImage:
+      enabled: true
+    gitRepository:
+      enabled: true
+    imageFromRegistry:
+      enabled: true
+    mysql:
+      enabled: true
+    postgres:
+      enabled: true
+    mysqlCluster:
+      enabled: false
+    postgresCluster:
+      enabled: false
+`, projectName, projectUUID, projectName, workspaceUUIDConst)
+
+			cmd := exec.Command("kubectl", "apply", "-f", "-")
+			cmd.Stdin = strings.NewReader(projectManifest)
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Waiting for project to be ready")
+			Eventually(func() bool {
+				cmd := exec.Command("kubectl", "get", "project", projectName, "-o", "jsonpath={.status.phase}")
+				output, err := cmd.CombinedOutput()
+				if err != nil {
+					return false
+				}
+				return strings.TrimSpace(string(output)) == readyPhase
+			}, "1m", "5s").Should(BeTrue(), "Project should be Ready")
+
+			By("Waiting for default production environment to be ready")
+			Eventually(func() bool {
+				cmd := exec.Command("kubectl", "get", "environment", "-n", projectNS, "-l", "platform.kibaship.com/slug=production", "-o", "jsonpath={.items[0].metadata.name}")
+				output, err := cmd.CombinedOutput()
+				if err != nil {
+					return false
+				}
+				envName = strings.TrimSpace(string(output))
+				return envName != ""
+			}, "5s", "1s").Should(BeTrue(), "Should find default production environment")
+
+			Eventually(func() bool {
+				cmd := exec.Command("kubectl", "get", "environment", envName, "-n", projectNS, "-o", "jsonpath={.status.phase}")
+				output, err := cmd.CombinedOutput()
+				if err != nil {
+					return false
+				}
+				return strings.TrimSpace(string(output)) == readyPhase
+			}, "5s", "1s").Should(BeTrue(), "Default production environment should be Ready before creating Application")
+
+			By("Fetching the environment UUID")
+			cmd = exec.Command("kubectl", "get", "environment", envName, "-n", projectNS, "-o", "jsonpath={.metadata.labels.platform\\.kibaship\\.com/uuid}")
+			output, err := cmd.CombinedOutput()
+			Expect(err).NotTo(HaveOccurred())
+			envUUID = strings.TrimSpace(string(output))
+			Expect(envUUID).NotTo(BeEmpty(), "Environment should have UUID label")
+
+			By("Creating the test application with ImageFromRegistry type")
+			applicationManifest := fmt.Sprintf(`apiVersion: platform.operator.kibaship.com/v1alpha1
+kind: Application
+metadata:
+  name: %s
+  namespace: %s
+  labels:
+    platform.kibaship.com/uuid: "%s"
+    platform.kibaship.com/slug: "%s"
+    platform.kibaship.com/project-uuid: "%s"
+    platform.kibaship.com/workspace-uuid: "%s"
+    platform.kibaship.com/environment-uuid: "%s"
+spec:
+  type: ImageFromRegistry
+  environmentRef:
+    name: %s
+  imageFromRegistry:
+    registry: dockerhub
+    repository: library/nginx
+    defaultTag: "1.29.2"
+    port: 80
+`, applicationName, projectNS, applicationUUID, applicationName, projectUUID, workspaceUUIDConst, envUUID, envName)
+
+			cmd = exec.Command("kubectl", "apply", "-f", "-")
+			cmd.Stdin = strings.NewReader(applicationManifest)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Waiting for application to be ready")
+			Eventually(func() bool {
+				cmd := exec.Command("kubectl", "get", "application", applicationName, "-n", projectNS, "-o", "jsonpath={.status.phase}")
+				output, err := cmd.CombinedOutput()
+				if err != nil {
+					return false
+				}
+				return strings.TrimSpace(string(output)) == readyPhase
+			}, "2m", "5s").Should(BeTrue(), "Application should be Ready before creating Deployment")
+
+			By("Verifying Application has Type=ImageFromRegistry")
+			Eventually(func() bool {
+				cmd := exec.Command("kubectl", "get", "application", applicationName, "-n", projectNS, "-o", "jsonpath={.spec.type}")
+				output, err := cmd.CombinedOutput()
+				if err != nil {
+					return false
+				}
+				return strings.TrimSpace(string(output)) == "ImageFromRegistry"
+			}, "30s", "2s").Should(BeTrue(), "Application should have Type=ImageFromRegistry")
+
+			By("Creating the test deployment with inline manifest")
+			deploymentManifest := fmt.Sprintf(`apiVersion: platform.operator.kibaship.com/v1alpha1
+kind: Deployment
+metadata:
+  name: %s
+  namespace: %s
+  labels:
+    platform.kibaship.com/uuid: "%s"
+    platform.kibaship.com/slug: "%s"
+    platform.kibaship.com/project-uuid: "%s"
+    platform.kibaship.com/application-uuid: "%s"
+    platform.kibaship.com/workspace-uuid: "%s"
+    platform.kibaship.com/environment-uuid: "%s"
+spec:
+  applicationRef:
+    name: %s
+  promote: true
+  imageFromRegistry:
+    tag: "1.22"
+`, deploymentName, projectNS, deploymentUUID, deploymentName, projectUUID, applicationUUID, workspaceUUIDConst, envUUID, applicationName)
+
+			cmd = exec.Command("kubectl", "apply", "-f", "-")
+			cmd.Stdin = strings.NewReader(deploymentManifest)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Waiting for deployment to be created and transition to Initializing")
+			Eventually(func() bool {
+				cmd := exec.Command("kubectl", "get", deploymentResourceType, deploymentName, "-n", projectNS, "-o", "jsonpath={.status.phase}")
+				output, err := cmd.CombinedOutput()
+				if err != nil {
+					return false
+				}
+				phase := strings.TrimSpace(string(output))
+				return phase == "Initializing" || phase == "Deploying" || phase == "Succeeded"
+			}, "2m", "2s").Should(BeTrue(), "Deployment should be created and have a valid phase")
+
+			By("Verifying Deployment has ImageFromRegistry configuration")
+			Eventually(func() bool {
+				cmd := exec.Command("kubectl", "get", deploymentResourceType, deploymentName, "-n", projectNS, "-o", "jsonpath={.spec.imageFromRegistry.tag}")
+				output, err := cmd.CombinedOutput()
+				if err != nil {
+					return false
+				}
+				return strings.TrimSpace(string(output)) == "1.22"
+			}, "2m", "2s").Should(BeTrue(), "Deployment should have ImageFromRegistry tag=1.22")
+
+			By("Waiting for Kubernetes Deployment to be created")
+			Eventually(func() bool {
+				cmd := exec.Command("kubectl", "get", "deployment", fmt.Sprintf("deployment-%s", deploymentUUID), "-n", projectNS)
+				_, err := cmd.CombinedOutput()
+				return err == nil
+			}, "2m", "5s").Should(BeTrue(), "Kubernetes Deployment should be created")
+
+			By("Verifying Kubernetes Deployment has correct image")
+			Eventually(func() string {
+				cmd := exec.Command("kubectl", "get", "deployment", fmt.Sprintf("deployment-%s", deploymentUUID), "-n", projectNS, "-o", "jsonpath={.spec.template.spec.containers[0].image}")
+				output, err := cmd.CombinedOutput()
+				if err != nil {
+					return ""
+				}
+				return strings.TrimSpace(string(output))
+			}, "2m", "2s").Should(Equal("docker.io/library/nginx:1.22"), "Kubernetes Deployment should have correct nginx image")
+
+			By("Waiting for Kubernetes Service to be created")
+			Eventually(func() bool {
+				cmd := exec.Command("kubectl", "get", "service", fmt.Sprintf("service-%s", deploymentUUID), "-n", projectNS)
+				_, err := cmd.CombinedOutput()
+				return err == nil
+			}, "1m", "5s").Should(BeTrue(), "Kubernetes Service should be created")
+
+			By("Verifying Kubernetes Service has correct port")
+			Eventually(func() string {
+				cmd := exec.Command("kubectl", "get", "service", fmt.Sprintf("service-%s", deploymentUUID), "-n", projectNS, "-o", "jsonpath={.spec.ports[0].port}")
+				output, err := cmd.CombinedOutput()
+				if err != nil {
+					return ""
+				}
+				return strings.TrimSpace(string(output))
+			}, "2m", "2s").Should(Equal("80"), "Kubernetes Service should have port 80")
+
+			By("Waiting for ApplicationDomain to be created")
+			Eventually(func() bool {
+				cmd := exec.Command("kubectl", "get", "applicationdomain", fmt.Sprintf("domain-%s", deploymentUUID), "-n", projectNS)
+				_, err := cmd.CombinedOutput()
+				return err == nil
+			}, "1m", "5s").Should(BeTrue(), "ApplicationDomain should be created")
+
+			By("Waiting for pods to become ready")
+			Eventually(func() string {
+				cmd := exec.Command("kubectl", "get", "deployment", fmt.Sprintf("deployment-%s", deploymentUUID), "-n", projectNS, "-o", "jsonpath={.status.readyReplicas}")
+				output, err := cmd.CombinedOutput()
+				if err != nil {
+					return "0"
+				}
+				return strings.TrimSpace(string(output))
+			}, "3m", "5s").Should(Equal("1"), "Pod should be ready")
+
+			By("Waiting for deployment to transition to Succeeded phase")
+			Eventually(func() string {
+				cmd := exec.Command("kubectl", "get", deploymentResourceType, deploymentName, "-n", projectNS, "-o", "jsonpath={.status.phase}")
+				output, err := cmd.CombinedOutput()
+				if err != nil {
+					return ""
+				}
+				return strings.TrimSpace(string(output))
+			}, "3m", "5s").Should(Equal("Succeeded"), "Deployment should transition to Succeeded phase after pods are ready")
+
+			By("✅ All ImageFromRegistry deployment tests passed - ImageFromRegistry working correctly")
+		})
 	})
 })

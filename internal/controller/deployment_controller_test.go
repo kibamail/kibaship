@@ -249,7 +249,7 @@ var _ = Describe("Deployment Controller", func() {
 				Expect(pipeline.Labels["app.kubernetes.io/name"]).To(Equal(testProject.Name))
 				Expect(pipeline.Labels["app.kubernetes.io/managed-by"]).To(Equal("kibaship-operator"))
 				Expect(pipeline.Labels["project.kibaship.com/slug"]).To(Equal("test123"))
-				Expect(pipeline.Labels["tekton.dev/pipeline"]).To(Equal("git-repository-clone"))
+				Expect(pipeline.Labels["tekton.dev/pipeline"]).To(Equal("git-repository-railpack"))
 			})
 
 			It("should use default branch when application branch is empty", func() {
@@ -1084,7 +1084,7 @@ var _ = Describe("Deployment Controller", func() {
 				Expect(err).NotTo(HaveOccurred())
 				requests, _, err := unstructured.NestedMap(resources, "requests")
 				Expect(err).NotTo(HaveOccurred())
-				Expect(requests["storage"]).To(Equal("512Mi"))
+				Expect(requests["storage"]).To(Equal("1Gi"))
 
 				// Verify InnoDBCluster has correct labels
 				Expect(cluster.GetLabels()["app.kubernetes.io/name"]).To(Equal(testProject.Name))

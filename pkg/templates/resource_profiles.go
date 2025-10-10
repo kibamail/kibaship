@@ -125,6 +125,26 @@ func getDevelopmentTemplate() v1alpha1.ApplicationTypesConfig {
 				},
 			},
 		},
+		ImageFromRegistry: v1alpha1.ApplicationTypeConfig{
+			Enabled: true,
+			DefaultLimits: v1alpha1.ResourceLimits{
+				CPU:     "0.25",
+				Memory:  "512Mi",
+				Storage: "2Gi",
+			},
+			ResourceBounds: v1alpha1.ResourceBounds{
+				Min: v1alpha1.ResourceLimits{
+					CPU:     "0.1",
+					Memory:  "128Mi",
+					Storage: "1Gi",
+				},
+				Max: v1alpha1.ResourceLimits{
+					CPU:     "4",
+					Memory:  "8Gi",
+					Storage: "10Gi",
+				},
+			},
+		},
 	}
 }
 
@@ -217,6 +237,26 @@ func getProductionTemplate() v1alpha1.ApplicationTypesConfig {
 				},
 			},
 		},
+		ImageFromRegistry: v1alpha1.ApplicationTypeConfig{
+			Enabled: true,
+			DefaultLimits: v1alpha1.ResourceLimits{
+				CPU:     "1",
+				Memory:  "2Gi",
+				Storage: "10Gi",
+			},
+			ResourceBounds: v1alpha1.ResourceBounds{
+				Min: v1alpha1.ResourceLimits{
+					CPU:     "0.1",
+					Memory:  "128Mi",
+					Storage: "1Gi",
+				},
+				Max: v1alpha1.ResourceLimits{
+					CPU:     "10",
+					Memory:  "32Gi",
+					Storage: "50Gi",
+				},
+			},
+		},
 	}
 }
 
@@ -236,6 +276,9 @@ func getCustomTemplate(customLimits *models.CustomResourceLimits) v1alpha1.Appli
 	}
 	if customLimits.GitRepository != nil {
 		config.GitRepository = convertToApplicationTypeConfig(customLimits.GitRepository, config.GitRepository)
+	}
+	if customLimits.ImageFromRegistry != nil {
+		config.ImageFromRegistry = convertToApplicationTypeConfig(customLimits.ImageFromRegistry, config.ImageFromRegistry)
 	}
 
 	return config

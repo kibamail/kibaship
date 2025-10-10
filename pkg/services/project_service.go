@@ -406,16 +406,20 @@ func (s *ProjectService) applyApplicationTypeEnablement(config *v1alpha1.Applica
 	if settings.GitRepository != nil {
 		config.GitRepository.Enabled = *settings.GitRepository
 	}
+	if settings.ImageFromRegistry != nil {
+		config.ImageFromRegistry.Enabled = *settings.ImageFromRegistry
+	}
 }
 
 // extractApplicationTypeSettings extracts enablement settings from CRD
 func (s *ProjectService) extractApplicationTypeSettings(config *v1alpha1.ApplicationTypesConfig) models.ApplicationTypeSettings {
 	return models.ApplicationTypeSettings{
-		MySQL:           &config.MySQL.Enabled,
-		MySQLCluster:    &config.MySQLCluster.Enabled,
-		Postgres:        &config.Postgres.Enabled,
-		PostgresCluster: &config.PostgresCluster.Enabled,
-		DockerImage:     &config.DockerImage.Enabled,
-		GitRepository:   &config.GitRepository.Enabled,
+		MySQL:             &config.MySQL.Enabled,
+		MySQLCluster:      &config.MySQLCluster.Enabled,
+		Postgres:          &config.Postgres.Enabled,
+		PostgresCluster:   &config.PostgresCluster.Enabled,
+		DockerImage:       &config.DockerImage.Enabled,
+		GitRepository:     &config.GitRepository.Enabled,
+		ImageFromRegistry: &config.ImageFromRegistry.Enabled,
 	}
 }

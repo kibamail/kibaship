@@ -285,6 +285,136 @@ var _ = Describe("Deployment Integration", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(response["error"]).To(Equal("Not Found"))
 	})
+
+	It("creates ImageFromRegistry deployment successfully", NodeTimeout(30*time.Second), func(ctx SpecContext) {
+		apiKey := generateTestAPIKey()
+		router := setupIntegrationTestRouter(apiKey)
+
+		// Create project
+		projectPayload := models.ProjectCreateRequest{
+			Name:          "Test Project for ImageFromRegistry",
+			WorkspaceUUID: "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+		}
+
+		jsonData, err := json.Marshal(projectPayload)
+		Expect(err).NotTo(HaveOccurred())
+
+		req, err := http.NewRequest("POST", "/v1/projects", bytes.NewBuffer(jsonData))
+		Expect(err).NotTo(HaveOccurred())
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		Expect(w.Code).To(Equal(http.StatusCreated))
+
+		var createdProject models.ProjectResponse
+		err = json.Unmarshal(w.Body.Bytes(), &createdProject)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Create environment via API
+		envPayload := models.EnvironmentCreateRequest{
+			Name:        "production",
+			Description: "Production environment",
+		}
+		jsonData, err = json.Marshal(envPayload)
+		Expect(err).NotTo(HaveOccurred())
+
+		req, err = http.NewRequest("POST", "/v1/projects/"+createdProject.UUID+"/environments", bytes.NewBuffer(jsonData))
+		Expect(err).NotTo(HaveOccurred())
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+
+		w = httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		Expect(w.Code).To(Equal(http.StatusCreated))
+
+		var createdEnvironment models.EnvironmentResponse
+		err = json.Unmarshal(w.Body.Bytes(), &createdEnvironment)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Create ImageFromRegistry application
+		applicationPayload := models.ApplicationCreateRequest{
+			Name: "My Nginx App",
+			Type: models.ApplicationTypeImageFromRegistry,
+			ImageFromRegistry: &models.ImageFromRegistryConfig{
+				Registry:   "dockerhub",
+				Repository: "library/nginx",
+				DefaultTag: "1.21",
+				Port:       80,
+			},
+		}
+
+		jsonData, err = json.Marshal(applicationPayload)
+		Expect(err).NotTo(HaveOccurred())
+
+		req, err = http.NewRequest("POST", "/v1/environments/"+createdEnvironment.UUID+"/applications", bytes.NewBuffer(jsonData))
+		Expect(err).NotTo(HaveOccurred())
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+
+		w = httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		Expect(w.Code).To(Equal(http.StatusCreated))
+
+		var createdApplication models.ApplicationResponse
+		err = json.Unmarshal(w.Body.Bytes(), &createdApplication)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Create deployment with specific tag
+		payload := models.DeploymentCreateRequest{
+			ApplicationUUID: createdApplication.UUID,
+			ImageFromRegistry: &models.ImageFromRegistryDeploymentConfig{
+				Tag: "1.22",
+			},
+		}
+
+		jsonData, err = json.Marshal(payload)
+		Expect(err).NotTo(HaveOccurred())
+
+		req, err = http.NewRequest("POST", "/v1/applications/"+createdApplication.UUID+"/deployments", bytes.NewBuffer(jsonData))
+		Expect(err).NotTo(HaveOccurred())
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+
+		w = httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		Expect(w.Code).To(Equal(http.StatusCreated))
+
+		var response models.DeploymentResponse
+		err = json.Unmarshal(w.Body.Bytes(), &response)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Validate response
+		Expect(response.UUID).NotTo(BeEmpty())
+		Expect(response.Slug).NotTo(BeEmpty())
+		Expect(response.Slug).To(HaveLen(8))
+		Expect(response.ApplicationSlug).To(Equal(createdApplication.Slug))
+		Expect(response.Phase).To(Equal(models.DeploymentPhaseInitializing))
+		Expect(response.ImageFromRegistry).NotTo(BeNil())
+		Expect(response.ImageFromRegistry.Tag).To(Equal("1.22"))
+
+		// Verify CRD
+		var deployment v1alpha1.Deployment
+		err = k8sClient.Get(ctx, client.ObjectKey{
+			Name:      "deployment-" + response.UUID + "",
+			Namespace: "default",
+		}, &deployment)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Validate CRD fields
+		Expect(deployment.Spec.ApplicationRef.Name).To(Equal("application-" + createdApplication.UUID))
+		Expect(deployment.Spec.ImageFromRegistry).NotTo(BeNil())
+		Expect(deployment.Spec.ImageFromRegistry.Tag).To(Equal("1.22"))
+
+		// Cleanup
+		defer func() {
+			var proj v1alpha1.Project
+			if err := k8sClient.Get(ctx, client.ObjectKey{Name: "project-" + createdProject.UUID}, &proj); err == nil {
+				_ = k8sClient.Delete(ctx, &proj)
+			}
+		}()
+	})
 })
 
 // Helper function to create a test deployment

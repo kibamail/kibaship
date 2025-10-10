@@ -31,6 +31,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -41,6 +42,7 @@ import (
 
 	platformv1alpha1 "github.com/kibamail/kibaship-operator/api/v1alpha1"
 	"github.com/kibamail/kibaship-operator/pkg/config"
+	"github.com/kibamail/kibaship-operator/pkg/utils"
 	"github.com/kibamail/kibaship-operator/pkg/webhooks"
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 )
@@ -56,49 +58,9 @@ const (
 	RailpackPrepareTaskName = "tekton-task-railpack-prepare-kibaship-com"
 	// RailpackBuildTaskName is the name of the railpack build task in tekton-pipelines namespace
 	RailpackBuildTaskName = "tekton-task-railpack-build-kibaship-com"
-	// eventEmittedValue is the value used to mark events as emitted in annotations
-	eventEmittedValue = "true"
 	// DefaultGitBranch is the default git branch when none is specified
 	DefaultGitBranch = "main"
 )
-
-// annotationTracker tracks annotation changes to batch updates and prevent unnecessary reconciliations
-type annotationTracker struct {
-	deployment *platformv1alpha1.Deployment
-	changes    map[string]string
-	hasChanges bool
-}
-
-// newAnnotationTracker creates a new annotation tracker for the deployment
-func newAnnotationTracker(deployment *platformv1alpha1.Deployment) *annotationTracker {
-	if deployment.Annotations == nil {
-		deployment.Annotations = make(map[string]string)
-	}
-	return &annotationTracker{
-		deployment: deployment,
-		changes:    make(map[string]string),
-		hasChanges: false,
-	}
-}
-
-// setAnnotation sets an annotation if it's different from the current value
-func (at *annotationTracker) setAnnotation(key, value string) {
-	currentValue := at.deployment.Annotations[key]
-	if currentValue != value {
-		at.changes[key] = value
-		at.hasChanges = true
-	}
-}
-
-// applyChanges applies all tracked changes to the deployment annotations
-func (at *annotationTracker) applyChanges() {
-	if !at.hasChanges {
-		return
-	}
-	for key, value := range at.changes {
-		at.deployment.Annotations[key] = value
-	}
-}
 
 // DeploymentReconciler reconciles a Deployment object
 type DeploymentReconciler struct {
@@ -184,6 +146,14 @@ func (r *DeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 	}
 
+	// Check if Application is of type ImageFromRegistry
+	if app.Spec.Type == platformv1alpha1.ApplicationTypeImageFromRegistry {
+		if err := r.handleImageFromRegistryDeployment(ctx, &deployment, &app); err != nil {
+			log.Error(err, "Failed to handle ImageFromRegistry deployment")
+			return ctrl.Result{}, err
+		}
+	}
+
 	// Check if Application is of type MySQL
 	if app.Spec.Type == platformv1alpha1.ApplicationTypeMySQL {
 		if err := r.handleMySQLDeployment(ctx, &deployment, &app); err != nil {
@@ -195,11 +165,8 @@ func (r *DeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	// Track previous phase before updating status
 	prevPhase := deployment.Status.Phase
 
-	// Update deployment status and check PipelineRun status
-	if err := r.updateDeploymentStatus(ctx, &deployment); err != nil {
-		log.Error(err, "Failed to update Deployment status")
-		return ctrl.Result{}, err
-	}
+	// Note: Status updates are handled by DeploymentProgressController
+	// This controller only handles resource creation
 
 	// Emit webhook on phase transition
 	r.emitDeploymentPhaseChange(ctx, &deployment, string(prevPhase), string(deployment.Status.Phase))
@@ -322,6 +289,396 @@ func (r *DeploymentReconciler) handleGitRepositoryDeployment(ctx context.Context
 		return fmt.Errorf("failed to create PipelineRun: %w", err)
 	}
 
+	return nil
+}
+
+// handleImageFromRegistryDeployment handles deployments for ImageFromRegistry applications
+func (r *DeploymentReconciler) handleImageFromRegistryDeployment(ctx context.Context, deployment *platformv1alpha1.Deployment, app *platformv1alpha1.Application) error {
+	log := logf.FromContext(ctx).WithValues("deployment", deployment.Name, "application", app.Name)
+
+	// Validate ImageFromRegistry configuration is present in deployment spec
+	if deployment.Spec.ImageFromRegistry == nil {
+		return fmt.Errorf("ImageFromRegistry configuration is required for ImageFromRegistry application deployments")
+	}
+
+	log.Info("Handling ImageFromRegistry deployment", "registry", app.Spec.ImageFromRegistry.Registry, "repository", app.Spec.ImageFromRegistry.Repository, "tag", deployment.Spec.ImageFromRegistry.Tag)
+
+	// Create Kubernetes Deployment
+	if err := r.createKubernetesDeployment(ctx, deployment, app); err != nil {
+		return fmt.Errorf("failed to create Kubernetes Deployment: %w", err)
+	}
+
+	// Create Kubernetes Service
+	if err := r.createKubernetesService(ctx, deployment, app); err != nil {
+		return fmt.Errorf("failed to create Kubernetes Service: %w", err)
+	}
+
+	// Create ApplicationDomain for routing
+	if err := r.ensureApplicationDomain(ctx, deployment, app); err != nil {
+		return fmt.Errorf("failed to ensure ApplicationDomain: %w", err)
+	}
+
+	log.Info("Successfully handled ImageFromRegistry deployment")
+	return nil
+}
+
+// createKubernetesDeployment creates a Kubernetes Deployment for ImageFromRegistry applications
+func (r *DeploymentReconciler) createKubernetesDeployment(ctx context.Context, deployment *platformv1alpha1.Deployment, app *platformv1alpha1.Application) error {
+	log := logf.FromContext(ctx)
+
+	// Only handle ImageFromRegistry applications in this method
+	if app.Spec.Type != platformv1alpha1.ApplicationTypeImageFromRegistry {
+		return fmt.Errorf("createKubernetesDeployment called for non-ImageFromRegistry application")
+	}
+
+	k8sDepName := fmt.Sprintf("deployment-%s", deployment.GetUUID())
+
+	// Check if deployment already exists
+	var existing appsv1.Deployment
+	err := r.Get(ctx, client.ObjectKey{
+		Name:      k8sDepName,
+		Namespace: deployment.Namespace,
+	}, &existing)
+
+	if err == nil {
+		log.V(1).Info("K8s Deployment already exists", "name", k8sDepName)
+		return nil // Already exists
+	}
+
+	if !errors.IsNotFound(err) {
+		return err
+	}
+
+	// Build image name
+	imageName := r.buildImageName(app.Spec.ImageFromRegistry, deployment.Spec.ImageFromRegistry)
+
+	// Determine port
+	port := app.Spec.ImageFromRegistry.Port
+	if port == 0 {
+		port = 3000 // Default port
+	}
+
+	// Merge environment variables
+	envVars := r.mergeEnvVars(app.Spec.ImageFromRegistry.Env, deployment.Spec.ImageFromRegistry.Env)
+
+	// Merge resource requirements
+	resources := r.mergeResources(app.Spec.ImageFromRegistry.Resources, deployment.Spec.ImageFromRegistry.Resources)
+
+	// Create Kubernetes Deployment
+	replicas := int32(1)
+	appUUID := app.GetUUID()
+
+	k8sDep := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      k8sDepName,
+			Namespace: deployment.Namespace,
+			Labels: map[string]string{
+				"app.kubernetes.io/name":                 fmt.Sprintf("app-%s", appUUID),
+				"app.kubernetes.io/managed-by":           "kibaship-operator",
+				"app.kubernetes.io/component":            "application",
+				"platform.kibaship.com/deployment-uuid":  deployment.GetUUID(),
+				"platform.kibaship.com/application-uuid": app.GetUUID(),
+				"platform.kibaship.com/project-uuid":     deployment.GetProjectUUID(),
+			},
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: &replicas,
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"app.kubernetes.io/name":                fmt.Sprintf("app-%s", appUUID),
+					"platform.kibaship.com/deployment-uuid": deployment.GetUUID(),
+				},
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						"app.kubernetes.io/name":                 fmt.Sprintf("app-%s", appUUID),
+						"app.kubernetes.io/managed-by":           "kibaship-operator",
+						"app.kubernetes.io/component":            "application",
+						"platform.kibaship.com/deployment-uuid":  deployment.GetUUID(),
+						"platform.kibaship.com/application-uuid": app.GetUUID(),
+						"platform.kibaship.com/project-uuid":     deployment.GetProjectUUID(),
+					},
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name:  "app",
+							Image: imageName,
+							Ports: []corev1.ContainerPort{
+								{
+									ContainerPort: port,
+									Protocol:      corev1.ProtocolTCP,
+								},
+							},
+							Env:       envVars,
+							Resources: *resources,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	// Set owner reference to Deployment CR
+	if err := ctrl.SetControllerReference(deployment, k8sDep, r.Scheme); err != nil {
+		return fmt.Errorf("failed to set controller reference: %w", err)
+	}
+
+	if err := r.Create(ctx, k8sDep); err != nil {
+		return fmt.Errorf("failed to create K8s Deployment: %w", err)
+	}
+
+	log.Info("Created K8s Deployment", "name", k8sDepName, "image", imageName)
+	return nil
+}
+
+// buildImageName constructs the full container image name from registry, repository, and tag
+func (r *DeploymentReconciler) buildImageName(appConfig *platformv1alpha1.ImageFromRegistryConfig, deployConfig *platformv1alpha1.ImageFromRegistryDeploymentConfig) string {
+	var registryURL string
+	switch appConfig.Registry {
+	case platformv1alpha1.RegistryTypeDockerHub:
+		registryURL = "docker.io"
+	case platformv1alpha1.RegistryTypeGHCR:
+		registryURL = "ghcr.io"
+	default:
+		registryURL = "docker.io" // fallback
+	}
+
+	// Use deployment tag or fall back to app default tag or "latest"
+	tag := deployConfig.Tag
+	if tag == "" {
+		tag = appConfig.DefaultTag
+		if tag == "" {
+			tag = "latest"
+		}
+	}
+
+	return fmt.Sprintf("%s/%s:%s", registryURL, appConfig.Repository, tag)
+}
+
+// mergeEnvVars merges application and deployment environment variables
+// Deployment env vars override application env vars by name
+func (r *DeploymentReconciler) mergeEnvVars(appEnv []corev1.EnvVar, deployEnv []corev1.EnvVar) []corev1.EnvVar {
+	envMap := make(map[string]corev1.EnvVar)
+
+	// Add application env vars first
+	for _, env := range appEnv {
+		envMap[env.Name] = env
+	}
+
+	// Override with deployment env vars
+	for _, env := range deployEnv {
+		envMap[env.Name] = env
+	}
+
+	// Convert back to slice
+	result := make([]corev1.EnvVar, 0, len(envMap))
+	for _, env := range envMap {
+		result = append(result, env)
+	}
+
+	return result
+}
+
+// mergeResources merges application and deployment resource requirements
+// Deployment resources override application resources
+func (r *DeploymentReconciler) mergeResources(appResources *corev1.ResourceRequirements, deployResources *corev1.ResourceRequirements) *corev1.ResourceRequirements {
+	// Start with application resources or empty if nil
+	result := &corev1.ResourceRequirements{}
+	if appResources != nil {
+		result = appResources.DeepCopy()
+	}
+
+	// Override with deployment resources if provided
+	if deployResources != nil {
+		if deployResources.Limits != nil {
+			if result.Limits == nil {
+				result.Limits = make(corev1.ResourceList)
+			}
+			for k, v := range deployResources.Limits {
+				result.Limits[k] = v
+			}
+		}
+		if deployResources.Requests != nil {
+			if result.Requests == nil {
+				result.Requests = make(corev1.ResourceList)
+			}
+			for k, v := range deployResources.Requests {
+				result.Requests[k] = v
+			}
+		}
+	}
+
+	return result
+}
+
+// createKubernetesService creates a Kubernetes Service for ImageFromRegistry applications
+func (r *DeploymentReconciler) createKubernetesService(ctx context.Context, deployment *platformv1alpha1.Deployment, app *platformv1alpha1.Application) error {
+	log := logf.FromContext(ctx)
+
+	// Only handle ImageFromRegistry applications in this method
+	if app.Spec.Type != platformv1alpha1.ApplicationTypeImageFromRegistry {
+		return fmt.Errorf("createKubernetesService called for non-ImageFromRegistry application")
+	}
+
+	serviceName := fmt.Sprintf("service-%s", deployment.GetUUID())
+
+	// Check if service already exists
+	var existing corev1.Service
+	err := r.Get(ctx, client.ObjectKey{
+		Name:      serviceName,
+		Namespace: deployment.Namespace,
+	}, &existing)
+
+	if err == nil {
+		log.V(1).Info("K8s Service already exists", "name", serviceName)
+		return nil // Already exists
+	}
+
+	if !errors.IsNotFound(err) {
+		return err
+	}
+
+	// Determine port
+	port := app.Spec.ImageFromRegistry.Port
+	if port == 0 {
+		port = 3000 // Default port
+	}
+
+	appUUID := app.GetUUID()
+
+	service := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      serviceName,
+			Namespace: deployment.Namespace,
+			Labels: map[string]string{
+				"app.kubernetes.io/name":                 fmt.Sprintf("app-%s", appUUID),
+				"app.kubernetes.io/managed-by":           "kibaship-operator",
+				"app.kubernetes.io/component":            "application",
+				"platform.kibaship.com/deployment-uuid":  deployment.GetUUID(),
+				"platform.kibaship.com/application-uuid": app.GetUUID(),
+				"platform.kibaship.com/project-uuid":     deployment.GetProjectUUID(),
+			},
+		},
+		Spec: corev1.ServiceSpec{
+			Type: corev1.ServiceTypeClusterIP,
+			Selector: map[string]string{
+				"app.kubernetes.io/name":                fmt.Sprintf("app-%s", appUUID),
+				"platform.kibaship.com/deployment-uuid": deployment.GetUUID(),
+			},
+			Ports: []corev1.ServicePort{
+				{
+					Name:       "http",
+					Protocol:   corev1.ProtocolTCP,
+					Port:       port,
+					TargetPort: intstr.FromInt32(port),
+				},
+			},
+		},
+	}
+
+	// Set owner reference to Deployment CR
+	if err := ctrl.SetControllerReference(deployment, service, r.Scheme); err != nil {
+		return fmt.Errorf("failed to set controller reference: %w", err)
+	}
+
+	if err := r.Create(ctx, service); err != nil {
+		return fmt.Errorf("failed to create Service: %w", err)
+	}
+
+	log.Info("Created K8s Service", "name", serviceName, "port", port)
+	return nil
+}
+
+// ensureApplicationDomain creates an ApplicationDomain for ImageFromRegistry applications
+func (r *DeploymentReconciler) ensureApplicationDomain(ctx context.Context, deployment *platformv1alpha1.Deployment, app *platformv1alpha1.Application) error {
+	log := logf.FromContext(ctx)
+
+	// Only handle ImageFromRegistry applications in this method
+	if app.Spec.Type != platformv1alpha1.ApplicationTypeImageFromRegistry {
+		return fmt.Errorf("ensureApplicationDomain called for non-ImageFromRegistry application")
+	}
+
+	deploymentUUID := deployment.GetUUID()
+	appUUID := app.GetUUID()
+
+	// Check if this deployment's domain already exists
+	domainName := fmt.Sprintf("domain-%s", deploymentUUID)
+	var existing platformv1alpha1.ApplicationDomain
+	err := r.Get(ctx, client.ObjectKey{
+		Name:      domainName,
+		Namespace: deployment.Namespace,
+	}, &existing)
+
+	if err == nil {
+		log.V(1).Info("ApplicationDomain already exists for this deployment", "domain", existing.Spec.Domain)
+		return nil // Already exists
+	}
+
+	if !errors.IsNotFound(err) {
+		return err
+	}
+
+	// Get operator configuration for base domain
+	opConfig, err := GetOperatorConfig()
+	if err != nil {
+		return fmt.Errorf("failed to get operator configuration: %w", err)
+	}
+
+	// ImageFromRegistry applications use <deployment-uuid>.apps.<baseDomain>
+	domain := fmt.Sprintf("%s.apps.%s", deploymentUUID, opConfig.Domain)
+
+	// Determine port
+	port := app.Spec.ImageFromRegistry.Port
+	if port == 0 {
+		port = 3000 // Default port
+	}
+
+	// Generate slug for ApplicationDomain
+	domainSlug, err := utils.GenerateRandomSlug()
+	if err != nil {
+		return fmt.Errorf("failed to generate domain slug: %w", err)
+	}
+
+	// Create ApplicationDomain CR
+	applicationDomain := &platformv1alpha1.ApplicationDomain{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      domainName,
+			Namespace: deployment.Namespace,
+			Labels: map[string]string{
+				"platform.kibaship.com/uuid":             deploymentUUID,
+				"platform.kibaship.com/slug":             domainSlug,
+				"platform.kibaship.com/project-uuid":     app.GetProjectUUID(),
+				"platform.kibaship.com/application-uuid": appUUID,
+				"platform.kibaship.com/deployment-uuid":  deploymentUUID,
+			},
+			Annotations: map[string]string{
+				"platform.kibaship.com/resource-name": fmt.Sprintf("Deployment domain %s", domain),
+			},
+		},
+		Spec: platformv1alpha1.ApplicationDomainSpec{
+			ApplicationRef: corev1.LocalObjectReference{
+				Name: app.Name,
+			},
+			Domain:     domain,
+			Port:       port,
+			Type:       platformv1alpha1.ApplicationDomainTypeDefault,
+			Default:    false, // Deployment domains are not default
+			TLSEnabled: true,
+		},
+	}
+
+	// Set owner reference to the Deployment CR for cascading deletion
+	if err := ctrl.SetControllerReference(deployment, applicationDomain, r.Scheme); err != nil {
+		return fmt.Errorf("failed to set controller reference on ApplicationDomain: %w", err)
+	}
+
+	if err := r.Create(ctx, applicationDomain); err != nil {
+		return fmt.Errorf("failed to create ApplicationDomain: %w", err)
+	}
+
+	log.Info("Created ApplicationDomain", "domain", domain, "port", port)
 	return nil
 }
 
@@ -484,6 +841,10 @@ func (r *DeploymentReconciler) getEnvSecretName(app *platformv1alpha1.Applicatio
 		if app.Spec.DockerImage != nil && app.Spec.DockerImage.Env != nil {
 			return app.Spec.DockerImage.Env.Name
 		}
+	case platformv1alpha1.ApplicationTypeImageFromRegistry:
+		// ImageFromRegistry applications don't have a specific env secret reference
+		// Environment variables are defined directly in the application spec
+		return ""
 	case platformv1alpha1.ApplicationTypeMySQL:
 		if app.Spec.MySQL != nil && app.Spec.MySQL.Env != nil {
 			return app.Spec.MySQL.Env.Name
@@ -663,320 +1024,6 @@ func (r *DeploymentReconciler) createPipelineRun(ctx context.Context, deployment
 
 	log.Info("Created PipelineRun", "pipelineRun", pipelineRunName, "namespace", deployment.Namespace, "commit", deployment.Spec.GitRepository.CommitSHA)
 	return nil
-}
-
-// updateDeploymentStatus updates the Deployment status based on PipelineRun status
-func (r *DeploymentReconciler) updateDeploymentStatus(ctx context.Context, deployment *platformv1alpha1.Deployment) error {
-	log := logf.FromContext(ctx)
-
-	// Create annotation tracker to batch updates
-	annotationTracker := newAnnotationTracker(deployment)
-
-	deployment.Status.ObservedGeneration = deployment.Generation
-
-	// Get the PipelineRun for this deployment to determine phase
-	deploymentUUID := deployment.GetUUID()
-	pipelineRunName := fmt.Sprintf("pipeline-run-%s-%d", deploymentUUID, deployment.Generation)
-	pipelineRun := &tektonv1.PipelineRun{}
-	err := r.Get(ctx, types.NamespacedName{
-		Namespace: deployment.Namespace,
-		Name:      pipelineRunName,
-	}, pipelineRun)
-
-	// Store current phase to check for changes
-	previousPhase := deployment.Status.Phase
-	var newPhase platformv1alpha1.DeploymentPhase
-
-	if err != nil {
-		if errors.IsNotFound(err) {
-			// PipelineRun doesn't exist yet - stay in Initializing
-			newPhase = platformv1alpha1.DeploymentPhaseInitializing
-		} else {
-			return fmt.Errorf("failed to get PipelineRun: %w", err)
-		}
-	} else {
-		// PipelineRun exists - determine phase based on its status
-		newPhase = r.determineDeploymentPhase(ctx, pipelineRun)
-
-		// Emit events for completed TaskRuns using annotation tracker
-		r.emitTaskRunEventsWithTracker(ctx, deployment, pipelineRun, annotationTracker)
-	}
-
-	// Early exit if phase hasn't changed and no annotation changes
-	if previousPhase == newPhase && !annotationTracker.hasChanges {
-		return nil
-	}
-
-	// Update phase if it changed
-	deployment.Status.Phase = newPhase
-
-	// Update conditions based on phase
-	var condition metav1.Condition
-	switch deployment.Status.Phase {
-	case platformv1alpha1.DeploymentPhaseFailed:
-		condition = metav1.Condition{
-			Type:               "Ready",
-			Status:             metav1.ConditionFalse,
-			LastTransitionTime: metav1.Now(),
-			Reason:             "PipelineRunFailed",
-			Message:            "Pipeline run failed",
-		}
-	case platformv1alpha1.DeploymentPhaseSucceeded:
-		condition = metav1.Condition{
-			Type:               "Ready",
-			Status:             metav1.ConditionTrue,
-			LastTransitionTime: metav1.Now(),
-			Reason:             "PipelineRunSucceeded",
-			Message:            "Pipeline run succeeded",
-		}
-	case platformv1alpha1.DeploymentPhaseDeploying:
-		condition = metav1.Condition{
-			Type:               "Ready",
-			Status:             metav1.ConditionUnknown,
-			LastTransitionTime: metav1.Now(),
-			Reason:             "Deploying",
-			Message:            "Deploying application",
-		}
-	case platformv1alpha1.DeploymentPhaseBuilding:
-		condition = metav1.Condition{
-			Type:               "Ready",
-			Status:             metav1.ConditionUnknown,
-			LastTransitionTime: metav1.Now(),
-			Reason:             "Building",
-			Message:            "Building container image",
-		}
-	case platformv1alpha1.DeploymentPhasePreparing:
-		condition = metav1.Condition{
-			Type:               "Ready",
-			Status:             metav1.ConditionUnknown,
-			LastTransitionTime: metav1.Now(),
-			Reason:             "Preparing",
-			Message:            "Preparing deployment",
-		}
-	default:
-		condition = metav1.Condition{
-			Type:               "Ready",
-			Status:             metav1.ConditionUnknown,
-			LastTransitionTime: metav1.Now(),
-			Reason:             "Initializing",
-			Message:            "Deployment is initializing",
-		}
-	}
-
-	updated := false
-	for i, existingCondition := range deployment.Status.Conditions {
-		if existingCondition.Type == condition.Type {
-			deployment.Status.Conditions[i] = condition
-			updated = true
-			break
-		}
-	}
-	if !updated {
-		deployment.Status.Conditions = append(deployment.Status.Conditions, condition)
-	}
-
-	if err := r.Status().Update(ctx, deployment); err != nil {
-		return fmt.Errorf("failed to update Deployment status: %w", err)
-	}
-
-	log.Info("Updated deployment status", "phase", deployment.Status.Phase)
-
-	// Emit events for phase changes using annotation tracker
-	r.emitPhaseEventWithTracker(deployment, deployment.Status.Phase, annotationTracker)
-
-	// Apply all annotation changes in a single update if there are any changes
-	if annotationTracker.hasChanges {
-		annotationTracker.applyChanges()
-		if err := r.Update(ctx, deployment); err != nil {
-			log.Error(err, "Failed to update deployment annotations")
-			// Don't fail the reconcile if annotation update fails
-		}
-	}
-
-	return nil
-}
-
-// determineDeploymentPhase determines the deployment phase based on PipelineRun status
-func (r *DeploymentReconciler) determineDeploymentPhase(ctx context.Context, pipelineRun *tektonv1.PipelineRun) platformv1alpha1.DeploymentPhase {
-	// Check if PipelineRun has completed
-	succeededCondition := pipelineRun.Status.GetCondition("Succeeded")
-	if succeededCondition == nil {
-		// No status yet - initializing
-		return platformv1alpha1.DeploymentPhaseInitializing
-	}
-
-	// Check if failed
-	if succeededCondition.Status == corev1.ConditionFalse {
-		return platformv1alpha1.DeploymentPhaseFailed
-	}
-
-	// Check if succeeded
-	if succeededCondition.Status == corev1.ConditionTrue {
-		// Pipeline completed successfully - for now return Deploying
-		// Will transition to Succeeded after actual deployment phase is implemented
-		return platformv1alpha1.DeploymentPhaseDeploying
-	}
-
-	// Pipeline is running - check which task is active using childReferences
-	if len(pipelineRun.Status.ChildReferences) > 0 {
-		prepareCompleted := false
-		prepareRunning := false
-		buildRunning := false
-
-		// Check each child TaskRun
-		for _, childRef := range pipelineRun.Status.ChildReferences {
-			if childRef.Kind != "TaskRun" {
-				continue
-			}
-
-			taskName := childRef.PipelineTaskName
-
-			// Get the actual TaskRun to check its status
-			taskRun := &tektonv1.TaskRun{}
-			err := r.Get(ctx, types.NamespacedName{
-				Namespace: pipelineRun.Namespace,
-				Name:      childRef.Name,
-			}, taskRun)
-
-			if err != nil {
-				continue // Skip if we can't fetch the TaskRun
-			}
-
-			taskCondition := taskRun.Status.GetCondition("Succeeded")
-
-			// Check for Railpack prepare task
-			if taskName == "prepare" {
-				if taskCondition != nil && taskCondition.Status == corev1.ConditionTrue {
-					prepareCompleted = true
-				} else if taskCondition != nil && taskCondition.Status == corev1.ConditionUnknown {
-					prepareRunning = true
-				}
-			}
-
-			// Check for Railpack build task or Dockerfile build task
-			if taskName == "build" || taskName == "build-dockerfile" {
-				if taskCondition != nil && taskCondition.Status == corev1.ConditionUnknown {
-					buildRunning = true
-				}
-			}
-		}
-
-		if buildRunning {
-			return platformv1alpha1.DeploymentPhaseBuilding
-		}
-		if prepareCompleted {
-			// Prepare completed, waiting for build to start
-			return platformv1alpha1.DeploymentPhaseBuilding
-		}
-		if prepareRunning {
-			return platformv1alpha1.DeploymentPhasePreparing
-		}
-		// Pipeline started but no task status yet
-		return platformv1alpha1.DeploymentPhasePreparing
-	}
-
-	// Default to initializing
-	return platformv1alpha1.DeploymentPhaseInitializing
-}
-
-// emitPhaseEventWithTracker emits an event for the current deployment phase using annotation tracker
-func (r *DeploymentReconciler) emitPhaseEventWithTracker(deployment *platformv1alpha1.Deployment, phase platformv1alpha1.DeploymentPhase, tracker *annotationTracker) {
-	if r.Recorder == nil {
-		return
-	}
-
-	// Track last emitted phase to avoid duplicate events using annotation tracker
-	lastPhaseKey := "platform.kibaship.com/last-phase-event"
-	lastPhase := deployment.Annotations[lastPhaseKey]
-	currentPhase := string(phase)
-
-	if lastPhase == currentPhase {
-		return // Already emitted event for this phase
-	}
-
-	switch phase {
-	case platformv1alpha1.DeploymentPhaseInitializing:
-		r.Recorder.Event(deployment, corev1.EventTypeNormal, "deployment.initializing", "Deployment is being initialized")
-	case platformv1alpha1.DeploymentPhasePreparing:
-		r.Recorder.Event(deployment, corev1.EventTypeNormal, "deployment.preparing", "Preparing deployment")
-	case platformv1alpha1.DeploymentPhaseBuilding:
-		r.Recorder.Event(deployment, corev1.EventTypeNormal, "deployment.building", "Building container image with BuildKit")
-	case platformv1alpha1.DeploymentPhaseDeploying:
-		r.Recorder.Event(deployment, corev1.EventTypeNormal, "deployment.deploying", "Pipeline completed successfully, ready to deploy")
-	case platformv1alpha1.DeploymentPhaseFailed:
-		r.Recorder.Event(deployment, corev1.EventTypeWarning, "deployment.failed", "Deployment pipeline failed")
-	case platformv1alpha1.DeploymentPhaseSucceeded:
-		r.Recorder.Event(deployment, corev1.EventTypeNormal, "deployment.succeeded", "Deployment completed successfully")
-	}
-
-	tracker.setAnnotation(lastPhaseKey, currentPhase)
-}
-
-// emitTaskRunEventsWithTracker checks TaskRun statuses and emits detailed events using annotation tracker
-func (r *DeploymentReconciler) emitTaskRunEventsWithTracker(ctx context.Context, deployment *platformv1alpha1.Deployment, pipelineRun *tektonv1.PipelineRun, tracker *annotationTracker) {
-	if r.Recorder == nil {
-		return
-	}
-
-	// Use annotation tracker to track which tasks we've already emitted events for
-
-	// Check each child TaskRun
-	for _, childRef := range pipelineRun.Status.ChildReferences {
-		if childRef.Kind != "TaskRun" {
-			continue
-		}
-
-		taskName := childRef.PipelineTaskName
-		startedKey := fmt.Sprintf("platform.kibaship.com/taskrun.%s.started", taskName)
-		completedKey := fmt.Sprintf("platform.kibaship.com/taskrun.%s.completed", taskName)
-		failedKey := fmt.Sprintf("platform.kibaship.com/taskrun.%s.failed", taskName)
-
-		// Get the actual TaskRun to check its status
-		taskRun := &tektonv1.TaskRun{}
-		err := r.Get(ctx, types.NamespacedName{
-			Namespace: pipelineRun.Namespace,
-			Name:      childRef.Name,
-		}, taskRun)
-
-		if err != nil {
-			continue
-		}
-
-		// Emit started event if not already emitted
-		if taskRun.Status.StartTime != nil && deployment.Annotations[startedKey] == "" {
-			eventKey := fmt.Sprintf("taskrun.%s.started", taskName)
-			message := fmt.Sprintf("Task '%s' started at %s", taskName, taskRun.Status.StartTime.Format(time.RFC3339))
-			r.Recorder.Event(deployment, corev1.EventTypeNormal, eventKey, message)
-			tracker.setAnnotation(startedKey, eventEmittedValue)
-		}
-
-		taskCondition := taskRun.Status.GetCondition("Succeeded")
-		if taskCondition == nil {
-			continue
-		}
-
-		// Emit completion or failure events
-		if taskCondition.Status == corev1.ConditionTrue && deployment.Annotations[completedKey] == "" {
-			eventKey := fmt.Sprintf("taskrun.%s.completed", taskName)
-			message := fmt.Sprintf("Task '%s' completed successfully", taskName)
-			if taskRun.Status.CompletionTime != nil && taskRun.Status.StartTime != nil {
-				duration := taskRun.Status.CompletionTime.Sub(taskRun.Status.StartTime.Time)
-				message = fmt.Sprintf("Task '%s' completed in %s", taskName, duration.Round(time.Second))
-			}
-			r.Recorder.Event(deployment, corev1.EventTypeNormal, eventKey, message)
-			tracker.setAnnotation(completedKey, eventEmittedValue)
-		} else if taskCondition.Status == corev1.ConditionFalse && deployment.Annotations[failedKey] == "" {
-			eventKey := fmt.Sprintf("taskrun.%s.failed", taskName)
-			message := fmt.Sprintf("Task '%s' failed: %s", taskName, taskCondition.Reason)
-			if taskCondition.Message != "" {
-				message = fmt.Sprintf("Task '%s' failed: %s - %s", taskName, taskCondition.Reason, taskCondition.Message)
-			}
-			r.Recorder.Event(deployment, corev1.EventTypeWarning, eventKey, message)
-			tracker.setAnnotation(failedKey, eventEmittedValue)
-		}
-	}
-
-	// Annotations will be updated by the caller
 }
 
 // truncateLabel truncates a label to 63 characters and adds a hash suffix if needed

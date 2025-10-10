@@ -548,6 +548,8 @@ func (s *ApplicationService) isApplicationTypeEnabled(project *models.Project, a
 		return project.EnabledApplicationTypes.DockerImage != nil && *project.EnabledApplicationTypes.DockerImage
 	case models.ApplicationTypeGitRepository:
 		return project.EnabledApplicationTypes.GitRepository != nil && *project.EnabledApplicationTypes.GitRepository
+	case models.ApplicationTypeImageFromRegistry:
+		return project.EnabledApplicationTypes.ImageFromRegistry != nil && *project.EnabledApplicationTypes.ImageFromRegistry
 	default:
 		return false
 	}
@@ -560,6 +562,8 @@ func (s *ApplicationService) setApplicationConfiguration(app *models.Application
 		app.GitRepository = req.GitRepository
 	case models.ApplicationTypeDockerImage:
 		app.DockerImage = req.DockerImage
+	case models.ApplicationTypeImageFromRegistry:
+		app.ImageFromRegistry = req.ImageFromRegistry
 	case models.ApplicationTypeMySQL:
 		app.MySQL = req.MySQL
 	case models.ApplicationTypeMySQLCluster:
@@ -706,6 +710,8 @@ func (s *ApplicationService) convertApplicationType(appType models.ApplicationTy
 		return v1alpha1.ApplicationTypeDockerImage
 	case models.ApplicationTypeGitRepository:
 		return v1alpha1.ApplicationTypeGitRepository
+	case models.ApplicationTypeImageFromRegistry:
+		return v1alpha1.ApplicationTypeImageFromRegistry
 	default:
 		return v1alpha1.ApplicationTypeDockerImage // Default fallback
 	}

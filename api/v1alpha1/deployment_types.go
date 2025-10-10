@@ -65,6 +65,21 @@ type GitRepositoryDeploymentConfig struct {
 	Branch string `json:"branch,omitempty"`
 }
 
+// ImageFromRegistryDeploymentConfig defines deployment-specific config for registry images
+type ImageFromRegistryDeploymentConfig struct {
+	// Tag specifies the specific image tag to deploy (overrides application default)
+	// +kubebuilder:validation:Required
+	Tag string `json:"tag"`
+
+	// Env defines environment variable overrides for this deployment
+	// +optional
+	Env []corev1.EnvVar `json:"env,omitempty"`
+
+	// Resources defines resource requirement overrides for this deployment
+	// +optional
+	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
+}
+
 // DeploymentSpec defines the desired state of Deployment.
 type DeploymentSpec struct {
 	// ApplicationRef references the Application this deployment belongs to
@@ -81,6 +96,11 @@ type DeploymentSpec struct {
 	// Required when ApplicationRef points to a GitRepository application
 	// +optional
 	GitRepository *GitRepositoryDeploymentConfig `json:"gitRepository,omitempty"`
+
+	// ImageFromRegistry contains configuration for ImageFromRegistry deployments
+	// Required when ApplicationRef points to an ImageFromRegistry application
+	// +optional
+	ImageFromRegistry *ImageFromRegistryDeploymentConfig `json:"imageFromRegistry,omitempty"`
 }
 
 // DeploymentStatus defines the observed state of Deployment.
@@ -228,11 +248,42 @@ func (r *Deployment) validateDeployment(ctx context.Context) error {
 	// This would require fetching the application, which isn't available in webhook validation
 	// The validation should be done in the controller reconcile loop
 
+	// Basic validation for ImageFromRegistry configuration
+	if r.Spec.ImageFromRegistry != nil {
+		if err := r.validateImageFromRegistryDeployment(); err != nil {
+			errors = append(errors, err.Error())
+		}
+	}
+
 	if len(errors) > 0 {
 		return fmt.Errorf("validation failed: %v", errors)
 	}
 
 	return nil
+}
+
+// validateImageFromRegistryDeployment validates ImageFromRegistry deployment configuration
+func (r *Deployment) validateImageFromRegistryDeployment() error {
+	config := r.Spec.ImageFromRegistry
+
+	// Validate tag is required
+	if config.Tag == "" {
+		return fmt.Errorf("tag is required for ImageFromRegistry deployments")
+	}
+
+	// Validate tag format
+	if !r.isValidImageTag(config.Tag) {
+		return fmt.Errorf("invalid image tag format: %s", config.Tag)
+	}
+
+	return nil
+}
+
+// isValidImageTag validates image tag format
+func (r *Deployment) isValidImageTag(tag string) bool {
+	// Basic tag validation - alphanumeric, dots, hyphens, underscores
+	pattern := regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
+	return pattern.MatchString(tag)
 }
 
 // isValidDeploymentName validates if the deployment name follows the required format

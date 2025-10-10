@@ -94,6 +94,11 @@ func (s *DeploymentService) CreateDeployment(ctx context.Context, req *models.De
 		req.GitRepository,
 	)
 
+	// Set ImageFromRegistry config if present
+	if req.ImageFromRegistry != nil {
+		deployment.ImageFromRegistry = req.ImageFromRegistry
+	}
+
 	// Create Kubernetes Deployment CRD
 	crd := s.convertToDeploymentCRD(deployment, application, req.Promote)
 
@@ -329,6 +334,29 @@ func (s *DeploymentService) convertToDeploymentCRD(deployment *models.Deployment
 		crd.Spec.GitRepository = &v1alpha1.GitRepositoryDeploymentConfig{
 			CommitSHA: deployment.GitRepository.CommitSHA,
 			Branch:    deployment.GitRepository.Branch,
+		}
+	}
+
+	// Add ImageFromRegistry config if present
+	if deployment.ImageFromRegistry != nil {
+		crd.Spec.ImageFromRegistry = &v1alpha1.ImageFromRegistryDeploymentConfig{
+			Tag: deployment.ImageFromRegistry.Tag,
+		}
+
+		// Convert environment variables
+		if len(deployment.ImageFromRegistry.Env) > 0 {
+			crd.Spec.ImageFromRegistry.Env = make([]corev1.EnvVar, len(deployment.ImageFromRegistry.Env))
+			for i, env := range deployment.ImageFromRegistry.Env {
+				crd.Spec.ImageFromRegistry.Env[i] = corev1.EnvVar{
+					Name:  env.Name,
+					Value: env.Value,
+				}
+			}
+		}
+
+		// Convert resource requirements
+		if deployment.ImageFromRegistry.Resources != nil {
+			crd.Spec.ImageFromRegistry.Resources = deployment.ImageFromRegistry.Resources.DeepCopy()
 		}
 	}
 

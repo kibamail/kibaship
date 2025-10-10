@@ -24,18 +24,26 @@ import (
 	"github.com/google/uuid"
 	"github.com/kibamail/kibaship-operator/api/v1alpha1"
 	"github.com/kibamail/kibaship-operator/pkg/validation"
+	corev1 "k8s.io/api/core/v1"
 )
+
+// EnvironmentVariable represents a Kubernetes environment variable
+type EnvironmentVariable = corev1.EnvVar
+
+// ResourceRequirements represents Kubernetes resource requirements
+type ResourceRequirements = corev1.ResourceRequirements
 
 // ApplicationType represents the type of application
 type ApplicationType string
 
 const (
-	ApplicationTypeMySQL           ApplicationType = "MySQL"
-	ApplicationTypeMySQLCluster    ApplicationType = "MySQLCluster"
-	ApplicationTypePostgres        ApplicationType = "Postgres"
-	ApplicationTypePostgresCluster ApplicationType = "PostgresCluster"
-	ApplicationTypeDockerImage     ApplicationType = "DockerImage"
-	ApplicationTypeGitRepository   ApplicationType = "GitRepository"
+	ApplicationTypeMySQL             ApplicationType = "MySQL"
+	ApplicationTypeMySQLCluster      ApplicationType = "MySQLCluster"
+	ApplicationTypePostgres          ApplicationType = "Postgres"
+	ApplicationTypePostgresCluster   ApplicationType = "PostgresCluster"
+	ApplicationTypeDockerImage       ApplicationType = "DockerImage"
+	ApplicationTypeGitRepository     ApplicationType = "GitRepository"
+	ApplicationTypeImageFromRegistry ApplicationType = "ImageFromRegistry"
 )
 
 // GitProvider represents the Git provider
@@ -97,6 +105,17 @@ type DockerImageConfig struct {
 	HealthCheck        *HealthCheckConfig `json:"healthCheck,omitempty"`
 }
 
+// ImageFromRegistryConfig defines configuration for ImageFromRegistry applications
+type ImageFromRegistryConfig struct {
+	Registry    string                `json:"registry" example:"dockerhub"`
+	Repository  string                `json:"repository" example:"nginx/nginx"`
+	DefaultTag  string                `json:"defaultTag,omitempty" example:"latest"`
+	Port        int32                 `json:"port,omitempty" example:"3000"`
+	Env         []EnvironmentVariable `json:"env,omitempty"`
+	Resources   *ResourceRequirements `json:"resources,omitempty"`
+	HealthCheck *HealthCheckConfig    `json:"healthCheck,omitempty"`
+}
+
 // MySQLConfig defines configuration for MySQL applications
 type MySQLConfig struct {
 	Version   string  `json:"version,omitempty" example:"8.0"`
@@ -129,26 +148,28 @@ type PostgresClusterConfig struct {
 
 // ApplicationCreateRequest represents a request to create an application
 type ApplicationCreateRequest struct {
-	Name            string                 `json:"name" example:"my-web-app"`
-	EnvironmentUUID string                 `json:"environmentUuid" example:"123e4567-e89b-12d3-a456-426614174000"`
-	Type            ApplicationType        `json:"type" example:"DockerImage"`
-	GitRepository   *GitRepositoryConfig   `json:"gitRepository,omitempty"`
-	DockerImage     *DockerImageConfig     `json:"dockerImage,omitempty"`
-	MySQL           *MySQLConfig           `json:"mysql,omitempty"`
-	MySQLCluster    *MySQLClusterConfig    `json:"mysqlCluster,omitempty"`
-	Postgres        *PostgresConfig        `json:"postgres,omitempty"`
-	PostgresCluster *PostgresClusterConfig `json:"postgresCluster,omitempty"`
+	Name              string                   `json:"name" example:"my-web-app"`
+	EnvironmentUUID   string                   `json:"environmentUuid" example:"123e4567-e89b-12d3-a456-426614174000"`
+	Type              ApplicationType          `json:"type" example:"DockerImage"`
+	GitRepository     *GitRepositoryConfig     `json:"gitRepository,omitempty"`
+	DockerImage       *DockerImageConfig       `json:"dockerImage,omitempty"`
+	ImageFromRegistry *ImageFromRegistryConfig `json:"imageFromRegistry,omitempty"`
+	MySQL             *MySQLConfig             `json:"mysql,omitempty"`
+	MySQLCluster      *MySQLClusterConfig      `json:"mysqlCluster,omitempty"`
+	Postgres          *PostgresConfig          `json:"postgres,omitempty"`
+	PostgresCluster   *PostgresClusterConfig   `json:"postgresCluster,omitempty"`
 }
 
 // ApplicationUpdateRequest represents a request to update an application
 type ApplicationUpdateRequest struct {
-	Name            *string                `json:"name,omitempty" example:"updated-web-app"`
-	GitRepository   *GitRepositoryConfig   `json:"gitRepository,omitempty"`
-	DockerImage     *DockerImageConfig     `json:"dockerImage,omitempty"`
-	MySQL           *MySQLConfig           `json:"mysql,omitempty"`
-	MySQLCluster    *MySQLClusterConfig    `json:"mysqlCluster,omitempty"`
-	Postgres        *PostgresConfig        `json:"postgres,omitempty"`
-	PostgresCluster *PostgresClusterConfig `json:"postgresCluster,omitempty"`
+	Name              *string                  `json:"name,omitempty" example:"updated-web-app"`
+	GitRepository     *GitRepositoryConfig     `json:"gitRepository,omitempty"`
+	DockerImage       *DockerImageConfig       `json:"dockerImage,omitempty"`
+	ImageFromRegistry *ImageFromRegistryConfig `json:"imageFromRegistry,omitempty"`
+	MySQL             *MySQLConfig             `json:"mysql,omitempty"`
+	MySQLCluster      *MySQLClusterConfig      `json:"mysqlCluster,omitempty"`
+	Postgres          *PostgresConfig          `json:"postgres,omitempty"`
+	PostgresCluster   *PostgresClusterConfig   `json:"postgresCluster,omitempty"`
 }
 
 // ApplicationEnvUpdateRequest represents a request to update environment variables
@@ -158,45 +179,47 @@ type ApplicationEnvUpdateRequest struct {
 
 // Application represents an application in the system
 type Application struct {
-	UUID             string                 `json:"uuid"`
-	Name             string                 `json:"name"`
-	Slug             string                 `json:"slug"`
-	ProjectUUID      string                 `json:"projectUuid"`
-	ProjectSlug      string                 `json:"projectSlug"`
-	EnvironmentUUID  string                 `json:"environmentUuid"`
-	Type             ApplicationType        `json:"type"`
-	GitRepository    *GitRepositoryConfig   `json:"gitRepository,omitempty"`
-	DockerImage      *DockerImageConfig     `json:"dockerImage,omitempty"`
-	MySQL            *MySQLConfig           `json:"mysql,omitempty"`
-	MySQLCluster     *MySQLClusterConfig    `json:"mysqlCluster,omitempty"`
-	Postgres         *PostgresConfig        `json:"postgres,omitempty"`
-	PostgresCluster  *PostgresClusterConfig `json:"postgresCluster,omitempty"`
-	Status           string                 `json:"status"`
-	Domains          []*ApplicationDomain   `json:"domains,omitempty"`
-	LatestDeployment *Deployment            `json:"latestDeployment,omitempty"`
-	CreatedAt        time.Time              `json:"createdAt"`
-	UpdatedAt        time.Time              `json:"updatedAt"`
+	UUID              string                   `json:"uuid"`
+	Name              string                   `json:"name"`
+	Slug              string                   `json:"slug"`
+	ProjectUUID       string                   `json:"projectUuid"`
+	ProjectSlug       string                   `json:"projectSlug"`
+	EnvironmentUUID   string                   `json:"environmentUuid"`
+	Type              ApplicationType          `json:"type"`
+	GitRepository     *GitRepositoryConfig     `json:"gitRepository,omitempty"`
+	DockerImage       *DockerImageConfig       `json:"dockerImage,omitempty"`
+	ImageFromRegistry *ImageFromRegistryConfig `json:"imageFromRegistry,omitempty"`
+	MySQL             *MySQLConfig             `json:"mysql,omitempty"`
+	MySQLCluster      *MySQLClusterConfig      `json:"mysqlCluster,omitempty"`
+	Postgres          *PostgresConfig          `json:"postgres,omitempty"`
+	PostgresCluster   *PostgresClusterConfig   `json:"postgresCluster,omitempty"`
+	Status            string                   `json:"status"`
+	Domains           []*ApplicationDomain     `json:"domains,omitempty"`
+	LatestDeployment  *Deployment              `json:"latestDeployment,omitempty"`
+	CreatedAt         time.Time                `json:"createdAt"`
+	UpdatedAt         time.Time                `json:"updatedAt"`
 }
 
 // ApplicationResponse represents an application response
 type ApplicationResponse struct {
-	UUID             string                      `json:"uuid" example:"123e4567-e89b-12d3-a456-426614174000"`
-	Name             string                      `json:"name" example:"my-web-app"`
-	Slug             string                      `json:"slug" example:"abc123de"`
-	ProjectUUID      string                      `json:"projectUuid" example:"123e4567-e89b-12d3-a456-426614174001"`
-	ProjectSlug      string                      `json:"projectSlug" example:"xyz789ab"`
-	Type             ApplicationType             `json:"type" example:"DockerImage"`
-	GitRepository    *GitRepositoryConfig        `json:"gitRepository,omitempty"`
-	DockerImage      *DockerImageConfig          `json:"dockerImage,omitempty"`
-	MySQL            *MySQLConfig                `json:"mysql,omitempty"`
-	MySQLCluster     *MySQLClusterConfig         `json:"mysqlCluster,omitempty"`
-	Postgres         *PostgresConfig             `json:"postgres,omitempty"`
-	PostgresCluster  *PostgresClusterConfig      `json:"postgresCluster,omitempty"`
-	Status           string                      `json:"status" example:"Running"`
-	Domains          []ApplicationDomainResponse `json:"domains,omitempty"`
-	LatestDeployment *DeploymentResponse         `json:"latestDeployment,omitempty"`
-	CreatedAt        time.Time                   `json:"createdAt" example:"2023-01-01T12:00:00Z"`
-	UpdatedAt        time.Time                   `json:"updatedAt" example:"2023-01-01T12:00:00Z"`
+	UUID              string                      `json:"uuid" example:"123e4567-e89b-12d3-a456-426614174000"`
+	Name              string                      `json:"name" example:"my-web-app"`
+	Slug              string                      `json:"slug" example:"abc123de"`
+	ProjectUUID       string                      `json:"projectUuid" example:"123e4567-e89b-12d3-a456-426614174001"`
+	ProjectSlug       string                      `json:"projectSlug" example:"xyz789ab"`
+	Type              ApplicationType             `json:"type" example:"DockerImage"`
+	GitRepository     *GitRepositoryConfig        `json:"gitRepository,omitempty"`
+	DockerImage       *DockerImageConfig          `json:"dockerImage,omitempty"`
+	ImageFromRegistry *ImageFromRegistryConfig    `json:"imageFromRegistry,omitempty"`
+	MySQL             *MySQLConfig                `json:"mysql,omitempty"`
+	MySQLCluster      *MySQLClusterConfig         `json:"mysqlCluster,omitempty"`
+	Postgres          *PostgresConfig             `json:"postgres,omitempty"`
+	PostgresCluster   *PostgresClusterConfig      `json:"postgresCluster,omitempty"`
+	Status            string                      `json:"status" example:"Running"`
+	Domains           []ApplicationDomainResponse `json:"domains,omitempty"`
+	LatestDeployment  *DeploymentResponse         `json:"latestDeployment,omitempty"`
+	CreatedAt         time.Time                   `json:"createdAt" example:"2023-01-01T12:00:00Z"`
+	UpdatedAt         time.Time                   `json:"updatedAt" example:"2023-01-01T12:00:00Z"`
 }
 
 // NewApplication creates a new Application with default values
@@ -251,7 +274,7 @@ func (req *ApplicationCreateRequest) Validate() *ValidationErrors {
 	if !isValidApplicationType(req.Type) {
 		errors = append(errors, ValidationError{
 			Field:   "type",
-			Message: "Application type must be one of: MySQL, MySQLCluster, Postgres, PostgresCluster, DockerImage, GitRepository",
+			Message: "Application type must be one of: MySQL, MySQLCluster, Postgres, PostgresCluster, DockerImage, GitRepository, ImageFromRegistry",
 		})
 	}
 
@@ -274,6 +297,15 @@ func (req *ApplicationCreateRequest) Validate() *ValidationErrors {
 			})
 		} else {
 			errors = append(errors, validateDockerImage(req.DockerImage)...)
+		}
+	case ApplicationTypeImageFromRegistry:
+		if req.ImageFromRegistry == nil {
+			errors = append(errors, ValidationError{
+				Field:   "imageFromRegistry",
+				Message: "ImageFromRegistry configuration is required for ImageFromRegistry applications",
+			})
+		} else {
+			errors = append(errors, validateImageFromRegistry(req.ImageFromRegistry)...)
 		}
 	case ApplicationTypeMySQL:
 		if req.MySQL != nil {
@@ -326,6 +358,9 @@ func (req *ApplicationUpdateRequest) ValidateUpdate() *ValidationErrors {
 	}
 	if req.DockerImage != nil {
 		errors = append(errors, validateDockerImage(req.DockerImage)...)
+	}
+	if req.ImageFromRegistry != nil {
+		errors = append(errors, validateImageFromRegistry(req.ImageFromRegistry)...)
 	}
 	if req.MySQL != nil {
 		errors = append(errors, validateMySQL(req.MySQL)...)
@@ -392,7 +427,8 @@ func isValidApplicationType(appType ApplicationType) bool {
 		appType == ApplicationTypePostgres ||
 		appType == ApplicationTypePostgresCluster ||
 		appType == ApplicationTypeDockerImage ||
-		appType == ApplicationTypeGitRepository
+		appType == ApplicationTypeGitRepository ||
+		appType == ApplicationTypeImageFromRegistry
 }
 
 func isValidGitProvider(provider GitProvider) bool {
@@ -466,6 +502,61 @@ func validateDockerImage(config *DockerImageConfig) []ValidationError {
 			Field:   "dockerImage.image",
 			Message: "Docker image is required",
 		})
+	}
+
+	return errors
+}
+
+func validateImageFromRegistry(config *ImageFromRegistryConfig) []ValidationError {
+	var errors []ValidationError
+
+	// Validate registry
+	if strings.TrimSpace(config.Registry) == "" {
+		errors = append(errors, ValidationError{
+			Field:   "imageFromRegistry.registry",
+			Message: "Registry is required",
+		})
+	} else if config.Registry != "dockerhub" && config.Registry != "ghcr" {
+		errors = append(errors, ValidationError{
+			Field:   "imageFromRegistry.registry",
+			Message: "Registry must be one of: dockerhub, ghcr",
+		})
+	}
+
+	// Validate repository
+	if strings.TrimSpace(config.Repository) == "" {
+		errors = append(errors, ValidationError{
+			Field:   "imageFromRegistry.repository",
+			Message: "Repository is required",
+		})
+	} else {
+		// Validate repository format (org/repo)
+		repoRegex := regexp.MustCompile(`^[a-z0-9]+(?:[._-][a-z0-9]+)*\/[a-z0-9]+(?:[._-][a-z0-9]+)*$`)
+		if !repoRegex.MatchString(config.Repository) {
+			errors = append(errors, ValidationError{
+				Field:   "imageFromRegistry.repository",
+				Message: "Repository must be in format 'org/repo' with lowercase alphanumeric characters, dots, hyphens, and underscores only",
+			})
+		}
+	}
+
+	// Validate port if specified
+	if config.Port != 0 && (config.Port < 1 || config.Port > 65535) {
+		errors = append(errors, ValidationError{
+			Field:   "imageFromRegistry.port",
+			Message: "Port must be between 1 and 65535",
+		})
+	}
+
+	// Validate default tag if specified
+	if config.DefaultTag != "" {
+		tagRegex := regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
+		if !tagRegex.MatchString(config.DefaultTag) {
+			errors = append(errors, ValidationError{
+				Field:   "imageFromRegistry.defaultTag",
+				Message: "DefaultTag contains invalid characters",
+			})
+		}
 	}
 
 	return errors

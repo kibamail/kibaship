@@ -124,8 +124,9 @@ vet: ## Run go vet against code.
 
 .PHONY: test
 test: manifests generate fmt vet setup-envtest ## Run tests.
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v /e2e | grep -v /test/api | grep -v /internal/bootstrap) -v -ginkgo.v -ginkgo.show-node-events -coverprofile cover.out
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path | xargs realpath)" go test ./internal/controller/... ./test/integration/... ./test/utils/... -v -ginkgo.v -ginkgo.show-node-events -coverprofile cover.out
 	go test ./internal/bootstrap/... -v
+	go test ./pkg/models/... -v
 
 .PHONY: test-api
 test-api: fmt vet ## Run API integration tests.

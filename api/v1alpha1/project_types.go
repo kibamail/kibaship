@@ -147,6 +147,9 @@ type ApplicationTypesConfig struct {
 
 	// Git repository application configuration
 	GitRepository ApplicationTypeConfig `json:"gitRepository,omitempty"`
+
+	// Image from registry application configuration
+	ImageFromRegistry ApplicationTypeConfig `json:"imageFromRegistry,omitempty"`
 }
 
 // ProjectStatus defines the observed state of Project.
