@@ -621,7 +621,7 @@ func IsTektonPipelinesCRDsInstalled() bool {
 
 // InstallValkeyOperator installs the full Valkey operator
 func InstallValkeyOperator() error {
-	url := "https://github.com/hyperspike/valkey-operator/releases/download/v0.0.59/install.yaml"
+	url := "https://github.com/hyperspike/valkey-operator/releases/download/v0.0.60/install.yaml"
 	cmd := exec.Command("kubectl", "apply", "-f", url)
 	if _, err := Run(cmd); err != nil {
 		return err
