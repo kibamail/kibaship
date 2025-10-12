@@ -580,6 +580,15 @@ func (r *DeploymentProgressController) ensureKubernetesDeployment(
 									Protocol:      corev1.ProtocolTCP,
 								},
 							},
+							EnvFrom: []corev1.EnvFromSource{
+								{
+									SecretRef: &corev1.SecretEnvSource{
+										LocalObjectReference: corev1.LocalObjectReference{
+											Name: fmt.Sprintf("deployment-%s", deployment.GetUUID()),
+										},
+									},
+								},
+							},
 							Resources: resourceRequirements,
 							VolumeMounts: []corev1.VolumeMount{
 								{
