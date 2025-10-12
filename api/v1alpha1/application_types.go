@@ -289,6 +289,10 @@ type MySQLConfig struct {
 	// +optional
 	SecretRef *corev1.LocalObjectReference `json:"secretRef,omitempty"`
 
+	// Slug is an auto-generated 18-character identifier for MySQL resources
+	// +optional
+	Slug string `json:"slug,omitempty"`
+
 	// Env is a reference to a secret containing environment variables for this application (optional)
 	// +optional
 	Env *corev1.LocalObjectReference `json:"env,omitempty"`
@@ -312,6 +316,10 @@ type MySQLClusterConfig struct {
 	// SecretRef references the secret containing MySQL credentials
 	// +optional
 	SecretRef *corev1.LocalObjectReference `json:"secretRef,omitempty"`
+
+	// Slug is an auto-generated 18-character identifier for MySQL resources
+	// +optional
+	Slug string `json:"slug,omitempty"`
 
 	// Env is a reference to a secret containing environment variables for this application (optional)
 	// +optional

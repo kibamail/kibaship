@@ -155,6 +155,27 @@ func runCreate(cmd *cobra.Command, args []string) {
 				styles.CommandStyle.Render("Region:"),
 				styles.DescriptionStyle.Render(config.GCloud.Region))
 		}
+	case "kind":
+		if config.Kind != nil {
+			fmt.Printf("\n%s %s\n",
+				styles.HelpStyle.Render("🐳"),
+				styles.HelpStyle.Render("Kind Configuration:"))
+			fmt.Printf("   %s %s\n",
+				styles.CommandStyle.Render("Nodes:"),
+				styles.DescriptionStyle.Render(config.Kind.Nodes))
+			fmt.Printf("   %s %s\n",
+				styles.CommandStyle.Render("Type:"),
+				styles.DescriptionStyle.Render("Local Docker containers"))
+			fmt.Printf("   %s %s\n",
+				styles.CommandStyle.Render("Network:"),
+				styles.DescriptionStyle.Render("kind"))
+			fmt.Printf("   %s %s\n",
+				styles.CommandStyle.Render("CNI:"),
+				styles.DescriptionStyle.Render("Disabled (ready for Cilium)"))
+			fmt.Printf("   %s %s\n",
+				styles.CommandStyle.Render("Kube-proxy:"),
+				styles.DescriptionStyle.Render("Disabled"))
+		}
 	}
 
 	// Build Terraform files

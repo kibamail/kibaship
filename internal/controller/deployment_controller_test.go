@@ -41,8 +41,8 @@ import (
 
 const (
 	expectedPipelineName     = "pipeline-deployment-uuid-123"
-	expectedMySQLSecretName  = "mysql-secret-app-uuid-mysql-mysqlapp"
-	expectedMySQLClusterName = "mysql-0f240b15edba7750862e14"
+	expectedMySQLSecretName  = "m-0f240b15edba7750862e14"
+	expectedMySQLClusterName = "m-0f240b15edba7750862e14"
 )
 
 var _ = Describe("Deployment Controller", func() {
@@ -989,6 +989,7 @@ var _ = Describe("Deployment Controller", func() {
 						Type:           platformv1alpha1.ApplicationTypeMySQL,
 						MySQL: &platformv1alpha1.MySQLConfig{
 							Version: "8.0.28",
+							Slug:    "0f240b15edba7750862e14",
 						},
 					},
 				}
@@ -1063,7 +1064,6 @@ var _ = Describe("Deployment Controller", func() {
 				Expect(err).NotTo(HaveOccurred())
 
 				Expect(spec["secretName"]).To(Equal(expectedSecretName))
-				Expect(spec["tlsUseSelfSigned"]).To(BeTrue())
 				Expect(spec["instances"]).To(Equal(int64(1)))
 				Expect(spec["version"]).To(Equal("8.0.28"))
 
@@ -1131,7 +1131,7 @@ var _ = Describe("Deployment Controller", func() {
 					Kind:    "InnoDBCluster",
 				})
 				// Cluster name uses application UUID (shared across deployments)
-				expectedClusterName := "mysql-0f240b15edba7750862e14"
+				expectedClusterName := "m-0f240b15edba7750862e14"
 				clusterKey := types.NamespacedName{Name: expectedClusterName, Namespace: testNamespace.Name}
 				Eventually(func() error {
 					return k8sClient.Get(ctx, clusterKey, cluster)
@@ -1201,7 +1201,9 @@ var _ = Describe("Deployment Controller", func() {
 					Spec: platformv1alpha1.ApplicationSpec{
 						EnvironmentRef: corev1.LocalObjectReference{Name: testEnvironment.Name},
 						Type:           platformv1alpha1.ApplicationTypeMySQL,
-						MySQL:          &platformv1alpha1.MySQLConfig{}, // No version specified
+						MySQL: &platformv1alpha1.MySQLConfig{
+							Slug: "bf0911292d1548e45b1d70",
+						}, // No version specified
 					},
 				}
 				Expect(k8sClient.Create(ctx, appWithoutVersion)).To(Succeed())
@@ -1237,8 +1239,8 @@ var _ = Describe("Deployment Controller", func() {
 					Version: "v2",
 					Kind:    "InnoDBCluster",
 				})
-				// Cluster name uses application UUID
-				expectedClusterName := "mysql-bf0911292d1548e45b1d70"
+				// Cluster name uses application UUID with m- prefix for single MySQL instances
+				expectedClusterName := "m-bf0911292d1548e45b1d70"
 				clusterKey := types.NamespacedName{Name: expectedClusterName, Namespace: testNamespace.Name}
 				Eventually(func() error {
 					return k8sClient.Get(ctx, clusterKey, cluster)
@@ -1267,7 +1269,9 @@ var _ = Describe("Deployment Controller", func() {
 					Spec: platformv1alpha1.ApplicationSpec{
 						EnvironmentRef: corev1.LocalObjectReference{Name: testEnvironment.Name},
 						Type:           platformv1alpha1.ApplicationTypeMySQL,
-						// MySQL config is nil
+						MySQL: &platformv1alpha1.MySQLConfig{
+							Slug: "a1e06b7371a88430daef27",
+						},
 					},
 				}
 				Expect(k8sClient.Create(ctx, appWithoutConfig)).To(Succeed())
@@ -1298,7 +1302,7 @@ var _ = Describe("Deployment Controller", func() {
 
 				// Verify resources were still created successfully
 				secret := &corev1.Secret{}
-				expectedSecretName := "mysql-secret-app-uuid-mysql-no-config"
+				expectedSecretName := "m-a1e06b7371a88430daef27"
 				secretKey := types.NamespacedName{Name: expectedSecretName, Namespace: testNamespace.Name}
 				Eventually(func() error {
 					return k8sClient.Get(ctx, secretKey, secret)
@@ -1311,7 +1315,7 @@ var _ = Describe("Deployment Controller", func() {
 					Kind:    "InnoDBCluster",
 				})
 				// Cluster name uses application UUID
-				expectedClusterName := "mysql-a1e06b7371a88430daef27"
+				expectedClusterName := "m-a1e06b7371a88430daef27"
 				clusterKey := types.NamespacedName{Name: expectedClusterName, Namespace: testNamespace.Name}
 				Eventually(func() error {
 					return k8sClient.Get(ctx, clusterKey, cluster)
@@ -1406,10 +1410,18 @@ var _ = Describe("Deployment Controller", func() {
 						},
 					},
 				}
-				secretName, clusterName := generateMySQLResourceNames(testDeployment, "testproject", "myapp")
+				testApp := &platformv1alpha1.Application{
+					Spec: platformv1alpha1.ApplicationSpec{
+						Type: platformv1alpha1.ApplicationTypeMySQL,
+						MySQL: &platformv1alpha1.MySQLConfig{
+							Slug: "testslug123456789a",
+						},
+					},
+				}
+				secretName, clusterName := generateMySQLResourceNames(testDeployment, testApp, "testproject", "myapp")
 
-				Expect(secretName).To(Equal("mysql-secret-app-uuid-testdeploy"))
-				Expect(clusterName).To(Equal("m-app-uuid-testdeploy"))
+				Expect(secretName).To(Equal("m-testslug123456789a"))
+				Expect(clusterName).To(Equal("m-testslug123456789a"))
 			})
 		})
 

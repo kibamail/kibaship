@@ -244,7 +244,6 @@ spec:
 				}
 				spec := string(output)
 				return strings.Contains(spec, "\"instances\":1") &&
-					strings.Contains(spec, "\"tlsUseSelfSigned\":true") &&
 					strings.Contains(spec, fmt.Sprintf("\"secretName\":\"%s\"", mysqlSecretName))
 			}, "30s", "2s").Should(BeTrue(), "InnoDBCluster should have correct single-instance configuration")
 
@@ -444,7 +443,6 @@ spec:
 				}
 				spec := string(output)
 				return strings.Contains(spec, "\"instances\":3") &&
-					strings.Contains(spec, "\"tlsUseSelfSigned\":true") &&
 					strings.Contains(spec, fmt.Sprintf("\"secretName\":\"%s\"", mysqlClusterSecretName))
 			}, "30s", "2s").Should(BeTrue(), "MySQLCluster InnoDBCluster should have correct cluster configuration with 3 instances")
 

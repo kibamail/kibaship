@@ -29,3 +29,4 @@ apiserver
 ___cert-manager-webhook-vercel/
 kubebuilder
 .kibaship
+configuration.yaml

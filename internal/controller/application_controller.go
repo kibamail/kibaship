@@ -173,6 +173,22 @@ func (r *ApplicationReconciler) handleApplicationReconcile(ctx context.Context, 
 
 	log.Info("Reconciling Application")
 
+	// Ensure MySQL slug is generated for MySQL/MySQLCluster applications
+	slugUpdated, err := r.ensureMySQLSlug(ctx, app)
+	if err != nil {
+		log.Error(err, "Failed to ensure MySQL slug")
+		return ctrl.Result{}, err
+	}
+	if slugUpdated {
+		// Update the Application spec with the slug
+		if err := r.Update(ctx, app); err != nil {
+			log.Error(err, "Failed to update Application with MySQL slug")
+			return ctrl.Result{}, err
+		}
+		log.Info("Updated Application with MySQL slug")
+		return ctrl.Result{Requeue: true}, nil
+	}
+
 	// Ensure environment variables secret exists for all applications
 	secretRefUpdated, err := r.ensureApplicationEnvSecret(ctx, app)
 	if err != nil {
@@ -500,7 +516,7 @@ func (r *ApplicationReconciler) handleApplicationDomains(ctx context.Context, ap
 
 	// Create default domain if it doesn't exist
 	if defaultDomain == nil {
-		log.Info("Creating default ApplicationDomain for GitRepository application")
+		log.Info("Creating default ApplicationDomain for application", "type", app.Spec.Type)
 		return r.createDefaultDomain(ctx, app)
 	}
 
@@ -618,6 +634,48 @@ func (r *ApplicationReconciler) deleteAssociatedDomains(ctx context.Context, app
 	}
 
 	return nil
+}
+
+// ensureMySQLSlug ensures that MySQL and MySQLCluster applications have a slug generated
+func (r *ApplicationReconciler) ensureMySQLSlug(ctx context.Context, app *platformv1alpha1.Application) (bool, error) {
+	// Only generate slug for MySQL and MySQLCluster applications
+	if app.Spec.Type != platformv1alpha1.ApplicationTypeMySQL && app.Spec.Type != platformv1alpha1.ApplicationTypeMySQLCluster {
+		return false, nil
+	}
+
+	var currentSlug string
+	var needsUpdate bool
+
+	switch app.Spec.Type {
+	case platformv1alpha1.ApplicationTypeMySQL:
+		if app.Spec.MySQL == nil {
+			app.Spec.MySQL = &platformv1alpha1.MySQLConfig{}
+		}
+		currentSlug = app.Spec.MySQL.Slug
+		if currentSlug == "" {
+			slug, err := generateMySQLSlug()
+			if err != nil {
+				return false, fmt.Errorf("failed to generate MySQL slug: %w", err)
+			}
+			app.Spec.MySQL.Slug = slug
+			needsUpdate = true
+		}
+	case platformv1alpha1.ApplicationTypeMySQLCluster:
+		if app.Spec.MySQLCluster == nil {
+			app.Spec.MySQLCluster = &platformv1alpha1.MySQLClusterConfig{}
+		}
+		currentSlug = app.Spec.MySQLCluster.Slug
+		if currentSlug == "" {
+			slug, err := generateMySQLSlug()
+			if err != nil {
+				return false, fmt.Errorf("failed to generate MySQL cluster slug: %w", err)
+			}
+			app.Spec.MySQLCluster.Slug = slug
+			needsUpdate = true
+		}
+	}
+
+	return needsUpdate, nil
 }
 
 // emitApplicationPhaseChange sends a webhook if Notifier is configured and the phase actually changed.

@@ -678,6 +678,10 @@ spec:
                         type: string
                     type: object
                     x-kubernetes-map-type: atomic
+                  slug:
+                    description: Slug is an auto-generated 18-character identifier
+                      for MySQL resources
+                    type: string
                   version:
                     description: Version is the MySQL version to deploy
                     type: string
@@ -726,6 +730,10 @@ spec:
                         type: string
                     type: object
                     x-kubernetes-map-type: atomic
+                  slug:
+                    description: Slug is an auto-generated 18-character identifier
+                      for MySQL resources
+                    type: string
                   version:
                     description: Version is the MySQL version to deploy
                     type: string

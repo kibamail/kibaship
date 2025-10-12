@@ -18,15 +18,22 @@ import (
 func runTerraformInit(config *CreateConfig) error {
 	provisionDir := filepath.Join(".kibaship", config.Name, "provision")
 
-	// Prepare backend configuration arguments
-	backendArgs := []string{
-		"init",
-		fmt.Sprintf("-backend-config=bucket=%s", config.TerraformState.S3Bucket),
-		fmt.Sprintf("-backend-config=key=clusters/%s/provision.terraform.tfstate", config.Name),
-		fmt.Sprintf("-backend-config=region=%s", config.TerraformState.S3Region),
-		fmt.Sprintf("-backend-config=access_key=%s", config.TerraformState.S3AccessKey),
-		fmt.Sprintf("-backend-config=secret_key=%s", config.TerraformState.S3AccessSecret),
-		"-backend-config=encrypt=true",
+	// Prepare backend configuration arguments based on provider
+	var backendArgs []string
+	if config.Provider == "kind" {
+		// Kind clusters use local backend - no S3 configuration needed
+		backendArgs = []string{"init"}
+	} else {
+		// Cloud providers use S3 backend
+		backendArgs = []string{
+			"init",
+			fmt.Sprintf("-backend-config=bucket=%s", config.TerraformState.S3Bucket),
+			fmt.Sprintf("-backend-config=key=clusters/%s/provision.terraform.tfstate", config.Name),
+			fmt.Sprintf("-backend-config=region=%s", config.TerraformState.S3Region),
+			fmt.Sprintf("-backend-config=access_key=%s", config.TerraformState.S3AccessKey),
+			fmt.Sprintf("-backend-config=secret_key=%s", config.TerraformState.S3AccessSecret),
+			"-backend-config=encrypt=true",
+		}
 	}
 
 	// Create terraform command
@@ -188,11 +195,13 @@ func runTerraformApply(config *CreateConfig) error {
 	env = append(env, fmt.Sprintf("TF_VAR_cluster_email=%s", config.Email))
 	env = append(env, fmt.Sprintf("TF_VAR_paas_features=%s", config.PaaSFeatures))
 
-	// Add Terraform state configuration variables
-	env = append(env, fmt.Sprintf("TF_VAR_terraform_state_bucket=%s", config.TerraformState.S3Bucket))
-	env = append(env, fmt.Sprintf("TF_VAR_terraform_state_region=%s", config.TerraformState.S3Region))
-	env = append(env, fmt.Sprintf("TF_VAR_terraform_state_access_key=%s", config.TerraformState.S3AccessKey))
-	env = append(env, fmt.Sprintf("TF_VAR_terraform_state_secret_key=%s", config.TerraformState.S3AccessSecret))
+	// Add Terraform state configuration variables (only for cloud providers)
+	if config.Provider != "kind" {
+		env = append(env, fmt.Sprintf("TF_VAR_terraform_state_bucket=%s", config.TerraformState.S3Bucket))
+		env = append(env, fmt.Sprintf("TF_VAR_terraform_state_region=%s", config.TerraformState.S3Region))
+		env = append(env, fmt.Sprintf("TF_VAR_terraform_state_access_key=%s", config.TerraformState.S3AccessKey))
+		env = append(env, fmt.Sprintf("TF_VAR_terraform_state_secret_key=%s", config.TerraformState.S3AccessSecret))
+	}
 
 	// Add provider-specific environment variables
 	switch config.Provider {
@@ -202,6 +211,10 @@ func runTerraformApply(config *CreateConfig) error {
 			env = append(env, fmt.Sprintf("TF_VAR_do_region=%s", config.DigitalOcean.Region))
 			env = append(env, fmt.Sprintf("TF_VAR_do_node_count=%s", config.DigitalOcean.Nodes))
 			env = append(env, fmt.Sprintf("TF_VAR_do_node_size=%s", config.DigitalOcean.NodesSize))
+		}
+	case "kind":
+		if config.Kind != nil {
+			env = append(env, fmt.Sprintf("TF_VAR_kind_node_count=%s", config.Kind.Nodes))
 		}
 	}
 

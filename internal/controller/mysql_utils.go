@@ -18,6 +18,7 @@ package controller
 
 import (
 	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"math/big"
 
@@ -36,6 +37,16 @@ const (
 	alphanumericChars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 )
 
+// generateMySQLSlug generates an 18-character hexadecimal slug for MySQL resources
+func generateMySQLSlug() (string, error) {
+	// Generate 9 random bytes (9 * 2 = 18 hex characters)
+	bytes := make([]byte, 9)
+	if _, err := rand.Read(bytes); err != nil {
+		return "", fmt.Errorf("failed to generate random bytes: %w", err)
+	}
+	return hex.EncodeToString(bytes), nil
+}
+
 // generateMySQLCredentialsSecret creates a secret with MySQL root credentials
 func generateMySQLCredentialsSecret(deployment *platformv1alpha1.Deployment, projectName, projectSlug, appSlug string, namespace string) (*corev1.Secret, error) {
 	password, err := generateSecurePassword()
@@ -43,7 +54,7 @@ func generateMySQLCredentialsSecret(deployment *platformv1alpha1.Deployment, pro
 		return nil, fmt.Errorf("failed to generate MySQL password: %w", err)
 	}
 
-	secretName := fmt.Sprintf("mysql-secret-%s", deployment.GetApplicationUUID())
+	secretName := fmt.Sprintf("m-%s", deployment.GetApplicationUUID())
 
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -74,11 +85,15 @@ func generateMySQLCredentialsSecret(deployment *platformv1alpha1.Deployment, pro
 
 // generateInnoDBCluster creates an InnoDBCluster resource for MySQL deployment
 func generateInnoDBCluster(deployment *platformv1alpha1.Deployment, app *platformv1alpha1.Application, projectName, projectSlug, appSlug string, secretName, namespace string) *unstructured.Unstructured {
-	// Use application UUID so multiple deployments share the same MySQL instance
-	appUUID := deployment.GetApplicationUUID()
-
-	// Use short prefix to stay under 40-character limit: m-{uuid} = 38 chars
-	clusterName := fmt.Sprintf("m-%s", appUUID)
+	// Use MySQL slug for consistent naming: m-{slug} = 20 chars (fits MySQL Operator's 28-char limit)
+	var clusterName string
+	if app.Spec.MySQL != nil && app.Spec.MySQL.Slug != "" {
+		clusterName = fmt.Sprintf("m-%s", app.Spec.MySQL.Slug)
+	} else {
+		// Fallback to UUID if slug not available (shouldn't happen with new logic)
+		appUUID := deployment.GetApplicationUUID()
+		clusterName = fmt.Sprintf("m-%s", appUUID[:20])
+	}
 
 	cluster := &unstructured.Unstructured{
 		Object: map[string]interface{}{
@@ -100,9 +115,8 @@ func generateInnoDBCluster(deployment *platformv1alpha1.Deployment, app *platfor
 				},
 			},
 			"spec": map[string]interface{}{
-				"secretName":       secretName,
-				"tlsUseSelfSigned": true,
-				"instances":        1,
+				"secretName": secretName,
+				"instances":  1,
 				"datadirVolumeClaimTemplate": map[string]interface{}{
 					"metadata": map[string]interface{}{
 						"labels": map[string]interface{}{
@@ -122,7 +136,7 @@ func generateInnoDBCluster(deployment *platformv1alpha1.Deployment, app *platfor
 					},
 				},
 				"router": map[string]interface{}{
-					"instances": 0,
+					"instances": 1,
 				},
 				"podSpec": map[string]interface{}{
 					"resources": map[string]interface{}{
@@ -166,15 +180,20 @@ func generateSecurePassword() (string, error) {
 }
 
 // generateMySQLResourceNames generates resource names following naming conventions
-func generateMySQLResourceNames(deployment *platformv1alpha1.Deployment, _, _ string) (secretName, clusterName string) {
-	// Use application UUID so multiple deployments share the same MySQL instance
-	appUUID := deployment.GetApplicationUUID()
+func generateMySQLResourceNames(deployment *platformv1alpha1.Deployment, app *platformv1alpha1.Application, _, _ string) (secretName, clusterName string) {
+	// Use MySQL slug for consistent naming
+	var slug string
+	if app.Spec.MySQL != nil && app.Spec.MySQL.Slug != "" {
+		slug = app.Spec.MySQL.Slug
+	} else {
+		// Fallback to truncated UUID if slug not available
+		appUUID := deployment.GetApplicationUUID()
+		slug = appUUID[:18]
+	}
 
-	// For secrets
-	secretName = fmt.Sprintf("mysql-secret-%s", appUUID)
-
-	// For InnoDBCluster - use short prefix to stay under 40-character limit: m-{uuid} = 38 chars
-	clusterName = fmt.Sprintf("m-%s", appUUID)
+	// For secrets and clusters, use same naming pattern: m-{slug}
+	secretName = fmt.Sprintf("m-%s", slug)
+	clusterName = fmt.Sprintf("m-%s", slug)
 	return
 }
 
@@ -208,11 +227,15 @@ func checkForExistingMySQLDeployments(deployments []platformv1alpha1.Deployment,
 
 // generateMySQLCluster creates an InnoDBCluster resource for MySQL cluster deployment
 func generateMySQLCluster(deployment *platformv1alpha1.Deployment, app *platformv1alpha1.Application, projectName, projectSlug, appSlug string, secretName, namespace string) *unstructured.Unstructured {
-	// Use application UUID so multiple deployments share the same MySQL cluster instance
-	appUUID := deployment.GetApplicationUUID()
-
-	// Use short prefix to stay under 40-character limit: mc-{uuid} = 39 chars
-	clusterName := fmt.Sprintf("mc-%s", appUUID)
+	// Use MySQL cluster slug for consistent naming: mc-{slug} = 21 chars (fits MySQL Operator's 28-char limit)
+	var clusterName string
+	if app.Spec.MySQLCluster != nil && app.Spec.MySQLCluster.Slug != "" {
+		clusterName = fmt.Sprintf("mc-%s", app.Spec.MySQLCluster.Slug)
+	} else {
+		// Fallback to UUID if slug not available (shouldn't happen with new logic)
+		appUUID := deployment.GetApplicationUUID()
+		clusterName = fmt.Sprintf("mc-%s", appUUID[:20])
+	}
 
 	// Default values for cluster
 	instances := int32(3)
@@ -247,9 +270,8 @@ func generateMySQLCluster(deployment *platformv1alpha1.Deployment, app *platform
 				},
 			},
 			"spec": map[string]interface{}{
-				"secretName":       secretName,
-				"tlsUseSelfSigned": true,
-				"instances":        instances,
+				"secretName": secretName,
+				"instances":  instances,
 				"datadirVolumeClaimTemplate": map[string]interface{}{
 					"metadata": map[string]interface{}{
 						"labels": map[string]interface{}{
@@ -269,7 +291,7 @@ func generateMySQLCluster(deployment *platformv1alpha1.Deployment, app *platform
 					},
 				},
 				"router": map[string]interface{}{
-					"instances": int(instances), // Router instances match cluster size
+					"instances": 1, // Single router instance for cluster
 				},
 				"podSpec": map[string]interface{}{
 					"resources": map[string]interface{}{
@@ -297,15 +319,20 @@ func generateMySQLCluster(deployment *platformv1alpha1.Deployment, app *platform
 }
 
 // generateMySQLClusterResourceNames generates resource names for cluster deployments
-func generateMySQLClusterResourceNames(deployment *platformv1alpha1.Deployment, _, _ string) (secretName, clusterName string) {
-	// Use application UUID so multiple deployments share the same MySQL cluster instance
-	appUUID := deployment.GetApplicationUUID()
+func generateMySQLClusterResourceNames(deployment *platformv1alpha1.Deployment, app *platformv1alpha1.Application, _, _ string) (secretName, clusterName string) {
+	// Use MySQL cluster slug for consistent naming
+	var slug string
+	if app.Spec.MySQLCluster != nil && app.Spec.MySQLCluster.Slug != "" {
+		slug = app.Spec.MySQLCluster.Slug
+	} else {
+		// Fallback to truncated UUID if slug not available
+		appUUID := deployment.GetApplicationUUID()
+		slug = appUUID[:18]
+	}
 
-	// For secrets
-	secretName = fmt.Sprintf("mysql-secret-%s", appUUID)
-
-	// For InnoDBCluster - use short prefix to stay under 40-character limit: mc-{uuid} = 39 chars
-	clusterName = fmt.Sprintf("mc-%s", appUUID)
+	// For secrets and clusters, use same naming pattern: mc-{slug}
+	secretName = fmt.Sprintf("mc-%s", slug)
+	clusterName = fmt.Sprintf("mc-%s", slug)
 	return
 }
 

@@ -741,7 +741,7 @@ func (r *DeploymentReconciler) handleMySQLDeployment(ctx context.Context, deploy
 	}
 
 	// Generate resource names
-	secretName, clusterName := generateMySQLResourceNames(deployment, projectSlug, appSlug)
+	secretName, clusterName := generateMySQLResourceNames(deployment, app, projectSlug, appSlug)
 
 	// Check if secret already exists
 	existingSecret := &corev1.Secret{}
@@ -840,7 +840,7 @@ func (r *DeploymentReconciler) handleMySQLClusterDeployment(ctx context.Context,
 	}
 
 	// Generate resource names
-	secretName, clusterName := generateMySQLClusterResourceNames(deployment, projectSlug, appSlug)
+	secretName, clusterName := generateMySQLClusterResourceNames(deployment, app, projectSlug, appSlug)
 
 	// Check if secret already exists
 	existingSecret := &corev1.Secret{}

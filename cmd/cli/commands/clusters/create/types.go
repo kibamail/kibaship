@@ -3,7 +3,7 @@ package create
 // CreateConfig represents the configuration for creating a cluster
 type CreateConfig struct {
 	// Core configuration
-	Provider      string `validate:"required,oneof=aws digital-ocean hetzner hetzner-robot linode gcloud"`
+	Provider      string `validate:"required,oneof=aws digital-ocean hetzner hetzner-robot linode gcloud kind"`
 	Configuration string `validate:"omitempty,file"`
 	Domain        string `validate:"required,domain_name"`
 	Name          string `validate:"-"` // Derived from Domain by replacing dots with dashes
@@ -20,6 +20,7 @@ type CreateConfig struct {
 	HetznerRobot *HetznerRobotConfig `validate:"omitempty"`
 	Linode       *LinodeConfig       `validate:"omitempty"`
 	GCloud       *GCloudConfig       `validate:"omitempty"`
+	Kind         *KindConfig         `validate:"omitempty"`
 }
 
 // AWSConfig represents AWS-specific configuration
@@ -59,6 +60,11 @@ type GCloudConfig struct {
 	ServiceAccountKey string `validate:"required_with=GCloudConfig,file"`
 	ProjectID         string `validate:"required_with=GCloudConfig"`
 	Region            string `validate:"required_with=GCloudConfig"`
+}
+
+// KindConfig represents Kind (Kubernetes in Docker) specific configuration
+type KindConfig struct {
+	Nodes string `validate:"required_with=KindConfig,number"`
 }
 
 // TerraformStateConfig represents Terraform state storage configuration

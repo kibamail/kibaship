@@ -128,7 +128,7 @@ func GenerateFullDomainForApplicationType(subdomain string, appType platformv1al
 	var port int32
 
 	switch appType {
-	case platformv1alpha1.ApplicationTypeGitRepository, platformv1alpha1.ApplicationTypeDockerImage:
+	case platformv1alpha1.ApplicationTypeGitRepository, platformv1alpha1.ApplicationTypeDockerImage, platformv1alpha1.ApplicationTypeImageFromRegistry:
 		fullDomain = fmt.Sprintf("%s.apps.%s", subdomain, config.Domain)
 		port = 3000
 	case platformv1alpha1.ApplicationTypeValkey, platformv1alpha1.ApplicationTypeValkeyCluster:
