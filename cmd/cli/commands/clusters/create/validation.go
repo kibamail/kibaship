@@ -20,6 +20,7 @@ func init() {
 	validate.RegisterValidation("file", validateFile)
 	validate.RegisterValidation("domain_name", validateDomainName)
 	validate.RegisterValidation("paas_features", validatePaaSFeatures)
+	validate.RegisterValidation("kind_storage", validateKindStorage)
 }
 
 // validateFile checks if a file exists and is readable
@@ -128,6 +129,52 @@ func validatePaaSFeatures(fl validator.FieldLevel) bool {
 	}
 
 	return true
+}
+
+// validateKindStorage validates Kind cluster storage configuration
+func validateKindStorage(fl validator.FieldLevel) bool {
+	// Get the storage value
+	storageStr := fl.Field().String()
+	if storageStr == "" {
+		return false // Storage is required for Kind clusters
+	}
+
+	// Parse storage as integer
+	var storage int
+	if _, err := fmt.Sscanf(storageStr, "%d", &storage); err != nil {
+		return false // Must be a valid number
+	}
+
+	// Get the parent struct to access nodes
+	parent := fl.Parent()
+	if !parent.IsValid() {
+		return false
+	}
+
+	// Get nodes field
+	nodesField := parent.FieldByName("Nodes")
+	if !nodesField.IsValid() {
+		return false
+	}
+
+	nodesStr := nodesField.String()
+	var nodes int
+	if _, err := fmt.Sscanf(nodesStr, "%d", &nodes); err != nil {
+		return false // Nodes must be a valid number
+	}
+
+	// Apply storage validation logic:
+	// - Minimum 50 GB per node if 3+ nodes
+	// - Minimum 75 GB per node if 1-2 nodes
+	// - This ensures at least 75 GB total storage in cluster
+	var minStoragePerNode int
+	if nodes >= 3 {
+		minStoragePerNode = 50
+	} else {
+		minStoragePerNode = 75
+	}
+
+	return storage >= minStoragePerNode
 }
 
 // ValidateCreateCommand validates the core create command flags and builds the configuration

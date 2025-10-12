@@ -59,7 +59,8 @@ type YAMLConfig struct {
 			} `yaml:"gcloud"`
 
 			Kind struct {
-				Nodes string `yaml:"nodes"`
+				Nodes   string `yaml:"nodes"`
+				Storage string `yaml:"storage"`
 			} `yaml:"kind"`
 		} `yaml:"provider"`
 	} `yaml:"cluster"`
@@ -87,6 +88,11 @@ func LoadConfigFromYAML(filePath string) (*CreateConfig, error) {
 
 	// Set the configuration file path
 	config.Configuration = filePath
+
+	// Validate the configuration
+	if err := validate.Struct(config); err != nil {
+		return nil, fmt.Errorf("configuration validation failed: %w", err)
+	}
 
 	return config, nil
 }
@@ -258,11 +264,13 @@ func determineProviderFromYAML(yamlConfig *YAMLConfig) (string, interface{}, err
 		{
 			name: "kind",
 			hasData: func() bool {
-				return yamlConfig.Cluster.Provider.Kind.Nodes != ""
+				return yamlConfig.Cluster.Provider.Kind.Nodes != "" ||
+					yamlConfig.Cluster.Provider.Kind.Storage != ""
 			},
 			getConfig: func() interface{} {
 				return &KindConfig{
-					Nodes: yamlConfig.Cluster.Provider.Kind.Nodes,
+					Nodes:   yamlConfig.Cluster.Provider.Kind.Nodes,
+					Storage: yamlConfig.Cluster.Provider.Kind.Storage,
 				}
 			},
 		},

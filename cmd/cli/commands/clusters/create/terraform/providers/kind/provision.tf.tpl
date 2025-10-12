@@ -28,9 +28,26 @@ locals {
   has_valkey        = contains(local.paas_features_list, "valkey")
 }
 
+# Create Longhorn storage directories for Kind nodes
+resource "null_resource" "create_storage_dirs" {
+  provisioner "local-exec" {
+    command = <<-EOT
+      mkdir -p /tmp/kibaship-longhorn/${var.cluster_name}-control-plane
+      for i in $(seq 1 ${max(0, var.kind_node_count - 1)}); do
+        mkdir -p /tmp/kibaship-longhorn/${var.cluster_name}-worker-$i
+      done
+      echo "Created Longhorn storage directories for cluster: ${var.cluster_name}"
+      echo "Storage per node: ${var.kind_storage_per_node}GB"
+      echo "Total cluster storage: $((${var.kind_node_count} * ${var.kind_storage_per_node}))GB"
+    EOT
+  }
+}
+
 # Create the Kind cluster
 resource "kind_cluster" "cluster" {
   name = var.cluster_name
+
+  depends_on = [null_resource.create_storage_dirs]
   
   kind_config {
     kind        = "Cluster"
@@ -45,7 +62,13 @@ resource "kind_cluster" "cluster" {
     # Control plane node
     node {
       role = "control-plane"
-      
+
+      # Dedicated Longhorn storage for control plane
+      extra_mounts {
+        host_path      = "/tmp/kibaship-longhorn/${var.cluster_name}-control-plane"
+        container_path = "/var/lib/longhorn"
+      }
+
       # Port mappings for services (using 140xx prefix to avoid conflicts)
       extra_port_mappings {
         container_port = 30080
@@ -109,12 +132,35 @@ resource "kind_cluster" "cluster" {
       for_each = range(max(0, var.kind_node_count - 1))
       content {
         role = "worker"
+
+        # Dedicated Longhorn storage for each worker node
+        extra_mounts {
+          host_path      = "/tmp/kibaship-longhorn/${var.cluster_name}-worker-${node.key + 1}"
+          container_path = "/var/lib/longhorn"
+        }
       }
     }
   }
   
   # Wait for cluster to be ready
   wait_for_ready = true
+}
+
+# Cleanup storage directories when cluster is destroyed
+resource "null_resource" "cleanup_storage_dirs" {
+  depends_on = [kind_cluster.cluster]
+
+  triggers = {
+    cluster_name = var.cluster_name
+  }
+
+  provisioner "local-exec" {
+    when    = destroy
+    command = <<-EOT
+      rm -rf /tmp/kibaship-longhorn/${self.triggers.cluster_name}-*
+      echo "Cleaned up Longhorn storage directories for cluster: ${self.triggers.cluster_name}"
+    EOT
+  }
 }
 
 # Output important cluster information
@@ -164,6 +210,11 @@ output "kind_cluster_info" {
     cni_disabled = true
     kube_proxy_disabled = true
     cilium_ready = "Cluster is ready for Cilium installation"
+    storage_enabled = true
+    storage_per_node = "${var.kind_storage_per_node}GB"
+    storage_total = "${var.kind_node_count * var.kind_storage_per_node}GB"
+    storage_path = "/tmp/kibaship-longhorn/${var.cluster_name}-*"
+    storage_info = "Dedicated Longhorn storage volumes mounted for each node"
   }
 }
 

@@ -10,3 +10,4 @@ cluster:
   provider:
     kind:
       nodes: "3"
+      storage: "100"

@@ -24,6 +24,12 @@ variable "kind_node_count" {
   default     = 1
 }
 
+variable "kind_storage_per_node" {
+  description = "Storage size per node in GB"
+  type        = number
+  default     = 75
+}
+
 # Note: Kind clusters use local Terraform state - no S3 configuration needed
 
 # Derived variables for internal use

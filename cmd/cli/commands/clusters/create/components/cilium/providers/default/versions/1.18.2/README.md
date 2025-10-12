@@ -37,7 +37,6 @@ helm template cilium cilium/cilium \
   --set gatewayAPI.hostNetwork.enabled=true \
   --set-string 'gatewayAPI.hostNetwork.nodes.matchLabels.ingress\.kibaship\.com/ready=true' \
   --set gatewayAPI.enableAlpn=true \
-  --set gatewayAPI.enableProxyProtocol=true \
   --set gatewayAPI.enableAppProtocol=true \
   --set operator.replicas=2 \
   > manifest.yaml
@@ -53,7 +52,6 @@ helm template cilium cilium/cilium \
 | `gatewayAPI.hostNetwork.enabled` | `true` | Allows Gateway pods to use the host network, binding directly to node IPs |
 | `gatewayAPI.hostNetwork.nodes.matchLabels.ingress.kibaship.com/ready` | `"true"` | Only schedules Gateway pods on nodes with this label, giving control over which nodes handle ingress traffic |
 | `gatewayAPI.enableAlpn` | `true` | Enables Application-Layer Protocol Negotiation for protocol detection |
-| `gatewayAPI.enableProxyProtocol` | `true` | Supports PROXY protocol to preserve client IP addresses through load balancers |
 | `gatewayAPI.enableAppProtocol` | `true` | Enables application protocol detection for routing decisions |
 
 ### Operator Configuration

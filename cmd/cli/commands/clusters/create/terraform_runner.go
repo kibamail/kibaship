@@ -215,6 +215,7 @@ func runTerraformApply(config *CreateConfig) error {
 	case "kind":
 		if config.Kind != nil {
 			env = append(env, fmt.Sprintf("TF_VAR_kind_node_count=%s", config.Kind.Nodes))
+			env = append(env, fmt.Sprintf("TF_VAR_kind_storage_per_node=%s", config.Kind.Storage))
 		}
 	}
 

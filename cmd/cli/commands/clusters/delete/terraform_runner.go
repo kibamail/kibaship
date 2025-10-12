@@ -37,15 +37,22 @@ func buildTerraformFiles(config *create.CreateConfig) error {
 func runTerraformInit(config *create.CreateConfig) error {
 	provisionDir := filepath.Join(".kibaship", config.Name, "provision")
 
-	// Prepare backend configuration arguments
-	backendArgs := []string{
-		"init",
-		fmt.Sprintf("-backend-config=bucket=%s", config.TerraformState.S3Bucket),
-		fmt.Sprintf("-backend-config=key=clusters/%s/provision.terraform.tfstate", config.Name),
-		fmt.Sprintf("-backend-config=region=%s", config.TerraformState.S3Region),
-		fmt.Sprintf("-backend-config=access_key=%s", config.TerraformState.S3AccessKey),
-		fmt.Sprintf("-backend-config=secret_key=%s", config.TerraformState.S3AccessSecret),
-		"-backend-config=encrypt=true",
+	// Prepare backend configuration arguments based on provider
+	var backendArgs []string
+	if config.Provider == "kind" {
+		// Kind uses local backend - no additional configuration needed
+		backendArgs = []string{"init"}
+	} else {
+		// Other providers use S3 backend
+		backendArgs = []string{
+			"init",
+			fmt.Sprintf("-backend-config=bucket=%s", config.TerraformState.S3Bucket),
+			fmt.Sprintf("-backend-config=key=clusters/%s/provision.terraform.tfstate", config.Name),
+			fmt.Sprintf("-backend-config=region=%s", config.TerraformState.S3Region),
+			fmt.Sprintf("-backend-config=access_key=%s", config.TerraformState.S3AccessKey),
+			fmt.Sprintf("-backend-config=secret_key=%s", config.TerraformState.S3AccessSecret),
+			"-backend-config=encrypt=true",
+		}
 	}
 
 	// Create terraform command
@@ -114,6 +121,11 @@ func runTerraformDestroy(config *create.CreateConfig) error {
 
 	// Add provider-specific environment variables
 	switch config.Provider {
+	case "kind":
+		if config.Kind != nil {
+			env = append(env, fmt.Sprintf("TF_VAR_kind_node_count=%s", config.Kind.Nodes))
+			env = append(env, fmt.Sprintf("TF_VAR_kind_storage_per_node=%s", config.Kind.Storage))
+		}
 	case "digital-ocean":
 		if config.DigitalOcean != nil {
 			env = append(env, fmt.Sprintf("TF_VAR_do_token=%s", config.DigitalOcean.Token))

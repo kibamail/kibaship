@@ -175,6 +175,9 @@ func runCreate(cmd *cobra.Command, args []string) {
 			fmt.Printf("   %s %s\n",
 				styles.CommandStyle.Render("Kube-proxy:"),
 				styles.DescriptionStyle.Render("Disabled"))
+			fmt.Printf("   %s %s\n",
+				styles.CommandStyle.Render("Longhorn Storage:"),
+				styles.DescriptionStyle.Render(fmt.Sprintf("%s per node", config.Kind.Storage+"GB")))
 		}
 	}
 

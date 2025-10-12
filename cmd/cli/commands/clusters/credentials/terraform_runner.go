@@ -17,6 +17,10 @@ type TerraformOutput struct {
 	Kubeconfig struct {
 		Value string `json:"value"`
 	} `json:"kubeconfig"`
+	KindClusterInfo struct {
+		StoragePerNode string `json:"storage_per_node"`
+		StorageTotal   string `json:"storage_total"`
+	} `json:"kind_cluster_info"`
 }
 
 // extractCredentials extracts credentials from terraform output based on provider
@@ -53,6 +57,7 @@ func extractCredentials(config *create.CreateConfig) error {
 	case "kind":
 		if config.Kind != nil {
 			env = append(env, fmt.Sprintf("TF_VAR_kind_node_count=%s", config.Kind.Nodes))
+			env = append(env, fmt.Sprintf("TF_VAR_kind_storage_per_node=%s", config.Kind.Storage))
 		}
 	}
 
@@ -193,6 +198,21 @@ func extractKindCredentials(config *create.CreateConfig, output *TerraformOutput
 	fmt.Printf("   %s %s\n",
 		styles.CommandStyle.Render("Kube-proxy:"),
 		styles.DescriptionStyle.Render("Disabled"))
+	fmt.Printf("   %s %s\n",
+		styles.CommandStyle.Render("Longhorn Storage:"),
+		styles.DescriptionStyle.Render("Dedicated volumes per node"))
+
+	// Get storage information from Terraform outputs
+	if output.KindClusterInfo.StoragePerNode != "" {
+		fmt.Printf("   %s %s\n",
+			styles.CommandStyle.Render("Per Node:"),
+			styles.DescriptionStyle.Render(output.KindClusterInfo.StoragePerNode))
+	}
+	if output.KindClusterInfo.StorageTotal != "" {
+		fmt.Printf("   %s %s\n",
+			styles.CommandStyle.Render("Total:"),
+			styles.DescriptionStyle.Render(output.KindClusterInfo.StorageTotal))
+	}
 
 	return nil
 }
@@ -299,6 +319,19 @@ func showUsageInstructions(config *create.CreateConfig) {
 			styles.DescriptionStyle.Render("3. Test cluster connectivity:"))
 		fmt.Printf("      %s\n",
 			styles.TitleStyle.Render("kubectl get nodes"))
+		fmt.Printf("   %s\n",
+			styles.DescriptionStyle.Render("4. Verify storage setup:"))
+		fmt.Printf("      %s\n",
+			styles.TitleStyle.Render("kubectl get storageclass"))
+		fmt.Printf("\n%s %s\n",
+			styles.HelpStyle.Render("💾"),
+			styles.HelpStyle.Render("Longhorn Storage Information:"))
+		fmt.Printf("   %s\n",
+			styles.DescriptionStyle.Render("Each node has dedicated Longhorn storage mounted at:"))
+		fmt.Printf("   %s\n",
+			styles.TitleStyle.Render("/tmp/kibaship-longhorn/"+config.Name+"-*"))
+		fmt.Printf("   %s\n",
+			styles.DescriptionStyle.Render("This enables Longhorn distributed storage for persistent volumes."))
 		fmt.Printf("\n%s %s\n",
 			styles.HelpStyle.Render("💡"),
 			styles.HelpStyle.Render("Example Service Access:"))
