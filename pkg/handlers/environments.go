@@ -20,8 +20,8 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/kibamail/kibaship-operator/pkg/models"
-	"github.com/kibamail/kibaship-operator/pkg/services"
+	"github.com/kibamail/kibaship/pkg/models"
+	"github.com/kibamail/kibaship/pkg/services"
 )
 
 // EnvironmentHandler handles environment-related HTTP requests

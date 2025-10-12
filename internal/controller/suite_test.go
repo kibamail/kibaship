@@ -34,7 +34,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	platformv1alpha1 "github.com/kibamail/kibaship-operator/api/v1alpha1"
+	platformv1alpha1 "github.com/kibamail/kibaship/api/v1alpha1"
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	// +kubebuilder:scaffold:imports
 )

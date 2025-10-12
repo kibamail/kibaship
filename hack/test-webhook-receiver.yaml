@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: webhook-receiver
-  namespace: kibaship-operator
+  namespace: kibaship
   labels:
     app: webhook-receiver
 spec:
@@ -71,7 +71,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: webhook-receiver
-  namespace: kibaship-operator
+  namespace: kibaship
   labels:
     app: webhook-receiver
 spec:

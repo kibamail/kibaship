@@ -2,10 +2,10 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: kibaship-cert-manager-webhook
-  namespace: kibaship-operator
+  namespace: kibaship
   labels:
     app.kubernetes.io/name: kibaship-cert-manager-webhook
-    app.kubernetes.io/part-of: kibaship-operator
+    app.kubernetes.io/part-of: kibaship
 spec:
   replicas: 1
   selector:

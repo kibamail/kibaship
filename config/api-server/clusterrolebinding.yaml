@@ -8,9 +8,8 @@ metadata:
 subjects:
   - kind: ServiceAccount
     name: apiserver
-    namespace: kibaship-operator
+    namespace: kibaship
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: kibaship-apiserver-crd-access
-

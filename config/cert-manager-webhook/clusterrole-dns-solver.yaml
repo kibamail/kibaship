@@ -4,12 +4,11 @@ metadata:
   name: kibaship-certwebhook-domain-solver
   labels:
     app.kubernetes.io/name: kibaship-cert-manager-webhook
-    app.kubernetes.io/part-of: kibaship-operator
+    app.kubernetes.io/part-of: kibaship
 rules:
   - apiGroups:
       - dns.kibaship.com
     resources:
-      - '*'
+      - "*"
     verbs:
-      - '*'
-
+      - "*"

@@ -17,8 +17,8 @@ limitations under the License.
 package templates
 
 import (
-	"github.com/kibamail/kibaship-operator/api/v1alpha1"
-	"github.com/kibamail/kibaship-operator/pkg/models"
+	"github.com/kibamail/kibaship/api/v1alpha1"
+	"github.com/kibamail/kibaship/pkg/models"
 )
 
 // GetResourceProfileTemplate returns the CRD configuration for a given resource profile

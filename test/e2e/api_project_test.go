@@ -17,13 +17,13 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/kibamail/kibaship-operator/test/utils"
+	"github.com/kibamail/kibaship/test/utils"
 )
 
 var _ = Describe("API Server Project Creation", func() {
 	It("creates a project via REST and operator reconciles it", func() {
 		By("fetching API key from api-server secret")
-		cmd := exec.Command("kubectl", "get", "secret", "api-server-api-key", "-n", "kibaship-operator", "-o", "jsonpath={.data.api-key}")
+		cmd := exec.Command("kubectl", "get", "secret", "api-server-api-key", "-n", "kibaship", "-o", "jsonpath={.data.api-key}")
 		output, err := cmd.CombinedOutput()
 		Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("failed to get api key secret: %s", string(output)))
 		encodedKey := strings.TrimSpace(string(output))
@@ -32,7 +32,7 @@ var _ = Describe("API Server Project Creation", func() {
 		apiKey := strings.TrimSpace(string(decodedKeyBytes))
 
 		By("port-forwarding API service to localhost:18080")
-		pfCmd := exec.Command("kubectl", "-n", "kibaship-operator", "port-forward", "svc/apiserver", "18080:80")
+		pfCmd := exec.Command("kubectl", "-n", "kibaship", "port-forward", "svc/apiserver", "18080:80")
 		Expect(pfCmd.Start()).To(Succeed(), "failed to start port-forward")
 		defer func() { _ = pfCmd.Process.Kill() }()
 
@@ -124,7 +124,7 @@ var _ = Describe("API Server Project Creation", func() {
 			}
 			return ns.Labels
 		}, "30s", "2s").Should(And(
-			HaveKeyWithValue("app.kubernetes.io/managed-by", "kibaship-operator"),
+			HaveKeyWithValue("app.kubernetes.io/managed-by", "kibaship"),
 			HaveKeyWithValue("platform.kibaship.com/project-name", projectCRName),
 			HaveKeyWithValue("platform.kibaship.com/workspace-uuid", workspaceUUID),
 		), "Namespace should have correct labels")

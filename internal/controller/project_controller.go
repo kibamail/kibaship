@@ -32,9 +32,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	platformv1alpha1 "github.com/kibamail/kibaship-operator/api/v1alpha1"
-	"github.com/kibamail/kibaship-operator/pkg/validation"
-	"github.com/kibamail/kibaship-operator/pkg/webhooks"
+	platformv1alpha1 "github.com/kibamail/kibaship/api/v1alpha1"
+	"github.com/kibamail/kibaship/pkg/validation"
+	"github.com/kibamail/kibaship/pkg/webhooks"
 )
 
 const (
@@ -280,7 +280,7 @@ func (r *ProjectReconciler) ensureRegistryCredentials(ctx context.Context, names
 			Name:      secretName,
 			Namespace: namespaceName,
 			Labels: map[string]string{
-				"app.kubernetes.io/managed-by": "kibaship-operator",
+				"app.kubernetes.io/managed-by": "kibaship",
 				"app.kubernetes.io/component":  "registry-credentials",
 			},
 		},
@@ -359,7 +359,7 @@ func (r *ProjectReconciler) ensureRegistryCACertificate(ctx context.Context, nam
 			Name:      caCertSecretName,
 			Namespace: namespaceName,
 			Labels: map[string]string{
-				"app.kubernetes.io/managed-by": "kibaship-operator",
+				"app.kubernetes.io/managed-by": "kibaship",
 				"app.kubernetes.io/component":  "registry-ca",
 			},
 		},
@@ -439,7 +439,7 @@ func (r *ProjectReconciler) ensureRegistryDockerConfig(ctx context.Context, name
 				Name:      dockerConfigSecretName,
 				Namespace: namespaceName,
 				Labels: map[string]string{
-					"app.kubernetes.io/managed-by": "kibaship-operator",
+					"app.kubernetes.io/managed-by": "kibaship",
 					"app.kubernetes.io/component":  "registry-docker-config",
 				},
 			},
@@ -465,7 +465,7 @@ func (r *ProjectReconciler) ensureRegistryDockerConfig(ctx context.Context, name
 				Name:      imagePullSecretName,
 				Namespace: namespaceName,
 				Labels: map[string]string{
-					"app.kubernetes.io/managed-by": "kibaship-operator",
+					"app.kubernetes.io/managed-by": "kibaship",
 					"app.kubernetes.io/component":  "registry-image-pull-secret",
 				},
 			},

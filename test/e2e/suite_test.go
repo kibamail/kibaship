@@ -12,7 +12,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 
-	"github.com/kibamail/kibaship-operator/test/utils"
+	"github.com/kibamail/kibaship/test/utils"
 )
 
 const (
@@ -38,12 +38,12 @@ const (
 )
 
 var (
-	projectImage             = "kibaship.com/kibaship-operator:v0.0.1"
-	projectImageAPIServer    = "kibaship.com/kibaship-operator-apiserver:v0.0.1"
-	projectImageCertWebhook  = "kibaship.com/kibaship-operator-cert-manager-webhook:v0.0.1"
+	projectImage             = "kibaship.com/kibaship:v0.0.1"
+	projectImageAPIServer    = "kibaship.com/kibaship-apiserver:v0.0.1"
+	projectImageCertWebhook  = "kibaship.com/kibaship-cert-manager-webhook:v0.0.1"
 	projectImageRailpackCLI  = "kibaship.com/kibaship-railpack-cli:v0.0.1"
 	projectImageRailpackBld  = "kibaship.com/kibaship-railpack-build:v0.0.1"
-	projectImageRegistryAuth = "kibaship.com/kibaship-operator-registry-auth:v0.0.1"
+	projectImageRegistryAuth = "kibaship.com/kibaship-registry-auth:v0.0.1"
 )
 
 // getKubernetesClient creates a Kubernetes client using the current context
@@ -91,7 +91,7 @@ func clusterExists(clusterName string) bool {
 
 func TestE2E(t *testing.T) {
 	RegisterFailHandler(Fail)
-	_, _ = fmt.Fprintf(GinkgoWriter, "Starting kibaship-operator integration test suite\n")
+	_, _ = fmt.Fprintf(GinkgoWriter, "Starting kibaship integration test suite\n")
 	RunSpecs(t, "e2e suite")
 }
 
@@ -102,7 +102,7 @@ var _ = BeforeSuite(func() {
 	// Check if cluster exists, create if not
 	clusterName := os.Getenv("KIND_CLUSTER")
 	if clusterName == "" {
-		clusterName = "kibaship-operator"
+		clusterName = "kibaship"
 	}
 
 	if !clusterExists(clusterName) {
@@ -195,7 +195,7 @@ var _ = BeforeSuite(func() {
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to load the registry-auth image into Kind")
 
 	// Check if operator and registry are already deployed
-	operatorDeployed := namespaceExists("kibaship-operator")
+	operatorDeployed := namespaceExists("kibaship")
 	registryDeployed := deploymentExists("registry", "registry") && deploymentExists("registry", "registry-auth")
 
 	if !operatorDeployed {
@@ -203,23 +203,23 @@ var _ = BeforeSuite(func() {
 		Expect(utils.DeployWebhookReceiver()).To(Succeed(), "Failed to deploy test webhook receiver")
 
 		By("setting WEBHOOK_TARGET_URL for operator deploy")
-		target := "http://webhook-receiver.kibaship-operator.svc.cluster.local:8080/webhook"
+		target := "http://webhook-receiver.kibaship.svc.cluster.local:8080/webhook"
 		err = os.Setenv("WEBHOOK_TARGET_URL", target)
 		Expect(err).NotTo(HaveOccurred(), "failed to set WEBHOOK_TARGET_URL")
 
-		By("provisioning kibaship-operator")
-		Expect(utils.ProvisionKibashipOperator()).To(Succeed(), "Failed to provision kibaship-operator")
+		By("provisioning kibaship")
+		Expect(utils.ProvisionKibashipOperator()).To(Succeed(), "Failed to provision kibaship")
 
-		By("waiting for kibaship-operator to be ready")
-		Expect(utils.WaitForKibashipOperator()).To(Succeed(), "Failed to wait for kibaship-operator")
+		By("waiting for kibaship to be ready")
+		Expect(utils.WaitForKibashipOperator()).To(Succeed(), "Failed to wait for kibaship")
 	} else {
 		By("operator namespace exists - restarting deployments to pick up new images")
-		cmd = exec.Command("kubectl", "rollout", "restart", "deployment", "-n", "kibaship-operator")
+		cmd = exec.Command("kubectl", "rollout", "restart", "deployment", "-n", "kibaship")
 		_, err = utils.Run(cmd)
 		ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to restart operator deployments")
 
 		By("waiting for operator deployments to complete rollout")
-		cmd = exec.Command("kubectl", "rollout", "status", "deployment", "-n", "kibaship-operator", "--timeout=5m")
+		cmd = exec.Command("kubectl", "rollout", "status", "deployment", "-n", "kibaship", "--timeout=5m")
 		_, err = utils.Run(cmd)
 		ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to wait for operator rollout")
 	}
@@ -268,7 +268,7 @@ var _ = BeforeSuite(func() {
 
 	clusterName = os.Getenv("KIND_CLUSTER")
 	if clusterName == "" {
-		clusterName = "kibaship-operator"
+		clusterName = "kibaship"
 	}
 
 	By("adding registry service DNS entries to Kind node /etc/hosts")

@@ -26,8 +26,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
-	platformv1alpha1 "github.com/kibamail/kibaship-operator/api/v1alpha1"
-	"github.com/kibamail/kibaship-operator/pkg/config"
+	platformv1alpha1 "github.com/kibamail/kibaship/api/v1alpha1"
+	"github.com/kibamail/kibaship/pkg/config"
 )
 
 const (

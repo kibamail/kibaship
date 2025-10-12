@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/kibamail/kibaship-operator/cmd/cli/commands/clusters/create"
-	"github.com/kibamail/kibaship-operator/cmd/cli/internal/styles"
+	"github.com/kibamail/kibaship/cmd/cli/commands/clusters/create"
+	"github.com/kibamail/kibaship/cmd/cli/internal/styles"
 )
 
 // buildTerraformFiles creates the directory structure and compiles Terraform templates for deletion

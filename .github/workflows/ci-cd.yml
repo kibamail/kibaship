@@ -94,16 +94,16 @@ jobs:
       fail-fast: true
       matrix:
         image:
-          - name: kibaship-operator
+          - name: kibaship
             context: .
             file: Dockerfile
-          - name: kibaship-operator-apiserver
+          - name: kibaship-apiserver
             context: .
             file: Dockerfile.apiserver
-          - name: kibaship-operator-cert-manager-webhook
+          - name: kibaship-cert-manager-webhook
             context: webhooks/cert-manager-kibaship-webhook
             file: webhooks/cert-manager-kibaship-webhook/Dockerfile
-          - name: kibaship-operator-registry-auth
+          - name: kibaship-registry-auth
             context: .
             file: Dockerfile.registry-auth
           - name: kibaship-railpack-cli
@@ -217,10 +217,10 @@ jobs:
       - name: Verify all prerelease images exist before promotion
         env:
           IMAGES: |
-            kibaship-operator
-            kibaship-operator-apiserver
-            kibaship-operator-cert-manager-webhook
-            kibaship-operator-registry-auth
+            kibaship
+            kibaship-apiserver
+            kibaship-cert-manager-webhook
+            kibaship-registry-auth
             kibaship-railpack-cli
             kibaship-railpack-build
         run: |
@@ -267,10 +267,10 @@ jobs:
       - name: Promote all images from prerelease to release
         env:
           IMAGES: |
-            kibaship-operator
-            kibaship-operator-apiserver
-            kibaship-operator-cert-manager-webhook
-            kibaship-operator-registry-auth
+            kibaship
+            kibaship-apiserver
+            kibaship-cert-manager-webhook
+            kibaship-registry-auth
             kibaship-railpack-cli
             kibaship-railpack-build
         run: |
@@ -405,10 +405,10 @@ jobs:
       - name: Cleanup prerelease tags
         env:
           IMAGES: |
-            kibaship-operator
-            kibaship-operator-apiserver
-            kibaship-operator-cert-manager-webhook
-            kibaship-operator-registry-auth
+            kibaship
+            kibaship-apiserver
+            kibaship-cert-manager-webhook
+            kibaship-registry-auth
             kibaship-railpack-cli
             kibaship-railpack-build
         run: |
@@ -515,10 +515,10 @@ jobs:
       - name: Generate deployment manifests
         run: |
           make build-installer \
-            IMG=${{ env.REGISTRY }}/${{ env.DOCKER_HUB_USERNAME }}/kibaship-operator:v-${{ steps.version.outputs.version }} \
-            IMG_APISERVER=${{ env.REGISTRY }}/${{ env.DOCKER_HUB_USERNAME }}/kibaship-operator-apiserver:v-${{ steps.version.outputs.version }} \
-            IMG_CERT_MANAGER_WEBHOOK=${{ env.REGISTRY }}/${{ env.DOCKER_HUB_USERNAME }}/kibaship-operator-cert-manager-webhook:v-${{ steps.version.outputs.version }} \
-            IMG_REGISTRY_AUTH=${{ env.REGISTRY }}/${{ env.DOCKER_HUB_USERNAME }}/kibaship-operator-registry-auth:v-${{ steps.version.outputs.version }}
+            IMG=${{ env.REGISTRY }}/${{ env.DOCKER_HUB_USERNAME }}/kibaship:v-${{ steps.version.outputs.version }} \
+            IMG_APISERVER=${{ env.REGISTRY }}/${{ env.DOCKER_HUB_USERNAME }}/kibaship-apiserver:v-${{ steps.version.outputs.version }} \
+            IMG_CERT_MANAGER_WEBHOOK=${{ env.REGISTRY }}/${{ env.DOCKER_HUB_USERNAME }}/kibaship-cert-manager-webhook:v-${{ steps.version.outputs.version }} \
+            IMG_REGISTRY_AUTH=${{ env.REGISTRY }}/${{ env.DOCKER_HUB_USERNAME }}/kibaship-registry-auth:v-${{ steps.version.outputs.version }}
 
       - name: Upload deployment manifests
         uses: actions/upload-artifact@v4
@@ -553,7 +553,7 @@ jobs:
             Deploy the operator to your Kubernetes cluster:
 
             ```bash
-            kubectl apply -f https://github.com/kibamail/kibaship-operator/releases/download/${{ steps.version.outputs.tag_name }}/install.yaml
+            kubectl apply -f https://github.com/kibamail/kibaship/releases/download/${{ steps.version.outputs.tag_name }}/install.yaml
             ```
 
             ### Configuration
@@ -561,8 +561,8 @@ jobs:
             Create the required ConfigMap with your configuration:
 
             ```bash
-            kubectl create configmap kibaship-operator-config \
-              -n kibaship-operator \
+            kubectl create configmap kibaship-config \
+              -n kibaship \
               --from-literal=KIBASHIP_OPERATOR_DOMAIN=your-domain.com \
               --from-literal=KIBASHIP_ACME_EMAIL=acme@your-domain.com \
               --from-literal=WEBHOOK_TARGET_URL=https://webhook.your-domain.com
@@ -571,10 +571,10 @@ jobs:
             ### Container Images
 
             The following container images are available for this release:
-            - `docker.io/kibamail/kibaship-operator:v-${{ steps.version.outputs.version }}`
-            - `docker.io/kibamail/kibaship-operator-apiserver:v-${{ steps.version.outputs.version }}`
-            - `docker.io/kibamail/kibaship-operator-cert-manager-webhook:v-${{ steps.version.outputs.version }}`
-            - `docker.io/kibamail/kibaship-operator-registry-auth:v-${{ steps.version.outputs.version }}`
+            - `docker.io/kibamail/kibaship:v-${{ steps.version.outputs.version }}`
+            - `docker.io/kibamail/kibaship-apiserver:v-${{ steps.version.outputs.version }}`
+            - `docker.io/kibamail/kibaship-cert-manager-webhook:v-${{ steps.version.outputs.version }}`
+            - `docker.io/kibamail/kibaship-registry-auth:v-${{ steps.version.outputs.version }}`
             - `docker.io/kibamail/kibaship-railpack-cli:v-${{ steps.version.outputs.version }}`
             - `docker.io/kibamail/kibaship-railpack-build:v-${{ steps.version.outputs.version }}`
 
@@ -584,42 +584,42 @@ jobs:
 
             **Linux (AMD64)**
             ```bash
-            curl -L -o kibaship https://github.com/kibamail/kibaship-operator/releases/download/${{ steps.version.outputs.tag_name }}/kibaship-linux-amd64
+            curl -L -o kibaship https://github.com/kibamail/kibaship/releases/download/${{ steps.version.outputs.tag_name }}/kibaship-linux-amd64
             chmod +x kibaship
             sudo mv kibaship /usr/local/bin/
             ```
 
             **Linux (ARM64)**
             ```bash
-            curl -L -o kibaship https://github.com/kibamail/kibaship-operator/releases/download/${{ steps.version.outputs.tag_name }}/kibaship-linux-arm64
+            curl -L -o kibaship https://github.com/kibamail/kibaship/releases/download/${{ steps.version.outputs.tag_name }}/kibaship-linux-arm64
             chmod +x kibaship
             sudo mv kibaship /usr/local/bin/
             ```
 
             **macOS (Intel)**
             ```bash
-            curl -L -o kibaship https://github.com/kibamail/kibaship-operator/releases/download/${{ steps.version.outputs.tag_name }}/kibaship-darwin-amd64
+            curl -L -o kibaship https://github.com/kibamail/kibaship/releases/download/${{ steps.version.outputs.tag_name }}/kibaship-darwin-amd64
             chmod +x kibaship
             sudo mv kibaship /usr/local/bin/
             ```
 
             **macOS (Apple Silicon)**
             ```bash
-            curl -L -o kibaship https://github.com/kibamail/kibaship-operator/releases/download/${{ steps.version.outputs.tag_name }}/kibaship-darwin-arm64
+            curl -L -o kibaship https://github.com/kibamail/kibaship/releases/download/${{ steps.version.outputs.tag_name }}/kibaship-darwin-arm64
             chmod +x kibaship
             sudo mv kibaship /usr/local/bin/
             ```
 
             **Windows (AMD64)**
             ```powershell
-            curl -L -o kibaship.exe https://github.com/kibamail/kibaship-operator/releases/download/${{ steps.version.outputs.tag_name }}/kibaship-windows-amd64.exe
+            curl -L -o kibaship.exe https://github.com/kibamail/kibaship/releases/download/${{ steps.version.outputs.tag_name }}/kibaship-windows-amd64.exe
             ```
 
             ### Verification
 
             Verify the downloaded CLI binary with checksums:
             ```bash
-            curl -L -o checksums.txt https://github.com/kibamail/kibaship-operator/releases/download/${{ steps.version.outputs.tag_name }}/checksums.txt
+            curl -L -o checksums.txt https://github.com/kibamail/kibaship/releases/download/${{ steps.version.outputs.tag_name }}/checksums.txt
             sha256sum -c checksums.txt --ignore-missing
             ```
 

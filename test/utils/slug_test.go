@@ -22,7 +22,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/kibamail/kibaship-operator/pkg/utils"
+	"github.com/kibamail/kibaship/pkg/utils"
 )
 
 var _ = Describe("GenerateRandomSlug", func() {

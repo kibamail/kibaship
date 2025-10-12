@@ -28,8 +28,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	platformv1alpha1 "github.com/kibamail/kibaship-operator/api/v1alpha1"
-	"github.com/kibamail/kibaship-operator/pkg/validation"
+	platformv1alpha1 "github.com/kibamail/kibaship/api/v1alpha1"
+	"github.com/kibamail/kibaship/pkg/validation"
 )
 
 const (
@@ -46,7 +46,7 @@ const (
 	ManagedByLabel = "app.kubernetes.io/managed-by"
 
 	// ManagedByValue is the value for the managed-by label
-	ManagedByValue = "kibaship-operator"
+	ManagedByValue = "kibaship"
 
 	// ServiceAccountNamePrefix is the prefix for the service account name
 	ServiceAccountNamePrefix = "project-"
@@ -117,7 +117,7 @@ func (nm *NamespaceManager) CreateProjectNamespace(ctx context.Context, project 
 			Name:   namespaceName,
 			Labels: nm.generateNamespaceLabels(project),
 			Annotations: map[string]string{
-				"platform.kibaship.com/created-by": "kibaship-operator",
+				"platform.kibaship.com/created-by": "kibaship",
 				"platform.kibaship.com/project":    project.Name,
 			},
 		},
@@ -299,7 +299,7 @@ func (nm *NamespaceManager) createServiceAccount(ctx context.Context, namespace 
 				ProjectNameLabel: project.Name,
 			},
 			Annotations: map[string]string{
-				"platform.kibaship.com/created-by": "kibaship-operator",
+				"platform.kibaship.com/created-by": "kibaship",
 				"platform.kibaship.com/project":    project.Name,
 			},
 		},
@@ -332,7 +332,7 @@ func (nm *NamespaceManager) createAdminRole(ctx context.Context, namespace *core
 				ProjectNameLabel: project.Name,
 			},
 			Annotations: map[string]string{
-				"platform.kibaship.com/created-by": "kibaship-operator",
+				"platform.kibaship.com/created-by": "kibaship",
 				"platform.kibaship.com/project":    project.Name,
 			},
 		},
@@ -372,7 +372,7 @@ func (nm *NamespaceManager) createRoleBinding(ctx context.Context, namespace *co
 				ProjectNameLabel: project.Name,
 			},
 			Annotations: map[string]string{
-				"platform.kibaship.com/created-by": "kibaship-operator",
+				"platform.kibaship.com/created-by": "kibaship",
 				"platform.kibaship.com/project":    project.Name,
 			},
 		},
@@ -520,7 +520,7 @@ func (nm *NamespaceManager) ensureTektonTasksReaderRole(ctx context.Context) err
 				ManagedByLabel: ManagedByValue,
 			},
 			Annotations: map[string]string{
-				"platform.kibaship.com/created-by": "kibaship-operator",
+				"platform.kibaship.com/created-by": "kibaship",
 				"platform.kibaship.com/purpose":    "Allow projects to read Tekton tasks",
 			},
 		},
@@ -557,7 +557,7 @@ func (nm *NamespaceManager) createTektonRoleBinding(ctx context.Context, namespa
 				ProjectNameLabel: project.Name,
 			},
 			Annotations: map[string]string{
-				"platform.kibaship.com/created-by": "kibaship-operator",
+				"platform.kibaship.com/created-by": "kibaship",
 				"platform.kibaship.com/project":    project.Name,
 				"platform.kibaship.com/purpose":    "Allow project service account to read Tekton tasks",
 			},
@@ -617,7 +617,7 @@ func (nm *NamespaceManager) ensureTektonNamespace(ctx context.Context) error {
 				ManagedByLabel: ManagedByValue,
 			},
 			Annotations: map[string]string{
-				"platform.kibaship.com/created-by": "kibaship-operator",
+				"platform.kibaship.com/created-by": "kibaship",
 				"platform.kibaship.com/purpose":    "Tekton Pipelines namespace for task management",
 			},
 		},

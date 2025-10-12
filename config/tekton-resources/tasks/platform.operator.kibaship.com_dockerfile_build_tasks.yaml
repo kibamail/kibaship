@@ -4,9 +4,9 @@ metadata:
   name: tekton-task-dockerfile-build-kibaship-com
   annotations:
     tekton.dev/displayName: "Dockerfile Build and Push"
-    platform.kibaship.com/created-by: "kibaship-operator"
+    platform.kibaship.com/created-by: "kibaship"
   labels:
-    app.kubernetes.io/part-of: kibaship-operator
+    app.kubernetes.io/part-of: kibaship
 spec:
   description: |
     Build an OCI image using BuildKit with the standard Dockerfile frontend.

@@ -2,7 +2,7 @@ apiVersion: platform.operator.kibaship.com/v1alpha1
 kind: ApplicationDomain
 metadata:
   labels:
-    app.kubernetes.io/name: kibaship-operator
+    app.kubernetes.io/name: kibaship
     app.kubernetes.io/managed-by: kustomize
     platform.operator.kibaship.com/application: project-myproject-app-frontend-kibaship-com
     platform.operator.kibaship.com/domain-type: default
@@ -30,7 +30,7 @@ apiVersion: platform.operator.kibaship.com/v1alpha1
 kind: ApplicationDomain
 metadata:
   labels:
-    app.kubernetes.io/name: kibaship-operator
+    app.kubernetes.io/name: kibaship
     app.kubernetes.io/managed-by: kustomize
     platform.operator.kibaship.com/application: project-myproject-app-frontend-kibaship-com
     platform.operator.kibaship.com/domain-type: custom

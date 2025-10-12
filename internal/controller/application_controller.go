@@ -31,9 +31,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	platformv1alpha1 "github.com/kibamail/kibaship-operator/api/v1alpha1"
-	"github.com/kibamail/kibaship-operator/pkg/validation"
-	"github.com/kibamail/kibaship-operator/pkg/webhooks"
+	platformv1alpha1 "github.com/kibamail/kibaship/api/v1alpha1"
+	"github.com/kibamail/kibaship/pkg/validation"
+	"github.com/kibamail/kibaship/pkg/webhooks"
 )
 
 const (
@@ -265,7 +265,7 @@ func (r *ApplicationReconciler) ensureApplicationEnvSecret(ctx context.Context, 
 			Name:      secretName,
 			Namespace: app.Namespace,
 			Labels: map[string]string{
-				"app.kubernetes.io/managed-by":        "kibaship-operator",
+				"app.kubernetes.io/managed-by":        "kibaship",
 				validation.LabelApplicationUUID:       appUUID,
 				"platform.operator.kibaship.com/type": "application-env-vars",
 				validation.LabelProjectUUID:           app.Labels[validation.LabelProjectUUID],

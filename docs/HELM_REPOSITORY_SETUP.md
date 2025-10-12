@@ -18,7 +18,7 @@ git init
 helm-charts/
 ├── index.yaml                 # Helm repository index
 ├── charts/                    # Packaged chart files
-│   └── kibaship-operator-0.1.0.tgz
+│   └── kibaship-0.1.0.tgz
 └── docs/                      # GitHub Pages source
     ├── index.yaml -> ../index.yaml
     └── charts/ -> ../charts/
@@ -34,7 +34,7 @@ helm-release:
   steps:
     - name: Package Helm Chart
       run: |
-        helm package deploy/helm/kibaship-operator/ --destination ./charts/
+        helm package deploy/helm/kibaship/ --destination ./charts/
 
     - name: Update Helm Repository
       env:
@@ -52,7 +52,7 @@ helm-release:
 
         # Commit and push
         git add .
-        git commit -m "Add kibaship-operator v${{ steps.version.outputs.VERSION }}"
+        git commit -m "Add kibaship v${{ steps.version.outputs.VERSION }}"
         git push
 ```
 
@@ -61,7 +61,7 @@ helm-release:
 ```bash
 helm repo add kibaship https://helm.kibaship.com
 helm repo update
-helm install kibaship-operator kibaship/kibaship-operator
+helm install kibaship kibaship/kibaship
 ```
 
 ## Option 2: OCI Registry (Modern Approach)
@@ -70,16 +70,16 @@ helm install kibaship-operator kibaship/kibaship-operator
 
 ```bash
 # Package chart
-helm package deploy/helm/kibaship-operator/
+helm package deploy/helm/kibaship/
 
 # Push to GitHub Container Registry
-helm push kibaship-operator-0.1.0.tgz oci://kibamail/charts
+helm push kibaship-0.1.0.tgz oci://kibamail/charts
 ```
 
 ### 2. User Installation
 
 ```bash
-helm install kibaship-operator oci://kibamail/charts/kibaship-operator --version 0.1.0
+helm install kibaship oci://kibamail/charts/kibaship --version 0.1.0
 ```
 
 ## Option 3: GitHub Releases (Simple)
@@ -92,27 +92,27 @@ The current CI/CD can be extended to package and attach the chart:
 # .github/workflows/build-and-push.yml (addition)
 - name: Package Helm Chart
   run: |
-    helm package deploy/helm/kibaship-operator/ --destination ./charts/
+    helm package deploy/helm/kibaship/ --destination ./charts/
 
 - name: Create GitHub Release
   uses: softprops/action-gh-release@v2
   with:
     files: |
       dist/install.yaml
-      charts/kibaship-operator-*.tgz  # Add chart package
+      charts/kibaship-*.tgz  # Add chart package
 ```
 
 ### 2. User Installation
 
 ```bash
 # Download from GitHub releases
-curl -L -o chart.tgz https://github.com/kibamail/kibaship-operator/releases/download/v0.1.0/kibaship-operator-0.1.0.tgz
-helm install kibaship-operator chart.tgz
+curl -L -o chart.tgz https://github.com/kibamail/kibaship/releases/download/v0.1.0/kibaship-0.1.0.tgz
+helm install kibaship chart.tgz
 ```
 
 ## Current Status
 
-- ✅ **Chart exists**: Functional Helm chart in `deploy/helm/kibaship-operator/`
+- ✅ **Chart exists**: Functional Helm chart in `deploy/helm/kibaship/`
 - ✅ **Versioning**: Automatic version management in release script (chart version = app version)
 - ✅ **CI/CD ready**: Fully integrated into GitHub Actions release workflow
 - ✅ **Distribution**: Charts attached to GitHub releases automatically
@@ -124,7 +124,7 @@ For production use, implement **Option 1 (GitHub Pages)** or **Option 2 (OCI Reg
 ```bash
 # Goal: Simple installation
 helm repo add kibaship https://helm.kibaship.com
-helm install kibaship-operator kibaship/kibaship-operator
+helm install kibaship kibaship/kibaship
 ```
 
 This provides:

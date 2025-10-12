@@ -12,7 +12,7 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/kibamail/kibaship-operator/pkg/config"
+	"github.com/kibamail/kibaship/pkg/config"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -376,7 +376,7 @@ func EnsureRegistryCredentials(ctx context.Context, c client.Client) error {
 				Namespace: registryNS,
 				Labels: map[string]string{
 					"app":                          "registry",
-					"app.kubernetes.io/managed-by": "kibaship-operator",
+					"app.kubernetes.io/managed-by": "kibaship",
 				},
 			},
 			Type: corev1.SecretTypeOpaque,
@@ -534,7 +534,7 @@ func EnsureRegistryJWKS(ctx context.Context, c client.Client) error {
 			Namespace: registryNS,
 			Labels: map[string]string{
 				"app":                          "registry",
-				"app.kubernetes.io/managed-by": "kibaship-operator",
+				"app.kubernetes.io/managed-by": "kibaship",
 			},
 		},
 		Type: corev1.SecretTypeOpaque,
@@ -568,7 +568,7 @@ func ensureRegistryNamespace(ctx context.Context, c client.Client, registryNS st
 				ObjectMeta: metav1.ObjectMeta{
 					Name: registryNS,
 					Labels: map[string]string{
-						"app.kubernetes.io/managed-by": "kibaship-operator",
+						"app.kubernetes.io/managed-by": "kibaship",
 						"app.kubernetes.io/component":  "registry",
 					},
 				},
@@ -858,7 +858,7 @@ func EnsureRegistryCACertificateInBuildkit(ctx context.Context, c client.Client)
 			Namespace: buildkitNS,
 			Labels: map[string]string{
 				"app":                          "buildkitd",
-				"app.kubernetes.io/managed-by": "kibaship-operator",
+				"app.kubernetes.io/managed-by": "kibaship",
 			},
 		},
 		Type: corev1.SecretTypeOpaque,

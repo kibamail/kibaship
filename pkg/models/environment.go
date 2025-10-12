@@ -21,7 +21,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/kibamail/kibaship-operator/pkg/validation"
+	"github.com/kibamail/kibaship/pkg/validation"
 )
 
 // EnvironmentCreateRequest represents the request to create an environment

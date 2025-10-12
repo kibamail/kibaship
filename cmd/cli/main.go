@@ -6,8 +6,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/kibamail/kibaship-operator/cmd/cli/commands/clusters"
-	"github.com/kibamail/kibaship-operator/cmd/cli/internal/styles"
+	"github.com/kibamail/kibaship/cmd/cli/commands/clusters"
+	"github.com/kibamail/kibaship/cmd/cli/internal/styles"
 )
 
 var (

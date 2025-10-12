@@ -34,8 +34,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
-	platformv1alpha1 "github.com/kibamail/kibaship-operator/api/v1alpha1"
-	"github.com/kibamail/kibaship-operator/pkg/utils"
+	platformv1alpha1 "github.com/kibamail/kibaship/api/v1alpha1"
+	"github.com/kibamail/kibaship/pkg/utils"
 )
 
 const (
@@ -539,7 +539,7 @@ func (r *DeploymentProgressController) ensureKubernetesDeployment(
 			Namespace: deployment.Namespace,
 			Labels: map[string]string{
 				"app.kubernetes.io/name":                 fmt.Sprintf("app-%s", appUUID),
-				"app.kubernetes.io/managed-by":           "kibaship-operator",
+				"app.kubernetes.io/managed-by":           "kibaship",
 				"app.kubernetes.io/component":            "application",
 				"platform.kibaship.com/deployment-uuid":  deployment.GetUUID(),
 				"platform.kibaship.com/application-uuid": app.GetUUID(),
@@ -558,7 +558,7 @@ func (r *DeploymentProgressController) ensureKubernetesDeployment(
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{
 						"app.kubernetes.io/name":                 fmt.Sprintf("app-%s", appUUID),
-						"app.kubernetes.io/managed-by":           "kibaship-operator",
+						"app.kubernetes.io/managed-by":           "kibaship",
 						"app.kubernetes.io/component":            "application",
 						"platform.kibaship.com/deployment-uuid":  deployment.GetUUID(),
 						"platform.kibaship.com/application-uuid": app.GetUUID(),
@@ -655,7 +655,7 @@ func (r *DeploymentProgressController) ensureKubernetesService(
 			Namespace: deployment.Namespace,
 			Labels: map[string]string{
 				"app.kubernetes.io/name":                 fmt.Sprintf("project-%s", app.GetProjectUUID()),
-				"app.kubernetes.io/managed-by":           "kibaship-operator",
+				"app.kubernetes.io/managed-by":           "kibaship",
 				"app.kubernetes.io/component":            "application-service",
 				"platform.kibaship.com/application-uuid": app.GetUUID(),
 				"platform.kibaship.com/project-uuid":     app.GetProjectUUID(),

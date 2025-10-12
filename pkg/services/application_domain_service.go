@@ -25,10 +25,10 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/kibamail/kibaship-operator/api/v1alpha1"
-	"github.com/kibamail/kibaship-operator/pkg/models"
-	"github.com/kibamail/kibaship-operator/pkg/utils"
-	"github.com/kibamail/kibaship-operator/pkg/validation"
+	"github.com/kibamail/kibaship/api/v1alpha1"
+	"github.com/kibamail/kibaship/pkg/models"
+	"github.com/kibamail/kibaship/pkg/utils"
+	"github.com/kibamail/kibaship/pkg/validation"
 )
 
 // ApplicationDomainService handles CRUD operations for application domains

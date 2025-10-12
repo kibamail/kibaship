@@ -1,4 +1,4 @@
-module github.com/kibamail/kibaship-operator
+module github.com/kibamail/kibaship
 
 go 1.24.0
 

@@ -33,9 +33,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	platformv1alpha1 "github.com/kibamail/kibaship-operator/api/v1alpha1"
-	"github.com/kibamail/kibaship-operator/pkg/config"
-	"github.com/kibamail/kibaship-operator/pkg/validation"
+	platformv1alpha1 "github.com/kibamail/kibaship/api/v1alpha1"
+	"github.com/kibamail/kibaship/pkg/config"
+	"github.com/kibamail/kibaship/pkg/validation"
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 )
 
@@ -246,7 +246,7 @@ var _ = Describe("Deployment Controller", func() {
 
 				By("Verifying pipeline has correct labels and annotations")
 				Expect(pipeline.Labels["app.kubernetes.io/name"]).To(Equal(testProject.Name))
-				Expect(pipeline.Labels["app.kubernetes.io/managed-by"]).To(Equal("kibaship-operator"))
+				Expect(pipeline.Labels["app.kubernetes.io/managed-by"]).To(Equal("kibaship"))
 				Expect(pipeline.Labels["project.kibaship.com/slug"]).To(Equal("test123"))
 				Expect(pipeline.Labels["tekton.dev/pipeline"]).To(Equal("git-repository-railpack"))
 			})

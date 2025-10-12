@@ -24,7 +24,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
-	platformv1alpha1 "github.com/kibamail/kibaship-operator/api/v1alpha1"
+	platformv1alpha1 "github.com/kibamail/kibaship/api/v1alpha1"
 )
 
 // generateValkeyCredentialsSecret creates a secret with Valkey credentials

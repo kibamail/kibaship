@@ -28,8 +28,8 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/kibamail/kibaship-operator/pkg/auth"
-	"github.com/kibamail/kibaship-operator/pkg/models"
+	"github.com/kibamail/kibaship/pkg/auth"
+	"github.com/kibamail/kibaship/pkg/models"
 )
 
 // generateAPIKey generates a random 48-character API key

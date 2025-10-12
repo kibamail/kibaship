@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/kibamail/kibaship-operator/cmd/cli/internal/styles"
+	"github.com/kibamail/kibaship/cmd/cli/internal/styles"
 )
 
 // runTerraformInit runs terraform init in the provision directory with backend configuration

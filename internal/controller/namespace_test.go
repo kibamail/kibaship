@@ -29,8 +29,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
-	platformv1alpha1 "github.com/kibamail/kibaship-operator/api/v1alpha1"
-	"github.com/kibamail/kibaship-operator/pkg/validation"
+	platformv1alpha1 "github.com/kibamail/kibaship/api/v1alpha1"
+	"github.com/kibamail/kibaship/pkg/validation"
 )
 
 var _ = Describe("NamespaceManager", func() {
@@ -117,7 +117,7 @@ var _ = Describe("NamespaceManager", func() {
 			Expect(namespace.Labels[validation.LabelWorkspaceUUID]).To(Equal("6ba7b810-9dad-11d1-80b4-00c04fd430d0"))
 
 			By("Verifying namespace annotations")
-			Expect(namespace.Annotations["platform.kibaship.com/created-by"]).To(Equal("kibaship-operator"))
+			Expect(namespace.Annotations["platform.kibaship.com/created-by"]).To(Equal("kibaship"))
 			Expect(namespace.Annotations["platform.kibaship.com/project"]).To(Equal(testProject.Name))
 
 			By("Verifying namespace exists in cluster")
@@ -343,7 +343,7 @@ var _ = Describe("NamespaceManager", func() {
 			Expect(serviceAccount.Labels[validation.LabelWorkspaceUUID]).To(Equal("6ba7b810-9dad-11d1-80b4-00c04fd430d0"))
 
 			By("Verifying service account has correct annotations")
-			Expect(serviceAccount.Annotations["platform.kibaship.com/created-by"]).To(Equal("kibaship-operator"))
+			Expect(serviceAccount.Annotations["platform.kibaship.com/created-by"]).To(Equal("kibaship"))
 			Expect(serviceAccount.Annotations["platform.kibaship.com/project"]).To(Equal(testProject.Name))
 		})
 

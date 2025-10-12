@@ -28,8 +28,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	platformv1alpha1 "github.com/kibamail/kibaship-operator/api/v1alpha1"
-	"github.com/kibamail/kibaship-operator/pkg/validation"
+	platformv1alpha1 "github.com/kibamail/kibaship/api/v1alpha1"
+	"github.com/kibamail/kibaship/pkg/validation"
 )
 
 var _ = Describe("Tekton Integration", func() {
@@ -123,7 +123,7 @@ var _ = Describe("Tekton Integration", func() {
 
 			By("Verifying the role has correct labels and annotations")
 			Expect(role.Labels[ManagedByLabel]).To(Equal(ManagedByValue))
-			Expect(role.Annotations["platform.kibaship.com/created-by"]).To(Equal("kibaship-operator"))
+			Expect(role.Annotations["platform.kibaship.com/created-by"]).To(Equal("kibaship"))
 		})
 
 		It("should not create duplicate tekton-tasks-reader role", func() {

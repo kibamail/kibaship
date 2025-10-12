@@ -9,7 +9,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/kibamail/kibaship-operator/test/utils"
+	"github.com/kibamail/kibaship/test/utils"
 )
 
 const (

@@ -31,9 +31,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	platformv1alpha1 "github.com/kibamail/kibaship-operator/api/v1alpha1"
-	"github.com/kibamail/kibaship-operator/pkg/validation"
-	"github.com/kibamail/kibaship-operator/pkg/webhooks"
+	platformv1alpha1 "github.com/kibamail/kibaship/api/v1alpha1"
+	"github.com/kibamail/kibaship/pkg/validation"
+	"github.com/kibamail/kibaship/pkg/webhooks"
 )
 
 const (
@@ -291,7 +291,7 @@ func (r *EnvironmentReconciler) ensureEnvironmentSecret(ctx context.Context, env
 	}
 
 	desiredLabels := map[string]string{
-		"app.kubernetes.io/managed-by":        "kibaship-operator",
+		"app.kubernetes.io/managed-by":        "kibaship",
 		validation.LabelProjectUUID:           projectUUID,
 		validation.LabelEnvironmentUUID:       envUUID,
 		"platform.operator.kibaship.com/type": "environment-variables",

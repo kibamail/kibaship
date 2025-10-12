@@ -24,7 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	platformv1alpha1 "github.com/kibamail/kibaship-operator/api/v1alpha1"
+	platformv1alpha1 "github.com/kibamail/kibaship/api/v1alpha1"
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 )
 
@@ -107,7 +107,7 @@ func (r *DeploymentReconciler) generateRailpackPipeline(
 			Namespace: deployment.Namespace,
 			Labels: map[string]string{
 				"app.kubernetes.io/name":                 fmt.Sprintf("project-%s", projectUUID),
-				"app.kubernetes.io/managed-by":           "kibaship-operator",
+				"app.kubernetes.io/managed-by":           "kibaship",
 				"app.kubernetes.io/component":            "ci-cd-pipeline",
 				"tekton.dev/pipeline":                    "git-repository-railpack",
 				"project.kibaship.com/slug":              projectSlug,
@@ -344,7 +344,7 @@ func (r *DeploymentReconciler) generateDockerfilePipeline(
 			Namespace: deployment.Namespace,
 			Labels: map[string]string{
 				"app.kubernetes.io/name":                 fmt.Sprintf("project-%s", projectUUID),
-				"app.kubernetes.io/managed-by":           "kibaship-operator",
+				"app.kubernetes.io/managed-by":           "kibaship",
 				"app.kubernetes.io/component":            "ci-cd-pipeline",
 				"tekton.dev/pipeline":                    "git-repository-dockerfile",
 				"project.kibaship.com/slug":              projectSlug,

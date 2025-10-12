@@ -21,7 +21,7 @@ var _ = Describe("Infrastructure Health Check", func() {
 				}
 
 				ctx := context.Background()
-				pods, err := client.CoreV1().Pods("kibaship-operator").List(ctx, metav1.ListOptions{
+				pods, err := client.CoreV1().Pods("kibaship").List(ctx, metav1.ListOptions{
 					LabelSelector: "control-plane=controller-manager",
 				})
 				if err != nil {

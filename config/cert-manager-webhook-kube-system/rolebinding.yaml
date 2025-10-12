@@ -10,5 +10,4 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: kibaship-cert-manager-webhook
-    namespace: kibaship-operator
-
+    namespace: kibaship

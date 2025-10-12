@@ -19,7 +19,7 @@ import (
 var _ = Describe("API Server Deployment CRUD", func() {
 	It("creates a deployment via API, lists and fetches it, and verifies Tekton resources + LatestDeployment", func() {
 		By("fetching API key from api-server secret")
-		cmd := exec.Command("kubectl", "get", "secret", "api-server-api-key", "-n", "kibaship-operator", "-o", "jsonpath={.data.api-key}")
+		cmd := exec.Command("kubectl", "get", "secret", "api-server-api-key", "-n", "kibaship", "-o", "jsonpath={.data.api-key}")
 		output, err := cmd.CombinedOutput()
 		Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("failed to get api key secret: %s", string(output)))
 		encodedKey := strings.TrimSpace(string(output))
@@ -28,7 +28,7 @@ var _ = Describe("API Server Deployment CRUD", func() {
 		apiKey := strings.TrimSpace(string(decodedKeyBytes))
 
 		By("port-forwarding API service to localhost:18080")
-		pfCmd := exec.Command("kubectl", "-n", "kibaship-operator", "port-forward", "svc/apiserver", "18080:80")
+		pfCmd := exec.Command("kubectl", "-n", "kibaship", "port-forward", "svc/apiserver", "18080:80")
 		Expect(pfCmd.Start()).To(Succeed(), "failed to start port-forward")
 		defer func() { _ = pfCmd.Process.Kill() }()
 

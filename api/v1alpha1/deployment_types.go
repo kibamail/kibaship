@@ -29,7 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	"github.com/kibamail/kibaship-operator/pkg/validation"
+	"github.com/kibamail/kibaship/pkg/validation"
 )
 
 // DeploymentPhase represents the current phase of the deployment

@@ -40,10 +40,10 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
-	platformv1alpha1 "github.com/kibamail/kibaship-operator/api/v1alpha1"
-	"github.com/kibamail/kibaship-operator/pkg/config"
-	"github.com/kibamail/kibaship-operator/pkg/utils"
-	"github.com/kibamail/kibaship-operator/pkg/webhooks"
+	platformv1alpha1 "github.com/kibamail/kibaship/api/v1alpha1"
+	"github.com/kibamail/kibaship/pkg/config"
+	"github.com/kibamail/kibaship/pkg/utils"
+	"github.com/kibamail/kibaship/pkg/webhooks"
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 )
 
@@ -399,7 +399,7 @@ func (r *DeploymentReconciler) createKubernetesDeployment(ctx context.Context, d
 			Namespace: deployment.Namespace,
 			Labels: map[string]string{
 				"app.kubernetes.io/name":                 fmt.Sprintf("app-%s", appUUID),
-				"app.kubernetes.io/managed-by":           "kibaship-operator",
+				"app.kubernetes.io/managed-by":           "kibaship",
 				"app.kubernetes.io/component":            "application",
 				"platform.kibaship.com/deployment-uuid":  deployment.GetUUID(),
 				"platform.kibaship.com/application-uuid": app.GetUUID(),
@@ -418,7 +418,7 @@ func (r *DeploymentReconciler) createKubernetesDeployment(ctx context.Context, d
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{
 						"app.kubernetes.io/name":                 fmt.Sprintf("app-%s", appUUID),
-						"app.kubernetes.io/managed-by":           "kibaship-operator",
+						"app.kubernetes.io/managed-by":           "kibaship",
 						"app.kubernetes.io/component":            "application",
 						"platform.kibaship.com/deployment-uuid":  deployment.GetUUID(),
 						"platform.kibaship.com/application-uuid": app.GetUUID(),
@@ -579,7 +579,7 @@ func (r *DeploymentReconciler) createKubernetesService(ctx context.Context, depl
 			Namespace: deployment.Namespace,
 			Labels: map[string]string{
 				"app.kubernetes.io/name":                 fmt.Sprintf("app-%s", appUUID),
-				"app.kubernetes.io/managed-by":           "kibaship-operator",
+				"app.kubernetes.io/managed-by":           "kibaship",
 				"app.kubernetes.io/component":            "application",
 				"platform.kibaship.com/deployment-uuid":  deployment.GetUUID(),
 				"platform.kibaship.com/application-uuid": app.GetUUID(),

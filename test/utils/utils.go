@@ -28,7 +28,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2" // nolint:revive,staticcheck
 
-	"github.com/kibamail/kibaship-operator/pkg/config"
+	"github.com/kibamail/kibaship/pkg/config"
 )
 
 // InstallGatewayAPI installs the required Gateway API CRDs and waits for them to be Established
@@ -127,7 +127,7 @@ func InstallCiliumHelm(version string) error {
 		"--set", "gatewayAPI.enableAppProtocol=true",
 		"--set", "ipam.mode=kubernetes",
 		"--set", "loadBalancer.mode=snat",
-		"--set", "k8sServiceHost=kibaship-operator-test-e2e-control-plane",
+		"--set", "k8sServiceHost=kibaship-test-e2e-control-plane",
 		"--set", "k8sServicePort=6443",
 
 		"--set", "operator.replicas=1",
@@ -800,7 +800,7 @@ func CleanupStorageClasses() {
 	}
 }
 
-// DeployKibashipOperator deploys the kibaship-operator using make deploy
+// DeployKibashipOperator deploys the kibaship using make deploy
 func ProvisionKibashipOperator() error {
 	// First install the CRDs
 	cmd := exec.Command("make", "install")
@@ -827,14 +827,14 @@ func ProvisionKibashipOperator() error {
 	// Create the operator ConfigMap with configuration
 	webhookURL := os.Getenv("WEBHOOK_TARGET_URL")
 	if webhookURL == "" {
-		webhookURL = "http://webhook-receiver.kibaship-operator.svc.cluster.local:8080/webhook"
+		webhookURL = "http://webhook-receiver.kibaship.svc.cluster.local:8080/webhook"
 	}
 
 	configMapYAML := fmt.Sprintf(`apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: kibaship-operator-config
-  namespace: kibaship-operator
+  name: kibaship-config
+  namespace: kibaship
 data:
   KIBASHIP_OPERATOR_DOMAIN: "myapps.kibaship.com"
   KIBASHIP_ACME_EMAIL: "acme@kibaship.com"
@@ -848,7 +848,7 @@ data:
 	}
 
 	// Then deploy the operator
-	cmd = exec.Command("make", "deploy", "IMG=kibaship.com/kibaship-operator:v0.0.1")
+	cmd = exec.Command("make", "deploy", "IMG=kibaship.com/kibaship:v0.0.1")
 	if _, err := Run(cmd); err != nil {
 		return err
 	}
@@ -860,7 +860,7 @@ data:
 func WaitForKibashipOperator() error {
 	// Use enhanced monitoring with longer timeout
 	maxWaitTime := 8 * time.Minute
-	return MonitorOperatorStartup("kibaship-operator", maxWaitTime)
+	return MonitorOperatorStartup("kibaship", maxWaitTime)
 }
 
 // DeployAPIServer deploys the API server into the operator namespace and sets its image
@@ -872,14 +872,14 @@ func DeployAPIServer(image string) error {
 	}
 
 	// Update the deployment image to the locally built tag
-	cmd = exec.Command("kubectl", "-n", "kibaship-operator", "set", "image",
+	cmd = exec.Command("kubectl", "-n", "kibaship", "set", "image",
 		"deployment/apiserver", fmt.Sprintf("apiserver=%s", image))
 	if _, err := Run(cmd); err != nil {
 		return err
 	}
 
 	// Wait for rollout to complete
-	cmd = exec.Command("kubectl", "-n", "kibaship-operator", "rollout", "status",
+	cmd = exec.Command("kubectl", "-n", "kibaship", "rollout", "status",
 		"deployment/apiserver", "--timeout=5m")
 	if _, err := Run(cmd); err != nil {
 		return err
@@ -897,7 +897,7 @@ func DeployCertManagerWebhook(image string) error {
 	}
 
 	// Update the deployment image to the locally built tag
-	cmd = exec.Command("kubectl", "-n", "kibaship-operator", "set", "image",
+	cmd = exec.Command("kubectl", "-n", "kibaship", "set", "image",
 		"deployment/kibaship-cert-manager-webhook", fmt.Sprintf("webhook=%s", image))
 	if _, err := Run(cmd); err != nil {
 		return err
@@ -910,10 +910,10 @@ func DeployCertManagerWebhook(image string) error {
 	}
 
 	// Wait for rollout with periodic pod logging
-	waitCmd := exec.Command("kubectl", "-n", "kibaship-operator", "rollout", "status", "deployment/kibaship-cert-manager-webhook", "--timeout=5m")
-	if err := WaitWithPodLogging(waitCmd, "kibaship-operator", 5*time.Minute); err != nil {
+	waitCmd := exec.Command("kubectl", "-n", "kibaship", "rollout", "status", "deployment/kibaship-cert-manager-webhook", "--timeout=5m")
+	if err := WaitWithPodLogging(waitCmd, "kibaship", 5*time.Minute); err != nil {
 		_, _ = fmt.Fprintf(GinkgoWriter, "\n❌ Timeout or error waiting for cert-manager webhook rollout. Deployment describe:\n")
-		desc := exec.Command("kubectl", "-n", "kibaship-operator", "describe", "deployment", "kibaship-cert-manager-webhook")
+		desc := exec.Command("kubectl", "-n", "kibaship", "describe", "deployment", "kibaship-cert-manager-webhook")
 		_, _ = Run(desc)
 		return err
 	}
@@ -921,7 +921,7 @@ func DeployCertManagerWebhook(image string) error {
 	return nil
 }
 
-// UndeployKibashipOperator removes the kibaship-operator deployment
+// UndeployKibashipOperator removes the kibaship deployment
 func UndeployKibashipOperator() {
 	cmd := exec.Command("make", "undeploy")
 	if _, err := Run(cmd); err != nil {
@@ -1024,7 +1024,7 @@ func MonitorOperatorStartup(namespace string, timeout time.Duration) error {
 	_, _ = fmt.Fprintf(GinkgoWriter, "Monitoring namespace: %s\n", namespace)
 	_, _ = fmt.Fprintf(GinkgoWriter, "Timeout: %v\n", timeout)
 
-	waitCmd := exec.Command("kubectl", "-n", namespace, "rollout", "status", "deploy/kibaship-operator-controller-manager", fmt.Sprintf("--timeout=%s", timeout))
+	waitCmd := exec.Command("kubectl", "-n", namespace, "rollout", "status", "deploy/kibaship-controller-manager", fmt.Sprintf("--timeout=%s", timeout))
 	if err := WaitWithPodLogging(waitCmd, namespace, timeout); err != nil {
 		_, _ = fmt.Fprintf(GinkgoWriter, "\n❌ Timeout reached - performing final diagnostic check\n")
 		CheckOperatorHealthStatus(namespace)
@@ -1042,7 +1042,7 @@ func DiagnoseKibashipOperator() {
 	_, _ = fmt.Fprintf(GinkgoWriter, "=====================================\n")
 
 	// Check general operator status
-	CheckOperatorHealthStatus("kibaship-operator")
+	CheckOperatorHealthStatus("kibaship")
 
 	// Additional context: Check dependencies
 	_, _ = fmt.Fprintf(GinkgoWriter, "\n=== DEPENDENCY STATUS ===\n")
@@ -1092,7 +1092,7 @@ func ConfigureCoreDNSForwarders() error {
 // DeployWebhookReceiver applies the test-only webhook receiver and waits for it to be ready.
 func DeployWebhookReceiver() error {
 	// Ensure namespace exists
-	cmd := exec.Command("kubectl", "create", "ns", "kibaship-operator", "--dry-run=client", "-o", "yaml")
+	cmd := exec.Command("kubectl", "create", "ns", "kibaship", "--dry-run=client", "-o", "yaml")
 	out, err := cmd.CombinedOutput()
 	if err == nil {
 		apply := exec.Command("kubectl", "apply", "-f", "-")
@@ -1106,10 +1106,10 @@ func DeployWebhookReceiver() error {
 	if _, err := Run(cmd); err != nil {
 		return err
 	}
-	wait := exec.Command("kubectl", "-n", "kibaship-operator", "rollout", "status", "deploy/webhook-receiver", "--timeout=5m")
-	if err := WaitWithPodLogging(wait, "kibaship-operator", 5*time.Minute); err != nil {
+	wait := exec.Command("kubectl", "-n", "kibaship", "rollout", "status", "deploy/webhook-receiver", "--timeout=5m")
+	if err := WaitWithPodLogging(wait, "kibaship", 5*time.Minute); err != nil {
 		_, _ = fmt.Fprintf(GinkgoWriter, "\n❌ Timeout or error waiting for webhook-receiver rollout. Deployment describe:\n")
-		desc := exec.Command("kubectl", "-n", "kibaship-operator", "describe", "deployment", "webhook-receiver")
+		desc := exec.Command("kubectl", "-n", "kibaship", "describe", "deployment", "webhook-receiver")
 		_, _ = Run(desc)
 		return err
 	}
@@ -1119,11 +1119,11 @@ func DeployWebhookReceiver() error {
 
 // ConfigureOperatorWebhookEnv sets the operator's WEBHOOK_TARGET_URL env and waits for rollout.
 func ConfigureOperatorWebhookEnv(targetURL string) error {
-	cmd := exec.Command("kubectl", "-n", "kibaship-operator", "set", "env", "deployment/kibaship-operator-controller-manager", "WEBHOOK_TARGET_URL="+targetURL)
+	cmd := exec.Command("kubectl", "-n", "kibaship", "set", "env", "deployment/kibaship-controller-manager", "WEBHOOK_TARGET_URL="+targetURL)
 	if _, err := Run(cmd); err != nil {
 		return err
 	}
-	wait := exec.Command("kubectl", "-n", "kibaship-operator", "rollout", "status", "deploy/kibaship-operator-controller-manager", "--timeout=5m")
+	wait := exec.Command("kubectl", "-n", "kibaship", "rollout", "status", "deploy/kibaship-controller-manager", "--timeout=5m")
 	if _, err := Run(wait); err != nil {
 		return err
 	}

@@ -30,8 +30,8 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	platformv1alpha1 "github.com/kibamail/kibaship-operator/api/v1alpha1"
-	"github.com/kibamail/kibaship-operator/pkg/validation"
+	platformv1alpha1 "github.com/kibamail/kibaship/api/v1alpha1"
+	"github.com/kibamail/kibaship/pkg/validation"
 )
 
 var _ = Describe("Application Controller", func() {
@@ -733,7 +733,7 @@ var _ = Describe("Application Controller", func() {
 			}, "5s", "100ms").Should(BeTrue())
 
 			By("Verifying secret has correct labels")
-			Expect(secret.Labels).To(HaveKeyWithValue("app.kubernetes.io/managed-by", "kibaship-operator"))
+			Expect(secret.Labels).To(HaveKeyWithValue("app.kubernetes.io/managed-by", "kibaship"))
 			Expect(secret.Labels).To(HaveKeyWithValue(validation.LabelApplicationUUID, appUUID))
 			Expect(secret.Labels).To(HaveKeyWithValue("platform.operator.kibaship.com/type", "application-env-vars"))
 
@@ -821,7 +821,7 @@ var _ = Describe("Application Controller", func() {
 			}, "5s", "100ms").Should(BeTrue())
 
 			By("Verifying secret has correct labels")
-			Expect(secret.Labels).To(HaveKeyWithValue("app.kubernetes.io/managed-by", "kibaship-operator"))
+			Expect(secret.Labels).To(HaveKeyWithValue("app.kubernetes.io/managed-by", "kibaship"))
 			Expect(secret.Labels).To(HaveKeyWithValue(validation.LabelApplicationUUID, appUUID))
 			Expect(secret.Labels).To(HaveKeyWithValue("platform.operator.kibaship.com/type", "application-env-vars"))
 
@@ -858,7 +858,7 @@ var _ = Describe("Application Controller", func() {
 					Name:      secretName,
 					Namespace: "default",
 					Labels: map[string]string{
-						"app.kubernetes.io/managed-by":        "kibaship-operator",
+						"app.kubernetes.io/managed-by":        "kibaship",
 						validation.LabelApplicationUUID:       appUUID,
 						"platform.operator.kibaship.com/type": "application-env-vars",
 					},

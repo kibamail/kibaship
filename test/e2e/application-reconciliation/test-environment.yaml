@@ -1,4 +1,4 @@
-apiVersion: platform.operator.kibaship.com/v1alpha1
+go ahead apiVersion: platform.operator.kibaship.com/v1alpha1
 kind: Environment
 metadata:
   name: environment-testenv-application-e2e-kibaship-com

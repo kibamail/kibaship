@@ -3,9 +3,9 @@ package clusters
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/kibamail/kibaship-operator/cmd/cli/commands/clusters/create"
-	"github.com/kibamail/kibaship-operator/cmd/cli/commands/clusters/credentials"
-	"github.com/kibamail/kibaship-operator/cmd/cli/commands/clusters/delete"
+	"github.com/kibamail/kibaship/cmd/cli/commands/clusters/create"
+	"github.com/kibamail/kibaship/cmd/cli/commands/clusters/credentials"
+	"github.com/kibamail/kibaship/cmd/cli/commands/clusters/delete"
 )
 
 // NewCommand creates and returns the clusters command with all subcommands

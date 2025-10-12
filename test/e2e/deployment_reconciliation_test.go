@@ -9,7 +9,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/kibamail/kibaship-operator/test/utils"
+	"github.com/kibamail/kibaship/test/utils"
 )
 
 var _ = Describe("Deployment Reconciliation", func() {
@@ -323,7 +323,7 @@ spec:
 			By("Verifying all pipeline resources have proper tracking labels")
 			Eventually(func() error {
 				expectedLabels := map[string]string{
-					"app.kubernetes.io/managed-by":           "kibaship-operator",
+					"app.kubernetes.io/managed-by":           "kibaship",
 					"platform.kibaship.com/deployment-uuid":  deploymentUUID,
 					"platform.kibaship.com/application-uuid": applicationUUID,
 					"platform.kibaship.com/project-uuid":     projectUUID,
@@ -375,7 +375,7 @@ spec:
 				labels := string(output)
 				// jsonpath returns labels in JSON format: {"key":"value",...}
 				return strings.Contains(labels, fmt.Sprintf("\"app.kubernetes.io/name\":\"app-%s\"", applicationUUID)) &&
-					strings.Contains(labels, "\"app.kubernetes.io/managed-by\":\"kibaship-operator\"") &&
+					strings.Contains(labels, "\"app.kubernetes.io/managed-by\":\"kibaship\"") &&
 					strings.Contains(labels, fmt.Sprintf("\"platform.kibaship.com/deployment-uuid\":\"%s\"", deploymentUUID)) &&
 					strings.Contains(labels, fmt.Sprintf("\"platform.kibaship.com/application-uuid\":\"%s\"", applicationUUID))
 			}, "30s", "2s").Should(BeTrue(), "K8s Deployment should have correct labels")
@@ -662,7 +662,7 @@ spec:
     name: %s
   gitRepository:
     provider: github.com
-    repository: kibamail/kibaship-operator
+    repository: kibamail/kibaship
     publicAccess: true
     branch: main
     buildType: Dockerfile

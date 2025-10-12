@@ -14,10 +14,10 @@ import (
 
 const (
 	// OperatorConfigMapName is the name of the ConfigMap in the operator namespace
-	OperatorConfigMapName = "kibaship-operator-config"
+	OperatorConfigMapName = "kibaship-config"
 
 	// OperatorNamespace is the namespace where the operator runs
-	OperatorNamespace = "kibaship-operator"
+	OperatorNamespace = "kibaship"
 
 	// ConfigMap keys
 	ConfigKeyDomain     = "KIBASHIP_OPERATOR_DOMAIN"

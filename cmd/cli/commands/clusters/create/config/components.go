@@ -2,7 +2,8 @@ package config
 
 import (
 	"fmt"
-	"github.com/kibamail/kibaship-operator/cmd/cli/internal/version"
+
+	"github.com/kibamail/kibaship/cmd/cli/internal/version"
 )
 
 // ComponentFile represents a manifest file for a component
@@ -19,13 +20,13 @@ type ComponentVersion struct {
 
 // ComponentProvider represents a provider configuration for a component
 type ComponentProvider struct {
-	Name     string                       `json:"name"`
+	Name     string                      `json:"name"`
 	Versions map[string]ComponentVersion `json:"versions"`
 }
 
 // Component represents a Kubernetes component that can be installed
 type Component struct {
-	Name      string                        `json:"name"`
+	Name      string                       `json:"name"`
 	Providers map[string]ComponentProvider `json:"providers"`
 }
 
@@ -38,10 +39,10 @@ type ComponentsConfig struct {
 // GetBaseURL returns the base URL for component manifests based on version
 func GetBaseURL() string {
 	if version.IsDevelopment() {
-		return "https://raw.githubusercontent.com/kibamail/kibaship-operator/refs/heads/main/cmd/cli/commands/clusters/create/components"
+		return "https://raw.githubusercontent.com/kibamail/kibaship/refs/heads/main/cmd/cli/commands/clusters/create/components"
 	}
 	v := version.GetVersion()
-	return fmt.Sprintf("https://raw.githubusercontent.com/kibamail/kibaship-operator/refs/tags/%s/cmd/cli/commands/clusters/create/components", v)
+	return fmt.Sprintf("https://raw.githubusercontent.com/kibamail/kibaship/refs/tags/%s/cmd/cli/commands/clusters/create/components", v)
 }
 
 // GetComponentsConfig returns the configuration for all components with dynamic versioning
@@ -135,7 +136,7 @@ func GetComponentsConfig() ComponentsConfig {
 						Versions: map[string]ComponentVersion{
 							longhornVersion: {
 								Version: longhornVersion,
-								Files: []ComponentFile{
+								Files:   []ComponentFile{
 									// TODO: Add files when available
 								},
 							},
@@ -151,7 +152,7 @@ func GetComponentsConfig() ComponentsConfig {
 						Versions: map[string]ComponentVersion{
 							mysqlVersion: {
 								Version: mysqlVersion,
-								Files: []ComponentFile{
+								Files:   []ComponentFile{
 									// TODO: Add files when available
 								},
 							},
@@ -167,7 +168,7 @@ func GetComponentsConfig() ComponentsConfig {
 						Versions: map[string]ComponentVersion{
 							valkeyVersion: {
 								Version: valkeyVersion,
-								Files: []ComponentFile{
+								Files:   []ComponentFile{
 									// TODO: Add files when available
 								},
 							},
@@ -183,7 +184,7 @@ func GetComponentsConfig() ComponentsConfig {
 						Versions: map[string]ComponentVersion{
 							acmeDnsVersion: {
 								Version: acmeDnsVersion,
-								Files: []ComponentFile{
+								Files:   []ComponentFile{
 									// TODO: Add files when available
 								},
 							},

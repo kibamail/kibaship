@@ -8,8 +8,8 @@ layout:
 plugins:
   manifests.sdk.operatorframework.io/v2: {}
   scorecard.sdk.operatorframework.io/v2: {}
-projectName: kibaship-operator
-repo: github.com/kibamail/kibaship-operator
+projectName: kibaship
+repo: github.com/kibamail/kibaship
 resources:
 - api:
     crdVersion: v1
@@ -18,7 +18,7 @@ resources:
   domain: operator.kibaship.com
   group: platform
   kind: Project
-  path: github.com/kibamail/kibaship-operator/api/v1alpha1
+  path: github.com/kibamail/kibaship/api/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
@@ -27,7 +27,7 @@ resources:
   domain: operator.kibaship.com
   group: platform
   kind: Application
-  path: github.com/kibamail/kibaship-operator/api/v1alpha1
+  path: github.com/kibamail/kibaship/api/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
@@ -36,6 +36,6 @@ resources:
   domain: operator.kibaship.com
   group: platform
   kind: Deployment
-  path: github.com/kibamail/kibaship-operator/api/v1alpha1
+  path: github.com/kibamail/kibaship/api/v1alpha1
   version: v1alpha1
 version: "3"

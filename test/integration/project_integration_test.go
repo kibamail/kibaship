@@ -36,12 +36,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 
-	"github.com/kibamail/kibaship-operator/api/v1alpha1"
-	"github.com/kibamail/kibaship-operator/pkg/auth"
-	"github.com/kibamail/kibaship-operator/pkg/handlers"
-	"github.com/kibamail/kibaship-operator/pkg/models"
-	"github.com/kibamail/kibaship-operator/pkg/services"
-	"github.com/kibamail/kibaship-operator/pkg/validation"
+	"github.com/kibamail/kibaship/api/v1alpha1"
+	"github.com/kibamail/kibaship/pkg/auth"
+	"github.com/kibamail/kibaship/pkg/handlers"
+	"github.com/kibamail/kibaship/pkg/models"
+	"github.com/kibamail/kibaship/pkg/services"
+	"github.com/kibamail/kibaship/pkg/validation"
 )
 
 var (

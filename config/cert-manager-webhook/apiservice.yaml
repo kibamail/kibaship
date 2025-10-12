@@ -3,7 +3,7 @@ kind: APIService
 metadata:
   name: v1alpha1.dns.kibaship.com
   annotations:
-    cert-manager.io/inject-ca-from: kibaship-operator/kibaship-dns01-webhook-cert
+    cert-manager.io/inject-ca-from: kibaship/kibaship-dns01-webhook-cert
 spec:
   group: dns.kibaship.com
   version: v1alpha1
@@ -11,7 +11,6 @@ spec:
   versionPriority: 15
   service:
     name: kibaship-cert-manager-webhook
-    namespace: kibaship-operator
+    namespace: kibaship
     port: 443
   insecureSkipTLSVerify: false
-

@@ -27,9 +27,9 @@ import (
 	. "github.com/onsi/gomega"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/kibamail/kibaship-operator/api/v1alpha1"
-	"github.com/kibamail/kibaship-operator/pkg/models"
-	"github.com/kibamail/kibaship-operator/pkg/validation"
+	"github.com/kibamail/kibaship/api/v1alpha1"
+	"github.com/kibamail/kibaship/pkg/models"
+	"github.com/kibamail/kibaship/pkg/validation"
 )
 
 var _ = Describe("Application Integration", func() {

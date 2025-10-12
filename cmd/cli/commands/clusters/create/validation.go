@@ -8,7 +8,7 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/spf13/cobra"
 
-	"github.com/kibamail/kibaship-operator/cmd/cli/internal/styles"
+	"github.com/kibamail/kibaship/cmd/cli/internal/styles"
 )
 
 var validate *validator.Validate

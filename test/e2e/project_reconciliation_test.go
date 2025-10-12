@@ -13,7 +13,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/kibamail/kibaship-operator/test/utils"
+	"github.com/kibamail/kibaship/test/utils"
 )
 
 var _ = Describe("Project Reconciliation", func() {
@@ -113,7 +113,7 @@ spec:
 				}
 				return ns.Labels
 			}, "30s", "2s").Should(And(
-				HaveKeyWithValue("app.kubernetes.io/managed-by", "kibaship-operator"),
+				HaveKeyWithValue("app.kubernetes.io/managed-by", "kibaship"),
 				HaveKeyWithValue("platform.kibaship.com/project-name", projectName),
 				HaveKeyWithValue("platform.kibaship.com/uuid", projectUUID),
 				HaveKeyWithValue("platform.kibaship.com/workspace-uuid", workspaceUUIDConst),
@@ -185,7 +185,7 @@ spec:
 			By("Verifying all resources have proper tracking labels")
 			Eventually(func() bool {
 				expectedLabels := map[string]string{
-					"app.kubernetes.io/managed-by":       "kibaship-operator",
+					"app.kubernetes.io/managed-by":       "kibaship",
 					"platform.kibaship.com/project-name": projectName,
 				}
 				// Check service account labels

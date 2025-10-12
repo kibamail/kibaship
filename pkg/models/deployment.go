@@ -20,8 +20,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/kibamail/kibaship-operator/api/v1alpha1"
-	"github.com/kibamail/kibaship-operator/pkg/validation"
+	"github.com/kibamail/kibaship/api/v1alpha1"
+	"github.com/kibamail/kibaship/pkg/validation"
 )
 
 type DeploymentPhase string

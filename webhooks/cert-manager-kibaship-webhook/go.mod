@@ -1,4 +1,4 @@
-module github.com/kibamail/kibaship-operator/webhooks/cert-manager-kibaship-webhook
+module github.com/kibamail/kibaship/webhooks/cert-manager-kibaship-webhook
 
 go 1.23.0
 

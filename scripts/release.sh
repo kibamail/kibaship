@@ -264,7 +264,7 @@ This release includes:
 - Updated installation manifests
 
 For installation instructions, see:
-kubectl apply -f https://github.com/kibamail/kibaship-operator/releases/download/v$NEW_VERSION/install.yaml"
+kubectl apply -f https://github.com/kibamail/kibaship/releases/download/v$NEW_VERSION/install.yaml"
 
 # Push changes first
 log_info "Pushing version changes to remote..."
@@ -290,10 +290,10 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
     echo ""
     echo "✅ CI/CD pipeline will now:"
     echo "   1. Build and push all 6 Docker images:"
-    echo "      - kibamail/kibaship-operator:v$NEW_VERSION"
-    echo "      - kibamail/kibaship-operator-apiserver:v$NEW_VERSION"
-    echo "      - kibamail/kibaship-operator-cert-manager-webhook:v$NEW_VERSION"
-    echo "      - kibamail/kibaship-operator-registry-auth:v$NEW_VERSION"
+    echo "      - kibamail/kibaship:v$NEW_VERSION"
+    echo "      - kibamail/kibaship-apiserver:v$NEW_VERSION"
+    echo "      - kibamail/kibaship-cert-manager-webhook:v$NEW_VERSION"
+    echo "      - kibamail/kibaship-registry-auth:v$NEW_VERSION"
     echo "      - kibamail/kibaship-railpack-cli:v$NEW_VERSION"
     echo "      - kibamail/kibaship-railpack-build:v$NEW_VERSION"
     echo ""
@@ -305,8 +305,8 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
     echo "   3. Create GitHub releases with manifests and binaries"
     echo ""
     echo "🔗 Monitor progress at:"
-    echo "   - Actions: https://github.com/kibamail/kibaship-operator/actions"
-    echo "   - Releases: https://github.com/kibamail/kibaship-operator/releases"
+    echo "   - Actions: https://github.com/kibamail/kibaship/actions"
+    echo "   - Releases: https://github.com/kibamail/kibaship/releases"
 else
     log_warning "Release tag not pushed. To complete release later, run:"
     echo "   git push origin v$NEW_VERSION"
@@ -318,7 +318,7 @@ echo "1. Monitor CI/CD pipeline execution"
 echo "2. Verify all 6 Docker images are available at docker.io"
 echo "3. Verify CLI binaries are in GitHub release"
 echo "4. Test installation:"
-echo "   kubectl apply -f https://github.com/kibamail/kibaship-operator/releases/download/v$NEW_VERSION/install.yaml"
+echo "   kubectl apply -f https://github.com/kibamail/kibaship/releases/download/v$NEW_VERSION/install.yaml"
 echo "5. Update documentation if needed"
 
 echo ""
@@ -370,7 +370,7 @@ echo "### 📦 Installation"
 echo ""
 echo "**Using kubectl:**"
 echo "\`\`\`bash"
-echo "kubectl apply -f https://github.com/kibamail/kibaship-operator/releases/download/v$NEW_VERSION/install.yaml"
+echo "kubectl apply -f https://github.com/kibamail/kibaship/releases/download/v$NEW_VERSION/install.yaml"
 echo "\`\`\`"
 echo ""
 echo "### 🔧 Compatibility"
@@ -383,5 +383,5 @@ if [ "$RELEASE_TYPE" = "major" ]; then
     echo "This is a major release with breaking changes. Please review the migration guide before upgrading."
     echo ""
 fi
-echo "**Full Changelog**: https://github.com/kibamail/kibaship-operator/compare/v$CURRENT_VERSION...v$NEW_VERSION"
+echo "**Full Changelog**: https://github.com/kibamail/kibaship/compare/v$CURRENT_VERSION...v$NEW_VERSION"
 echo "---"

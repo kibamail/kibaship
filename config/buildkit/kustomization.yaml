@@ -3,7 +3,7 @@ namespace: buildkit
 labels:
   - includeSelectors: true
     pairs:
-      app.kubernetes.io/part-of: kibaship-operator
+      app.kubernetes.io/part-of: kibaship
       app.kubernetes.io/name: buildkitd
 
 resources:

@@ -3,7 +3,7 @@ package clusters
 import (
 	"fmt"
 
-	"github.com/kibamail/kibaship-operator/cmd/cli/internal/styles"
+	"github.com/kibamail/kibaship/cmd/cli/internal/styles"
 )
 
 // PrintHelp displays the help documentation for the clusters command

@@ -11,6 +11,7 @@ This document outlines the comprehensive plan to introduce the **Environment CRD
 ## Current Architecture Analysis
 
 ### Existing CRD Hierarchy
+
 ```
 Project (Cluster-scoped)
   ├── Creates Namespace (project-{slug}-kibaship-com)
@@ -24,6 +25,7 @@ Project (Cluster-scoped)
 ```
 
 ### Current Labels System
+
 - `platform.kibaship.com/uuid` - Resource UUID
 - `platform.kibaship.com/slug` - Resource slug
 - `platform.kibaship.com/workspace-uuid` - Workspace UUID (Projects)
@@ -32,12 +34,15 @@ Project (Cluster-scoped)
 - `platform.kibaship.com/deployment-uuid` - Deployment UUID (ApplicationDomains)
 
 ### Current Controllers
+
 1. **ProjectController** (`internal/controller/project_controller.go`)
+
    - Creates namespace for project
    - Creates registry credentials, CA certs, docker config
    - Sets project status to Ready
 
 2. **ApplicationController** (`internal/controller/application_controller.go`)
+
    - Validates application belongs to project
    - Manages application environments (currently stored in `spec.environments[]`)
    - Creates environment secrets (`{app-name}-env-{env-name}`)
@@ -45,6 +50,7 @@ Project (Cluster-scoped)
    - Sets finalizer for cascading deletes
 
 3. **DeploymentController** (`internal/controller/deployment_controller.go`)
+
    - References `spec.environmentName` (string field)
    - Creates Tekton pipelines and pipeline runs
    - Manages MySQL/Postgres deployments
@@ -57,6 +63,7 @@ Project (Cluster-scoped)
 ## Target Architecture
 
 ### New CRD Hierarchy
+
 ```
 Project (Cluster-scoped)
   ├── Creates Namespace (project-{slug}-kibaship-com)
@@ -73,6 +80,7 @@ Project (Cluster-scoped)
 ```
 
 ### New Labels System
+
 - `platform.kibaship.com/uuid` - Resource UUID
 - `platform.kibaship.com/slug` - Resource slug
 - `platform.kibaship.com/workspace-uuid` - Workspace UUID (Projects)
@@ -86,9 +94,11 @@ Project (Cluster-scoped)
 ### Phase 1: Create Environment CRD
 
 #### 1.1 Create Environment Types File
+
 **File:** `api/v1alpha1/environment_types.go`
 
 **Structure:**
+
 ```go
 type EnvironmentSpec struct {
     // ProjectRef references the Project this environment belongs to
@@ -98,6 +108,7 @@ type EnvironmentSpec struct {
     // Description of the environment (optional)
     // +optional
     Description string `json:"description,omitempty"`
+
 
     // Variables contains environment-specific configuration variables
     // +optional
@@ -128,6 +139,7 @@ type EnvironmentStatus struct {
 ```
 
 **Validations:**
+
 - Must have required labels: `platform.kibaship.com/uuid`, `platform.kibaship.com/slug`, `platform.kibaship.com/project-uuid`
 - Name must follow format: `environment-{slug}-kibaship-com`
 - UUID and slug validations via webhook
@@ -135,12 +147,15 @@ type EnvironmentStatus struct {
 **Webhook:** Implement `ValidateCreate`, `ValidateUpdate`, `ValidateDelete` following existing patterns
 
 **Files to create:**
+
 - `api/v1alpha1/environment_types.go`
 
 #### 1.2 Create Environment Controller
+
 **File:** `internal/controller/environment_controller.go`
 
 **Responsibilities:**
+
 1. Add finalizer `platform.operator.kibaship.com/environment-finalizer`
 2. Validate environment belongs to valid project
 3. Create environment secret if needed
@@ -149,6 +164,7 @@ type EnvironmentStatus struct {
 6. Emit webhooks for environment status changes
 
 **Key Functions:**
+
 - `Reconcile()` - Main reconciliation loop
 - `handleDeletion()` - Cascade delete all applications
 - `deleteAssociatedApplications()` - Find and delete apps by environment label
@@ -157,19 +173,23 @@ type EnvironmentStatus struct {
 - `ensureUUIDLabels()` - Validate and set labels
 
 **Owner References:**
+
 - Environment → Project (for cleanup)
 - Applications → Environment (for cascading deletes)
 
 **Files to create:**
+
 - `internal/controller/environment_controller.go`
 - `internal/controller/environment_controller_test.go`
 
 ### Phase 2: Update Application CRD
 
 #### 2.1 Modify Application Spec
+
 **File:** `api/v1alpha1/application_types.go`
 
 **Changes:**
+
 ```go
 type ApplicationSpec struct {
     // REMOVE: ProjectRef corev1.LocalObjectReference
@@ -189,21 +209,27 @@ type ApplicationSpec struct {
 ```
 
 **Label Changes:**
+
 - Add `platform.kibaship.com/environment-uuid` label
 - Keep `platform.kibaship.com/project-uuid` (inherited from environment)
 
 **Validation Changes:**
+
 - Update webhook to require `environment-uuid` label
 - Validate `environmentRef` points to existing Environment
 
 **Files to modify:**
+
 - `api/v1alpha1/application_types.go` (remove ProjectRef, add EnvironmentRef, remove Environments array)
 
 #### 2.2 Update Application Controller
+
 **File:** `internal/controller/application_controller.go`
 
 **Changes:**
+
 1. **Remove:**
+
    - `ensureDefaultEnvironment()` - No longer needed
    - `reconcileEnvironmentSecrets()` - Move to Environment controller
    - `cleanupRemovedEnvironmentSecrets()` - Move to Environment controller
@@ -211,6 +237,7 @@ type ApplicationSpec struct {
    - Environment-related status tracking
 
 2. **Modify:**
+
    - `ensureUUIDLabels()` - Get environment UUID and project UUID from environment
    - `getProjectUUID()` - Change to get from environment instead of direct project ref
    - Validation logic to check environment exists
@@ -219,6 +246,7 @@ type ApplicationSpec struct {
    - `getEnvironmentUUID()` - Extract environment UUID from environment resource
 
 **Key Changes:**
+
 ```go
 // OLD:
 app.Spec.ProjectRef.Name
@@ -231,15 +259,18 @@ projectRef := environment.Spec.ProjectRef.Name
 ```
 
 **Files to modify:**
+
 - `internal/controller/application_controller.go`
 - `internal/controller/application_controller_test.go`
 
 ### Phase 3: Update Deployment CRD
 
 #### 3.1 Modify Deployment Spec
+
 **File:** `api/v1alpha1/deployment_types.go`
 
 **Changes:**
+
 ```go
 type DeploymentSpec struct {
     // ApplicationRef references the Application this deployment belongs to
@@ -254,29 +285,36 @@ type DeploymentSpec struct {
 ```
 
 **Label Changes:**
+
 - Add `platform.kibaship.com/environment-uuid` label (inherited from application)
 
 **Files to modify:**
+
 - `api/v1alpha1/deployment_types.go` (remove environmentName field)
 
 #### 3.2 Update Deployment Controller
+
 **File:** `internal/controller/deployment_controller.go`
 
 **Changes:**
+
 1. Remove all references to `deployment.Spec.EnvironmentName`
 2. Get environment UUID from application's labels
 3. Update pipeline creation to use environment context if needed
 
 **Files to modify:**
+
 - `internal/controller/deployment_controller.go`
 - `internal/controller/deployment_controller_test.go`
 
 ### Phase 4: Update Project Controller
 
 #### 4.1 Modify Project Controller
+
 **File:** `internal/controller/project_controller.go`
 
 **Add Auto-Creation of Production Environment:**
+
 ```go
 // After namespace creation and before status update
 func (r *ProjectReconciler) ensureDefaultEnvironment(ctx context.Context, project *platformv1alpha1.Project, namespace string) error {
@@ -329,6 +367,7 @@ func (r *ProjectReconciler) ensureDefaultEnvironment(ctx context.Context, projec
 ```
 
 **Call in Reconcile:**
+
 ```go
 // After namespace and registry setup, before status update
 if err := r.ensureDefaultEnvironment(ctx, &project, namespace.Name); err != nil {
@@ -339,37 +378,45 @@ if err := r.ensureDefaultEnvironment(ctx, &project, namespace.Name); err != nil 
 ```
 
 **Files to modify:**
+
 - `internal/controller/project_controller.go`
 - `internal/controller/project_controller_test.go`
 
 ### Phase 5: Update Validation Package
 
 #### 5.1 Add Environment UUID Label
+
 **File:** `pkg/validation/labels.go`
 
 **Add:**
+
 ```go
 // LabelEnvironmentUUID is the label key for environment UUID
 LabelEnvironmentUUID = "platform.kibaship.com/environment-uuid"
 ```
 
 **Files to modify:**
+
 - `pkg/validation/labels.go`
 
 #### 5.2 Update Resource Labeler
+
 **File:** `internal/controller/resource_labeler.go`
 
 **Add:**
+
 - `ValidateEnvironmentLabeling()` - Validate environment labels
 - Update `ValidateApplicationLabeling()` to check for environment-uuid
 - Update `ValidateDeploymentLabeling()` to check for environment-uuid
 
 **Files to modify:**
+
 - `internal/controller/resource_labeler.go`
 
 ### Phase 6: Generate CRD Manifests
 
 #### 6.1 Run Code Generation
+
 ```bash
 # Generate deepcopy, client, etc.
 make generate
@@ -379,31 +426,37 @@ make manifests
 ```
 
 This will create:
+
 - `config/crd/bases/platform.operator.kibaship.com_environments.yaml`
 - Updated application/deployment CRDs
 
 #### 6.2 Update Kustomization
+
 **File:** `config/crd/kustomization.yaml`
 
 **Add:**
+
 ```yaml
 resources:
-- bases/platform.operator.kibaship.com_projects.yaml
-- bases/platform.operator.kibaship.com_environments.yaml  # NEW
-- bases/platform.operator.kibaship.com_applications.yaml
-- bases/platform.operator.kibaship.com_deployments.yaml
-- bases/platform.operator.kibaship.com_applicationdomains.yaml
+  - bases/platform.operator.kibaship.com_projects.yaml
+  - bases/platform.operator.kibaship.com_environments.yaml # NEW
+  - bases/platform.operator.kibaship.com_applications.yaml
+  - bases/platform.operator.kibaship.com_deployments.yaml
+  - bases/platform.operator.kibaship.com_applicationdomains.yaml
 ```
 
 **Files to modify:**
+
 - `config/crd/kustomization.yaml`
 
 ### Phase 7: Update Main Entry Point
 
 #### 7.1 Register Environment Controller
+
 **File:** `cmd/main.go`
 
 **Add after other controller setups:**
+
 ```go
 // Setup Environment controller
 if err = (&controller.EnvironmentReconciler{
@@ -423,6 +476,7 @@ if err = (&platformv1alpha1.Environment{}).SetupWebhookWithManager(mgr); err != 
 ```
 
 **Files to modify:**
+
 - `cmd/main.go`
 
 ### Phase 8: Update All Tests
@@ -438,8 +492,8 @@ package controller
 
 import (
     "context"
-    platformv1alpha1 "github.com/kibamail/kibaship-operator/api/v1alpha1"
-    "github.com/kibamail/kibaship-operator/pkg/validation"
+    platformv1alpha1 "github.com/kibamail/kibaship/api/v1alpha1"
+    "github.com/kibamail/kibaship/pkg/validation"
     corev1 "k8s.io/api/core/v1"
     metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
     "sigs.k8s.io/controller-runtime/pkg/client"
@@ -503,6 +557,7 @@ func CreateTestApplication(ctx context.Context, k8sClient client.Client, appName
 ```
 
 **Files to create:**
+
 - `internal/controller/test_helpers.go`
 
 #### 8.2 Update Project Controller Tests
@@ -510,25 +565,31 @@ func CreateTestApplication(ctx context.Context, k8sClient client.Client, appName
 **File:** `internal/controller/project_controller_test.go`
 
 **Test Cases to Update:**
+
 1. ✅ "should successfully reconcile the resource"
+
    - After reconciliation, verify production environment was auto-created
    - Check environment has correct labels and owner reference
 
 2. ✅ "should fail validation when platform.kibaship.com/uuid label is missing"
+
    - No changes needed (project-level validation)
 
 3. ✅ "should fail validation when UUID labels have invalid format"
+
    - No changes needed (project-level validation)
 
 4. ✅ "should fail when project name conflicts with existing namespace"
    - No changes needed (namespace-level logic)
 
 **New Test Cases:**
+
 - "should auto-create production environment on project creation"
 - "should not recreate production environment if it already exists"
 - "production environment should have correct owner reference to project"
 
 **Example:**
+
 ```go
 It("should auto-create production environment on project creation", func() {
     By("Reconciling the project twice")
@@ -557,6 +618,7 @@ It("should auto-create production environment on project creation", func() {
 ```
 
 **Files to modify:**
+
 - `internal/controller/project_controller_test.go`
 
 #### 8.3 Create Environment Controller Tests
@@ -564,6 +626,7 @@ It("should auto-create production environment on project creation", func() {
 **File:** `internal/controller/environment_controller_test.go` (NEW)
 
 **Test Cases:**
+
 1. "should successfully reconcile environment"
 2. "should validate required labels"
 3. "should fail when environment UUID is invalid"
@@ -573,6 +636,7 @@ It("should auto-create production environment on project creation", func() {
 7. "should update environment status with application count"
 
 **Files to create:**
+
 - `internal/controller/environment_controller_test.go`
 
 #### 8.4 Update Application Controller Tests
@@ -580,12 +644,14 @@ It("should auto-create production environment on project creation", func() {
 **File:** `internal/controller/application_controller_test.go`
 
 **Changes Required:**
+
 1. Create test environment before creating test application
 2. Update application spec to use `EnvironmentRef` instead of `ProjectRef`
 3. Add `environment-uuid` label to all test applications
 4. Remove tests related to `spec.environments[]` management
 
 **Before:**
+
 ```go
 testProject := &platformv1alpha1.Project{...}
 k8sClient.Create(ctx, testProject)
@@ -599,6 +665,7 @@ resource := &platformv1alpha1.Application{
 ```
 
 **After:**
+
 ```go
 testProject := &platformv1alpha1.Project{...}
 k8sClient.Create(ctx, testProject)
@@ -636,12 +703,14 @@ resource := &platformv1alpha1.Application{
 ```
 
 **Test Cases to Update:**
+
 1. ✅ "should successfully reconcile the resource" - Add environment creation
 2. ✅ "should validate GitRepository application type" - Add environment creation
 3. ✅ "should validate MySQL application type" - Add environment creation
 4. ❌ REMOVE: Tests related to `spec.environments[]` array management
 
 **Files to modify:**
+
 - `internal/controller/application_controller_test.go`
 
 #### 8.5 Update Deployment Controller Tests
@@ -649,11 +718,13 @@ resource := &platformv1alpha1.Application{
 **File:** `internal/controller/deployment_controller_test.go`
 
 **Changes Required:**
+
 1. Create environment before creating application
 2. Add `environment-uuid` label to deployments
 3. Remove `spec.environmentName` field from deployment specs
 
 **Before:**
+
 ```go
 testDeployment = &platformv1alpha1.Deployment{
     Spec: platformv1alpha1.DeploymentSpec{
@@ -665,6 +736,7 @@ testDeployment = &platformv1alpha1.Deployment{
 ```
 
 **After:**
+
 ```go
 testDeployment = &platformv1alpha1.Deployment{
     ObjectMeta: metav1.ObjectMeta{
@@ -681,11 +753,13 @@ testDeployment = &platformv1alpha1.Deployment{
 ```
 
 **Test Cases to Update:**
+
 1. ✅ "should create a pipeline with correct parameters" - Add environment setup
 2. ✅ "should create PipelineRun with correct commit SHA" - Add environment setup
 3. ✅ MySQL deployment tests - Add environment setup
 
 **Files to modify:**
+
 - `internal/controller/deployment_controller_test.go`
 
 #### 8.6 Update Integration Tests
@@ -695,6 +769,7 @@ testDeployment = &platformv1alpha1.Deployment{
 **Review and update any integration tests to include environment creation.**
 
 **Files to modify:**
+
 - `internal/controller/application_integration_test.go`
 
 #### 8.7 Update Test Suite Setup
@@ -702,15 +777,18 @@ testDeployment = &platformv1alpha1.Deployment{
 **File:** `internal/controller/suite_test.go`
 
 **Verify that:**
+
 - Environment CRD is registered in scheme
 - Test environment cleanup includes environments
 
 **Files to modify:**
+
 - `internal/controller/suite_test.go`
 
 ### Phase 9: Update Sample Manifests
 
 #### 9.1 Create Environment Sample
+
 **File:** `config/samples/platform_v1alpha1_environment.yaml` (NEW)
 
 ```yaml
@@ -730,12 +808,15 @@ spec:
 ```
 
 **Files to create:**
+
 - `config/samples/platform_v1alpha1_environment.yaml`
 
 #### 9.2 Update Application Sample
+
 **File:** `config/samples/platform_v1alpha1_application.yaml`
 
 **Change:**
+
 ```yaml
 # OLD:
 spec:
@@ -749,53 +830,64 @@ spec:
 ```
 
 **Add label:**
+
 ```yaml
 labels:
   platform.kibaship.com/environment-uuid: "env-uuid-here"
 ```
 
 **Files to modify:**
+
 - `config/samples/platform_v1alpha1_application.yaml`
 
 #### 9.3 Update Deployment Sample
+
 **File:** `config/samples/platform_v1alpha1_deployment.yaml`
 
 **Remove:**
+
 ```yaml
 spec:
-  environmentName: "production"  # REMOVE
+  environmentName: "production" # REMOVE
 ```
 
 **Add label:**
+
 ```yaml
 labels:
   platform.kibaship.com/environment-uuid: "env-uuid-here"
 ```
 
 **Files to modify:**
+
 - `config/samples/platform_v1alpha1_deployment.yaml`
 
 #### 9.4 Update Demo Samples
+
 **File:** `config/samples/demo_automatic_domain_creation.yaml`
 
 Update this file to include environment resources.
 
 **Files to modify:**
+
 - `config/samples/demo_automatic_domain_creation.yaml`
 
 ### Phase 10: Update Documentation
 
 #### 10.1 Update API Documentation
+
 - Document the new Environment CRD
 - Update examples showing the new hierarchy
 - Migration guide for existing deployments
 
 #### 10.2 Update README
+
 If there's a README explaining the resource model, update it.
 
 ### Phase 11: Testing Strategy
 
 #### 11.1 Unit Tests Execution Order
+
 Run tests incrementally to catch issues early:
 
 ```bash
@@ -816,6 +908,7 @@ make test
 ```
 
 #### 11.2 Integration Testing
+
 ```bash
 # Generate manifests
 make manifests
@@ -842,6 +935,7 @@ kubectl apply -f config/samples/platform_v1alpha1_deployment.yaml
 ```
 
 #### 11.3 Deletion Testing
+
 Test cascading deletes work correctly:
 
 ```bash
@@ -855,6 +949,7 @@ kubectl get applications -n project-myproject-kibaship-com
 ## Migration Strategy for Existing Data
 
 ### Option 1: Fresh Start (Recommended for Development)
+
 1. Delete all existing Applications and Deployments
 2. Apply new CRDs
 3. Create Environments
@@ -862,7 +957,9 @@ kubectl get applications -n project-myproject-kibaship-com
 5. Recreate Deployments
 
 ### Option 2: Data Migration (For Production)
+
 Create a migration script:
+
 ```go
 // internal/migration/add_environments.go
 func MigrateApplicationsToEnvironments(ctx context.Context, client client.Client) error {
@@ -875,6 +972,7 @@ func MigrateApplicationsToEnvironments(ctx context.Context, client client.Client
 ## Files Summary
 
 ### Files to CREATE (NEW)
+
 1. `api/v1alpha1/environment_types.go` - Environment CRD definition
 2. `internal/controller/environment_controller.go` - Environment controller
 3. `internal/controller/environment_controller_test.go` - Environment tests
@@ -882,6 +980,7 @@ func MigrateApplicationsToEnvironments(ctx context.Context, client client.Client
 5. `config/samples/platform_v1alpha1_environment.yaml` - Sample environment
 
 ### Files to MODIFY (EXISTING)
+
 1. `api/v1alpha1/application_types.go` - Change ProjectRef → EnvironmentRef, remove Environments array
 2. `api/v1alpha1/deployment_types.go` - Remove environmentName field
 3. `pkg/validation/labels.go` - Add LabelEnvironmentUUID
@@ -900,6 +999,7 @@ func MigrateApplicationsToEnvironments(ctx context.Context, client client.Client
 16. `config/samples/demo_automatic_domain_creation.yaml` - Add environment
 
 ### Files Generated Automatically (by make manifests)
+
 1. `config/crd/bases/platform.operator.kibaship.com_environments.yaml`
 2. Updated `config/crd/bases/platform.operator.kibaship.com_applications.yaml`
 3. Updated `config/crd/bases/platform.operator.kibaship.com_deployments.yaml`
@@ -909,64 +1009,77 @@ func MigrateApplicationsToEnvironments(ctx context.Context, client client.Client
 ### Step-by-Step Implementation
 
 **Step 1: Scaffold Environment CRD**
+
 - Create `environment_types.go`
 - Run `make generate && make manifests`
 - Verify CRD generated
 
 **Step 2: Create Environment Controller**
+
 - Create `environment_controller.go`
 - Implement reconciliation logic
 - Add to `cmd/main.go`
 
 **Step 3: Update Project Controller**
+
 - Add environment auto-creation
 - Test that production env is created
 
 **Step 4: Update Application CRD and Controller**
+
 - Modify spec (ProjectRef → EnvironmentRef)
 - Update controller logic
 - Run `make manifests`
 
 **Step 5: Update Deployment CRD and Controller**
+
 - Remove environmentName
 - Update controller logic
 - Run `make manifests`
 
 **Step 6: Update Labels and Validation**
+
 - Add environment-uuid label constant
 - Update validation functions
 
 **Step 7: Write Tests**
+
 - Create environment tests
 - Update project tests
 - Update application tests
 - Update deployment tests
 
 **Step 8: Run Tests Incrementally**
+
 - Test each controller individually
 - Fix any failures
 - Run full suite
 
 **Step 9: Integration Testing**
+
 - Deploy locally
 - Create resources manually
 - Verify behavior
 
 **Step 10: Update Samples and Docs**
+
 - Create sample manifests
 - Update documentation
 
 ## Critical Success Factors
 
 1. **Cascading Deletes Must Work**
+
    - Deleting Environment must delete all Applications
    - Applications must have owner references to Environments
 
 2. **Label Propagation Must Be Correct**
+
    - Environment UUID must propagate to Applications and Deployments
    - Project UUID must still be accessible
 
 3. **Backward Compatibility**
+
    - Old resources must be migrated or clearly documented as incompatible
 
 4. **Test Coverage**
@@ -976,11 +1089,13 @@ func MigrateApplicationsToEnvironments(ctx context.Context, client client.Client
 ## Risk Mitigation
 
 ### High-Risk Areas
+
 1. **Cascading Deletes** - If owner references are wrong, orphaned resources
 2. **Label Propagation** - If labels missing, resources can't be queried correctly
 3. **Test Failures** - If tests don't include environment, they will all fail
 
 ### Mitigation Strategies
+
 1. Write comprehensive tests for each phase
 2. Test locally before committing each phase
 3. Use test helpers to ensure consistency
@@ -1009,6 +1124,7 @@ This is a comprehensive architectural change that touches almost every part of t
 5. **Patience** - This is a big refactor, take time to do it right
 
 Once complete, the new hierarchy will provide:
+
 - Better isolation between environments
 - Clearer resource organization
 - Easier environment management

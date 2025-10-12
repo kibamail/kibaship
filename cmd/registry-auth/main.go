@@ -8,7 +8,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/kibamail/kibaship-operator/internal/registryauth"
+	"github.com/kibamail/kibaship/internal/registryauth"
 )
 
 func main() {

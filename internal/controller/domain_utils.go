@@ -22,7 +22,7 @@ import (
 	"math/big"
 	"strings"
 
-	platformv1alpha1 "github.com/kibamail/kibaship-operator/api/v1alpha1"
+	platformv1alpha1 "github.com/kibamail/kibaship/api/v1alpha1"
 )
 
 const (

@@ -9,7 +9,7 @@ const docTemplate = `{
     "info": {
         "description": "{{escape .Description}}",
         "title": "{{.Title}}",
-        "termsOfService": "https://github.com/kibamail/kibaship-operator",
+        "termsOfService": "https://github.com/kibamail/kibaship",
         "contact": {
             "name": "API Support",
             "email": "support@kibamail.com"

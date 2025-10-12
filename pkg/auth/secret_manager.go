@@ -120,7 +120,7 @@ func (s *SecretManager) CreateOrGetAPIKey(ctx context.Context) (string, error) {
 			Name:      SecretName,
 			Namespace: s.namespace,
 			Labels: map[string]string{
-				"app":       "kibaship-operator",
+				"app":       "kibaship",
 				"component": "api-server",
 			},
 		},

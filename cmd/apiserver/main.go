@@ -17,7 +17,7 @@ limitations under the License.
 // @title Kibaship Operator API
 // @version 1.0
 // @description REST API server for managing Kibaship Operator resources
-// @termsOfService https://github.com/kibamail/kibaship-operator
+// @termsOfService https://github.com/kibamail/kibaship
 // @contact.name API Support
 // @contact.email support@kibamail.com
 // @license.name Apache 2.0
@@ -40,11 +40,11 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/kibamail/kibaship-operator/api/v1alpha1"
-	_ "github.com/kibamail/kibaship-operator/docs"
-	"github.com/kibamail/kibaship-operator/pkg/auth"
-	"github.com/kibamail/kibaship-operator/pkg/handlers"
-	"github.com/kibamail/kibaship-operator/pkg/services"
+	"github.com/kibamail/kibaship/api/v1alpha1"
+	_ "github.com/kibamail/kibaship/docs"
+	"github.com/kibamail/kibaship/pkg/auth"
+	"github.com/kibamail/kibaship/pkg/handlers"
+	"github.com/kibamail/kibaship/pkg/services"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 	"k8s.io/apimachinery/pkg/runtime"

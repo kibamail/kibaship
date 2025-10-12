@@ -3,7 +3,7 @@ package create
 import (
 	"fmt"
 
-	"github.com/kibamail/kibaship-operator/cmd/cli/internal/styles"
+	"github.com/kibamail/kibaship/cmd/cli/internal/styles"
 )
 
 // PrintHelp displays the comprehensive help documentation for clusters create command

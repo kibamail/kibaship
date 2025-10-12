@@ -39,11 +39,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	platformv1alpha1 "github.com/kibamail/kibaship-operator/api/v1alpha1"
-	"github.com/kibamail/kibaship-operator/internal/bootstrap"
-	"github.com/kibamail/kibaship-operator/internal/controller"
-	"github.com/kibamail/kibaship-operator/pkg/config"
-	"github.com/kibamail/kibaship-operator/pkg/webhooks"
+	platformv1alpha1 "github.com/kibamail/kibaship/api/v1alpha1"
+	"github.com/kibamail/kibaship/internal/bootstrap"
+	"github.com/kibamail/kibaship/internal/controller"
+	"github.com/kibamail/kibaship/pkg/config"
+	"github.com/kibamail/kibaship/pkg/webhooks"
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	// +kubebuilder:scaffold:imports
 )

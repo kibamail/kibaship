@@ -29,8 +29,8 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	platformv1alpha1 "github.com/kibamail/kibaship-operator/api/v1alpha1"
-	"github.com/kibamail/kibaship-operator/pkg/validation"
+	platformv1alpha1 "github.com/kibamail/kibaship/api/v1alpha1"
+	"github.com/kibamail/kibaship/pkg/validation"
 )
 
 var _ = Describe("Project Controller", func() {
@@ -109,7 +109,7 @@ var _ = Describe("Project Controller", func() {
 			Expect(namespace.Labels[validation.LabelWorkspaceUUID]).To(Equal("6ba7b810-9dad-11d1-80b4-00c04fd430c8"))
 
 			By("Verifying namespace has correct annotations")
-			Expect(namespace.Annotations["platform.kibaship.com/created-by"]).To(Equal("kibaship-operator"))
+			Expect(namespace.Annotations["platform.kibaship.com/created-by"]).To(Equal("kibaship"))
 			Expect(namespace.Annotations["platform.kibaship.com/project"]).To(Equal(resourceName))
 
 			By("Verifying production environment was auto-created")

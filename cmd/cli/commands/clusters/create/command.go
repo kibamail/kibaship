@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/kibamail/kibaship-operator/cmd/cli/internal/styles"
+	"github.com/kibamail/kibaship/cmd/cli/internal/styles"
 	"github.com/spf13/cobra"
 )
 
