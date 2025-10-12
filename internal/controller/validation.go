@@ -157,7 +157,7 @@ func (pv *ProjectValidator) validateProjectName(name string) error {
 	}
 
 	// Check for reserved names
-	reservedNames := []string{"default", "kube-system", "kube-public", "kube-node-lease", "kibaship-system"}
+	reservedNames := []string{"default", "kube-system", "kube-public", "kube-node-lease", "kibaship"}
 	for _, reserved := range reservedNames {
 		if name == reserved || strings.HasPrefix(name, reserved+"-") {
 			return fmt.Errorf("project name '%s' conflicts with reserved namespace name", name)

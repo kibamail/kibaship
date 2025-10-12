@@ -30,6 +30,12 @@ variable "kind_storage_per_node" {
   default     = 75
 }
 
+variable "kind_k8s_version" {
+  description = "Kubernetes version for Kind cluster (e.g., v1.30.6, v1.31.0)"
+  type        = string
+  default     = "v1.34.0@sha256:7416a61b42b1662ca6ca89f02028ac133a309a2a30ba309614e8ec94d976dc5a"
+}
+
 # Note: Kind clusters use local Terraform state - no S3 configuration needed
 
 # Derived variables for internal use

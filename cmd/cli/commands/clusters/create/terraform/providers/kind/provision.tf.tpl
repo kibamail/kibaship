@@ -61,7 +61,8 @@ resource "kind_cluster" "cluster" {
 
     # Control plane node
     node {
-      role = "control-plane"
+      role  = "control-plane"
+      image = "kindest/node:${var.kind_k8s_version}"
 
       # Dedicated Longhorn storage for control plane
       extra_mounts {
@@ -131,7 +132,8 @@ resource "kind_cluster" "cluster" {
     dynamic "node" {
       for_each = range(max(0, var.kind_node_count - 1))
       content {
-        role = "worker"
+        role  = "worker"
+        image = "kindest/node:${var.kind_k8s_version}"
 
         # Dedicated Longhorn storage for each worker node
         extra_mounts {

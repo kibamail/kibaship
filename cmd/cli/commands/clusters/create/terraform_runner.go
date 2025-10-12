@@ -216,6 +216,12 @@ func runTerraformApply(config *CreateConfig) error {
 		if config.Kind != nil {
 			env = append(env, fmt.Sprintf("TF_VAR_kind_node_count=%s", config.Kind.Nodes))
 			env = append(env, fmt.Sprintf("TF_VAR_kind_storage_per_node=%s", config.Kind.Storage))
+			// Use provided Kubernetes version or default to v1.30.6
+			k8sVersion := config.Kind.KubernetesVersion
+			if k8sVersion == "" {
+				k8sVersion = "v1.30.6"
+			}
+			env = append(env, fmt.Sprintf("TF_VAR_kind_k8s_version=%s", k8sVersion))
 		}
 	}
 
@@ -265,6 +271,206 @@ func runTerraformApply(config *CreateConfig) error {
 	return nil
 }
 
+// runBootstrapTerraformInit runs terraform init in the bootstrap directory
+func runBootstrapTerraformInit(config *CreateConfig) error {
+	bootstrapDir := filepath.Join(".kibaship", config.Name, "bootstrap")
+
+	// Prepare backend configuration arguments based on provider
+	var backendArgs []string
+	if config.Provider == ProviderKind {
+		// Kind clusters use local backend - no S3 configuration needed
+		backendArgs = []string{"init"}
+	} else {
+		// Cloud providers use S3 backend
+		backendArgs = []string{
+			"init",
+			fmt.Sprintf("-backend-config=bucket=%s", config.TerraformState.S3Bucket),
+			fmt.Sprintf("-backend-config=key=clusters/%s/bootstrap.terraform.tfstate", config.Name),
+			fmt.Sprintf("-backend-config=region=%s", config.TerraformState.S3Region),
+			fmt.Sprintf("-backend-config=access_key=%s", config.TerraformState.S3AccessKey),
+			fmt.Sprintf("-backend-config=secret_key=%s", config.TerraformState.S3AccessSecret),
+			"-backend-config=encrypt=true",
+		}
+	}
+
+	// Create terraform command
+	cmd := exec.Command("terraform", backendArgs...)
+	cmd.Dir = bootstrapDir
+
+	// Set up environment variables
+	cmd.Env = os.Environ()
+
+	// Create pipes for stdout and stderr
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return fmt.Errorf("failed to create stdout pipe: %w", err)
+	}
+
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return fmt.Errorf("failed to create stderr pipe: %w", err)
+	}
+
+	// Start the command
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("failed to start bootstrap terraform init: %w", err)
+	}
+
+	// Stream output in real-time using channels for synchronization
+	done := make(chan bool, 2)
+	go func() {
+		streamOutput(stdout, "")
+		done <- true
+	}()
+	go func() {
+		streamOutput(stderr, "")
+		done <- true
+	}()
+
+	// Wait for command to complete
+	err = cmd.Wait()
+
+	// Wait for both output streams to finish
+	<-done
+	<-done
+
+	if err != nil {
+		return fmt.Errorf("bootstrap terraform init failed: %w", err)
+	}
+
+	return nil
+}
+
+// runBootstrapTerraformValidate runs terraform validate in the bootstrap directory
+func runBootstrapTerraformValidate(config *CreateConfig) error {
+	bootstrapDir := filepath.Join(".kibaship", config.Name, "bootstrap")
+
+	// Create terraform validate command
+	cmd := exec.Command("terraform", "validate")
+	cmd.Dir = bootstrapDir
+
+	// Set up environment variables
+	cmd.Env = os.Environ()
+
+	// Create pipes for stdout and stderr
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return fmt.Errorf("failed to create stdout pipe: %w", err)
+	}
+
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return fmt.Errorf("failed to create stderr pipe: %w", err)
+	}
+
+	// Start the command
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("failed to start bootstrap terraform validate: %w", err)
+	}
+
+	// Stream output in real-time using channels for synchronization
+	done := make(chan bool, 2)
+	go func() {
+		streamOutput(stdout, "")
+		done <- true
+	}()
+	go func() {
+		streamOutput(stderr, "")
+		done <- true
+	}()
+
+	// Wait for command to complete
+	err = cmd.Wait()
+
+	// Wait for both output streams to finish
+	<-done
+	<-done
+
+	if err != nil {
+		return fmt.Errorf("bootstrap terraform validate failed: %w", err)
+	}
+
+	return nil
+}
+
+// runBootstrapTerraformApply runs terraform apply in the bootstrap directory
+func runBootstrapTerraformApply(config *CreateConfig) error {
+	bootstrapDir := filepath.Join(".kibaship", config.Name, "bootstrap")
+
+	// Set up TF_VAR environment variables for Terraform
+	env := os.Environ()
+	env = append(env, fmt.Sprintf("TF_VAR_cluster_name=%s", config.Name))
+	env = append(env, fmt.Sprintf("TF_VAR_cluster_email=%s", config.Email))
+	env = append(env, fmt.Sprintf("TF_VAR_paas_features=%s", config.PaaSFeatures))
+
+	// Add provider-specific environment variables
+	switch config.Provider {
+	case "digital-ocean":
+		if config.DigitalOcean != nil {
+			env = append(env, fmt.Sprintf("TF_VAR_do_token=%s", config.DigitalOcean.Token))
+			env = append(env, fmt.Sprintf("TF_VAR_do_region=%s", config.DigitalOcean.Region))
+			env = append(env, fmt.Sprintf("TF_VAR_do_node_count=%s", config.DigitalOcean.Nodes))
+			env = append(env, fmt.Sprintf("TF_VAR_do_node_size=%s", config.DigitalOcean.NodesSize))
+		}
+	case "kind":
+		if config.Kind != nil {
+			env = append(env, fmt.Sprintf("TF_VAR_kind_node_count=%s", config.Kind.Nodes))
+			env = append(env, fmt.Sprintf("TF_VAR_kind_storage_per_node=%s", config.Kind.Storage))
+			// Use provided Kubernetes version or default to v1.30.6
+			k8sVersion := config.Kind.KubernetesVersion
+			if k8sVersion == "" {
+				k8sVersion = "v1.30.6"
+			}
+			env = append(env, fmt.Sprintf("TF_VAR_kind_k8s_version=%s", k8sVersion))
+		}
+	}
+
+	// Create terraform apply command with auto-approve
+	cmd := exec.Command("terraform", "apply", "-auto-approve")
+	cmd.Dir = bootstrapDir
+	cmd.Env = env
+
+	// Create pipes for stdout and stderr
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return fmt.Errorf("failed to create stdout pipe: %w", err)
+	}
+
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return fmt.Errorf("failed to create stderr pipe: %w", err)
+	}
+
+	// Start the command
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("failed to start bootstrap terraform apply: %w", err)
+	}
+
+	// Stream output in real-time using channels for synchronization
+	done := make(chan bool, 2)
+	go func() {
+		streamOutput(stdout, "")
+		done <- true
+	}()
+	go func() {
+		streamOutput(stderr, "")
+		done <- true
+	}()
+
+	// Wait for command to complete
+	err = cmd.Wait()
+
+	// Wait for both output streams to finish
+	<-done
+	<-done
+
+	if err != nil {
+		return fmt.Errorf("bootstrap terraform apply failed: %w", err)
+	}
+
+	return nil
+}
+
 // checkTerraformInstalled checks if terraform is available in PATH
 func checkTerraformInstalled() error {
 	cmd := exec.Command("terraform", "version")
@@ -272,5 +478,91 @@ func checkTerraformInstalled() error {
 		return fmt.Errorf("terraform is not installed or not available in PATH. " +
 			"Please install Terraform: https://terraform.io/downloads")
 	}
+	return nil
+}
+
+// runTerraformDestroy runs terraform destroy in the provision directory
+func runTerraformDestroy(config *CreateConfig) error {
+	provisionDir := filepath.Join(".kibaship", config.Name, "provision")
+
+	// Set up TF_VAR environment variables for Terraform
+	env := os.Environ()
+	env = append(env, fmt.Sprintf("TF_VAR_cluster_name=%s", config.Name))
+	env = append(env, fmt.Sprintf("TF_VAR_cluster_email=%s", config.Email))
+	env = append(env, fmt.Sprintf("TF_VAR_paas_features=%s", config.PaaSFeatures))
+
+	// Add Terraform state configuration variables (only for cloud providers)
+	if config.Provider != "kind" {
+		env = append(env, fmt.Sprintf("TF_VAR_terraform_state_bucket=%s", config.TerraformState.S3Bucket))
+		env = append(env, fmt.Sprintf("TF_VAR_terraform_state_region=%s", config.TerraformState.S3Region))
+		env = append(env, fmt.Sprintf("TF_VAR_terraform_state_access_key=%s", config.TerraformState.S3AccessKey))
+		env = append(env, fmt.Sprintf("TF_VAR_terraform_state_secret_key=%s", config.TerraformState.S3AccessSecret))
+	}
+
+	// Add provider-specific environment variables
+	switch config.Provider {
+	case "digital-ocean":
+		if config.DigitalOcean != nil {
+			env = append(env, fmt.Sprintf("TF_VAR_do_token=%s", config.DigitalOcean.Token))
+			env = append(env, fmt.Sprintf("TF_VAR_do_region=%s", config.DigitalOcean.Region))
+			env = append(env, fmt.Sprintf("TF_VAR_do_node_count=%s", config.DigitalOcean.Nodes))
+			env = append(env, fmt.Sprintf("TF_VAR_do_node_size=%s", config.DigitalOcean.NodesSize))
+		}
+	case "kind":
+		if config.Kind != nil {
+			env = append(env, fmt.Sprintf("TF_VAR_kind_node_count=%s", config.Kind.Nodes))
+			env = append(env, fmt.Sprintf("TF_VAR_kind_storage_per_node=%s", config.Kind.Storage))
+			// Use provided Kubernetes version or default to v1.30.6
+			k8sVersion := config.Kind.KubernetesVersion
+			if k8sVersion == "" {
+				k8sVersion = "v1.30.6"
+			}
+			env = append(env, fmt.Sprintf("TF_VAR_kind_k8s_version=%s", k8sVersion))
+		}
+	}
+
+	// Create terraform destroy command with auto-approve
+	cmd := exec.Command("terraform", "destroy", "-auto-approve")
+	cmd.Dir = provisionDir
+	cmd.Env = env
+
+	// Create pipes for stdout and stderr
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return fmt.Errorf("failed to create stdout pipe: %w", err)
+	}
+
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return fmt.Errorf("failed to create stderr pipe: %w", err)
+	}
+
+	// Start the command
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("failed to start terraform destroy: %w", err)
+	}
+
+	// Stream output in real-time using channels for synchronization
+	done := make(chan bool, 2)
+	go func() {
+		streamOutput(stdout, "")
+		done <- true
+	}()
+	go func() {
+		streamOutput(stderr, "")
+		done <- true
+	}()
+
+	// Wait for command to complete
+	err = cmd.Wait()
+
+	// Wait for both output streams to finish
+	<-done
+	<-done
+
+	if err != nil {
+		return fmt.Errorf("terraform destroy failed: %w", err)
+	}
+
 	return nil
 }

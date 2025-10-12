@@ -33,6 +33,9 @@ func setupFlags(cmd *cobra.Command) {
 	// Only configuration file flag - all other settings must be in YAML
 	cmd.Flags().StringP("configuration", "c", "", "Path to YAML configuration file (required)")
 
+	// Reset flag to destroy existing infrastructure before creating
+	cmd.Flags().Bool("reset", false, "Destroy existing cluster infrastructure before creating new one")
+
 	// Mark configuration as required
 	_ = cmd.MarkFlagRequired("configuration")
 }
@@ -45,8 +48,9 @@ func runCreate(cmd *cobra.Command, args []string) {
 		styles.TitleStyle.Render("🚀"),
 		styles.TitleStyle.Render("Kibaship Cluster Creation"))
 
-	// Get configuration file path
+	// Get configuration file path and flags
 	configuration, _ := cmd.Flags().GetString("configuration")
+	reset, _ := cmd.Flags().GetBool("reset")
 
 	// Load and validate configuration from YAML file
 	fmt.Printf("%s %s\n",
@@ -181,6 +185,46 @@ func runCreate(cmd *cobra.Command, args []string) {
 		}
 	}
 
+	// Handle reset flag - destroy existing infrastructure
+	if reset {
+		fmt.Printf("\n%s %s\n",
+			styles.CommandStyle.Render("⚠️"),
+			styles.TitleStyle.Render("RESET MODE ENABLED"))
+		fmt.Printf("%s %s\n",
+			styles.CommandStyle.Render("🔥"),
+			styles.DescriptionStyle.Render("This will DESTROY all existing cluster infrastructure before recreating it."))
+		fmt.Printf("%s %s\n",
+			styles.CommandStyle.Render("📦"),
+			styles.DescriptionStyle.Render(fmt.Sprintf("Cluster: %s", config.Name)))
+		fmt.Printf("%s %s\n\n",
+			styles.CommandStyle.Render("⚠️"),
+			styles.DescriptionStyle.Render("WARNING: This action cannot be undone!"))
+
+		fmt.Printf("%s %s ",
+			styles.CommandStyle.Render("❓"),
+			styles.HelpStyle.Render("Press ENTER to confirm and proceed with reset, or Ctrl+C to cancel:"))
+
+		// Wait for user to press Enter
+		fmt.Scanln()
+
+		fmt.Printf("\n%s %s\n",
+			styles.CommandStyle.Render("🔥"),
+			styles.HelpStyle.Render("Destroying existing cluster infrastructure..."))
+
+		if err := runTerraformDestroy(config); err != nil {
+			fmt.Fprintf(os.Stderr, "\n%s %s\n",
+				styles.CommandStyle.Render("❌"),
+				styles.CommandStyle.Render(fmt.Sprintf("Terraform destroy failed: %v", err)))
+			fmt.Fprintf(os.Stderr, "%s %s\n",
+				styles.CommandStyle.Render("💡"),
+				styles.DescriptionStyle.Render("Continuing with cluster creation anyway..."))
+		} else {
+			fmt.Printf("\n%s %s\n",
+				styles.TitleStyle.Render("✅"),
+				styles.TitleStyle.Render("Existing infrastructure destroyed successfully!"))
+		}
+	}
+
 	// Build Terraform files
 	fmt.Printf("\n%s %s\n",
 		styles.CommandStyle.Render("🔨"),
@@ -285,11 +329,83 @@ func runCreate(cmd *cobra.Command, args []string) {
 
 	fmt.Printf("\n%s %s\n",
 		styles.TitleStyle.Render("✅"),
-		styles.TitleStyle.Render("Cluster provisioning completed successfully!"))
+		styles.TitleStyle.Render("Cluster infrastructure provisioned successfully!"))
+
+	// Bootstrap cluster with essential components (Cilium, cert-manager)
+	fmt.Printf("\n%s %s\n",
+		styles.TitleStyle.Render("🔧"),
+		styles.HelpStyle.Render("Bootstrapping cluster with essential components..."))
 	fmt.Printf("%s %s\n",
+		styles.CommandStyle.Render("📦"),
+		styles.DescriptionStyle.Render("Installing Cilium CNI and cert-manager"))
+	fmt.Printf("%s %s\n\n",
+		styles.CommandStyle.Render("⚠️"),
+		styles.DescriptionStyle.Render("This may take a few minutes to complete..."))
+
+	// Run bootstrap Terraform init
+	fmt.Printf("%s %s\n",
+		styles.CommandStyle.Render("🚀"),
+		styles.HelpStyle.Render("Initializing bootstrap Terraform..."))
+	if err := runBootstrapTerraformInit(config); err != nil {
+		fmt.Fprintf(os.Stderr, "\n%s %s\n",
+			styles.CommandStyle.Render("❌"),
+			styles.CommandStyle.Render(fmt.Sprintf("Bootstrap Terraform init failed: %v", err)))
+		os.Exit(1)
+	}
+
+	fmt.Printf("\n%s %s\n",
+		styles.TitleStyle.Render("✅"),
+		styles.TitleStyle.Render("Bootstrap Terraform initialization completed!"))
+
+	// Run bootstrap Terraform validate
+	fmt.Printf("\n%s %s\n",
+		styles.CommandStyle.Render("🔍"),
+		styles.HelpStyle.Render("Validating bootstrap Terraform configuration..."))
+	if err := runBootstrapTerraformValidate(config); err != nil {
+		fmt.Fprintf(os.Stderr, "\n%s %s\n",
+			styles.CommandStyle.Render("❌"),
+			styles.CommandStyle.Render(fmt.Sprintf("Bootstrap Terraform validate failed: %v", err)))
+		os.Exit(1)
+	}
+
+	fmt.Printf("\n%s %s\n",
+		styles.TitleStyle.Render("✅"),
+		styles.TitleStyle.Render("Bootstrap Terraform configuration is valid!"))
+
+	// Run bootstrap Terraform apply
+	fmt.Printf("\n%s %s\n",
+		styles.CommandStyle.Render("🚀"),
+		styles.HelpStyle.Render("Applying bootstrap configuration..."))
+	fmt.Printf("%s %s\n",
+		styles.CommandStyle.Render("📝"),
+		styles.DescriptionStyle.Render("Running: terraform apply -auto-approve"))
+	fmt.Printf("%s %s\n\n",
+		styles.CommandStyle.Render("🕰️"),
+		styles.DescriptionStyle.Render("Installing Cilium and cert-manager..."))
+
+	if err := runBootstrapTerraformApply(config); err != nil {
+		fmt.Fprintf(os.Stderr, "\n%s %s\n",
+			styles.CommandStyle.Render("❌"),
+			styles.CommandStyle.Render(fmt.Sprintf("Bootstrap Terraform apply failed: %v", err)))
+		os.Exit(1)
+	}
+
+	fmt.Printf("\n%s %s\n",
+		styles.TitleStyle.Render("✅"),
+		styles.TitleStyle.Render("Cluster bootstrap completed successfully!"))
+
+	fmt.Printf("\n%s %s\n",
 		styles.TitleStyle.Render("🎉"),
-		styles.TitleStyle.Render("Your Kubernetes cluster is now live!"))
-	fmt.Printf("%s %s\n",
+		styles.TitleStyle.Render("Your Kubernetes cluster is now fully operational!"))
+
+	fmt.Printf("\n%s %s\n",
+		styles.CommandStyle.Render("📦"),
+		styles.DescriptionStyle.Render("Installed components:"))
+	fmt.Printf("   %s\n", styles.DescriptionStyle.Render("• Cilium CNI - Container networking"))
+	fmt.Printf("   %s\n", styles.DescriptionStyle.Render("• cert-manager - Certificate management"))
+	fmt.Printf("   %s\n", styles.DescriptionStyle.Render("• kibaship-system namespace - Ready for PaaS services"))
+
+	fmt.Printf("\n%s %s\n",
 		styles.CommandStyle.Render("📝"),
 		styles.DescriptionStyle.Render("Next steps: Configure kubectl and deploy your applications"))
 }
