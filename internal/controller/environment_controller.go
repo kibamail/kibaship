@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"time"
 
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -123,12 +122,6 @@ func (r *EnvironmentReconciler) handleDeletion(ctx context.Context, environment 
 		return ctrl.Result{}, err
 	}
 
-	// Delete environment secret if it exists
-	if err := r.deleteEnvironmentSecret(ctx, environment); err != nil {
-		log.Error(err, "Failed to delete environment secret")
-		return ctrl.Result{}, err
-	}
-
 	// Remove finalizer
 	controllerutil.RemoveFinalizer(environment, EnvironmentFinalizerName)
 	if err := r.Update(ctx, environment); err != nil {
@@ -167,41 +160,11 @@ func (r *EnvironmentReconciler) deleteAssociatedApplications(ctx context.Context
 	return nil
 }
 
-// deleteEnvironmentSecret deletes the environment secret if it exists
-func (r *EnvironmentReconciler) deleteEnvironmentSecret(ctx context.Context, environment *platformv1alpha1.Environment) error {
-	secretName := getEnvironmentSecretName(environment)
-
-	secret := &corev1.Secret{}
-	err := r.Get(ctx, types.NamespacedName{
-		Namespace: environment.Namespace,
-		Name:      secretName,
-	}, secret)
-
-	if err != nil {
-		if errors.IsNotFound(err) {
-			return nil // Already deleted
-		}
-		return fmt.Errorf("failed to get environment secret: %w", err)
-	}
-
-	if err := r.Delete(ctx, secret); err != nil && !errors.IsNotFound(err) {
-		return fmt.Errorf("failed to delete environment secret: %w", err)
-	}
-
-	return nil
-}
-
 // handleEnvironmentReconcile handles the reconciliation of an Environment
 func (r *EnvironmentReconciler) handleEnvironmentReconcile(ctx context.Context, environment *platformv1alpha1.Environment, prevPhase string) (ctrl.Result, error) {
 	log := logf.FromContext(ctx).WithValues("environment", environment.Name, "namespace", environment.Namespace)
 
 	log.Info("Reconciling Environment")
-
-	// Ensure environment secret exists
-	if err := r.ensureEnvironmentSecret(ctx, environment); err != nil {
-		log.Error(err, "Failed to ensure environment secret")
-		return ctrl.Result{}, err
-	}
 
 	// Update environment status
 	if err := r.updateEnvironmentStatus(ctx, environment); err != nil {
@@ -271,82 +234,6 @@ func (r *EnvironmentReconciler) getProjectUUID(ctx context.Context, environment 
 	return projectUUID, nil
 }
 
-// getEnvironmentSecretName returns the name of the secret for environment variables
-func getEnvironmentSecretName(environment *platformv1alpha1.Environment) string {
-	return fmt.Sprintf("%s-secret", environment.Name)
-}
-
-// ensureEnvironmentSecret ensures a secret exists for this environment
-func (r *EnvironmentReconciler) ensureEnvironmentSecret(ctx context.Context, environment *platformv1alpha1.Environment) error {
-	log := logf.FromContext(ctx)
-
-	secretName := getEnvironmentSecretName(environment)
-	envUUID := environment.Labels[validation.LabelResourceUUID]
-	projectUUID := environment.Labels[validation.LabelProjectUUID]
-
-	var existing corev1.Secret
-	err := r.Get(ctx, types.NamespacedName{Namespace: environment.Namespace, Name: secretName}, &existing)
-	if err != nil && !errors.IsNotFound(err) {
-		return fmt.Errorf("failed to get environment secret %s: %w", secretName, err)
-	}
-
-	desiredLabels := map[string]string{
-		"app.kubernetes.io/managed-by":        "kibaship",
-		validation.LabelProjectUUID:           projectUUID,
-		validation.LabelEnvironmentUUID:       envUUID,
-		"platform.operator.kibaship.com/type": "environment-variables",
-	}
-
-	if errors.IsNotFound(err) {
-		// Create new empty secret
-		sec := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      secretName,
-				Namespace: environment.Namespace,
-				Labels:    desiredLabels,
-			},
-			Type: corev1.SecretTypeOpaque,
-			Data: map[string][]byte{},
-		}
-
-		// Populate with spec.variables if any
-		if len(environment.Spec.Variables) > 0 {
-			for k, v := range environment.Spec.Variables {
-				sec.Data[k] = []byte(v)
-			}
-		}
-
-		if err := controllerutil.SetControllerReference(environment, sec, r.Scheme); err != nil {
-			return fmt.Errorf("failed to set owner reference on secret %s: %w", secretName, err)
-		}
-		if err := r.Create(ctx, sec); err != nil {
-			return fmt.Errorf("failed to create environment secret %s: %w", secretName, err)
-		}
-		log.Info("Created environment secret", "secret", secretName)
-		return nil
-	}
-
-	// Ensure labels contain desired set
-	if existing.Labels == nil {
-		existing.Labels = map[string]string{}
-	}
-	changed := false
-	for k, v := range desiredLabels {
-		if existing.Labels[k] != v {
-			existing.Labels[k] = v
-			changed = true
-		}
-	}
-	if changed {
-		if err := r.Update(ctx, &existing); err != nil {
-			return fmt.Errorf("failed to update labels on environment secret %s: %w", secretName, err)
-		}
-		log.Info("Updated environment secret labels", "secret", secretName)
-	}
-
-	return nil
-}
-
 // updateEnvironmentStatus updates the Environment status
 func (r *EnvironmentReconciler) updateEnvironmentStatus(ctx context.Context, environment *platformv1alpha1.Environment) error {
 	// Count applications in this environment
@@ -360,12 +247,6 @@ func (r *EnvironmentReconciler) updateEnvironmentStatus(ctx context.Context, env
 	}
 
 	environment.Status.ApplicationCount = int32(len(applicationList.Items))
-
-	// Check if secret exists
-	secretName := getEnvironmentSecretName(environment)
-	var secret corev1.Secret
-	err := r.Get(ctx, types.NamespacedName{Namespace: environment.Namespace, Name: secretName}, &secret)
-	environment.Status.SecretReady = err == nil
 
 	// Set phase
 	environment.Status.Phase = "Ready"

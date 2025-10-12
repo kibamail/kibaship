@@ -722,7 +722,7 @@ var _ = Describe("Application Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Verifying env secret was created")
-			expectedSecretName := fmt.Sprintf("env-%s", appUUID)
+			expectedSecretName := fmt.Sprintf("application-%s", appUUID)
 			var secret corev1.Secret
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, types.NamespacedName{
@@ -810,7 +810,7 @@ var _ = Describe("Application Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Verifying env secret was created")
-			expectedSecretName := fmt.Sprintf("env-%s", appUUID)
+			expectedSecretName := fmt.Sprintf("application-%s", appUUID)
 			var secret corev1.Secret
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, types.NamespacedName{
@@ -850,7 +850,7 @@ var _ = Describe("Application Controller", func() {
 		It("should not recreate env secret if it already exists", func() {
 			By("Creating a GitRepository application with existing secret")
 			appUUID := "660e8400-e29b-41d4-a716-446655440027"
-			secretName := fmt.Sprintf("env-%s", appUUID)
+			secretName := fmt.Sprintf("application-%s", appUUID)
 
 			// Create secret first
 			secret := &corev1.Secret{

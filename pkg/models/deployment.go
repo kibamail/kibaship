@@ -175,16 +175,8 @@ func (d *Deployment) ConvertFromCRD(crd *v1alpha1.Deployment, applicationSlug st
 			Tag: crd.Spec.ImageFromRegistry.Tag,
 		}
 
-		// Convert environment variables
-		if len(crd.Spec.ImageFromRegistry.Env) > 0 {
-			d.ImageFromRegistry.Env = make([]EnvironmentVariable, len(crd.Spec.ImageFromRegistry.Env))
-			for i, env := range crd.Spec.ImageFromRegistry.Env {
-				d.ImageFromRegistry.Env[i] = EnvironmentVariable{
-					Name:  env.Name,
-					Value: env.Value,
-				}
-			}
-		}
+		// Note: Environment variables are now stored in deployment secrets (deployment-{uuid})
+		// and are not part of the deployment spec anymore
 
 		// Convert resource requirements
 		if crd.Spec.ImageFromRegistry.Resources != nil {

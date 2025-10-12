@@ -34,7 +34,7 @@ func generateValkeyCredentialsSecret(deployment *platformv1alpha1.Deployment, pr
 		return nil, fmt.Errorf("failed to generate Valkey password: %w", err)
 	}
 
-	secretName := fmt.Sprintf("valkey-secret-%s", deployment.GetUUID())
+	secretName := fmt.Sprintf("valkey-%s", deployment.GetUUID())
 
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -218,7 +218,7 @@ func generateValkeyResourceNames(deployment *platformv1alpha1.Deployment, _, _ s
 	deploymentUUID := deployment.GetUUID()
 
 	// For secrets
-	secretName = fmt.Sprintf("valkey-secret-%s", deploymentUUID)
+	secretName = fmt.Sprintf("valkey-%s", deploymentUUID)
 
 	// For Valkey instances (63 character limit)
 	instanceName = fmt.Sprintf("valkey-%s", deploymentUUID)
@@ -235,7 +235,7 @@ func generateValkeyClusterResourceNames(deployment *platformv1alpha1.Deployment,
 	deploymentUUID := deployment.GetUUID()
 
 	// For secrets
-	secretName = fmt.Sprintf("valkey-secret-%s", deploymentUUID)
+	secretName = fmt.Sprintf("valkey-%s", deploymentUUID)
 
 	// For Valkey clusters (63 character limit)
 	clusterName = fmt.Sprintf("valkey-cluster-%s", deploymentUUID)

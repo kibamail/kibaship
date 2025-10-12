@@ -139,6 +139,12 @@ func (r *DeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, err
 	}
 
+	// Ensure deployment secret exists (copy from application secret)
+	if err := r.ensureDeploymentSecret(ctx, &deployment, &app); err != nil {
+		log.Error(err, "Failed to ensure deployment secret")
+		return ctrl.Result{}, err
+	}
+
 	// Check if Application is of type GitRepository
 	if app.Spec.Type == platformv1alpha1.ApplicationTypeGitRepository {
 		if err := r.handleGitRepositoryDeployment(ctx, &deployment, &app); err != nil {
@@ -259,6 +265,95 @@ func (r *DeploymentReconciler) handleDeletion(ctx context.Context, deployment *p
 
 	log.Info("Successfully handled Deployment deletion")
 	return ctrl.Result{}, nil
+}
+
+// ensureDeploymentSecret ensures that a deployment-specific secret exists by copying from the application secret
+func (r *DeploymentReconciler) ensureDeploymentSecret(ctx context.Context, deployment *platformv1alpha1.Deployment, app *platformv1alpha1.Application) error {
+	log := logf.FromContext(ctx).WithValues("deployment", deployment.Name, "namespace", deployment.Namespace)
+
+	// Skip deployment secret creation for database types - they manage their own secrets
+	// with different naming patterns (e.g., m-{hash} for MySQL, v-{hash} for Valkey)
+	if app.Spec.Type == platformv1alpha1.ApplicationTypeMySQL ||
+		app.Spec.Type == platformv1alpha1.ApplicationTypeMySQLCluster ||
+		app.Spec.Type == platformv1alpha1.ApplicationTypeValkey ||
+		app.Spec.Type == platformv1alpha1.ApplicationTypeValkeyCluster {
+		log.V(1).Info("Skipping deployment secret creation for database application type", "appType", app.Spec.Type)
+		return nil
+	}
+
+	deploymentUUID := deployment.GetUUID()
+	appUUID := app.GetUUID()
+
+	// Generate secret names
+	deploymentSecretName := fmt.Sprintf("deployment-%s", deploymentUUID)
+	applicationSecretName := fmt.Sprintf("application-%s", appUUID)
+
+	// Fetch the application secret
+	applicationSecret := &corev1.Secret{}
+	if err := r.Get(ctx, types.NamespacedName{
+		Name:      applicationSecretName,
+		Namespace: deployment.Namespace,
+	}, applicationSecret); err != nil {
+		if errors.IsNotFound(err) {
+			// Application secret doesn't exist yet - this is okay, it will be created by application controller
+			log.V(1).Info("Application secret not found yet, will retry", "secretName", applicationSecretName)
+			return nil
+		}
+		return fmt.Errorf("failed to get application secret: %w", err)
+	}
+
+	// Check if deployment secret already exists
+	existingDeploymentSecret := &corev1.Secret{}
+	err := r.Get(ctx, types.NamespacedName{
+		Name:      deploymentSecretName,
+		Namespace: deployment.Namespace,
+	}, existingDeploymentSecret)
+
+	if err != nil && !errors.IsNotFound(err) {
+		return fmt.Errorf("failed to check for existing deployment secret: %w", err)
+	}
+
+	// Create or update deployment secret
+	if errors.IsNotFound(err) {
+		// Create new deployment secret
+		log.Info("Creating deployment secret", "secretName", deploymentSecretName)
+
+		deploymentSecret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      deploymentSecretName,
+				Namespace: deployment.Namespace,
+				Labels: map[string]string{
+					"app.kubernetes.io/managed-by":           "kibaship",
+					"platform.kibaship.com/deployment-uuid":  deploymentUUID,
+					"platform.kibaship.com/application-uuid": appUUID,
+					"platform.kibaship.com/project-uuid":     deployment.GetProjectUUID(),
+				},
+			},
+			Type: corev1.SecretTypeOpaque,
+			Data: applicationSecret.Data, // Copy data from application secret
+		}
+
+		// Set owner reference to deployment for cascading deletion
+		if err := controllerutil.SetControllerReference(deployment, deploymentSecret, r.Scheme); err != nil {
+			return fmt.Errorf("failed to set controller reference on deployment secret: %w", err)
+		}
+
+		if err := r.Create(ctx, deploymentSecret); err != nil {
+			return fmt.Errorf("failed to create deployment secret: %w", err)
+		}
+
+		log.Info("Successfully created deployment secret", "secretName", deploymentSecretName)
+	} else {
+		// Update existing deployment secret if data has changed
+		// This ensures the deployment secret stays in sync with the application secret
+		log.V(1).Info("Deployment secret already exists", "secretName", deploymentSecretName)
+
+		// Note: We intentionally don't update the secret data automatically to avoid
+		// unexpected changes during deployment. If users want to update env vars,
+		// they should create a new deployment.
+	}
+
+	return nil
 }
 
 // handleGitRepositoryDeployment handles deployments for GitRepository applications
@@ -383,9 +478,6 @@ func (r *DeploymentReconciler) createKubernetesDeployment(ctx context.Context, d
 		port = 3000 // Default port
 	}
 
-	// Merge environment variables
-	envVars := r.mergeEnvVars(app.Spec.ImageFromRegistry.Env, deployment.Spec.ImageFromRegistry.Env)
-
 	// Merge resource requirements
 	resources := r.mergeResources(app.Spec.ImageFromRegistry.Resources, deployment.Spec.ImageFromRegistry.Resources)
 
@@ -436,7 +528,15 @@ func (r *DeploymentReconciler) createKubernetesDeployment(ctx context.Context, d
 									Protocol:      corev1.ProtocolTCP,
 								},
 							},
-							Env:       envVars,
+							EnvFrom: []corev1.EnvFromSource{
+								{
+									SecretRef: &corev1.SecretEnvSource{
+										LocalObjectReference: corev1.LocalObjectReference{
+											Name: fmt.Sprintf("deployment-%s", deployment.GetUUID()),
+										},
+									},
+								},
+							},
 							Resources: *resources,
 						},
 					},
@@ -757,7 +857,7 @@ func (r *DeploymentReconciler) handleMySQLDeployment(ctx context.Context, deploy
 	// Create secret if it doesn't exist
 	if errors.IsNotFound(err) {
 		log.Info("Creating MySQL credentials secret", "secretName", secretName)
-		secret, err := generateMySQLCredentialsSecret(deployment, project.Name, projectSlug, appSlug, deployment.Namespace)
+		secret, err := generateMySQLCredentialsSecret(secretName, deployment, project.Name, projectSlug, appSlug, deployment.Namespace)
 		if err != nil {
 			return fmt.Errorf("failed to generate MySQL credentials secret: %w", err)
 		}
@@ -856,7 +956,7 @@ func (r *DeploymentReconciler) handleMySQLClusterDeployment(ctx context.Context,
 	// Create secret if it doesn't exist
 	if errors.IsNotFound(err) {
 		log.Info("Creating MySQLCluster credentials secret", "secretName", secretName)
-		secret, err := generateMySQLCredentialsSecret(deployment, project.Name, projectSlug, appSlug, deployment.Namespace)
+		secret, err := generateMySQLCredentialsSecret(secretName, deployment, project.Name, projectSlug, appSlug, deployment.Namespace)
 		if err != nil {
 			return fmt.Errorf("failed to generate MySQLCluster credentials secret: %w", err)
 		}
@@ -987,17 +1087,16 @@ func (r *DeploymentReconciler) getEnvSecretName(app *platformv1alpha1.Applicatio
 	}
 	// Fallback: generate from app UUID
 	if appUUID, exists := app.Labels["platform.kibaship.com/uuid"]; exists {
-		return fmt.Sprintf("env-%s", appUUID)
+		return fmt.Sprintf("application-%s", appUUID)
 	}
 	return ""
 }
 
-// getEnvWorkspaceBinding returns a workspace binding for the application's env secret
-func (r *DeploymentReconciler) getEnvWorkspaceBinding(app *platformv1alpha1.Application) *tektonv1.WorkspaceBinding {
-	secretName := r.getEnvSecretName(app)
-	if secretName == "" {
-		return nil
-	}
+// getEnvWorkspaceBinding returns a workspace binding for the deployment's env secret
+func (r *DeploymentReconciler) getEnvWorkspaceBinding(deployment *platformv1alpha1.Deployment) *tektonv1.WorkspaceBinding {
+	// Use deployment secret instead of application secret
+	deploymentUUID := deployment.GetUUID()
+	secretName := fmt.Sprintf("deployment-%s", deploymentUUID)
 
 	return &tektonv1.WorkspaceBinding{
 		Name: "app-env-vars",
@@ -1127,8 +1226,8 @@ func (r *DeploymentReconciler) createPipelineRun(ctx context.Context, deployment
 						},
 					},
 				}
-				// Add env vars workspace if available
-				if envWorkspace := r.getEnvWorkspaceBinding(app); envWorkspace != nil {
+				// Add env vars workspace (deployment secret)
+				if envWorkspace := r.getEnvWorkspaceBinding(deployment); envWorkspace != nil {
 					workspaces = append(workspaces, *envWorkspace)
 				}
 				return workspaces

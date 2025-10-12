@@ -48,13 +48,11 @@ func generateMySQLSlug() (string, error) {
 }
 
 // generateMySQLCredentialsSecret creates a secret with MySQL root credentials
-func generateMySQLCredentialsSecret(deployment *platformv1alpha1.Deployment, projectName, projectSlug, appSlug string, namespace string) (*corev1.Secret, error) {
+func generateMySQLCredentialsSecret(secretName string, deployment *platformv1alpha1.Deployment, projectName, projectSlug, appSlug string, namespace string) (*corev1.Secret, error) {
 	password, err := generateSecurePassword()
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate MySQL password: %w", err)
 	}
-
-	secretName := fmt.Sprintf("m-%s", deployment.GetApplicationUUID())
 
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -136,7 +134,7 @@ func generateInnoDBCluster(deployment *platformv1alpha1.Deployment, app *platfor
 					},
 				},
 				"router": map[string]interface{}{
-					"instances": 1,
+					"instances": 0, // Single MySQL instance doesn't need a router
 				},
 				"podSpec": map[string]interface{}{
 					"resources": map[string]interface{}{
@@ -291,7 +289,7 @@ func generateMySQLCluster(deployment *platformv1alpha1.Deployment, app *platform
 					},
 				},
 				"router": map[string]interface{}{
-					"instances": 1, // Single router instance for cluster
+					"instances": 1, // MySQL cluster needs 1 router instance
 				},
 				"podSpec": map[string]interface{}{
 					"resources": map[string]interface{}{

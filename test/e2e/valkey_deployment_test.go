@@ -209,7 +209,7 @@ spec:
 			}, "30s", "2s").Should(BeTrue(), "Valkey Deployment should be created successfully")
 
 			By("Verifying Valkey credentials secret is created")
-			valkeySecretName := fmt.Sprintf("valkey-secret-%s", valkeyDeploymentUUID)
+			valkeySecretName := fmt.Sprintf("valkey-%s", valkeyDeploymentUUID)
 			Eventually(func() error {
 				cmd := exec.Command("kubectl", "get", "secret", valkeySecretName, "-n", projectNS)
 				_, err := cmd.CombinedOutput()
@@ -422,7 +422,7 @@ spec:
 			}, "30s", "2s").Should(BeTrue(), "ValkeyCluster Deployment should be created successfully")
 
 			By("Verifying ValkeyCluster credentials secret is created")
-			valkeyClusterSecretName := fmt.Sprintf("valkey-secret-%s", valkeyClusterDeploymentUUID)
+			valkeyClusterSecretName := fmt.Sprintf("valkey-%s", valkeyClusterDeploymentUUID)
 			Eventually(func() error {
 				cmd := exec.Command("kubectl", "get", "secret", valkeyClusterSecretName, "-n", projectNS)
 				_, err := cmd.CombinedOutput()

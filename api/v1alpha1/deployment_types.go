@@ -71,10 +71,6 @@ type ImageFromRegistryDeploymentConfig struct {
 	// +kubebuilder:validation:Required
 	Tag string `json:"tag"`
 
-	// Env defines environment variable overrides for this deployment
-	// +optional
-	Env []corev1.EnvVar `json:"env,omitempty"`
-
 	// Resources defines resource requirement overrides for this deployment
 	// +optional
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`

@@ -178,7 +178,7 @@ var _ = Describe("Environment Integration", func() {
 
 		annotations := environment.GetAnnotations()
 		Expect(annotations[validation.AnnotationResourceDescription]).To(Equal("Staging environment for testing"))
-		Expect(environment.Spec.Variables["DB_HOST"]).To(Equal("staging-db.example.com"))
+		// Note: Variables are no longer stored on Environment CRD - they belong at Application level
 
 		// Clean up
 		_ = k8sClient.Delete(ctx, &environment)
@@ -358,19 +358,16 @@ var _ = Describe("Environment Integration", func() {
 		cleanupTestEnvironment(ctx, createdProject, createdEnvironment)
 	})
 
-	It("updates environment variables", NodeTimeout(30*time.Second), func(ctx SpecContext) {
+	It("updates environment description only (variables removed from environment)", NodeTimeout(30*time.Second), func(ctx SpecContext) {
 		apiKey := generateTestAPIKey()
 		router := setupIntegrationTestRouter(apiKey)
 
 		// Create project and environment
 		createdProject, createdEnvironment := createTestEnvironment(router, apiKey)
 
-		// Update environment variables
+		// Update environment description (variables are no longer supported on environments)
 		updateReq := models.EnvironmentUpdateRequest{
-			Variables: &map[string]string{
-				"NEW_VAR": "new_value",
-				"API_KEY": "secret123",
-			},
+			Description: stringPtr("Updated with new description"),
 		}
 
 		jsonData, err := json.Marshal(updateReq)
@@ -389,8 +386,8 @@ var _ = Describe("Environment Integration", func() {
 		err = json.Unmarshal(w.Body.Bytes(), &response)
 		Expect(err).NotTo(HaveOccurred())
 
-		Expect(response.Variables).To(HaveLen(2))
-		Expect(response.Variables["NEW_VAR"]).To(Equal("new_value"))
+		Expect(response.Description).To(Equal("Updated with new description"))
+		// Note: Variables are now managed at Application level, not Environment level
 
 		// Clean up
 		cleanupTestEnvironment(ctx, createdProject, createdEnvironment)

@@ -1116,9 +1116,9 @@ var _ = Describe("Deployment Controller", func() {
 				err := reconcileDeploymentTwice(ctx, deploymentReconciler, firstDeployment)
 				Expect(err).NotTo(HaveOccurred())
 
-				// Verify resources were created for first deployment (using shared application UUID)
+				// Verify resources were created for first deployment (using shared application slug)
 				secret := &corev1.Secret{}
-				expectedSecretName := "mysql-secret-app-uuid-mysql-mysqlapp"
+				expectedSecretName := expectedMySQLSecretName // Uses m-{slug} naming
 				secretKey := types.NamespacedName{Name: expectedSecretName, Namespace: testNamespace.Name}
 				Eventually(func() error {
 					return k8sClient.Get(ctx, secretKey, secret)
@@ -1340,6 +1340,9 @@ var _ = Describe("Deployment Controller", func() {
 					Spec: platformv1alpha1.ApplicationSpec{
 						EnvironmentRef: corev1.LocalObjectReference{Name: testEnvironment.Name},
 						Type:           platformv1alpha1.ApplicationTypeMySQL,
+						MySQL: &platformv1alpha1.MySQLConfig{
+							Slug: "error-handling123456",
+						},
 					},
 				}
 				Expect(k8sClient.Create(ctx, testMySQLApp)).To(Succeed())
@@ -1368,9 +1371,9 @@ var _ = Describe("Deployment Controller", func() {
 				err := reconcileDeploymentTwice(ctx, deploymentReconciler, testDeployment)
 				Expect(err).NotTo(HaveOccurred())
 
-				// Verify MySQL resources were created successfully (using application UUID)
+				// Verify MySQL resources were created successfully (using slug)
 				secret := &corev1.Secret{}
-				expectedSecretName := "mysql-secret-app-uuid-mysql-error-handling"
+				expectedSecretName := "m-error-handling123456" // Uses m-{slug} naming
 				secretKey := types.NamespacedName{Name: expectedSecretName, Namespace: testNamespace.Name}
 				Eventually(func() error {
 					return k8sClient.Get(ctx, secretKey, secret)

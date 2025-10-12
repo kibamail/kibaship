@@ -70,12 +70,6 @@ spec:
                     type: string
                 type: object
                 x-kubernetes-map-type: atomic
-              variables:
-                additionalProperties:
-                  type: string
-                description: Variables contains environment-specific configuration
-                  variables
-                type: object
             required:
             - projectRef
             type: object

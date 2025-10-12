@@ -116,13 +116,13 @@ type ImageFromRegistryConfig struct {
 	// +optional
 	Port int32 `json:"port,omitempty"`
 
-	// Env defines environment variables for the container
-	// +optional
-	Env []corev1.EnvVar `json:"env,omitempty"`
-
 	// Resources defines resource requirements for the container
 	// +optional
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
+
+	// Env is a reference to a secret containing environment variables for this application (optional)
+	// +optional
+	Env *corev1.LocalObjectReference `json:"env,omitempty"`
 
 	// HealthCheck defines the health check configuration
 	// +optional

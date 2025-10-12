@@ -64,9 +64,9 @@ type GCloudConfig struct {
 
 // KindConfig represents Kind (Kubernetes in Docker) specific configuration
 type KindConfig struct {
-	Nodes              string `validate:"required_with=KindConfig,number"`
-	Storage            string `validate:"required_with=KindConfig,kind_storage"`
-	KubernetesVersion  string `validate:"omitempty"`
+	Nodes             string `validate:"required_with=KindConfig,number"`
+	Storage           string `validate:"required_with=KindConfig,kind_storage"`
+	KubernetesVersion string `validate:"omitempty"`
 }
 
 // TerraformStateConfig represents Terraform state storage configuration

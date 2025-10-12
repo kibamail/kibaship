@@ -41,10 +41,6 @@ type EnvironmentSpec struct {
 	// Description of the environment (optional)
 	// +optional
 	Description string `json:"description,omitempty"`
-
-	// Variables contains environment-specific configuration variables
-	// +optional
-	Variables map[string]string `json:"variables,omitempty"`
 }
 
 // EnvironmentStatus defines the observed state of Environment

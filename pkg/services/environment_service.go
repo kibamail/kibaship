@@ -315,10 +315,8 @@ func (s *EnvironmentService) convertToEnvironmentCRD(env *models.Environment) *v
 		crd.Annotations[validation.AnnotationResourceDescription] = env.Description
 	}
 
-	// Add variables if present
-	if len(env.Variables) > 0 {
-		crd.Spec.Variables = env.Variables
-	}
+	// Note: Variables are no longer stored on Environment CRD
+	// They should be managed at the Application level via secrets
 
 	return crd
 }
@@ -340,7 +338,6 @@ func (s *EnvironmentService) convertFromEnvironmentCRD(crd *v1alpha1.Environment
 		Name:        annotations[validation.AnnotationResourceName],
 		Slug:        labels[validation.LabelResourceSlug],
 		Description: annotations[validation.AnnotationResourceDescription],
-		Variables:   crd.Spec.Variables,
 		ProjectUUID: labels[validation.LabelProjectUUID],
 		ProjectSlug: s.extractProjectSlugFromRef(crd.Spec.ProjectRef.Name),
 		CreatedAt:   crd.CreationTimestamp.Time,
@@ -361,10 +358,8 @@ func (s *EnvironmentService) applyEnvironmentUpdates(crd *v1alpha1.Environment, 
 		crd.SetAnnotations(annotations)
 	}
 
-	// Update variables in spec
-	if req.Variables != nil {
-		crd.Spec.Variables = *req.Variables
-	}
+	// Note: Variables are no longer stored on Environment CRD
+	// They should be managed at the Application level via secrets
 }
 
 // extractProjectSlugFromRef extracts the project slug from the ProjectRef name

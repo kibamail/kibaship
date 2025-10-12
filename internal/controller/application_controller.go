@@ -236,7 +236,7 @@ func (r *ApplicationReconciler) ensureApplicationEnvSecret(ctx context.Context, 
 		return false, fmt.Errorf("application UUID label not found")
 	}
 
-	secretName := fmt.Sprintf("env-%s", appUUID)
+	secretName := fmt.Sprintf("application-%s", appUUID)
 
 	// Get current env ref based on application type
 	currentEnvRef := r.getCurrentEnvRef(app)
