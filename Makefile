@@ -230,10 +230,6 @@ build-cli: ## Build Kibaship CLI binary.
 run-registry-auth: fmt vet ## Run registry auth service from your host.
 	go run ./cmd/registry-auth/main.go
 
-.PHONY: run-cli
-run-cli: fmt vet ## Run Kibaship CLI from your host.
-	go run ./cmd/cli/main.go
-
 .PHONY: generate-openapi
 generate-openapi: ## Generate OpenAPI documentation from code annotations.
 	go run github.com/swaggo/swag/cmd/swag@latest init -g cmd/apiserver/main.go -o docs

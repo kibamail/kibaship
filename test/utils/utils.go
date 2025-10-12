@@ -621,7 +621,7 @@ func IsTektonPipelinesCRDsInstalled() bool {
 
 // InstallValkeyOperator installs the full Valkey operator
 func InstallValkeyOperator() error {
-	url := "https://github.com/hyperspike/valkey-operator/releases/download/v0.0.60/install.yaml"
+	url := "https://github.com/hyperspike/valkey-operator/releases/download/v0.0.59/install.yaml"
 	cmd := exec.Command("kubectl", "apply", "-f", url)
 	if _, err := Run(cmd); err != nil {
 		return err
@@ -663,6 +663,87 @@ func IsValkeyOperatorCRDsInstalled() bool {
 
 	crdList := GetNonEmptyLines(output)
 	for _, crd := range valkeyCRDs {
+		for _, line := range crdList {
+			if strings.Contains(line, crd) {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+// InstallMySQLOperator installs the MySQL operator CRDs and operator
+func InstallMySQLOperator() error {
+	// Install CRDs first
+	crdsURL := "https://raw.githubusercontent.com/mysql/mysql-operator/9.4.0-2.2.5/deploy/deploy-crds.yaml"
+	cmd := exec.Command("kubectl", "apply", "-f", crdsURL)
+	if _, err := Run(cmd); err != nil {
+		return err
+	}
+
+	// Wait for InnoDBCluster CRD to be established
+	cmd = exec.Command("kubectl", "wait", "--for", "condition=Established", "crd", "innodbclusters.mysql.oracle.com", "--timeout=300s")
+	if _, err := Run(cmd); err != nil {
+		return err
+	}
+
+	// Install operator
+	operatorURL := "https://raw.githubusercontent.com/mysql/mysql-operator/9.4.0-2.2.5/deploy/deploy-operator.yaml"
+	cmd = exec.Command("kubectl", "apply", "-f", operatorURL)
+	if _, err := Run(cmd); err != nil {
+		return err
+	}
+
+	// Set the cluster domain environment variable to fix "Failed to detect cluster domain" error
+	cmd = exec.Command("kubectl", "-n", "mysql-operator", "set", "env", "deployment/mysql-operator",
+		"MYSQL_OPERATOR_K8S_CLUSTER_DOMAIN=cluster.local")
+	if _, err := Run(cmd); err != nil {
+		return err
+	}
+
+	// Wait for MySQL operator components to be ready (reduced timeout)
+	cmd = exec.Command("kubectl", "wait", "deployment.apps/mysql-operator",
+		"--for", "condition=Available",
+		"--namespace", "mysql-operator",
+		"--timeout", "3m",
+	)
+	if _, err := Run(cmd); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// UninstallMySQLOperator uninstalls the MySQL operator
+func UninstallMySQLOperator() {
+	operatorURL := "https://raw.githubusercontent.com/mysql/mysql-operator/9.4.0-2.2.5/deploy/deploy-operator.yaml"
+	cmd := exec.Command("kubectl", "delete", "-f", operatorURL)
+	if _, err := Run(cmd); err != nil {
+		warnError(err)
+	}
+
+	crdsURL := "https://raw.githubusercontent.com/mysql/mysql-operator/9.4.0-2.2.5/deploy/deploy-crds.yaml"
+	cmd = exec.Command("kubectl", "delete", "-f", crdsURL)
+	if _, err := Run(cmd); err != nil {
+		warnError(err)
+	}
+}
+
+// IsMySQLOperatorCRDsInstalled checks if any MySQL operator CRDs are installed
+func IsMySQLOperatorCRDsInstalled() bool {
+	mysqlCRDs := []string{
+		"innodbclusters.mysql.oracle.com",
+	}
+
+	cmd := exec.Command("kubectl", "get", "crds")
+	output, err := Run(cmd)
+	if err != nil {
+		return false
+	}
+
+	crdList := GetNonEmptyLines(output)
+	for _, crd := range mysqlCRDs {
 		for _, line := range crdList {
 			if strings.Contains(line, crd) {
 				return true

@@ -18,7 +18,6 @@ package controller
 
 import (
 	"context"
-	"crypto/sha256"
 	"fmt"
 	"math/rand/v2"
 	"time"
@@ -42,8 +41,8 @@ import (
 
 const (
 	expectedPipelineName     = "pipeline-deployment-uuid-123"
-	expectedMySQLSecretName  = "mysql-secret-deployment-uuid-mysql-deploy1"
-	expectedMySQLClusterName = "mysql-deployment-uuid-mysql-deploy1"
+	expectedMySQLSecretName  = "mysql-secret-app-uuid-mysql-mysqlapp"
+	expectedMySQLClusterName = "mysql-0f240b15edba7750862e14"
 )
 
 var _ = Describe("Deployment Controller", func() {
@@ -1117,9 +1116,9 @@ var _ = Describe("Deployment Controller", func() {
 				err := reconcileDeploymentTwice(ctx, deploymentReconciler, firstDeployment)
 				Expect(err).NotTo(HaveOccurred())
 
-				// Verify resources were created for first deployment
+				// Verify resources were created for first deployment (using shared application UUID)
 				secret := &corev1.Secret{}
-				expectedSecretName := "mysql-secret-deployment-uuid-mysql-first-deploy1"
+				expectedSecretName := "mysql-secret-app-uuid-mysql-mysqlapp"
 				secretKey := types.NamespacedName{Name: expectedSecretName, Namespace: testNamespace.Name}
 				Eventually(func() error {
 					return k8sClient.Get(ctx, secretKey, secret)
@@ -1131,8 +1130,8 @@ var _ = Describe("Deployment Controller", func() {
 					Version: "v2",
 					Kind:    "InnoDBCluster",
 				})
-				// Cluster name for UUID "deployment-uuid-mysql-first-deploy1" will be hashed since it exceeds 40 chars
-				expectedClusterName := fmt.Sprintf("mysql-%x", sha256.Sum256([]byte("deployment-uuid-mysql-first-deploy1")))[:40]
+				// Cluster name uses application UUID (shared across deployments)
+				expectedClusterName := "mysql-0f240b15edba7750862e14"
 				clusterKey := types.NamespacedName{Name: expectedClusterName, Namespace: testNamespace.Name}
 				Eventually(func() error {
 					return k8sClient.Get(ctx, clusterKey, cluster)
@@ -1238,8 +1237,8 @@ var _ = Describe("Deployment Controller", func() {
 					Version: "v2",
 					Kind:    "InnoDBCluster",
 				})
-				// Cluster name for UUID "deployment-uuid-mysql-no-version-deploy1" will be hashed since it exceeds 40 chars
-				expectedClusterName := fmt.Sprintf("mysql-%x", sha256.Sum256([]byte("deployment-uuid-mysql-no-version-deploy1")))[:40]
+				// Cluster name uses application UUID
+				expectedClusterName := "mysql-bf0911292d1548e45b1d70"
 				clusterKey := types.NamespacedName{Name: expectedClusterName, Namespace: testNamespace.Name}
 				Eventually(func() error {
 					return k8sClient.Get(ctx, clusterKey, cluster)
@@ -1299,7 +1298,7 @@ var _ = Describe("Deployment Controller", func() {
 
 				// Verify resources were still created successfully
 				secret := &corev1.Secret{}
-				expectedSecretName := "mysql-secret-deployment-uuid-mysql-no-config-deploy1"
+				expectedSecretName := "mysql-secret-app-uuid-mysql-no-config"
 				secretKey := types.NamespacedName{Name: expectedSecretName, Namespace: testNamespace.Name}
 				Eventually(func() error {
 					return k8sClient.Get(ctx, secretKey, secret)
@@ -1311,8 +1310,8 @@ var _ = Describe("Deployment Controller", func() {
 					Version: "v2",
 					Kind:    "InnoDBCluster",
 				})
-				// Cluster name for UUID "deployment-uuid-mysql-no-config-deploy1" will be hashed since it exceeds 40 chars
-				expectedClusterName := fmt.Sprintf("mysql-%x", sha256.Sum256([]byte("deployment-uuid-mysql-no-config-deploy1")))[:40]
+				// Cluster name uses application UUID
+				expectedClusterName := "mysql-a1e06b7371a88430daef27"
 				clusterKey := types.NamespacedName{Name: expectedClusterName, Namespace: testNamespace.Name}
 				Eventually(func() error {
 					return k8sClient.Get(ctx, clusterKey, cluster)
@@ -1365,9 +1364,9 @@ var _ = Describe("Deployment Controller", func() {
 				err := reconcileDeploymentTwice(ctx, deploymentReconciler, testDeployment)
 				Expect(err).NotTo(HaveOccurred())
 
-				// Verify MySQL resources were created successfully
+				// Verify MySQL resources were created successfully (using application UUID)
 				secret := &corev1.Secret{}
-				expectedSecretName := "mysql-secret-deployment-uuid-invalid-name"
+				expectedSecretName := "mysql-secret-app-uuid-mysql-error-handling"
 				secretKey := types.NamespacedName{Name: expectedSecretName, Namespace: testNamespace.Name}
 				Eventually(func() error {
 					return k8sClient.Get(ctx, secretKey, secret)
@@ -1401,15 +1400,16 @@ var _ = Describe("Deployment Controller", func() {
 				testDeployment := &platformv1alpha1.Deployment{
 					ObjectMeta: metav1.ObjectMeta{
 						Labels: map[string]string{
-							"platform.kibaship.com/uuid": "deployment-uuid-testdeploy",
-							"platform.kibaship.com/slug": "testdeploy",
+							"platform.kibaship.com/uuid":             "deployment-uuid-testdeploy",
+							"platform.kibaship.com/slug":             "testdeploy",
+							"platform.kibaship.com/application-uuid": "app-uuid-testdeploy",
 						},
 					},
 				}
 				secretName, clusterName := generateMySQLResourceNames(testDeployment, "testproject", "myapp")
 
-				Expect(secretName).To(Equal("mysql-secret-deployment-uuid-testdeploy"))
-				Expect(clusterName).To(Equal("mysql-deployment-uuid-testdeploy"))
+				Expect(secretName).To(Equal("mysql-secret-app-uuid-testdeploy"))
+				Expect(clusterName).To(Equal("m-app-uuid-testdeploy"))
 			})
 		})
 

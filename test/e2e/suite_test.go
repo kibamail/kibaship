@@ -141,6 +141,9 @@ var _ = BeforeSuite(func() {
 
 		By("installing Valkey Operator")
 		Expect(utils.InstallValkeyOperator()).To(Succeed(), "Failed to install Valkey Operator")
+
+		By("installing MySQL Operator")
+		Expect(utils.InstallMySQLOperator()).To(Succeed(), "Failed to install MySQL Operator")
 	} else {
 		By("skipping infrastructure installation (tekton-pipelines namespace exists)")
 	}

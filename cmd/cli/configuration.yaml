@@ -1,0 +1,52 @@
+# Kibaship Cluster Configuration
+# This file contains all possible configuration options for creating a cluster
+# Use nested structure for clean organization
+
+# Terraform state configuration (required)
+state:
+  s3:
+    bucket: "my-terraform-state"
+    region: "us-east-1"
+    access-key: "AKIAIOSFODNN7EXAMPLE"
+    access-secret: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+
+# Cluster configuration (required)
+cluster:
+  name: "app.kibaship.com"  # Cluster name in domain format
+  email: "admin@kibaship.com"  # Email for default credentials and Let's Encrypt certificates
+  paas-features: "mysql,valkey,postgres"  # Options: mysql, valkey, postgres, none (optional, defaults to mysql,valkey,postgres)
+
+  # Provider configuration (choose one provider)
+  provider:
+    # AWS Configuration
+    aws:
+      access-key-id: "AKIAIOSFODNN7EXAMPLE"
+      secret-access-key: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+      region: "us-east-1"
+
+    # DigitalOcean Configuration
+    digital-ocean:
+      token: "abcd1234567890abcd1234567890abcd1234567890abcd1234567890abcd1234"
+      nodes: "3"
+      nodes-size: "s-4vcpu-8gb"
+      region: "nyc3"
+
+    # Hetzner Cloud Configuration
+    hetzner:
+      token: "your-hetzner-cloud-api-token"
+
+    # Hetzner Robot Configuration
+    hetzner-robot:
+      username: "your-hetzner-robot-username"
+      password: "your-hetzner-robot-password"
+      cloud-token: "your-hetzner-cloud-token"
+
+    # Linode Configuration
+    linode:
+      token: "your-linode-api-token"
+
+    # Google Cloud Configuration
+    gcloud:
+      service-account-key: "/path/to/service-account-key.json"
+      project-id: "my-gcp-project"
+      region: "us-central1"

@@ -1,0 +1,196 @@
+package credentials
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+
+	"github.com/kibamail/kibaship-operator/cmd/cli/commands/clusters/create"
+	"github.com/kibamail/kibaship-operator/cmd/cli/internal/styles"
+)
+
+// TerraformOutput represents the structure of terraform output
+type TerraformOutput struct {
+	Kubeconfig struct {
+		Value string `json:"value"`
+	} `json:"kubeconfig"`
+}
+
+// extractCredentials extracts credentials from terraform output based on provider
+func extractCredentials(config *create.CreateConfig) error {
+	provisionDir := filepath.Join(".kibaship", config.Name, "provision")
+
+	// Run terraform output to get all outputs in JSON format
+	cmd := exec.Command("terraform", "output", "-json")
+	cmd.Dir = provisionDir
+
+	// Set up environment variables (same as apply)
+	env := os.Environ()
+	env = append(env, fmt.Sprintf("TF_VAR_cluster_name=%s", config.Name))
+	env = append(env, fmt.Sprintf("TF_VAR_cluster_email=%s", config.Email))
+	env = append(env, fmt.Sprintf("TF_VAR_paas_features=%s", config.PaaSFeatures))
+
+	// Add Terraform state configuration variables
+	env = append(env, fmt.Sprintf("TF_VAR_terraform_state_bucket=%s", config.TerraformState.S3Bucket))
+	env = append(env, fmt.Sprintf("TF_VAR_terraform_state_region=%s", config.TerraformState.S3Region))
+	env = append(env, fmt.Sprintf("TF_VAR_terraform_state_access_key=%s", config.TerraformState.S3AccessKey))
+	env = append(env, fmt.Sprintf("TF_VAR_terraform_state_secret_key=%s", config.TerraformState.S3AccessSecret))
+
+	// Add provider-specific environment variables
+	switch config.Provider {
+	case "digital-ocean":
+		if config.DigitalOcean != nil {
+			env = append(env, fmt.Sprintf("TF_VAR_do_token=%s", config.DigitalOcean.Token))
+			env = append(env, fmt.Sprintf("TF_VAR_do_region=%s", config.DigitalOcean.Region))
+			env = append(env, fmt.Sprintf("TF_VAR_do_node_count=%s", config.DigitalOcean.Nodes))
+			env = append(env, fmt.Sprintf("TF_VAR_do_node_size=%s", config.DigitalOcean.NodesSize))
+		}
+	}
+
+	cmd.Env = env
+
+	// Execute terraform output command
+	output, err := cmd.Output()
+	if err != nil {
+		return fmt.Errorf("terraform output failed: %w", err)
+	}
+
+	// Parse the JSON output
+	var terraformOutput TerraformOutput
+	if err := json.Unmarshal(output, &terraformOutput); err != nil {
+		return fmt.Errorf("failed to parse terraform output JSON: %w", err)
+	}
+
+	// Process credentials based on provider
+	switch config.Provider {
+	case "digital-ocean":
+		return extractDigitalOceanCredentials(config, &terraformOutput)
+	default:
+		return fmt.Errorf("credential extraction not implemented for provider: %s", config.Provider)
+	}
+}
+
+// extractDigitalOceanCredentials extracts and saves DigitalOcean cluster credentials
+func extractDigitalOceanCredentials(config *create.CreateConfig, output *TerraformOutput) error {
+	fmt.Printf("%s %s\n",
+		styles.CommandStyle.Render("🌊"),
+		styles.DescriptionStyle.Render("Processing DigitalOcean cluster credentials..."))
+
+	// Check if kubeconfig output exists
+	if output.Kubeconfig.Value == "" {
+		return fmt.Errorf("kubeconfig output not found in terraform state")
+	}
+
+	fmt.Printf("%s %s\n",
+		styles.CommandStyle.Render("📝"),
+		styles.DescriptionStyle.Render("Kubeconfig found in terraform output"))
+
+	// Save kubeconfig to file
+	credentialsDir := filepath.Join(".kibaship", config.Name, "credentials")
+	kubeconfigPath := filepath.Join(credentialsDir, "kubeconfig.yaml")
+
+	// The kubeconfig from DigitalOcean is already in YAML format
+	kubeconfigContent := output.Kubeconfig.Value
+
+	// Write kubeconfig to file
+	if err := os.WriteFile(kubeconfigPath, []byte(kubeconfigContent), 0600); err != nil {
+		return fmt.Errorf("failed to write kubeconfig file: %w", err)
+	}
+
+	fmt.Printf("%s %s\n",
+		styles.TitleStyle.Render("✅"),
+		styles.TitleStyle.Render("Kubeconfig saved successfully!"))
+	fmt.Printf("%s %s\n",
+		styles.CommandStyle.Render("📁"),
+		styles.DescriptionStyle.Render(fmt.Sprintf("File: %s", kubeconfigPath)))
+
+	// Validate the kubeconfig content
+	if err := validateKubeconfig(kubeconfigContent); err != nil {
+		fmt.Printf("%s %s\n",
+			styles.CommandStyle.Render("⚠️"),
+			styles.DescriptionStyle.Render(fmt.Sprintf("Warning: kubeconfig validation failed: %v", err)))
+	} else {
+		fmt.Printf("%s %s\n",
+			styles.TitleStyle.Render("✅"),
+			styles.TitleStyle.Render("Kubeconfig is valid"))
+	}
+
+	return nil
+}
+
+// validateKubeconfig performs basic validation on the kubeconfig content
+func validateKubeconfig(content string) error {
+	// Basic validation - check for required fields
+	requiredFields := []string{"apiVersion", "clusters", "contexts", "users"}
+
+	for _, field := range requiredFields {
+		if !strings.Contains(content, field) {
+			return fmt.Errorf("missing required field: %s", field)
+		}
+	}
+
+	return nil
+}
+
+// showUsageInstructions displays usage instructions for the extracted credentials
+func showUsageInstructions(config *create.CreateConfig) {
+	fmt.Printf("\n%s %s\n",
+		styles.HelpStyle.Render("📖"),
+		styles.HelpStyle.Render("Usage Instructions:"))
+
+	kubeconfigPath := fmt.Sprintf(".kibaship/%s/credentials/kubeconfig.yaml", config.Name)
+
+	fmt.Printf("\n%s %s\n",
+		styles.CommandStyle.Render("1."),
+		styles.DescriptionStyle.Render("Set KUBECONFIG environment variable:"))
+	fmt.Printf("   %s\n",
+		styles.TitleStyle.Render(fmt.Sprintf("export KUBECONFIG=%s", kubeconfigPath)))
+
+	fmt.Printf("\n%s %s\n",
+		styles.CommandStyle.Render("2."),
+		styles.DescriptionStyle.Render("Test cluster connection:"))
+	fmt.Printf("   %s\n",
+		styles.TitleStyle.Render("kubectl get nodes"))
+
+	fmt.Printf("\n%s %s\n",
+		styles.CommandStyle.Render("3."),
+		styles.DescriptionStyle.Render("View cluster information:"))
+	fmt.Printf("   %s\n",
+		styles.TitleStyle.Render("kubectl cluster-info"))
+
+	fmt.Printf("\n%s %s\n",
+		styles.CommandStyle.Render("4."),
+		styles.DescriptionStyle.Render("List all pods:"))
+	fmt.Printf("   %s\n",
+		styles.TitleStyle.Render("kubectl get pods --all-namespaces"))
+
+	fmt.Printf("\n%s %s\n",
+		styles.HelpStyle.Render("💡"),
+		styles.HelpStyle.Render("Alternative Usage:"))
+	fmt.Printf("   %s\n",
+		styles.DescriptionStyle.Render("You can also use the kubeconfig directly with kubectl:"))
+	fmt.Printf("   %s\n",
+		styles.TitleStyle.Render(fmt.Sprintf("kubectl --kubeconfig=%s get nodes", kubeconfigPath)))
+
+	fmt.Printf("\n%s %s\n",
+		styles.HelpStyle.Render("🔒"),
+		styles.HelpStyle.Render("Security Note:"))
+	fmt.Printf("   %s\n",
+		styles.DescriptionStyle.Render("The kubeconfig file contains sensitive credentials."))
+	fmt.Printf("   %s\n",
+		styles.DescriptionStyle.Render("Keep it secure and do not commit it to version control."))
+	fmt.Printf("   %s\n",
+		styles.DescriptionStyle.Render(fmt.Sprintf("File permissions: 600 (owner read/write only)")))
+}
+
+// checkTerraformInstalled checks if terraform is available in PATH
+func checkTerraformInstalled() error {
+	cmd := exec.Command("terraform", "version")
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("terraform is not installed or not available in PATH. Please install Terraform: https://terraform.io/downloads")
+	}
+	return nil
+}

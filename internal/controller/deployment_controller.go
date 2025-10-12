@@ -163,6 +163,14 @@ func (r *DeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 	}
 
+	// Check if Application is of type MySQLCluster
+	if app.Spec.Type == platformv1alpha1.ApplicationTypeMySQLCluster {
+		if err := r.handleMySQLClusterDeployment(ctx, &deployment, &app); err != nil {
+			log.Error(err, "Failed to handle MySQLCluster deployment")
+			return ctrl.Result{}, err
+		}
+	}
+
 	// Check if Application is of type Valkey
 	if app.Spec.Type == platformv1alpha1.ApplicationTypeValkey {
 		if err := r.handleValkeyDeployment(ctx, &deployment, &app); err != nil {
@@ -732,17 +740,6 @@ func (r *DeploymentReconciler) handleMySQLDeployment(ctx context.Context, deploy
 		return fmt.Errorf("failed to list deployments: %w", err)
 	}
 
-	// Check if other deployments exist for this application
-	hasExistingDeployments := checkForExistingMySQLDeployments(deploymentList.Items, deployment, app)
-	if hasExistingDeployments {
-		log.Info("Existing MySQL deployments found for this application - treating as config change")
-		// TODO: Handle configuration updates for existing MySQL deployments
-		// For now, we'll just log and return successfully
-		return nil
-	}
-
-	log.Info("No existing MySQL deployments found - creating new InnoDBCluster")
-
 	// Generate resource names
 	secretName, clusterName := generateMySQLResourceNames(deployment, projectSlug, appSlug)
 
@@ -810,6 +807,115 @@ func (r *DeploymentReconciler) handleMySQLDeployment(ctx context.Context, deploy
 		log.Info("Successfully created InnoDBCluster", "clusterName", clusterName)
 	} else {
 		log.Info("InnoDBCluster already exists", "clusterName", clusterName)
+	}
+
+	return nil
+}
+
+// handleMySQLClusterDeployment handles deployments for MySQLCluster applications
+func (r *DeploymentReconciler) handleMySQLClusterDeployment(ctx context.Context, deployment *platformv1alpha1.Deployment, app *platformv1alpha1.Application) error {
+	log := logf.FromContext(ctx).WithValues("deployment", deployment.Name, "application", app.Name)
+
+	// Validate MySQLCluster configuration
+	if err := validateMySQLClusterConfiguration(app); err != nil {
+		return fmt.Errorf("invalid MySQLCluster configuration: %w", err)
+	}
+
+	// Get project for resource metadata
+	var project platformv1alpha1.Project
+	if err := r.Get(ctx, types.NamespacedName{
+		Name: fmt.Sprintf("project-%s", deployment.GetProjectUUID()),
+	}, &project); err != nil {
+		return fmt.Errorf("failed to get project: %w", err)
+	}
+
+	// Get project and app slugs from labels
+	projectSlug, err := r.getProjectSlug(ctx, deployment.GetProjectUUID())
+	if err != nil {
+		return fmt.Errorf("failed to get project slug: %w", err)
+	}
+	appSlug, err := r.getApplicationSlug(ctx, deployment.GetApplicationUUID(), deployment.Namespace)
+	if err != nil {
+		return fmt.Errorf("failed to get application slug: %w", err)
+	}
+
+	// Generate resource names
+	secretName, clusterName := generateMySQLClusterResourceNames(deployment, projectSlug, appSlug)
+
+	// Check if secret already exists
+	existingSecret := &corev1.Secret{}
+	err = r.Get(ctx, types.NamespacedName{
+		Name:      secretName,
+		Namespace: deployment.Namespace,
+	}, existingSecret)
+
+	if err != nil && !errors.IsNotFound(err) {
+		return fmt.Errorf("failed to check for existing secret: %w", err)
+	}
+
+	// Create secret if it doesn't exist
+	if errors.IsNotFound(err) {
+		log.Info("Creating MySQLCluster credentials secret", "secretName", secretName)
+		secret, err := generateMySQLCredentialsSecret(deployment, project.Name, projectSlug, appSlug, deployment.Namespace)
+		if err != nil {
+			return fmt.Errorf("failed to generate MySQLCluster credentials secret: %w", err)
+		}
+
+		// Set owner reference to the deployment
+		if err := controllerutil.SetControllerReference(deployment, secret, r.Scheme); err != nil {
+			return fmt.Errorf("failed to set controller reference on secret: %w", err)
+		}
+
+		if err := r.Create(ctx, secret); err != nil {
+			return fmt.Errorf("failed to create MySQLCluster credentials secret: %w", err)
+		}
+		log.Info("Successfully created MySQLCluster credentials secret", "secretName", secretName)
+	} else {
+		log.Info("MySQLCluster credentials secret already exists", "secretName", secretName)
+	}
+
+	// Check if MySQLCluster already exists
+	existingCluster := &unstructured.Unstructured{}
+	existingCluster.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   "mysql.oracle.com",
+		Version: "v2",
+		Kind:    "InnoDBCluster",
+	})
+	err = r.Get(ctx, types.NamespacedName{
+		Name:      clusterName,
+		Namespace: deployment.Namespace,
+	}, existingCluster)
+
+	if err != nil && !errors.IsNotFound(err) {
+		return fmt.Errorf("failed to check for existing MySQLCluster: %w", err)
+	}
+
+	if errors.IsNotFound(err) {
+		// Create new MySQLCluster
+		log.Info("Creating MySQLCluster", "clusterName", clusterName)
+		cluster := generateMySQLCluster(deployment, app, project.Name, projectSlug, appSlug, secretName, deployment.Namespace)
+
+		// Set owner reference to the deployment
+		if err := controllerutil.SetControllerReference(deployment, cluster, r.Scheme); err != nil {
+			return fmt.Errorf("failed to set controller reference on MySQLCluster: %w", err)
+		}
+
+		if err := r.Create(ctx, cluster); err != nil {
+			return fmt.Errorf("failed to create MySQLCluster: %w", err)
+		}
+		log.Info("Successfully created MySQLCluster", "clusterName", clusterName)
+	} else {
+		// Update existing MySQLCluster with new configuration
+		log.Info("Updating existing MySQLCluster", "clusterName", clusterName)
+		updatedCluster := generateMySQLCluster(deployment, app, project.Name, projectSlug, appSlug, secretName, deployment.Namespace)
+
+		// Preserve the existing metadata but update spec
+		existingCluster.Object["spec"] = updatedCluster.Object["spec"]
+
+		if err := r.Update(ctx, existingCluster); err != nil {
+			return fmt.Errorf("failed to update MySQLCluster: %w", err)
+		}
+		log.Info("Successfully updated MySQLCluster", "clusterName", clusterName)
 	}
 
 	return nil

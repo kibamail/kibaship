@@ -478,13 +478,7 @@ func (r *ApplicationReconciler) updateApplicationStatus(ctx context.Context, app
 func (r *ApplicationReconciler) handleApplicationDomains(ctx context.Context, app *platformv1alpha1.Application) error {
 	log := logf.FromContext(ctx).WithValues("application", app.Name, "namespace", app.Namespace)
 
-	// Handle domains for applications that need them
-	if app.Spec.Type != platformv1alpha1.ApplicationTypeGitRepository &&
-		app.Spec.Type != platformv1alpha1.ApplicationTypeValkey &&
-		app.Spec.Type != platformv1alpha1.ApplicationTypeValkeyCluster {
-		log.V(1).Info("Skipping domain creation for application type", "type", app.Spec.Type)
-		return nil
-	}
+	// All application types get domains
 
 	// Check if default domain already exists
 	var domains platformv1alpha1.ApplicationDomainList

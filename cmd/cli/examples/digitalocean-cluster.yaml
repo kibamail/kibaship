@@ -1,0 +1,21 @@
+# DigitalOcean Cluster Configuration Example
+# A production-ready cluster on DigitalOcean with full PaaS features
+
+state:
+  s3:
+    bucket: "kibaship-terraform-state-staging"
+    region: "eu-north-1"
+    access-key: "xxx"
+    access-secret: "OXomLk2e5M8+xxx"
+
+cluster:
+  domain: "h.kibaship.app"
+  email: "admin@h.kibaship.app"
+  paas-features: "mysql,valkey,postgres"
+
+  provider:
+    digital-ocean:
+      token: "xxxx"
+      nodes: "3"
+      nodes-size: "s-8vcpu-16gb"
+      region: "nyc3"

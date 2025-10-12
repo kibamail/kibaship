@@ -445,7 +445,7 @@ spec:
 # apiVersion: mysql.oracle.com/v2
 # kind: InnoDBCluster
 # metadata:
-#   name: mysql-cluster-abc123
+#   name: mc-abc123-uuid-example
 #   namespace: project-xyz789-uuid
 # spec:
 #   tlsUseSelfSigned: false

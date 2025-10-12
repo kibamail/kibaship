@@ -580,7 +580,7 @@ jobs:
 
             ### CLI Tool
 
-            Download the KibaShip CLI for local cluster management:
+            Download the KibaShip CLI (minimal version with help screen and version info):
 
             **Linux (AMD64)**
             ```bash
@@ -626,9 +626,9 @@ jobs:
             ### What's in this release
 
             **CLI Tool:**
-            - Create and destroy development clusters
-            - Install required infrastructure (Cilium, Cert-Manager, Tekton, etc.)
-            - Manage cluster lifecycle
+            - Display help screen with beautiful ASCII art banner
+            - Show version information
+            - Minimal CLI foundation for future development
 
             Version: `${{ steps.version.outputs.version }}`
           generate_release_notes: true

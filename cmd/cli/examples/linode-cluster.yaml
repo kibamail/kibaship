@@ -1,0 +1,18 @@
+# Linode Cluster Configuration Example
+# A cluster on Linode with Valkey only
+
+state:
+  s3:
+    bucket: "mycompany-linode-terraform-state"
+    region: "us-east-1"
+    access-key: "AKIAIOSFODNN7EXAMPLE"
+    access-secret: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+
+cluster:
+  name: "cache.mycompany.com"
+  email: "platform@mycompany.com"
+  paas-features: "valkey"
+
+  provider:
+    linode:
+      token: "your-linode-api-token"

@@ -1,0 +1,20 @@
+# Google Cloud Enterprise Cluster Configuration Example
+# An enterprise cluster on Google Cloud with custom PaaS features
+
+state:
+  s3:
+    bucket: "mycompany-enterprise-terraform-state"
+    region: "us-east-1"
+    access-key: "AKIAIOSFODNN7EXAMPLE"
+    access-secret: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+
+cluster:
+  name: "enterprise.mycompany.com"
+  email: "platform@mycompany.com"
+  paas-features: "mysql,postgres"
+
+  provider:
+    gcloud:
+      service-account-key: "/path/to/enterprise-service-account.json"
+      project-id: "mycompany-enterprise-k8s"
+      region: "us-central1"

@@ -1,0 +1,16 @@
+# Hetzner Cloud Cluster Configuration Example
+# A cluster on Hetzner Cloud with MySQL and Valkey only
+
+name: "app.hetzner.mycompany.com"
+email: "ops@mycompany.com"
+paas-features: "mysql,valkey"
+provider: "hetzner"
+
+# Terraform state configuration
+state-s3-bucket: "mycompany-hetzner-terraform-state"
+state-s3-region: "eu-central-1"
+state-s3-access-key: "AKIAIOSFODNN7EXAMPLE"
+state-s3-access-secret: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+
+# Hetzner Cloud provider configuration
+provider-hetzner-token: "your-hetzner-cloud-api-token"
