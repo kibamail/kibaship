@@ -17,10 +17,10 @@ func init() {
 	validate = validator.New()
 
 	// Register custom validators
-	validate.RegisterValidation("file", validateFile)
-	validate.RegisterValidation("domain_name", validateDomainName)
-	validate.RegisterValidation("paas_features", validatePaaSFeatures)
-	validate.RegisterValidation("kind_storage", validateKindStorage)
+	_ = validate.RegisterValidation("file", validateFile)
+	_ = validate.RegisterValidation("domain_name", validateDomainName)
+	_ = validate.RegisterValidation("paas_features", validatePaaSFeatures)
+	_ = validate.RegisterValidation("kind_storage", validateKindStorage)
 }
 
 // validateFile checks if a file exists and is readable
@@ -177,8 +177,8 @@ func validateKindStorage(fl validator.FieldLevel) bool {
 	return storage >= minStoragePerNode
 }
 
-// ValidateCreateCommand validates the core create command flags and builds the configuration
-func ValidateCreateCommand(cmd *cobra.Command) (*CreateConfig, error) {
+// extractCoreFlags extracts and validates core command flags
+func extractCoreFlags(cmd *cobra.Command) *CreateConfig {
 	config := &CreateConfig{}
 
 	// Get core flags
@@ -199,19 +199,84 @@ func ValidateCreateCommand(cmd *cobra.Command) (*CreateConfig, error) {
 		config.PaaSFeatures = "mysql,valkey,postgres"
 	}
 
+	return config
+}
+
+// extractTerraformStateFlags extracts Terraform state configuration flags
+func extractTerraformStateFlags(cmd *cobra.Command) (string, string, string, string) {
+	stateS3Bucket, _ := cmd.Flags().GetString("state-s3-bucket")
+	stateS3Region, _ := cmd.Flags().GetString("state-s3-region")
+	stateS3AccessKey, _ := cmd.Flags().GetString("state-s3-access-key")
+	stateS3AccessSecret, _ := cmd.Flags().GetString("state-s3-access-secret")
+	return stateS3Bucket, stateS3Region, stateS3AccessKey, stateS3AccessSecret
+}
+
+// buildProviderConfig builds provider-specific configuration
+func buildProviderConfig(config *CreateConfig, cmd *cobra.Command) error {
+	switch config.Provider {
+	case ProviderAWS:
+		awsConfig, err := buildAWSConfig(cmd)
+		if err != nil {
+			return fmt.Errorf("AWS configuration validation failed: %w", err)
+		}
+		config.AWS = awsConfig
+
+	case ProviderDigitalOcean:
+		doConfig, err := buildDigitalOceanConfig(cmd)
+		if err != nil {
+			return fmt.Errorf("digital Ocean configuration validation failed: %w", err)
+		}
+		config.DigitalOcean = doConfig
+
+	case ProviderHetzner:
+		hetznerConfig, err := buildHetznerConfig(cmd)
+		if err != nil {
+			return fmt.Errorf("hetzner configuration validation failed: %w", err)
+		}
+		config.Hetzner = hetznerConfig
+
+	case ProviderHetznerRobot:
+		hetznerRobotConfig, err := buildHetznerRobotConfig(cmd)
+		if err != nil {
+			return fmt.Errorf("hetzner Robot configuration validation failed: %w", err)
+		}
+		config.HetznerRobot = hetznerRobotConfig
+
+	case ProviderLinode:
+		linodeConfig, err := buildLinodeConfig(cmd)
+		if err != nil {
+			return fmt.Errorf("linode configuration validation failed: %w", err)
+		}
+		config.Linode = linodeConfig
+
+	case ProviderGCloud:
+		gcloudConfig, err := buildGCloudConfig(cmd)
+		if err != nil {
+			return fmt.Errorf("google Cloud configuration validation failed: %w", err)
+		}
+		config.GCloud = gcloudConfig
+
+	default:
+		return fmt.Errorf("unsupported provider: %s", config.Provider)
+	}
+	return nil
+}
+
+// ValidateCreateCommand validates the core create command flags and builds the configuration
+func ValidateCreateCommand(cmd *cobra.Command) (*CreateConfig, error) {
+	// Extract core flags
+	config := extractCoreFlags(cmd)
+
 	// Derive cluster name from domain by replacing dots with dashes
 	if config.Domain != "" {
 		config.Name = strings.ReplaceAll(config.Domain, ".", "-")
 	}
 
 	// Get Terraform state flags
-	stateS3Bucket, _ := cmd.Flags().GetString("state-s3-bucket")
-	stateS3Region, _ := cmd.Flags().GetString("state-s3-region")
-	stateS3AccessKey, _ := cmd.Flags().GetString("state-s3-access-key")
-	stateS3AccessSecret, _ := cmd.Flags().GetString("state-s3-access-secret")
+	stateS3Bucket, stateS3Region, stateS3AccessKey, stateS3AccessSecret := extractTerraformStateFlags(cmd)
 
 	// Validate that we have either configuration file OR provider flags
-	if configuration == "" && provider == "" {
+	if config.Configuration == "" && config.Provider == "" {
 		return nil, fmt.Errorf("must specify either --configuration file or --provider with credentials")
 	}
 
@@ -219,28 +284,28 @@ func ValidateCreateCommand(cmd *cobra.Command) (*CreateConfig, error) {
 	// and provider flag will be ignored (this is intentional for CLI flag overrides)
 
 	// If using configuration file, load and parse it
-	if configuration != "" {
-		if err := validate.Var(configuration, "required,file"); err != nil {
+	if config.Configuration != "" {
+		if err := validate.Var(config.Configuration, "required,file"); err != nil {
 			return nil, fmt.Errorf("configuration file validation failed: %w", err)
 		}
 
 		// Load configuration from YAML file
-		yamlConfig, err := LoadConfigFromYAML(configuration)
+		yamlConfig, err := LoadConfigFromYAML(config.Configuration)
 		if err != nil {
 			return nil, fmt.Errorf("failed to load YAML configuration: %w", err)
 		}
 
 		// Override with CLI flags if provided (CLI flags take precedence)
-		if domain != "" {
-			yamlConfig.Domain = domain
+		if config.Domain != "" {
+			yamlConfig.Domain = config.Domain
 			// Derive cluster name from domain
-			yamlConfig.Name = strings.ReplaceAll(domain, ".", "-")
+			yamlConfig.Name = strings.ReplaceAll(config.Domain, ".", "-")
 		}
-		if email != "" {
-			yamlConfig.Email = email
+		if config.Email != "" {
+			yamlConfig.Email = config.Email
 		}
-		if paasFeatures != "" {
-			yamlConfig.PaaSFeatures = paasFeatures
+		if config.PaaSFeatures != "" {
+			yamlConfig.PaaSFeatures = config.PaaSFeatures
 		}
 
 		// Override Terraform state with CLI flags if provided
@@ -266,13 +331,15 @@ func ValidateCreateCommand(cmd *cobra.Command) (*CreateConfig, error) {
 	}
 
 	// Validate provider selection
-	if err := validate.Var(provider, "required,oneof=aws digital-ocean hetzner hetzner-robot linode gcloud"); err != nil {
+	if err := validate.Var(config.Provider,
+		"required,oneof=aws digital-ocean hetzner hetzner-robot linode gcloud"); err != nil {
 		return nil, fmt.Errorf("invalid provider: must be one of: aws, digital-ocean, hetzner, hetzner-robot, linode, gcloud")
 	}
 
 	// Validate Terraform state configuration
-	if err := validateTerraformStateFlags(stateS3Bucket, stateS3Region, stateS3AccessKey, stateS3AccessSecret); err != nil {
-		return nil, fmt.Errorf("Terraform state configuration validation failed: %w", err)
+	if err := validateTerraformStateFlags(stateS3Bucket, stateS3Region,
+		stateS3AccessKey, stateS3AccessSecret); err != nil {
+		return nil, fmt.Errorf("terraform state configuration validation failed: %w", err)
 	}
 	config.TerraformState = &TerraformStateConfig{
 		S3Bucket:       stateS3Bucket,
@@ -282,48 +349,8 @@ func ValidateCreateCommand(cmd *cobra.Command) (*CreateConfig, error) {
 	}
 
 	// Build provider-specific configuration based on selected provider
-	switch provider {
-	case "aws":
-		awsConfig, err := buildAWSConfig(cmd)
-		if err != nil {
-			return nil, fmt.Errorf("AWS configuration validation failed: %w", err)
-		}
-		config.AWS = awsConfig
-
-	case "digital-ocean":
-		doConfig, err := buildDigitalOceanConfig(cmd)
-		if err != nil {
-			return nil, fmt.Errorf("DigitalOcean configuration validation failed: %w", err)
-		}
-		config.DigitalOcean = doConfig
-
-	case "hetzner":
-		hetznerConfig, err := buildHetznerConfig(cmd)
-		if err != nil {
-			return nil, fmt.Errorf("Hetzner configuration validation failed: %w", err)
-		}
-		config.Hetzner = hetznerConfig
-
-	case "hetzner-robot":
-		hetznerRobotConfig, err := buildHetznerRobotConfig(cmd)
-		if err != nil {
-			return nil, fmt.Errorf("Hetzner Robot configuration validation failed: %w", err)
-		}
-		config.HetznerRobot = hetznerRobotConfig
-
-	case "linode":
-		linodeConfig, err := buildLinodeConfig(cmd)
-		if err != nil {
-			return nil, fmt.Errorf("Linode configuration validation failed: %w", err)
-		}
-		config.Linode = linodeConfig
-
-	case "gcloud":
-		gcloudConfig, err := buildGCloudConfig(cmd)
-		if err != nil {
-			return nil, fmt.Errorf("Google Cloud configuration validation failed: %w", err)
-		}
-		config.GCloud = gcloudConfig
+	if err := buildProviderConfig(config, cmd); err != nil {
+		return nil, err
 	}
 
 	// Validate required fields are present in the final configuration
@@ -337,16 +364,18 @@ func ValidateCreateCommand(cmd *cobra.Command) (*CreateConfig, error) {
 		return nil, fmt.Errorf("email is required (specify in YAML or use --email flag)")
 	}
 	if config.TerraformState == nil || config.TerraformState.S3Bucket == "" {
-		return nil, fmt.Errorf("Terraform state S3 bucket is required (specify in YAML or use --state-s3-bucket flag)")
+		return nil, fmt.Errorf("terraform state S3 bucket is required (specify in YAML or use --state-s3-bucket flag)")
 	}
 	if config.TerraformState.S3Region == "" {
-		return nil, fmt.Errorf("Terraform state S3 region is required (specify in YAML or use --state-s3-region flag)")
+		return nil, fmt.Errorf("terraform state S3 region is required (specify in YAML or use --state-s3-region flag)")
 	}
 	if config.TerraformState.S3AccessKey == "" {
-		return nil, fmt.Errorf("Terraform state S3 access key is required (specify in YAML or use --state-s3-access-key flag)")
+		return nil, fmt.Errorf("terraform state S3 access key is required " +
+			"(specify in YAML or use --state-s3-access-key flag)")
 	}
 	if config.TerraformState.S3AccessSecret == "" {
-		return nil, fmt.Errorf("Terraform state S3 access secret is required (specify in YAML or use --state-s3-access-secret flag)")
+		return nil, fmt.Errorf("terraform state S3 access secret is required " +
+			"(specify in YAML or use --state-s3-access-secret flag)")
 	}
 
 	// Final validation of the complete configuration
@@ -534,7 +563,8 @@ func getFieldErrorMessage(fe validator.FieldError) string {
 	case "domain_name":
 		return fmt.Sprintf("%s must be a valid domain name (e.g., app.kibaship.com, paas.kibaship.app)", field)
 	case "paas_features":
-		return fmt.Sprintf("%s must be a valid combination of: mysql, valkey, postgres, or 'none' (comma-separated, no duplicates)", field)
+		return fmt.Sprintf("%s must be a valid combination of: mysql, valkey, postgres, or 'none' "+
+			"(comma-separated, no duplicates)", field)
 	default:
 		return fmt.Sprintf("%s validation failed: %s", field, fe.Tag())
 	}

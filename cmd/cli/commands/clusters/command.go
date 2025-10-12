@@ -13,7 +13,8 @@ func NewCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "clusters",
 		Short: "Manage kibaship clusters",
-		Long:  "Manage kibaship clusters across different cloud providers including AWS, Digital Ocean, Hetzner, Hetzner Robot, Linode, and Google Cloud.",
+		Long: "Manage kibaship clusters across different cloud providers including AWS, Digital Ocean, " +
+			"Hetzner, Hetzner Robot, Linode, and Google Cloud.",
 		Run: func(cmd *cobra.Command, args []string) {
 			PrintHelp()
 		},

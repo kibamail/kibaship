@@ -20,9 +20,9 @@ func NewValidator() *GCloudValidator {
 	v := validator.New()
 
 	// Register Google Cloud-specific custom validators
-	v.RegisterValidation("gcloud_service_account", validateServiceAccountKey)
-	v.RegisterValidation("gcloud_project_id", validateProjectID)
-	v.RegisterValidation("gcloud_region", validateGCloudRegion)
+	_ = v.RegisterValidation("gcloud_service_account", validateServiceAccountKey)
+	_ = v.RegisterValidation("gcloud_project_id", validateProjectID)
+	_ = v.RegisterValidation("gcloud_region", validateGCloudRegion)
 
 	return &GCloudValidator{validator: v}
 }
@@ -125,7 +125,7 @@ func (v *GCloudValidator) formatValidationError(err error) error {
 		errorMessages = append(errorMessages, err.Error())
 	}
 
-	return fmt.Errorf("Google Cloud validation failed:\n  • %s", strings.Join(errorMessages, "\n  • "))
+	return fmt.Errorf("google Cloud validation failed:\n  • %s", strings.Join(errorMessages, "\n  • "))
 }
 
 // getGCloudFieldErrorMessage returns Google Cloud-specific error messages
@@ -140,7 +140,8 @@ func (v *GCloudValidator) getGCloudFieldErrorMessage(fe validator.FieldError) st
 	case "gcloud_service_account":
 		return fmt.Sprintf("%s must be a valid Google Cloud service account key file (JSON format)", field)
 	case "gcloud_project_id":
-		return fmt.Sprintf("%s must be a valid Google Cloud project ID (6-30 characters, lowercase, starts with letter)", field)
+		return fmt.Sprintf("%s must be a valid Google Cloud project ID (6-30 characters, lowercase, starts with letter)",
+			field)
 	case "gcloud_region":
 		return fmt.Sprintf("%s must be a valid Google Cloud region (e.g., us-central1, europe-west1)", field)
 	default:

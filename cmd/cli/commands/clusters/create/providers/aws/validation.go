@@ -18,9 +18,9 @@ func NewValidator() *AWSValidator {
 	v := validator.New()
 
 	// Register AWS-specific custom validators
-	v.RegisterValidation("aws_access_key", validateAWSAccessKey)
-	v.RegisterValidation("aws_secret_key", validateAWSSecretKey)
-	v.RegisterValidation("aws_region", validateAWSRegion)
+	_ = v.RegisterValidation("aws_access_key", validateAWSAccessKey)
+	_ = v.RegisterValidation("aws_secret_key", validateAWSSecretKey)
+	_ = v.RegisterValidation("aws_region", validateAWSRegion)
 
 	return &AWSValidator{validator: v}
 }

@@ -18,7 +18,7 @@ func NewValidator() *LinodeValidator {
 	v := validator.New()
 
 	// Register Linode-specific custom validators
-	v.RegisterValidation("linode_token", validateLinodeToken)
+	_ = v.RegisterValidation("linode_token", validateLinodeToken)
 
 	return &LinodeValidator{validator: v}
 }
@@ -62,7 +62,7 @@ func (v *LinodeValidator) formatValidationError(err error) error {
 		errorMessages = append(errorMessages, err.Error())
 	}
 
-	return fmt.Errorf("Linode validation failed:\n  • %s", strings.Join(errorMessages, "\n  • "))
+	return fmt.Errorf("linode validation failed:\n  • %s", strings.Join(errorMessages, "\n  • "))
 }
 
 // getLinodeFieldErrorMessage returns Linode-specific error messages

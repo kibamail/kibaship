@@ -637,7 +637,7 @@ func (r *ApplicationReconciler) deleteAssociatedDomains(ctx context.Context, app
 }
 
 // ensureMySQLSlug ensures that MySQL and MySQLCluster applications have a slug generated
-func (r *ApplicationReconciler) ensureMySQLSlug(ctx context.Context, app *platformv1alpha1.Application) (bool, error) {
+func (r *ApplicationReconciler) ensureMySQLSlug(_ context.Context, app *platformv1alpha1.Application) (bool, error) {
 	// Only generate slug for MySQL and MySQLCluster applications
 	if app.Spec.Type != platformv1alpha1.ApplicationTypeMySQL && app.Spec.Type != platformv1alpha1.ApplicationTypeMySQLCluster {
 		return false, nil

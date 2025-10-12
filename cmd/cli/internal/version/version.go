@@ -2,6 +2,11 @@ package version
 
 import "os"
 
+const (
+	// LatestVersion is the fallback version when component version is not found
+	LatestVersion = "latest"
+)
+
 // Version represents the CLI version
 const DefaultVersion = "v1.0.0" // This should match the release tag
 
@@ -39,7 +44,7 @@ func GetComponentVersion(component string) string {
 	if version, exists := ComponentVersions[component]; exists {
 		return version
 	}
-	return "latest" // fallback
+	return LatestVersion // fallback
 }
 
 // GetHetznerRobotComponentVersion returns the default version for a hetznerrobot provider component
@@ -48,8 +53,8 @@ func GetHetznerRobotComponentVersion(component string) string {
 		return version
 	}
 	// Fallback to regular component version with "v" prefix if not found
-	if version := GetComponentVersion(component); version != "latest" {
+	if version := GetComponentVersion(component); version != LatestVersion {
 		return "v" + version
 	}
-	return "latest"
+	return LatestVersion
 }

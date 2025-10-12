@@ -349,21 +349,3 @@ func validateMySQLClusterConfiguration(app *platformv1alpha1.Application) error 
 
 	return nil
 }
-
-// checkForExistingMySQLClusterDeployments checks if any other deployments exist for this MySQL cluster application
-func checkForExistingMySQLClusterDeployments(deployments []platformv1alpha1.Deployment, currentDeployment *platformv1alpha1.Deployment, app *platformv1alpha1.Application) bool {
-	for _, deployment := range deployments {
-		// Skip the current deployment
-		if deployment.Name == currentDeployment.Name {
-			continue
-		}
-
-		// Check if this deployment references the same application
-		if deployment.Spec.ApplicationRef.Name == app.Name &&
-			deployment.Namespace == currentDeployment.Namespace {
-			return true
-		}
-	}
-
-	return false
-}

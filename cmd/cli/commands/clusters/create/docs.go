@@ -13,7 +13,8 @@ func PrintHelp() {
 	fmt.Println()
 	fmt.Println(styles.DescriptionStyle.Render("Create a new kibaship cluster on your chosen cloud provider."))
 	fmt.Println()
-	fmt.Println(styles.DescriptionStyle.Render("All cluster configuration must be provided via a YAML configuration file."))
+	fmt.Println(styles.DescriptionStyle.Render(
+		"All cluster configuration must be provided via a YAML configuration file."))
 	fmt.Println()
 
 	// Supported Providers section
@@ -52,8 +53,10 @@ func PrintHelp() {
 
 	// YAML Configuration section
 	fmt.Println(styles.HelpStyle.Render("YAML Configuration:"))
-	fmt.Printf("  %s\n", styles.DescriptionStyle.Render("All cluster settings must be defined in a YAML configuration file."))
-	fmt.Printf("  %s\n", styles.DescriptionStyle.Render("See cmd/cli/examples/digitalocean-cluster.yaml for a complete example."))
+	fmt.Printf("  %s\n", styles.DescriptionStyle.Render(
+		"All cluster settings must be defined in a YAML configuration file."))
+	fmt.Printf("  %s\n", styles.DescriptionStyle.Render(
+		"See cmd/cli/examples/digitalocean-cluster.yaml for a complete example."))
 	fmt.Println()
 
 	// Example section
@@ -77,5 +80,6 @@ func PrintHelp() {
 	fmt.Printf("    %s\n", styles.DescriptionStyle.Render("s3-bucket: \"my-terraform-state\""))
 	fmt.Printf("    %s\n", styles.DescriptionStyle.Render("s3-region: \"us-east-1\""))
 	fmt.Printf("    %s\n", styles.DescriptionStyle.Render("s3-access-key: \"AKIAIOSFODNN7EXAMPLE\""))
-	fmt.Printf("    %s\n", styles.DescriptionStyle.Render("s3-access-secret: \"wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY\""))
+	fmt.Printf("    %s\n", styles.DescriptionStyle.Render(
+		"s3-access-secret: \"wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY\""))
 }

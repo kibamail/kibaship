@@ -38,7 +38,7 @@ func extractCredentials(config *create.CreateConfig) error {
 	env = append(env, fmt.Sprintf("TF_VAR_paas_features=%s", config.PaaSFeatures))
 
 	// Add Terraform state configuration variables (only for cloud providers)
-	if config.Provider != "kind" {
+	if config.Provider != create.ProviderKind {
 		env = append(env, fmt.Sprintf("TF_VAR_terraform_state_bucket=%s", config.TerraformState.S3Bucket))
 		env = append(env, fmt.Sprintf("TF_VAR_terraform_state_region=%s", config.TerraformState.S3Region))
 		env = append(env, fmt.Sprintf("TF_VAR_terraform_state_access_key=%s", config.TerraformState.S3AccessKey))
@@ -54,7 +54,7 @@ func extractCredentials(config *create.CreateConfig) error {
 			env = append(env, fmt.Sprintf("TF_VAR_do_node_count=%s", config.DigitalOcean.Nodes))
 			env = append(env, fmt.Sprintf("TF_VAR_do_node_size=%s", config.DigitalOcean.NodesSize))
 		}
-	case "kind":
+	case create.ProviderKind:
 		if config.Kind != nil {
 			env = append(env, fmt.Sprintf("TF_VAR_kind_node_count=%s", config.Kind.Nodes))
 			env = append(env, fmt.Sprintf("TF_VAR_kind_storage_per_node=%s", config.Kind.Storage))
@@ -79,7 +79,7 @@ func extractCredentials(config *create.CreateConfig) error {
 	switch config.Provider {
 	case "digital-ocean":
 		return extractDigitalOceanCredentials(config, &terraformOutput)
-	case "kind":
+	case create.ProviderKind:
 		return extractKindCredentials(config, &terraformOutput)
 	default:
 		return fmt.Errorf("credential extraction not implemented for provider: %s", config.Provider)
@@ -279,10 +279,10 @@ func showUsageInstructions(config *create.CreateConfig) {
 	fmt.Printf("   %s\n",
 		styles.DescriptionStyle.Render("Keep it secure and do not commit it to version control."))
 	fmt.Printf("   %s\n",
-		styles.DescriptionStyle.Render(fmt.Sprintf("File permissions: 600 (owner read/write only)")))
+		styles.DescriptionStyle.Render("File permissions: 600 (owner read/write only)"))
 
 	// Show Kind-specific port information if it's a Kind cluster
-	if config.Provider == "kind" {
+	if config.Provider == create.ProviderKind {
 		fmt.Printf("\n%s %s\n",
 			styles.HelpStyle.Render("🐳"),
 			styles.HelpStyle.Render("Kind Cluster Port Mappings:"))
@@ -346,7 +346,8 @@ func showUsageInstructions(config *create.CreateConfig) {
 func checkTerraformInstalled() error {
 	cmd := exec.Command("terraform", "version")
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("terraform is not installed or not available in PATH. Please install Terraform: https://terraform.io/downloads")
+		return fmt.Errorf("terraform is not installed or not available in PATH. " +
+			"Please install Terraform: https://terraform.io/downloads")
 	}
 	return nil
 }

@@ -114,7 +114,7 @@ func convertYAMLToCreateConfig(yamlConfig *YAMLConfig) (*CreateConfig, error) {
 			return nil, err
 		}
 
-		if provider == "kind" {
+		if provider == ProviderKind {
 			// For Kind clusters, use domain as-is
 			config.Name = config.Domain
 		} else {
@@ -150,12 +150,12 @@ func convertYAMLToCreateConfig(yamlConfig *YAMLConfig) (*CreateConfig, error) {
 		config.Linode = providerConfig.(*LinodeConfig)
 	case "gcloud":
 		config.GCloud = providerConfig.(*GCloudConfig)
-	case "kind":
+	case ProviderKind:
 		config.Kind = providerConfig.(*KindConfig)
 	}
 
 	// Set Terraform state configuration (only for cloud providers)
-	if provider != "kind" {
+	if provider != ProviderKind {
 		config.TerraformState = &TerraformStateConfig{
 			S3Bucket:       yamlConfig.State.S3.Bucket,
 			S3Region:       yamlConfig.State.S3.Region,
@@ -262,7 +262,7 @@ func determineProviderFromYAML(yamlConfig *YAMLConfig) (string, interface{}, err
 			},
 		},
 		{
-			name: "kind",
+			name: ProviderKind,
 			hasData: func() bool {
 				return yamlConfig.Cluster.Provider.Kind.Nodes != "" ||
 					yamlConfig.Cluster.Provider.Kind.Storage != ""
@@ -295,7 +295,8 @@ func determineProviderFromYAML(yamlConfig *YAMLConfig) (string, interface{}, err
 	}
 
 	if len(configuredProviders) > 1 {
-		return "", nil, fmt.Errorf("multiple providers configured in YAML file: %v. Please configure only one provider", configuredProviders)
+		return "", nil, fmt.Errorf("multiple providers configured in YAML file: %v. Please configure only one provider",
+			configuredProviders)
 	}
 
 	return selectedProvider, selectedConfig, nil

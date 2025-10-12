@@ -265,26 +265,8 @@ func validateValkeyClusterConfiguration(app *platformv1alpha1.Application) error
 
 	// Validate cluster-specific requirements
 	if app.Spec.ValkeyCluster != nil && app.Spec.ValkeyCluster.Replicas > 0 && app.Spec.ValkeyCluster.Replicas < 3 {
-		return fmt.Errorf("Valkey cluster requires at least 3 instances")
+		return fmt.Errorf("valkey cluster requires at least 3 instances")
 	}
 
 	return nil
-}
-
-// checkForExistingValkeyDeployments checks if any other deployments exist for this Valkey application
-func checkForExistingValkeyDeployments(deployments []platformv1alpha1.Deployment, currentDeployment *platformv1alpha1.Deployment, app *platformv1alpha1.Application) bool {
-	for _, deployment := range deployments {
-		// Skip the current deployment
-		if deployment.Name == currentDeployment.Name {
-			continue
-		}
-
-		// Check if this deployment references the same application
-		if deployment.Spec.ApplicationRef.Name == app.Name &&
-			deployment.Namespace == currentDeployment.Namespace {
-			return true
-		}
-	}
-
-	return false
 }

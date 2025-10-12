@@ -18,7 +18,7 @@ func NewValidator() *HetznerValidator {
 	v := validator.New()
 
 	// Register Hetzner-specific custom validators
-	v.RegisterValidation("hetzner_token", validateHetznerToken)
+	_ = v.RegisterValidation("hetzner_token", validateHetznerToken)
 
 	return &HetznerValidator{validator: v}
 }
@@ -62,7 +62,7 @@ func (v *HetznerValidator) formatValidationError(err error) error {
 		errorMessages = append(errorMessages, err.Error())
 	}
 
-	return fmt.Errorf("Hetzner Cloud validation failed:\n  • %s", strings.Join(errorMessages, "\n  • "))
+	return fmt.Errorf("hetzner Cloud validation failed:\n  • %s", strings.Join(errorMessages, "\n  • "))
 }
 
 // getHetznerFieldErrorMessage returns Hetzner-specific error messages

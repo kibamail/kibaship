@@ -18,7 +18,7 @@ func NewValidator() *DigitalOceanValidator {
 	v := validator.New()
 
 	// Register DigitalOcean-specific custom validators
-	v.RegisterValidation("do_token", validateDOToken)
+	_ = v.RegisterValidation("do_token", validateDOToken)
 
 	return &DigitalOceanValidator{validator: v}
 }

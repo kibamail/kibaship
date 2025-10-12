@@ -31,7 +31,8 @@ func buildTerraformFiles(config *CreateConfig) error {
 	return BuildTerraformFilesForConfig(config)
 }
 
-// BuildTerraformFilesForConfig creates the directory structure and compiles Terraform templates (exported for delete command)
+// BuildTerraformFilesForConfig creates the directory structure and compiles Terraform templates
+// (exported for delete command)
 func BuildTerraformFilesForConfig(config *CreateConfig) error {
 	// Create .kibaship directory structure
 	kibashipDir := ".kibaship"
@@ -51,7 +52,8 @@ func BuildTerraformFilesForConfig(config *CreateConfig) error {
 	providerPath := fmt.Sprintf("terraform/providers/%s", config.Provider)
 
 	// Compile provision templates
-	if err := compileTemplate(providerPath, "provision.tf.tpl", filepath.Join(provisionDir, "main.tf"), config); err != nil {
+	if err := compileTemplate(providerPath, "provision.tf.tpl",
+		filepath.Join(provisionDir, "main.tf"), config); err != nil {
 		return fmt.Errorf("failed to compile provision template: %w", err)
 	}
 
@@ -60,7 +62,8 @@ func BuildTerraformFilesForConfig(config *CreateConfig) error {
 	}
 
 	// Compile bootstrap templates
-	if err := compileTemplate(providerPath, "bootstrap.tf.tpl", filepath.Join(bootstrapDir, "main.tf"), config); err != nil {
+	if err := compileTemplate(providerPath, "bootstrap.tf.tpl",
+		filepath.Join(bootstrapDir, "main.tf"), config); err != nil {
 		return fmt.Errorf("failed to compile bootstrap template: %w", err)
 	}
 
@@ -91,7 +94,7 @@ func compileTemplate(providerPath, templateName, outputPath string, config *Crea
 	if err != nil {
 		return fmt.Errorf("failed to create output file %s: %w", outputPath, err)
 	}
-	defer outputFile.Close()
+	defer func() { _ = outputFile.Close() }()
 
 	// Execute template with configuration data
 	if err := tmpl.Execute(outputFile, config); err != nil {

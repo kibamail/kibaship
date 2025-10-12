@@ -28,7 +28,7 @@ func setupFlags(cmd *cobra.Command) {
 	cmd.Flags().StringP("configuration", "c", "", "Path to YAML configuration file used to create the cluster")
 
 	// Mark configuration as required
-	cmd.MarkFlagRequired("configuration")
+	_ = cmd.MarkFlagRequired("configuration")
 }
 
 // runDeleteCommand executes the cluster deletion process
@@ -116,7 +116,7 @@ func runDeleteCommand(cmd *cobra.Command, args []string) {
 		styles.HelpStyle.Render("Are you sure you want to delete this cluster? (type 'yes' to confirm): "))
 
 	var confirmation string
-	fmt.Scanln(&confirmation)
+	_, _ = fmt.Scanln(&confirmation)
 
 	if confirmation != "yes" {
 		fmt.Printf("\n%s %s\n",
@@ -154,7 +154,8 @@ func runDeleteCommand(cmd *cobra.Command, args []string) {
 		styles.DescriptionStyle.Render("Running: terraform init with S3 backend configuration"))
 	fmt.Printf("%s %s\n",
 		styles.CommandStyle.Render("📄"),
-		styles.DescriptionStyle.Render(fmt.Sprintf("Backend: s3://%s/clusters/%s/provision.terraform.tfstate", config.TerraformState.S3Bucket, config.Name)))
+		styles.DescriptionStyle.Render(fmt.Sprintf("Backend: s3://%s/clusters/%s/provision.terraform.tfstate",
+			config.TerraformState.S3Bucket, config.Name)))
 	fmt.Printf("%s %s\n\n",
 		styles.CommandStyle.Render("🌍"),
 		styles.DescriptionStyle.Render(fmt.Sprintf("Region: %s", config.TerraformState.S3Region)))

@@ -51,7 +51,8 @@ func printHelp() {
 var rootCmd = &cobra.Command{
 	Use:   "kibaship",
 	Short: "The complete paas platform for kubernetes.",
-	Long:  `Kibaship is a complete paas platform for deploying and managing applications, databases and workloads, powered by Kubernetes.`,
+	Long: `Kibaship is a complete paas platform for deploying and managing applications, ` +
+		`databases and workloads, powered by Kubernetes.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		// If no subcommand is provided, show help and exit
 		printHelp()

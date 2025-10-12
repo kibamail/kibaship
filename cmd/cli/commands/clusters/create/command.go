@@ -34,7 +34,7 @@ func setupFlags(cmd *cobra.Command) {
 	cmd.Flags().StringP("configuration", "c", "", "Path to YAML configuration file (required)")
 
 	// Mark configuration as required
-	cmd.MarkFlagRequired("configuration")
+	_ = cmd.MarkFlagRequired("configuration")
 }
 
 // runCreate is the main execution function for the create command
@@ -101,7 +101,7 @@ func runCreate(cmd *cobra.Command, args []string) {
 
 	// Show provider-specific configuration
 	switch config.Provider {
-	case "digital-ocean":
+	case ProviderDigitalOcean:
 		if config.DigitalOcean != nil {
 			fmt.Printf("\n%s %s\n",
 				styles.HelpStyle.Render("🌊"),
@@ -155,7 +155,7 @@ func runCreate(cmd *cobra.Command, args []string) {
 				styles.CommandStyle.Render("Region:"),
 				styles.DescriptionStyle.Render(config.GCloud.Region))
 		}
-	case "kind":
+	case ProviderKind:
 		if config.Kind != nil {
 			fmt.Printf("\n%s %s\n",
 				styles.HelpStyle.Render("🐳"),
@@ -226,7 +226,8 @@ func runCreate(cmd *cobra.Command, args []string) {
 		styles.DescriptionStyle.Render("Running: terraform init with S3 backend configuration"))
 	fmt.Printf("%s %s\n",
 		styles.CommandStyle.Render("📄"),
-		styles.DescriptionStyle.Render(fmt.Sprintf("Backend: s3://%s/clusters/%s/provision.terraform.tfstate", config.TerraformState.S3Bucket, config.Name)))
+		styles.DescriptionStyle.Render(fmt.Sprintf("Backend: s3://%s/clusters/%s/provision.terraform.tfstate",
+			config.TerraformState.S3Bucket, config.Name)))
 	fmt.Printf("%s %s\n\n",
 		styles.CommandStyle.Render("🌍"),
 		styles.DescriptionStyle.Render(fmt.Sprintf("Region: %s", config.TerraformState.S3Region)))

@@ -9,6 +9,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/kibamail/kibaship/internal/controller"
 	"github.com/kibamail/kibaship/test/utils"
 )
 
@@ -258,7 +259,7 @@ spec:
 				readyStates := strings.Fields(string(output))
 				readyCount := 0
 				for _, state := range readyStates {
-					if state == "true" {
+					if state == controller.TrueString {
 						readyCount++
 					}
 				}
@@ -460,7 +461,7 @@ spec:
 				readyStates := strings.Fields(string(output))
 				readyCount := 0
 				for _, state := range readyStates {
-					if state == "true" {
+					if state == controller.TrueString {
 						readyCount++
 					}
 				}

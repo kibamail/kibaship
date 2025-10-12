@@ -54,7 +54,7 @@ func (r *ValkeyStatusWatcherReconciler) Reconcile(ctx context.Context, req ctrl.
 	ownerRefs := valkeyResource.GetOwnerReferences()
 	var deploymentName string
 	for _, ownerRef := range ownerRefs {
-		if ownerRef.Kind == "Deployment" && ownerRef.APIVersion == "platform.operator.kibaship.com/v1alpha1" {
+		if ownerRef.Kind == DeploymentKind && ownerRef.APIVersion == "platform.operator.kibaship.com/v1alpha1" {
 			deploymentName = ownerRef.Name
 			break
 		}
@@ -112,7 +112,7 @@ func (r *ValkeyStatusWatcherReconciler) Reconcile(ctx context.Context, req ctrl.
 		message = "Valkey instance is ready and accepting connections"
 	} else {
 		conditionStatus = metav1.ConditionFalse
-		reason = "ValkeyNotReady"
+		reason = ValkeyNotReady
 		message = "Valkey instance is not ready"
 	}
 
@@ -190,7 +190,7 @@ func (r *ValkeyStatusWatcherReconciler) SetupWithManager(mgr ctrl.Manager) error
 func hasValkeyOwnerReference(obj client.Object) bool {
 	ownerRefs := obj.GetOwnerReferences()
 	for _, ownerRef := range ownerRefs {
-		if ownerRef.Kind == "Deployment" &&
+		if ownerRef.Kind == DeploymentKind &&
 			strings.Contains(ownerRef.APIVersion, "platform.operator.kibaship.com") {
 			return true
 		}

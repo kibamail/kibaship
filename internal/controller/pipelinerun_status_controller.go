@@ -64,7 +64,7 @@ func (r *PipelineRunStatusController) Reconcile(ctx context.Context, req ctrl.Re
 	// Find owner Deployment via OwnerReferences (Kubernetes-native way)
 	deploymentName := ""
 	for _, owner := range pipelineRun.GetOwnerReferences() {
-		if owner.Kind == "Deployment" && owner.APIVersion == platformv1alpha1.GroupVersion.String() {
+		if owner.Kind == DeploymentKind && owner.APIVersion == platformv1alpha1.GroupVersion.String() {
 			deploymentName = owner.Name
 			break
 		}

@@ -20,7 +20,7 @@ func runTerraformInit(config *CreateConfig) error {
 
 	// Prepare backend configuration arguments based on provider
 	var backendArgs []string
-	if config.Provider == "kind" {
+	if config.Provider == ProviderKind {
 		// Kind clusters use local backend - no S3 configuration needed
 		backendArgs = []string{"init"}
 	} else {
@@ -85,7 +85,7 @@ func runTerraformInit(config *CreateConfig) error {
 }
 
 // streamOutput streams command output to console with proper formatting using styles
-func streamOutput(reader io.Reader, prefix string) {
+func streamOutput(reader io.Reader, _ string) {
 	scanner := bufio.NewScanner(reader)
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -94,41 +94,41 @@ func streamOutput(reader io.Reader, prefix string) {
 		if strings.Contains(line, "Initializing") {
 			fmt.Printf("%s %s\n",
 				styles.CommandStyle.Render("🔄"),
-				styles.DescriptionStyle.Render(prefix+line))
+				styles.DescriptionStyle.Render(line))
 		} else if strings.Contains(line, "Successfully") || strings.Contains(line, "Success!") {
 			fmt.Printf("%s %s\n",
 				styles.TitleStyle.Render("✅"),
-				styles.TitleStyle.Render(prefix+line))
+				styles.TitleStyle.Render(line))
 		} else if strings.Contains(line, "Creating...") || strings.Contains(line, "Creation complete") {
 			fmt.Printf("%s %s\n",
 				styles.CommandStyle.Render("🔨"),
-				styles.DescriptionStyle.Render(prefix+line))
+				styles.DescriptionStyle.Render(line))
 		} else if strings.Contains(line, "Refreshing") || strings.Contains(line, "Reading") {
 			fmt.Printf("%s %s\n",
 				styles.CommandStyle.Render("🔄"),
-				styles.DescriptionStyle.Render(prefix+line))
+				styles.DescriptionStyle.Render(line))
 		} else if strings.Contains(line, "Plan:") || strings.Contains(line, "Apply complete!") {
 			fmt.Printf("%s %s\n",
 				styles.TitleStyle.Render("📊"),
-				styles.TitleStyle.Render(prefix+line))
+				styles.TitleStyle.Render(line))
 		} else if strings.Contains(line, "Error") || strings.Contains(line, "error") {
 			fmt.Printf("%s %s\n",
 				styles.CommandStyle.Render("❌"),
-				styles.CommandStyle.Render(prefix+line))
+				styles.CommandStyle.Render(line))
 		} else if strings.Contains(line, "Warning") || strings.Contains(line, "warning") {
 			fmt.Printf("%s %s\n",
 				styles.CommandStyle.Render("⚠️"),
-				styles.DescriptionStyle.Render(prefix+line))
+				styles.DescriptionStyle.Render(line))
 		} else if strings.Contains(line, "Downloading") || strings.Contains(line, "Installing") {
 			fmt.Printf("%s %s\n",
 				styles.CommandStyle.Render("📥"),
-				styles.DescriptionStyle.Render(prefix+line))
+				styles.DescriptionStyle.Render(line))
 		} else if strings.HasPrefix(line, "Terraform") {
 			fmt.Printf("%s %s\n",
 				styles.TitleStyle.Render("🏗️"),
-				styles.TitleStyle.Render(prefix+line))
+				styles.TitleStyle.Render(line))
 		} else if line != "" {
-			fmt.Printf("   %s\n", styles.DescriptionStyle.Render(prefix+line))
+			fmt.Printf("   %s\n", styles.DescriptionStyle.Render(line))
 		}
 	}
 }
@@ -269,7 +269,8 @@ func runTerraformApply(config *CreateConfig) error {
 func checkTerraformInstalled() error {
 	cmd := exec.Command("terraform", "version")
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("terraform is not installed or not available in PATH. Please install Terraform: https://terraform.io/downloads")
+		return fmt.Errorf("terraform is not installed or not available in PATH. " +
+			"Please install Terraform: https://terraform.io/downloads")
 	}
 	return nil
 }

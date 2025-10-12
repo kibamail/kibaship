@@ -18,9 +18,9 @@ func NewValidator() *HetznerRobotValidator {
 	v := validator.New()
 
 	// Register Hetzner Robot-specific custom validators
-	v.RegisterValidation("hetzner_robot_username", validateHetznerRobotUsername)
-	v.RegisterValidation("hetzner_robot_password", validateHetznerRobotPassword)
-	v.RegisterValidation("hetzner_cloud_token", validateHetznerCloudToken)
+	_ = v.RegisterValidation("hetzner_robot_username", validateHetznerRobotUsername)
+	_ = v.RegisterValidation("hetzner_robot_password", validateHetznerRobotPassword)
+	_ = v.RegisterValidation("hetzner_cloud_token", validateHetznerCloudToken)
 
 	return &HetznerRobotValidator{validator: v}
 }
@@ -96,7 +96,7 @@ func (v *HetznerRobotValidator) formatValidationError(err error) error {
 		errorMessages = append(errorMessages, err.Error())
 	}
 
-	return fmt.Errorf("Hetzner Robot validation failed:\n  • %s", strings.Join(errorMessages, "\n  • "))
+	return fmt.Errorf("hetzner Robot validation failed:\n  • %s", strings.Join(errorMessages, "\n  • "))
 }
 
 // getHetznerRobotFieldErrorMessage returns Hetzner Robot-specific error messages

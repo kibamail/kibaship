@@ -113,11 +113,11 @@ func (r *MySQLStatusWatcherReconciler) Reconcile(ctx context.Context, req ctrl.R
 		message = "MySQL cluster is online and ready"
 	} else if clusterStatus == "PENDING" || clusterStatus == "INITIALIZING" {
 		conditionStatus = metav1.ConditionFalse
-		reason = "MySQLNotReady"
+		reason = MySQLNotReady
 		message = fmt.Sprintf("MySQL cluster is in %s state", clusterStatus)
 	} else {
 		conditionStatus = metav1.ConditionFalse
-		reason = "MySQLNotReady"
+		reason = MySQLNotReady
 		message = fmt.Sprintf("MySQL cluster status: %s", clusterStatus)
 	}
 

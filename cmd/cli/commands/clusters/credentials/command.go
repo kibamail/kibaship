@@ -28,7 +28,7 @@ func setupFlags(cmd *cobra.Command) {
 	cmd.Flags().StringP("configuration", "c", "", "Path to YAML configuration file (required)")
 
 	// Mark configuration as required
-	cmd.MarkFlagRequired("configuration")
+	_ = cmd.MarkFlagRequired("configuration")
 }
 
 // runCredentialsCommand executes the credentials extraction process

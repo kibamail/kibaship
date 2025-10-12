@@ -11,7 +11,8 @@ func PrintHelp() {
 	styles.PrintBanner()
 	fmt.Println(styles.TitleStyle.Render("🚀 Kibaship Clusters"))
 	fmt.Println()
-	fmt.Println(styles.DescriptionStyle.Render("Create and manage Kubernetes clusters across different cloud providers including AWS, Digital Ocean, Hetzner, Hetzner Robot, Linode, and Google Cloud."))
+	fmt.Println(styles.DescriptionStyle.Render("Create and manage Kubernetes clusters across different cloud providers " +
+		"including AWS, Digital Ocean, Hetzner, Hetzner Robot, Linode, and Google Cloud."))
 	fmt.Println()
 	fmt.Println(styles.HelpStyle.Render("Available Commands:"))
 

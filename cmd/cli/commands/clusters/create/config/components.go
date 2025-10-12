@@ -39,10 +39,12 @@ type ComponentsConfig struct {
 // GetBaseURL returns the base URL for component manifests based on version
 func GetBaseURL() string {
 	if version.IsDevelopment() {
-		return "https://raw.githubusercontent.com/kibamail/kibaship/refs/heads/main/cmd/cli/commands/clusters/create/components"
+		return "https://raw.githubusercontent.com/kibamail/kibaship/refs/heads/main/" +
+			"cmd/cli/commands/clusters/create/components"
 	}
 	v := version.GetVersion()
-	return fmt.Sprintf("https://raw.githubusercontent.com/kibamail/kibaship/refs/tags/%s/cmd/cli/commands/clusters/create/components", v)
+	return fmt.Sprintf("https://raw.githubusercontent.com/kibamail/kibaship/refs/tags/%s/"+
+		"cmd/cli/commands/clusters/create/components", v)
 }
 
 // GetComponentsConfig returns the configuration for all components with dynamic versioning
@@ -87,7 +89,8 @@ func GetComponentsConfig() ComponentsConfig {
 								Files: []ComponentFile{
 									{
 										Name: "manifest.yaml",
-										URL:  fmt.Sprintf("%s/cert-manager/providers/hetznerrobot/versions/%s/manifest.yaml", baseURL, certManagerHetznerVersion),
+										URL: fmt.Sprintf("%s/cert-manager/providers/hetznerrobot/versions/%s/manifest.yaml",
+											baseURL, certManagerHetznerVersion),
 									},
 								},
 							},
@@ -120,7 +123,8 @@ func GetComponentsConfig() ComponentsConfig {
 								Files: []ComponentFile{
 									{
 										Name: "manifest.yaml",
-										URL:  fmt.Sprintf("%s/cilium/providers/hetznerrobot/versions/%s/manifest.yaml", baseURL, ciliumHetznerVersion),
+										URL: fmt.Sprintf("%s/cilium/providers/hetznerrobot/versions/%s/manifest.yaml",
+											baseURL, ciliumHetznerVersion),
 									},
 								},
 							},
@@ -205,7 +209,7 @@ func GetDefaultComponentsForKind() []string {
 }
 
 // GetComponentURL constructs the URL for a specific component file
-func GetComponentURL(component, provider, version, filename string) string {
+func GetComponentURL(component, provider, componentVersion, filename string) string {
 	baseURL := GetBaseURL()
-	return fmt.Sprintf("%s/%s/providers/%s/versions/%s/%s", baseURL, component, provider, version, filename)
+	return fmt.Sprintf("%s/%s/providers/%s/versions/%s/%s", baseURL, component, provider, componentVersion, filename)
 }
