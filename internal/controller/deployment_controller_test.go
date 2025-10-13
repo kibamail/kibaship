@@ -35,14 +35,15 @@ import (
 
 	platformv1alpha1 "github.com/kibamail/kibaship/api/v1alpha1"
 	"github.com/kibamail/kibaship/pkg/config"
+	"github.com/kibamail/kibaship/pkg/utils"
 	"github.com/kibamail/kibaship/pkg/validation"
 	tektonv1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 )
 
 const (
 	expectedPipelineName     = "pipeline-deployment-uuid-123"
-	expectedMySQLSecretName  = "m-0f240b15edba7750862e14"
-	expectedMySQLClusterName = "m-0f240b15edba7750862e14"
+	expectedMySQLSecretName  = "m-0f240b15edba7750862e14" // Uses slug
+	expectedMySQLClusterName = "m-0f240b15edba7750862e14" // Uses slug
 )
 
 var _ = Describe("Deployment Controller", func() {
@@ -81,7 +82,7 @@ var _ = Describe("Deployment Controller", func() {
 		// Create test project with unique UUID
 		testProject = &platformv1alpha1.Project{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: fmt.Sprintf("project-%s", projectUUID),
+				Name: utils.GetProjectResourceName(projectUUID),
 				Labels: map[string]string{
 					"platform.kibaship.com/uuid":           projectUUID,
 					"platform.kibaship.com/slug":           "test123",
@@ -95,7 +96,7 @@ var _ = Describe("Deployment Controller", func() {
 		// Create test environment with unique UUID
 		testEnvironment = &platformv1alpha1.Environment{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      fmt.Sprintf("environment-%s", envUUID),
+				Name:      utils.GetEnvironmentResourceName(envUUID),
 				Namespace: namespaceName,
 				Labels: map[string]string{
 					validation.LabelResourceUUID: envUUID,
@@ -135,7 +136,7 @@ var _ = Describe("Deployment Controller", func() {
 				// Create GitRepository application with branch configured
 				testApplication = &platformv1alpha1.Application{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "application-app-uuid-123",
+						Name:      utils.GetApplicationResourceName("app-uuid-123"),
 						Namespace: testNamespace.Name,
 						Labels: map[string]string{
 							"platform.kibaship.com/uuid":             "app-uuid-123",
@@ -159,7 +160,7 @@ var _ = Describe("Deployment Controller", func() {
 
 				testDeployment = &platformv1alpha1.Deployment{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "deployment-deployment-uuid-123",
+						Name:      utils.GetDeploymentResourceName("deployment-uuid-123"),
 						Namespace: testNamespace.Name,
 						Labels: map[string]string{
 							"platform.kibaship.com/uuid":             "deployment-uuid-123",
@@ -334,7 +335,7 @@ var _ = Describe("Deployment Controller", func() {
 				// Create DockerImage application
 				testApplication = &platformv1alpha1.Application{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "application-app-uuid-456",
+						Name:      utils.GetApplicationResourceName("app-uuid-456"),
 						Namespace: testNamespace.Name,
 						Labels: map[string]string{
 							"platform.kibaship.com/uuid":             "app-uuid-456",
@@ -355,7 +356,7 @@ var _ = Describe("Deployment Controller", func() {
 
 				testDeployment = &platformv1alpha1.Deployment{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "deployment-deployment-uuid-456",
+						Name:      utils.GetDeploymentResourceName("deployment-uuid-456"),
 						Namespace: testNamespace.Name,
 						Labels: map[string]string{
 							"platform.kibaship.com/uuid":             "deployment-uuid-456",
@@ -391,7 +392,7 @@ var _ = Describe("Deployment Controller", func() {
 			// Create fresh application for this test
 			app := &platformv1alpha1.Application{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "application-app-uuid-testproj-testapp",
+					Name:      utils.GetApplicationResourceName("app-uuid-testproj-testapp"),
 					Namespace: testNamespace.Name,
 					Labels: map[string]string{
 						"platform.kibaship.com/uuid":             "app-uuid-testproj-testapp",
@@ -416,7 +417,7 @@ var _ = Describe("Deployment Controller", func() {
 			// Create fresh deployment for this test
 			deployment := &platformv1alpha1.Deployment{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "deployment-deployment-uuid-testproj-testdeploy",
+					Name:      utils.GetDeploymentResourceName("deployment-uuid-testproj-testdeploy"),
 					Namespace: testNamespace.Name,
 					Labels: map[string]string{
 						"platform.kibaship.com/uuid":             "deployment-uuid-testproj-testdeploy",
@@ -442,7 +443,7 @@ var _ = Describe("Deployment Controller", func() {
 
 			// Verify Pipeline was created
 			pipeline := &tektonv1.Pipeline{}
-			expectedPipelineName := "pipeline-deployment-uuid-testproj-testdeploy"
+			expectedPipelineName := fmt.Sprintf("pipeline-%s", "deployment-uuid-testproj-testdeploy")
 			pipelineKey := types.NamespacedName{Name: expectedPipelineName, Namespace: testNamespace.Name}
 			Eventually(func() error {
 				return k8sClient.Get(ctx, pipelineKey, pipeline)
@@ -455,7 +456,7 @@ var _ = Describe("Deployment Controller", func() {
 
 			// Verify PipelineRun was created
 			pipelineRun := &tektonv1.PipelineRun{}
-			expectedPipelineRunName := fmt.Sprintf("pipeline-run-deployment-uuid-testproj-testdeploy-%d", deployment.Generation)
+			expectedPipelineRunName := fmt.Sprintf("pipeline-run-%s-%d", "deployment-uuid-testproj-testdeploy", deployment.Generation)
 			pipelineRunKey := types.NamespacedName{Name: expectedPipelineRunName, Namespace: testNamespace.Name}
 			Eventually(func() error {
 				return k8sClient.Get(ctx, pipelineRunKey, pipelineRun)
@@ -485,7 +486,7 @@ var _ = Describe("Deployment Controller", func() {
 				}
 			}
 			Expect(workspacePVC).NotTo(BeNil())
-			Expect(workspacePVC.Name).To(Equal("workspace-deployment-uuid-testproj-testdeploy"))
+			Expect(workspacePVC.Name).To(Equal(fmt.Sprintf("workspace-%s", "deployment-uuid-testproj-testdeploy")))
 
 			// Verify PVC storage allocation is 24GB
 			pvc := workspacePVC.VolumeClaimTemplate
@@ -501,7 +502,7 @@ var _ = Describe("Deployment Controller", func() {
 			// Create fresh application for this test
 			app := &platformv1alpha1.Application{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "application-app-uuid-teststorage-testapp",
+					Name:      utils.GetApplicationResourceName("app-uuid-teststorage-testapp"),
 					Namespace: testNamespace.Name,
 					Labels: map[string]string{
 						"platform.kibaship.com/uuid":             "app-uuid-teststorage-testapp",
@@ -526,7 +527,7 @@ var _ = Describe("Deployment Controller", func() {
 			// Create fresh deployment for this test
 			deployment := &platformv1alpha1.Deployment{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "deployment-deployment-uuid-teststorage-storage",
+					Name:      utils.GetDeploymentResourceName("deployment-uuid-teststorage-storage"),
 					Namespace: testNamespace.Name,
 					Labels: map[string]string{
 						"platform.kibaship.com/uuid":             "deployment-uuid-teststorage-storage",
@@ -587,7 +588,7 @@ var _ = Describe("Deployment Controller", func() {
 			// Create fresh application for this test
 			app := &platformv1alpha1.Application{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "application-app-uuid-teststorageclass-testapp",
+					Name:      utils.GetApplicationResourceName("app-uuid-teststorageclass-testapp"),
 					Namespace: testNamespace.Name,
 					Labels: map[string]string{
 						"platform.kibaship.com/uuid":             "app-uuid-teststorageclass-testapp",
@@ -612,7 +613,7 @@ var _ = Describe("Deployment Controller", func() {
 			// Create fresh deployment for this test
 			deployment := &platformv1alpha1.Deployment{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "deployment-deployment-uuid-teststorageclass-storageclass",
+					Name:      utils.GetDeploymentResourceName("deployment-uuid-teststorageclass-storageclass"),
 					Namespace: testNamespace.Name,
 					Labels: map[string]string{
 						"platform.kibaship.com/uuid":             "deployment-uuid-teststorageclass-storageclass",
@@ -668,7 +669,7 @@ var _ = Describe("Deployment Controller", func() {
 			// Create fresh application for this test
 			app := &platformv1alpha1.Application{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "application-app-uuid-testbranch-testapp",
+					Name:      utils.GetApplicationResourceName("app-uuid-testbranch-testapp"),
 					Namespace: testNamespace.Name,
 					Labels: map[string]string{
 						"platform.kibaship.com/uuid":             "app-uuid-testbranch-testapp",
@@ -693,7 +694,7 @@ var _ = Describe("Deployment Controller", func() {
 			// Create fresh deployment without branch specification
 			deployment := &platformv1alpha1.Deployment{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "deployment-deployment-uuid-testbranch-testbranch",
+					Name:      utils.GetDeploymentResourceName("deployment-uuid-testbranch-testbranch"),
 					Namespace: testNamespace.Name,
 					Labels: map[string]string{
 						"platform.kibaship.com/uuid":             "deployment-uuid-testbranch-testbranch",
@@ -741,7 +742,7 @@ var _ = Describe("Deployment Controller", func() {
 			// Create fresh application for this test
 			app := &platformv1alpha1.Application{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "application-app-uuid-testdup-testapp",
+					Name:      utils.GetApplicationResourceName("app-uuid-testdup-testapp"),
 					Namespace: testNamespace.Name,
 					Labels: map[string]string{
 						"platform.kibaship.com/uuid":             "app-uuid-testdup-testapp",
@@ -766,7 +767,7 @@ var _ = Describe("Deployment Controller", func() {
 			// Create fresh deployment for this test
 			deployment := &platformv1alpha1.Deployment{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "deployment-deployment-uuid-testdup-testdup",
+					Name:      utils.GetDeploymentResourceName("deployment-uuid-testdup-testdup"),
 					Namespace: testNamespace.Name,
 					Labels: map[string]string{
 						"platform.kibaship.com/uuid":             "deployment-uuid-testdup-testdup",
@@ -818,7 +819,7 @@ var _ = Describe("Deployment Controller", func() {
 			// Create fresh application for this test
 			app := &platformv1alpha1.Application{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "application-app-uuid-testrequired-testapp",
+					Name:      utils.GetApplicationResourceName("app-uuid-testrequired-testapp"),
 					Namespace: testNamespace.Name,
 					Labels: map[string]string{
 						"platform.kibaship.com/uuid":             "app-uuid-testrequired-testapp",
@@ -843,7 +844,7 @@ var _ = Describe("Deployment Controller", func() {
 			// Create fresh deployment WITHOUT GitRepository configuration
 			deployment := &platformv1alpha1.Deployment{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "deployment-deployment-uuid-testrequired-testrequired",
+					Name:      utils.GetDeploymentResourceName("deployment-uuid-testrequired-testrequired"),
 					Namespace: testNamespace.Name,
 					Labels: map[string]string{
 						"platform.kibaship.com/uuid":             "deployment-uuid-testrequired-testrequired",
@@ -975,7 +976,7 @@ var _ = Describe("Deployment Controller", func() {
 				// Create MySQL application
 				testMySQLApp = &platformv1alpha1.Application{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "application-app-uuid-mysql-mysqlapp",
+						Name:      utils.GetApplicationResourceName("app-uuid-mysql-mysqlapp"),
 						Namespace: testNamespace.Name,
 						Labels: map[string]string{
 							"platform.kibaship.com/uuid":             "app-uuid-mysql-mysqlapp",
@@ -1006,7 +1007,7 @@ var _ = Describe("Deployment Controller", func() {
 				// Create MySQL deployment
 				testDeployment = &platformv1alpha1.Deployment{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "deployment-deployment-uuid-mysql-deploy1",
+						Name:      utils.GetDeploymentResourceName("deployment-uuid-mysql-deploy1"),
 						Namespace: testNamespace.Name,
 						Labels: map[string]string{
 							"platform.kibaship.com/uuid":             "deployment-uuid-mysql-deploy1",
@@ -1096,7 +1097,7 @@ var _ = Describe("Deployment Controller", func() {
 				// Create first MySQL deployment
 				firstDeployment := &platformv1alpha1.Deployment{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "deployment-deployment-uuid-mysql-first-deploy1",
+						Name:      utils.GetDeploymentResourceName("deployment-uuid-mysql-first-deploy1"),
 						Namespace: testNamespace.Name,
 						Labels: map[string]string{
 							"platform.kibaship.com/uuid":             "deployment-uuid-mysql-first-deploy1",
@@ -1140,7 +1141,7 @@ var _ = Describe("Deployment Controller", func() {
 				// Create second MySQL deployment for the same application
 				testDeployment = &platformv1alpha1.Deployment{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "deployment-deployment-uuid-mysql-deploy2",
+						Name:      utils.GetDeploymentResourceName("deployment-uuid-mysql-deploy2"),
 						Namespace: testNamespace.Name,
 						Labels: map[string]string{
 							"platform.kibaship.com/uuid":             "deployment-uuid-mysql-deploy2",
@@ -1189,7 +1190,7 @@ var _ = Describe("Deployment Controller", func() {
 				// Create MySQL application without version
 				appWithoutVersion := &platformv1alpha1.Application{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "application-app-uuid-mysql-no-version",
+						Name:      utils.GetApplicationResourceName("app-uuid-mysql-no-version"),
 						Namespace: testNamespace.Name,
 						Labels: map[string]string{
 							"platform.kibaship.com/uuid":             "app-uuid-mysql-no-version",
@@ -1212,7 +1213,7 @@ var _ = Describe("Deployment Controller", func() {
 				// Create MySQL deployment
 				testDeployment = &platformv1alpha1.Deployment{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "deployment-deployment-uuid-mysql-no-version-deploy1",
+						Name:      utils.GetDeploymentResourceName("deployment-uuid-mysql-no-version-deploy1"),
 						Namespace: testNamespace.Name,
 						Labels: map[string]string{
 							"platform.kibaship.com/uuid":             "deployment-uuid-mysql-no-version-deploy1",
@@ -1257,7 +1258,7 @@ var _ = Describe("Deployment Controller", func() {
 				// Create MySQL application without MySQL config
 				appWithoutConfig := &platformv1alpha1.Application{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "application-app-uuid-mysql-no-config",
+						Name:      utils.GetApplicationResourceName("app-uuid-mysql-no-config"),
 						Namespace: testNamespace.Name,
 						Labels: map[string]string{
 							"platform.kibaship.com/uuid":             "app-uuid-mysql-no-config",
@@ -1280,7 +1281,7 @@ var _ = Describe("Deployment Controller", func() {
 				// Create MySQL deployment
 				testDeployment = &platformv1alpha1.Deployment{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "deployment-deployment-uuid-mysql-no-config-deploy1",
+						Name:      utils.GetDeploymentResourceName("deployment-uuid-mysql-no-config-deploy1"),
 						Namespace: testNamespace.Name,
 						Labels: map[string]string{
 							"platform.kibaship.com/uuid":             "deployment-uuid-mysql-no-config-deploy1",
@@ -1328,7 +1329,7 @@ var _ = Describe("Deployment Controller", func() {
 				// Create MySQL application
 				testMySQLApp := &platformv1alpha1.Application{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "application-app-uuid-mysql-error-handling",
+						Name:      utils.GetApplicationResourceName("app-uuid-mysql-error-handling"),
 						Namespace: testNamespace.Name,
 						Labels: map[string]string{
 							"platform.kibaship.com/uuid":             "app-uuid-mysql-error-handling",

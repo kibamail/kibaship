@@ -28,6 +28,7 @@ import (
 
 	platformv1alpha1 "github.com/kibamail/kibaship/api/v1alpha1"
 	"github.com/kibamail/kibaship/pkg/config"
+	"github.com/kibamail/kibaship/pkg/utils"
 )
 
 const (
@@ -86,11 +87,11 @@ func generateInnoDBCluster(deployment *platformv1alpha1.Deployment, app *platfor
 	// Use MySQL slug for consistent naming: m-{slug} = 20 chars (fits MySQL Operator's 28-char limit)
 	var clusterName string
 	if app.Spec.MySQL != nil && app.Spec.MySQL.Slug != "" {
-		clusterName = fmt.Sprintf("m-%s", app.Spec.MySQL.Slug)
+		clusterName = utils.GetMySQLResourceName(app.Spec.MySQL.Slug)
 	} else {
 		// Fallback to UUID if slug not available (shouldn't happen with new logic)
 		appUUID := deployment.GetApplicationUUID()
-		clusterName = fmt.Sprintf("m-%s", appUUID[:20])
+		clusterName = utils.GetMySQLResourceName(appUUID[:20])
 	}
 
 	cluster := &unstructured.Unstructured{
@@ -189,9 +190,9 @@ func generateMySQLResourceNames(deployment *platformv1alpha1.Deployment, app *pl
 		slug = appUUID[:18]
 	}
 
-	// For secrets and clusters, use same naming pattern: m-{slug}
-	secretName = fmt.Sprintf("m-%s", slug)
-	clusterName = fmt.Sprintf("m-%s", slug)
+	// Use unified resource naming helper
+	secretName = utils.GetMySQLResourceName(slug)
+	clusterName = utils.GetMySQLResourceName(slug)
 	return
 }
 
@@ -228,11 +229,11 @@ func generateMySQLCluster(deployment *platformv1alpha1.Deployment, app *platform
 	// Use MySQL cluster slug for consistent naming: mc-{slug} = 21 chars (fits MySQL Operator's 28-char limit)
 	var clusterName string
 	if app.Spec.MySQLCluster != nil && app.Spec.MySQLCluster.Slug != "" {
-		clusterName = fmt.Sprintf("mc-%s", app.Spec.MySQLCluster.Slug)
+		clusterName = utils.GetMySQLClusterResourceName(app.Spec.MySQLCluster.Slug)
 	} else {
 		// Fallback to UUID if slug not available (shouldn't happen with new logic)
 		appUUID := deployment.GetApplicationUUID()
-		clusterName = fmt.Sprintf("mc-%s", appUUID[:20])
+		clusterName = utils.GetMySQLClusterResourceName(appUUID[:20])
 	}
 
 	// Default values for cluster
@@ -328,9 +329,9 @@ func generateMySQLClusterResourceNames(deployment *platformv1alpha1.Deployment, 
 		slug = appUUID[:18]
 	}
 
-	// For secrets and clusters, use same naming pattern: mc-{slug}
-	secretName = fmt.Sprintf("mc-%s", slug)
-	clusterName = fmt.Sprintf("mc-%s", slug)
+	// Use unified resource naming helper
+	secretName = utils.GetMySQLClusterResourceName(slug)
+	clusterName = utils.GetMySQLClusterResourceName(slug)
 	return
 }
 

@@ -292,7 +292,7 @@ func (s *EnvironmentService) convertToEnvironmentCRD(env *models.Environment) *v
 			Kind:       "Environment",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("environment-%s", env.UUID),
+			Name:      utils.GetEnvironmentResourceName(env.UUID),
 			Namespace: "default",
 			Labels: map[string]string{
 				validation.LabelResourceUUID: env.UUID,
@@ -305,7 +305,7 @@ func (s *EnvironmentService) convertToEnvironmentCRD(env *models.Environment) *v
 		},
 		Spec: v1alpha1.EnvironmentSpec{
 			ProjectRef: corev1.LocalObjectReference{
-				Name: fmt.Sprintf("project-%s", env.ProjectUUID),
+				Name: utils.GetProjectResourceName(env.ProjectUUID),
 			},
 		},
 	}

@@ -33,6 +33,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	platformv1alpha1 "github.com/kibamail/kibaship/api/v1alpha1"
+	"github.com/kibamail/kibaship/pkg/utils"
 	"github.com/kibamail/kibaship/pkg/validation"
 	"github.com/kibamail/kibaship/pkg/webhooks"
 )
@@ -520,7 +521,7 @@ func (r *ProjectReconciler) ensureDefaultEnvironment(ctx context.Context, projec
 
 	// Create production environment
 	envUUID := validation.GenerateUUID()
-	productionEnvName := fmt.Sprintf("environment-%s", envUUID)
+	productionEnvName := utils.GetEnvironmentResourceName(envUUID)
 	productionEnv := &platformv1alpha1.Environment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      productionEnvName,

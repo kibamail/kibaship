@@ -9,7 +9,8 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/kibamail/kibaship/test/utils"
+	"github.com/kibamail/kibaship/pkg/utils"
+	testutils "github.com/kibamail/kibaship/test/utils"
 )
 
 var _ = Describe("Deployment Reconciliation", func() {
@@ -28,12 +29,12 @@ var _ = Describe("Deployment Reconciliation", func() {
 	BeforeEach(func() {
 		// Generate UUIDs for this test run
 		projectUUID = uuid.New().String()
-		projectName = fmt.Sprintf("project-%s", projectUUID)
+		projectName = utils.GetProjectResourceName(projectUUID)
 		projectNS = projectName
 		applicationUUID = uuid.New().String()
-		applicationName = fmt.Sprintf("application-%s", applicationUUID)
+		applicationName = utils.GetApplicationResourceName(applicationUUID)
 		deploymentUUID = uuid.New().String()
-		deploymentName = fmt.Sprintf("deployment-%s", deploymentUUID)
+		deploymentName = utils.GetDeploymentResourceName(deploymentUUID)
 	})
 
 	AfterEach(func() {
@@ -69,7 +70,7 @@ spec:
 
 			cmd := exec.Command("kubectl", "apply", "-f", "-")
 			cmd.Stdin = strings.NewReader(projectManifest)
-			_, err := utils.Run(cmd)
+			_, err := testutils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Waiting for project to be ready")
@@ -137,7 +138,7 @@ spec:
 
 			cmd = exec.Command("kubectl", "apply", "-f", "-")
 			cmd.Stdin = strings.NewReader(applicationManifest)
-			_, err = utils.Run(cmd)
+			_, err = testutils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Waiting for application to be ready")
@@ -174,13 +175,13 @@ spec:
 
 			cmd = exec.Command("kubectl", "apply", "-f", "-")
 			cmd.Stdin = strings.NewReader(deploymentManifest)
-			_, err = utils.Run(cmd)
+			_, err = testutils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Verifying Deployment resource exists and passes validation")
 			Eventually(func() bool {
 				cmd := exec.Command("kubectl", "get", deploymentResourceType, deploymentName, "-n", projectNS)
-				_, err := utils.Run(cmd)
+				_, err := testutils.Run(cmd)
 				return err == nil
 			}, "30s", "2s").Should(BeTrue(), "Deployment should be created successfully")
 
@@ -358,7 +359,7 @@ spec:
 			}, "2m", "5s").Should(Or(Equal("Deploying"), Equal("Succeeded")), "Deployment should transition to Deploying or Succeeded phase after build succeeds (fast pod startup may skip Deploying)")
 
 			By("Verifying Kubernetes Deployment resource is created by DeploymentProgressController")
-			k8sDeploymentName := fmt.Sprintf("deployment-%s", deploymentUUID)
+			k8sDeploymentName := utils.GetDeploymentResourceName(deploymentUUID)
 			Eventually(func() error {
 				cmd := exec.Command("kubectl", "get", "deployment", k8sDeploymentName, "-n", projectNS)
 				_, err := cmd.CombinedOutput()
@@ -413,7 +414,7 @@ spec:
 			}, "30s", "2s").Should(BeTrue(), "K8s Deployment should have registry image pull secret")
 
 			By("Verifying Kubernetes Service resource is created by DeploymentProgressController")
-			k8sServiceName := fmt.Sprintf("service-%s", applicationUUID)
+			k8sServiceName := utils.GetServiceName(applicationUUID)
 			Eventually(func() error {
 				cmd := exec.Command("kubectl", "get", "service", k8sServiceName, "-n", projectNS)
 				_, err := cmd.CombinedOutput()
@@ -604,7 +605,7 @@ spec:
 
 			cmd := exec.Command("kubectl", "apply", "-f", "-")
 			cmd.Stdin = strings.NewReader(projectManifest)
-			_, err := utils.Run(cmd)
+			_, err := testutils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Waiting for project to be ready")
@@ -673,7 +674,7 @@ spec:
 
 			cmd = exec.Command("kubectl", "apply", "-f", "-")
 			cmd.Stdin = strings.NewReader(applicationManifest)
-			_, err = utils.Run(cmd)
+			_, err = testutils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Waiting for application to be ready")
@@ -720,13 +721,13 @@ spec:
 
 			cmd = exec.Command("kubectl", "apply", "-f", "-")
 			cmd.Stdin = strings.NewReader(deploymentManifest)
-			_, err = utils.Run(cmd)
+			_, err = testutils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Verifying Deployment resource exists and passes validation")
 			Eventually(func() bool {
 				cmd := exec.Command("kubectl", "get", deploymentResourceType, deploymentName, "-n", projectNS)
-				_, err := utils.Run(cmd)
+				_, err := testutils.Run(cmd)
 				return err == nil
 			}, "30s", "2s").Should(BeTrue(), "Deployment should be created successfully")
 
@@ -793,7 +794,7 @@ spec:
 			}, "2m", "5s").Should(Or(Equal("Deploying"), Equal("Succeeded")), "Deployment should transition to Deploying or Succeeded phase after build succeeds")
 
 			By("Verifying Kubernetes Deployment resource is created by DeploymentProgressController")
-			k8sDeploymentName := fmt.Sprintf("deployment-%s", deploymentUUID)
+			k8sDeploymentName := utils.GetDeploymentResourceName(deploymentUUID)
 			Eventually(func() error {
 				cmd := exec.Command("kubectl", "get", "deployment", k8sDeploymentName, "-n", projectNS)
 				_, err := cmd.CombinedOutput()
@@ -801,7 +802,7 @@ spec:
 			}, "2m", "5s").Should(Succeed(), "Kubernetes Deployment should be created after build succeeds")
 
 			By("Verifying Kubernetes Service resource is created by DeploymentProgressController")
-			k8sServiceName := fmt.Sprintf("service-%s", applicationUUID)
+			k8sServiceName := utils.GetServiceName(applicationUUID)
 			Eventually(func() error {
 				cmd := exec.Command("kubectl", "get", "service", k8sServiceName, "-n", projectNS)
 				_, err := cmd.CombinedOutput()
@@ -868,7 +869,7 @@ spec:
 
 			cmd := exec.Command("kubectl", "apply", "-f", "-")
 			cmd.Stdin = strings.NewReader(projectManifest)
-			_, err := utils.Run(cmd)
+			_, err := testutils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Waiting for project to be ready")
@@ -933,7 +934,7 @@ spec:
 
 			cmd = exec.Command("kubectl", "apply", "-f", "-")
 			cmd.Stdin = strings.NewReader(applicationManifest)
-			_, err = utils.Run(cmd)
+			_, err = testutils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Waiting for application to be ready")
@@ -979,7 +980,7 @@ spec:
 
 			cmd = exec.Command("kubectl", "apply", "-f", "-")
 			cmd.Stdin = strings.NewReader(deploymentManifest)
-			_, err = utils.Run(cmd)
+			_, err = testutils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Waiting for deployment to be created and transition to Initializing")
@@ -1005,14 +1006,14 @@ spec:
 
 			By("Waiting for Kubernetes Deployment to be created")
 			Eventually(func() bool {
-				cmd := exec.Command("kubectl", "get", "deployment", fmt.Sprintf("deployment-%s", deploymentUUID), "-n", projectNS)
+				cmd := exec.Command("kubectl", "get", "deployment", utils.GetDeploymentResourceName(deploymentUUID), "-n", projectNS)
 				_, err := cmd.CombinedOutput()
 				return err == nil
 			}, "2m", "5s").Should(BeTrue(), "Kubernetes Deployment should be created")
 
 			By("Verifying Kubernetes Deployment has correct image")
 			Eventually(func() string {
-				cmd := exec.Command("kubectl", "get", "deployment", fmt.Sprintf("deployment-%s", deploymentUUID), "-n", projectNS, "-o", "jsonpath={.spec.template.spec.containers[0].image}")
+				cmd := exec.Command("kubectl", "get", "deployment", utils.GetDeploymentResourceName(deploymentUUID), "-n", projectNS, "-o", "jsonpath={.spec.template.spec.containers[0].image}")
 				output, err := cmd.CombinedOutput()
 				if err != nil {
 					return ""
@@ -1022,14 +1023,14 @@ spec:
 
 			By("Waiting for Kubernetes Service to be created")
 			Eventually(func() bool {
-				cmd := exec.Command("kubectl", "get", "service", fmt.Sprintf("service-%s", deploymentUUID), "-n", projectNS)
+				cmd := exec.Command("kubectl", "get", "service", utils.GetServiceName(deploymentUUID), "-n", projectNS)
 				_, err := cmd.CombinedOutput()
 				return err == nil
 			}, "1m", "5s").Should(BeTrue(), "Kubernetes Service should be created")
 
 			By("Verifying Kubernetes Service has correct port")
 			Eventually(func() string {
-				cmd := exec.Command("kubectl", "get", "service", fmt.Sprintf("service-%s", deploymentUUID), "-n", projectNS, "-o", "jsonpath={.spec.ports[0].port}")
+				cmd := exec.Command("kubectl", "get", "service", utils.GetServiceName(deploymentUUID), "-n", projectNS, "-o", "jsonpath={.spec.ports[0].port}")
 				output, err := cmd.CombinedOutput()
 				if err != nil {
 					return ""
@@ -1039,14 +1040,14 @@ spec:
 
 			By("Waiting for ApplicationDomain to be created")
 			Eventually(func() bool {
-				cmd := exec.Command("kubectl", "get", "applicationdomain", fmt.Sprintf("domain-%s", deploymentUUID), "-n", projectNS)
+				cmd := exec.Command("kubectl", "get", "applicationdomain", utils.GetApplicationDomainResourceName(deploymentUUID), "-n", projectNS)
 				_, err := cmd.CombinedOutput()
 				return err == nil
 			}, "1m", "5s").Should(BeTrue(), "ApplicationDomain should be created")
 
 			By("Waiting for pods to become ready")
 			Eventually(func() string {
-				cmd := exec.Command("kubectl", "get", "deployment", fmt.Sprintf("deployment-%s", deploymentUUID), "-n", projectNS, "-o", "jsonpath={.status.readyReplicas}")
+				cmd := exec.Command("kubectl", "get", "deployment", utils.GetDeploymentResourceName(deploymentUUID), "-n", projectNS, "-o", "jsonpath={.status.readyReplicas}")
 				output, err := cmd.CombinedOutput()
 				if err != nil {
 					return "0"

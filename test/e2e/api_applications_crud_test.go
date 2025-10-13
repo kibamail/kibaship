@@ -13,6 +13,8 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	"github.com/kibamail/kibaship/pkg/utils"
 )
 
 // Covers: GET/PATCH/DELETE /applications/{slug} and GET /projects/{slug}/applications
@@ -117,7 +119,7 @@ var _ = Describe("API Server Application CRUD", func() {
 		Expect(appResp.UUID).NotTo(BeEmpty())
 		Expect(appResp.UUID).NotTo(BeEmpty())
 
-		appCRName := fmt.Sprintf("application-%s", appResp.UUID)
+		appCRName := utils.GetApplicationResourceName(appResp.UUID)
 
 		By("GET /v1/applications/{uuid} returns application details")
 		Eventually(func() int {

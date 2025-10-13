@@ -25,6 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	platformv1alpha1 "github.com/kibamail/kibaship/api/v1alpha1"
+	"github.com/kibamail/kibaship/pkg/utils"
 )
 
 // generateValkeyCredentialsSecret creates a secret with Valkey credentials
@@ -34,7 +35,7 @@ func generateValkeyCredentialsSecret(deployment *platformv1alpha1.Deployment, pr
 		return nil, fmt.Errorf("failed to generate Valkey password: %w", err)
 	}
 
-	secretName := fmt.Sprintf("valkey-%s", deployment.GetUUID())
+	secretName := utils.GetValkeyResourceName(deployment.GetUUID())
 
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -66,7 +67,7 @@ func generateValkeyInstance(deployment *platformv1alpha1.Deployment, app *platfo
 	deploymentUUID := deployment.GetUUID()
 
 	// Valkey operator has naming constraints, use simple naming
-	instanceName := fmt.Sprintf("valkey-%s", deploymentUUID)
+	instanceName := utils.GetValkeyResourceName(deploymentUUID)
 
 	// If name is still too long, truncate it
 	if len(instanceName) > 63 {
@@ -133,7 +134,7 @@ func generateValkeyCluster(deployment *platformv1alpha1.Deployment, app *platfor
 	deploymentUUID := deployment.GetUUID()
 
 	// Valkey operator has naming constraints, use simple naming
-	clusterName := fmt.Sprintf("valkey-cluster-%s", deploymentUUID)
+	clusterName := utils.GetValkeyClusterResourceName(deploymentUUID)
 
 	// If name is still too long, truncate it
 	if len(clusterName) > 63 {
@@ -217,11 +218,11 @@ func generateValkeyCluster(deployment *platformv1alpha1.Deployment, app *platfor
 func generateValkeyResourceNames(deployment *platformv1alpha1.Deployment, _, _ string) (secretName, instanceName string) {
 	deploymentUUID := deployment.GetUUID()
 
-	// For secrets
-	secretName = fmt.Sprintf("valkey-%s", deploymentUUID)
+	// Use unified resource naming helpers
+	secretName = utils.GetValkeyResourceName(deploymentUUID)
+	instanceName = utils.GetValkeyResourceName(deploymentUUID)
 
 	// For Valkey instances (63 character limit)
-	instanceName = fmt.Sprintf("valkey-%s", deploymentUUID)
 	if len(instanceName) > 63 {
 		// Use hash for uniqueness if too long
 		hash := sha256.Sum256([]byte(deploymentUUID))
@@ -234,11 +235,11 @@ func generateValkeyResourceNames(deployment *platformv1alpha1.Deployment, _, _ s
 func generateValkeyClusterResourceNames(deployment *platformv1alpha1.Deployment, _, _ string) (secretName, clusterName string) {
 	deploymentUUID := deployment.GetUUID()
 
-	// For secrets
-	secretName = fmt.Sprintf("valkey-%s", deploymentUUID)
+	// Use unified resource naming helpers (secret uses same base name as single valkey)
+	secretName = utils.GetValkeyResourceName(deploymentUUID)
+	clusterName = utils.GetValkeyClusterResourceName(deploymentUUID)
 
 	// For Valkey clusters (63 character limit)
-	clusterName = fmt.Sprintf("valkey-cluster-%s", deploymentUUID)
 	if len(clusterName) > 63 {
 		// Use hash for uniqueness if too long
 		hash := sha256.Sum256([]byte(deploymentUUID))

@@ -32,3 +32,6 @@ main
 registry-auth
 .kibaship
 configuration.yaml
+__hrobot-go
+hrobot.yaml
+do.yaml

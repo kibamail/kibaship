@@ -18,7 +18,6 @@ package controller
 
 import (
 	"context"
-	"fmt"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -31,6 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	platformv1alpha1 "github.com/kibamail/kibaship/api/v1alpha1"
+	"github.com/kibamail/kibaship/pkg/utils"
 	"github.com/kibamail/kibaship/pkg/validation"
 )
 
@@ -722,7 +722,7 @@ var _ = Describe("Application Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Verifying env secret was created")
-			expectedSecretName := fmt.Sprintf("application-%s", appUUID)
+			expectedSecretName := utils.GetApplicationResourceName(appUUID)
 			var secret corev1.Secret
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, types.NamespacedName{
@@ -810,7 +810,7 @@ var _ = Describe("Application Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Verifying env secret was created")
-			expectedSecretName := fmt.Sprintf("application-%s", appUUID)
+			expectedSecretName := utils.GetApplicationResourceName(appUUID)
 			var secret corev1.Secret
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, types.NamespacedName{
@@ -850,7 +850,7 @@ var _ = Describe("Application Controller", func() {
 		It("should not recreate env secret if it already exists", func() {
 			By("Creating a GitRepository application with existing secret")
 			appUUID := "660e8400-e29b-41d4-a716-446655440027"
-			secretName := fmt.Sprintf("application-%s", appUUID)
+			secretName := utils.GetApplicationResourceName(appUUID)
 
 			// Create secret first
 			secret := &corev1.Secret{

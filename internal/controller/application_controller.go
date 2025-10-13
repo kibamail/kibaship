@@ -32,6 +32,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	platformv1alpha1 "github.com/kibamail/kibaship/api/v1alpha1"
+	"github.com/kibamail/kibaship/pkg/utils"
 	"github.com/kibamail/kibaship/pkg/validation"
 	"github.com/kibamail/kibaship/pkg/webhooks"
 )
@@ -236,7 +237,7 @@ func (r *ApplicationReconciler) ensureApplicationEnvSecret(ctx context.Context, 
 		return false, fmt.Errorf("application UUID label not found")
 	}
 
-	secretName := fmt.Sprintf("application-%s", appUUID)
+	secretName := utils.GetApplicationResourceName(appUUID)
 
 	// Get current env ref based on application type
 	currentEnvRef := r.getCurrentEnvRef(app)

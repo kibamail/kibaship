@@ -595,7 +595,7 @@ func (s *ApplicationService) convertToApplicationCRD(app *models.Application, en
 			Kind:       "Application",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("application-%s", app.UUID),
+			Name:      utils.GetApplicationResourceName(app.UUID),
 			Namespace: "default",
 			Labels: map[string]string{
 				validation.LabelResourceUUID:    app.UUID,
@@ -610,7 +610,7 @@ func (s *ApplicationService) convertToApplicationCRD(app *models.Application, en
 		},
 		Spec: v1alpha1.ApplicationSpec{
 			EnvironmentRef: corev1.LocalObjectReference{
-				Name: fmt.Sprintf("environment-%s", environment.UUID),
+				Name: utils.GetEnvironmentResourceName(environment.UUID),
 			},
 			Type:            s.convertApplicationType(app.Type),
 			GitRepository:   s.convertGitRepositoryConfig(app.GitRepository),

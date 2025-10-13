@@ -3,8 +3,8 @@
 # Note: Kind clusters use local Terraform state - no S3 configuration needed
 
 cluster:
-  domain: "four.kibaship.dev"
-  email: "admin@four.kibaship.dev"
+  domain: "nine.kibaship.dev"
+  email: "admin@nine.kibaship.dev"
   paas-features: "mysql,valkey,postgres"
 
   provider:

@@ -34,6 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	platformv1alpha1 "github.com/kibamail/kibaship/api/v1alpha1"
+	"github.com/kibamail/kibaship/pkg/utils"
 )
 
 const (
@@ -77,7 +78,7 @@ func (r *DeploymentStatusWatcherReconciler) Reconcile(ctx context.Context, req c
 	}
 
 	// Find the Deployment CR
-	deploymentName := fmt.Sprintf("deployment-%s", deploymentUUID)
+	deploymentName := utils.GetDeploymentResourceName(deploymentUUID)
 	var dep platformv1alpha1.Deployment
 	if err := r.Get(ctx, types.NamespacedName{Name: deploymentName, Namespace: k8sDep.Namespace}, &dep); err != nil {
 		if errors.IsNotFound(err) {

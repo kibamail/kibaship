@@ -456,7 +456,7 @@ func (r *DeploymentProgressController) ensureKubernetesDeployment(
 ) error {
 	log := ctrl.LoggerFrom(ctx)
 
-	k8sDepName := fmt.Sprintf("deployment-%s", deployment.GetUUID())
+	k8sDepName := utils.GetKubernetesDeploymentName(deployment.GetUUID())
 
 	var existing appsv1.Deployment
 	err := r.Get(ctx, client.ObjectKey{
@@ -475,7 +475,7 @@ func (r *DeploymentProgressController) ensureKubernetesDeployment(
 
 	// Get project for resource limits
 	var project platformv1alpha1.Project
-	projectName := fmt.Sprintf("project-%s", deployment.GetProjectUUID())
+	projectName := utils.GetProjectResourceName(deployment.GetProjectUUID())
 	if err := r.Get(ctx, client.ObjectKey{Name: projectName}, &project); err != nil {
 		return fmt.Errorf("failed to get project: %w", err)
 	}
@@ -584,7 +584,7 @@ func (r *DeploymentProgressController) ensureKubernetesDeployment(
 								{
 									SecretRef: &corev1.SecretEnvSource{
 										LocalObjectReference: corev1.LocalObjectReference{
-											Name: fmt.Sprintf("deployment-%s", deployment.GetUUID()),
+											Name: utils.GetDeploymentResourceName(deployment.GetUUID()),
 										},
 									},
 								},
@@ -638,7 +638,7 @@ func (r *DeploymentProgressController) ensureKubernetesService(
 	log := ctrl.LoggerFrom(ctx)
 
 	appUUID := app.GetUUID()
-	serviceName := fmt.Sprintf("service-%s", appUUID)
+	serviceName := utils.GetServiceName(appUUID)
 
 	var existing corev1.Service
 	err := r.Get(ctx, client.ObjectKey{
@@ -709,7 +709,7 @@ func (r *DeploymentProgressController) ensureApplicationDomain(ctx context.Conte
 	appUUID := app.GetUUID()
 
 	// Check if this deployment's domain already exists
-	domainName := fmt.Sprintf("domain-%s", deploymentUUID)
+	domainName := utils.GetApplicationDomainResourceName(deploymentUUID)
 	var existing platformv1alpha1.ApplicationDomain
 	err := r.Get(ctx, client.ObjectKey{
 		Name:      domainName,

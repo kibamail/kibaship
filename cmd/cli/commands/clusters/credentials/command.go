@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/kibamail/kibaship/cmd/cli/commands/clusters/create"
+	"github.com/kibamail/kibaship/cmd/cli/commands/clusters/create/config"
 	"github.com/kibamail/kibaship/cmd/cli/internal/styles"
 	"github.com/spf13/cobra"
 )
@@ -50,7 +50,7 @@ func runCredentialsCommand(cmd *cobra.Command, args []string) {
 		styles.CommandStyle.Render("📁"),
 		styles.DescriptionStyle.Render(fmt.Sprintf("Configuration file: %s", configuration)))
 
-	config, err := create.LoadConfigFromYAML(configuration)
+	config, err := config.LoadConfigFromYAML(configuration)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%s %s\n",
 			styles.CommandStyle.Render("❌"),

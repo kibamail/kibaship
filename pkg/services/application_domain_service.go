@@ -282,7 +282,7 @@ func (s *ApplicationDomainService) convertToApplicationDomainCRD(applicationDoma
 			Kind:       "ApplicationDomain",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("domain-%s", applicationDomain.UUID),
+			Name:      utils.GetApplicationDomainResourceName(applicationDomain.UUID),
 			Namespace: "default",
 			Labels: map[string]string{
 				validation.LabelResourceUUID:    applicationDomain.UUID,
@@ -296,7 +296,7 @@ func (s *ApplicationDomainService) convertToApplicationDomainCRD(applicationDoma
 		},
 		Spec: v1alpha1.ApplicationDomainSpec{
 			ApplicationRef: corev1.LocalObjectReference{
-				Name: fmt.Sprintf("application-%s", applicationDomain.ApplicationUUID),
+				Name: utils.GetApplicationResourceName(applicationDomain.ApplicationUUID),
 			},
 			Domain:     applicationDomain.Domain,
 			Port:       applicationDomain.Port,

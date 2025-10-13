@@ -9,7 +9,8 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/kibamail/kibaship/test/utils"
+	"github.com/kibamail/kibaship/pkg/utils"
+	testutils "github.com/kibamail/kibaship/test/utils"
 )
 
 const (
@@ -31,10 +32,10 @@ var _ = Describe("Application Reconciliation", func() {
 	BeforeEach(func() {
 		// Generate UUIDs for this test run
 		projectUUID = uuid.New().String()
-		projectName = fmt.Sprintf("project-%s", projectUUID)
+		projectName = utils.GetProjectResourceName(projectUUID)
 		projectNS = projectName
 		applicationUUID = uuid.New().String()
-		applicationName = fmt.Sprintf("application-%s", applicationUUID)
+		applicationName = utils.GetApplicationResourceName(applicationUUID)
 	})
 
 	AfterEach(func() {
@@ -70,7 +71,7 @@ spec:
 
 			cmd := exec.Command("kubectl", "apply", "-f", "-")
 			cmd.Stdin = strings.NewReader(projectManifest)
-			_, err := utils.Run(cmd)
+			_, err := testutils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Waiting for project to be ready")
@@ -138,13 +139,13 @@ spec:
 
 			cmd = exec.Command("kubectl", "apply", "-f", "-")
 			cmd.Stdin = strings.NewReader(applicationManifest)
-			_, err = utils.Run(cmd)
+			_, err = testutils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Verifying Application resource exists and passes validation")
 			Eventually(func() bool {
 				cmd := exec.Command("kubectl", "get", "application", applicationName, "-n", projectNS)
-				_, err := utils.Run(cmd)
+				_, err := testutils.Run(cmd)
 				return err == nil
 			}, "30s", "2s").Should(BeTrue(), "Application should be created successfully")
 

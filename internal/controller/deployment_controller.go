@@ -284,9 +284,9 @@ func (r *DeploymentReconciler) ensureDeploymentSecret(ctx context.Context, deplo
 	deploymentUUID := deployment.GetUUID()
 	appUUID := app.GetUUID()
 
-	// Generate secret names
-	deploymentSecretName := fmt.Sprintf("deployment-%s", deploymentUUID)
-	applicationSecretName := fmt.Sprintf("application-%s", appUUID)
+	// Generate secret names (use unified resource name helpers)
+	deploymentSecretName := utils.GetDeploymentResourceName(deploymentUUID)
+	applicationSecretName := utils.GetApplicationResourceName(appUUID)
 
 	// Fetch the application secret
 	applicationSecret := &corev1.Secret{}
@@ -451,7 +451,7 @@ func (r *DeploymentReconciler) createKubernetesDeployment(ctx context.Context, d
 		return fmt.Errorf("createKubernetesDeployment called for non-ImageFromRegistry application")
 	}
 
-	k8sDepName := fmt.Sprintf("deployment-%s", deployment.GetUUID())
+	k8sDepName := utils.GetDeploymentResourceName(deployment.GetUUID())
 
 	// Check if deployment already exists
 	var existing appsv1.Deployment
@@ -532,7 +532,7 @@ func (r *DeploymentReconciler) createKubernetesDeployment(ctx context.Context, d
 								{
 									SecretRef: &corev1.SecretEnvSource{
 										LocalObjectReference: corev1.LocalObjectReference{
-											Name: fmt.Sprintf("deployment-%s", deployment.GetUUID()),
+											Name: utils.GetDeploymentResourceName(deployment.GetUUID()),
 										},
 									},
 								},
@@ -647,7 +647,7 @@ func (r *DeploymentReconciler) createKubernetesService(ctx context.Context, depl
 		return fmt.Errorf("createKubernetesService called for non-ImageFromRegistry application")
 	}
 
-	serviceName := fmt.Sprintf("service-%s", deployment.GetUUID())
+	serviceName := utils.GetServiceName(deployment.GetUUID())
 
 	// Check if service already exists
 	var existing corev1.Service
@@ -729,7 +729,7 @@ func (r *DeploymentReconciler) ensureApplicationDomain(ctx context.Context, depl
 	appUUID := app.GetUUID()
 
 	// Check if this deployment's domain already exists
-	domainName := fmt.Sprintf("domain-%s", deploymentUUID)
+	domainName := utils.GetApplicationDomainResourceName(deploymentUUID)
 	var existing platformv1alpha1.ApplicationDomain
 	err := r.Get(ctx, client.ObjectKey{
 		Name:      domainName,
@@ -819,7 +819,7 @@ func (r *DeploymentReconciler) handleMySQLDeployment(ctx context.Context, deploy
 	// Get project for resource metadata
 	var project platformv1alpha1.Project
 	if err := r.Get(ctx, types.NamespacedName{
-		Name: fmt.Sprintf("project-%s", deployment.GetProjectUUID()),
+		Name: utils.GetProjectResourceName(deployment.GetProjectUUID()),
 	}, &project); err != nil {
 		return fmt.Errorf("failed to get project: %w", err)
 	}
@@ -924,7 +924,7 @@ func (r *DeploymentReconciler) handleMySQLClusterDeployment(ctx context.Context,
 	// Get project for resource metadata
 	var project platformv1alpha1.Project
 	if err := r.Get(ctx, types.NamespacedName{
-		Name: fmt.Sprintf("project-%s", deployment.GetProjectUUID()),
+		Name: utils.GetProjectResourceName(deployment.GetProjectUUID()),
 	}, &project); err != nil {
 		return fmt.Errorf("failed to get project: %w", err)
 	}
@@ -1087,7 +1087,7 @@ func (r *DeploymentReconciler) getEnvSecretName(app *platformv1alpha1.Applicatio
 	}
 	// Fallback: generate from app UUID
 	if appUUID, exists := app.Labels["platform.kibaship.com/uuid"]; exists {
-		return fmt.Sprintf("application-%s", appUUID)
+		return utils.GetApplicationResourceName(appUUID)
 	}
 	return ""
 }
@@ -1096,7 +1096,7 @@ func (r *DeploymentReconciler) getEnvSecretName(app *platformv1alpha1.Applicatio
 func (r *DeploymentReconciler) getEnvWorkspaceBinding(deployment *platformv1alpha1.Deployment) *tektonv1.WorkspaceBinding {
 	// Use deployment secret instead of application secret
 	deploymentUUID := deployment.GetUUID()
-	secretName := fmt.Sprintf("deployment-%s", deploymentUUID)
+	secretName := utils.GetDeploymentResourceName(deploymentUUID)
 
 	return &tektonv1.WorkspaceBinding{
 		Name: "app-env-vars",
@@ -1444,7 +1444,7 @@ func (r *DeploymentReconciler) handleValkeyDeployment(ctx context.Context, deplo
 	// Get project for resource metadata
 	var project platformv1alpha1.Project
 	if err := r.Get(ctx, types.NamespacedName{
-		Name: fmt.Sprintf("project-%s", deployment.GetProjectUUID()),
+		Name: utils.GetProjectResourceName(deployment.GetProjectUUID()),
 	}, &project); err != nil {
 		return fmt.Errorf("failed to get project: %w", err)
 	}
@@ -1553,7 +1553,7 @@ func (r *DeploymentReconciler) handleValkeyClusterDeployment(ctx context.Context
 	// Get project for resource metadata
 	var project platformv1alpha1.Project
 	if err := r.Get(ctx, types.NamespacedName{
-		Name: fmt.Sprintf("project-%s", deployment.GetProjectUUID()),
+		Name: utils.GetProjectResourceName(deployment.GetProjectUUID()),
 	}, &project); err != nil {
 		return fmt.Errorf("failed to get project: %w", err)
 	}

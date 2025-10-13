@@ -1,0 +1,20 @@
+# Test Hetzner Robot Cluster Configuration
+# This is a test configuration to demonstrate the server selection functionality
+
+state:
+  s3:
+    bucket: "test-terraform-state"
+    region: "eu-central-1"
+    access-key: "test-access-key"
+    access-secret: "test-secret-key"
+
+cluster:
+  name: "test.hetzner-robot.example.com"
+  email: "admin@example.com"
+  paas-features: "none"
+
+  provider:
+    hetzner-robot:
+      username: "test-username"
+      password: "test-password"
+      cloud-token: "test-cloud-token"

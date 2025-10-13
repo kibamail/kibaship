@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/kibamail/kibaship/cmd/cli/commands/clusters/create/automation"
+	"github.com/kibamail/kibaship/cmd/cli/commands/clusters/create/config"
+	"github.com/kibamail/kibaship/cmd/cli/commands/clusters/create/providers/hetznerrobot"
 	"github.com/kibamail/kibaship/cmd/cli/internal/styles"
 	"github.com/spf13/cobra"
 )
@@ -60,7 +63,7 @@ func runCreate(cmd *cobra.Command, args []string) {
 		styles.CommandStyle.Render("📁"),
 		styles.DescriptionStyle.Render(fmt.Sprintf("Configuration file: %s", configuration)))
 
-	config, err := LoadConfigFromYAML(configuration)
+	config, err := config.LoadConfigFromYAML(configuration)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%s %s\n",
 			styles.CommandStyle.Render("❌"),
@@ -140,6 +143,18 @@ func runCreate(cmd *cobra.Command, args []string) {
 			fmt.Printf("\n%s %s\n",
 				styles.HelpStyle.Render("🤖"),
 				styles.DescriptionStyle.Render("Hetzner Robot Configuration: Ready"))
+
+			// Perform server selection for Hetzner Robot
+			if err := hetznerrobot.PerformServerSelection(config); err != nil {
+				fmt.Fprintf(os.Stderr, "\n%s %s\n",
+					styles.CommandStyle.Render("❌"),
+					styles.CommandStyle.Render(fmt.Sprintf("Server selection failed: %v", err)))
+				os.Exit(1)
+			}
+
+			// Execute Hetzner Robot specific flow and exit
+			hetznerrobot.RunClusterCreationFlow(config)
+			return
 		}
 	case "linode":
 		if config.Linode != nil {
@@ -211,7 +226,7 @@ func runCreate(cmd *cobra.Command, args []string) {
 			styles.CommandStyle.Render("🔥"),
 			styles.HelpStyle.Render("Destroying existing cluster infrastructure..."))
 
-		if err := runTerraformDestroy(config); err != nil {
+		if err := automation.RunTerraformDestroy(config); err != nil {
 			fmt.Fprintf(os.Stderr, "\n%s %s\n",
 				styles.CommandStyle.Render("❌"),
 				styles.CommandStyle.Render(fmt.Sprintf("Terraform destroy failed: %v", err)))
@@ -229,7 +244,7 @@ func runCreate(cmd *cobra.Command, args []string) {
 	fmt.Printf("\n%s %s\n",
 		styles.CommandStyle.Render("🔨"),
 		styles.HelpStyle.Render("Building Terraform files..."))
-	if err := buildTerraformFiles(config); err != nil {
+	if err := automation.BuildTerraformFilesForConfig(config); err != nil {
 		fmt.Fprintf(os.Stderr, "%s %s\n",
 			styles.CommandStyle.Render("❌"),
 			styles.CommandStyle.Render(fmt.Sprintf("Error building Terraform files: %v", err)))
@@ -251,7 +266,7 @@ func runCreate(cmd *cobra.Command, args []string) {
 	fmt.Printf("\n%s %s\n",
 		styles.CommandStyle.Render("🔍"),
 		styles.HelpStyle.Render("Checking Terraform installation..."))
-	if err := checkTerraformInstalled(); err != nil {
+	if err := automation.CheckTerraformInstalled(); err != nil {
 		fmt.Fprintf(os.Stderr, "%s %s\n",
 			styles.CommandStyle.Render("❌"),
 			styles.CommandStyle.Render(err.Error()))
@@ -276,7 +291,7 @@ func runCreate(cmd *cobra.Command, args []string) {
 		styles.CommandStyle.Render("🌍"),
 		styles.DescriptionStyle.Render(fmt.Sprintf("Region: %s", config.TerraformState.S3Region)))
 
-	if err := runTerraformInit(config); err != nil {
+	if err := automation.RunTerraformInit(config); err != nil {
 		fmt.Fprintf(os.Stderr, "\n%s %s\n",
 			styles.CommandStyle.Render("❌"),
 			styles.CommandStyle.Render(fmt.Sprintf("Terraform init failed: %v", err)))
@@ -295,7 +310,7 @@ func runCreate(cmd *cobra.Command, args []string) {
 		styles.CommandStyle.Render("📝"),
 		styles.DescriptionStyle.Render("Running: terraform validate"))
 
-	if err := runTerraformValidate(config); err != nil {
+	if err := automation.RunTerraformValidate(config); err != nil {
 		fmt.Fprintf(os.Stderr, "\n%s %s\n",
 			styles.CommandStyle.Render("❌"),
 			styles.CommandStyle.Render(fmt.Sprintf("Terraform validate failed: %v", err)))
@@ -320,7 +335,7 @@ func runCreate(cmd *cobra.Command, args []string) {
 		styles.CommandStyle.Render("🕰️"),
 		styles.DescriptionStyle.Render("Please wait while the cluster is being created..."))
 
-	if err := runTerraformApply(config); err != nil {
+	if err := automation.RunTerraformApply(config); err != nil {
 		fmt.Fprintf(os.Stderr, "\n%s %s\n",
 			styles.CommandStyle.Render("❌"),
 			styles.CommandStyle.Render(fmt.Sprintf("Terraform apply failed: %v", err)))
@@ -346,7 +361,7 @@ func runCreate(cmd *cobra.Command, args []string) {
 	fmt.Printf("%s %s\n",
 		styles.CommandStyle.Render("🚀"),
 		styles.HelpStyle.Render("Initializing bootstrap Terraform..."))
-	if err := runBootstrapTerraformInit(config); err != nil {
+	if err := automation.RunBootstrapTerraformInit(config); err != nil {
 		fmt.Fprintf(os.Stderr, "\n%s %s\n",
 			styles.CommandStyle.Render("❌"),
 			styles.CommandStyle.Render(fmt.Sprintf("Bootstrap Terraform init failed: %v", err)))
@@ -361,7 +376,7 @@ func runCreate(cmd *cobra.Command, args []string) {
 	fmt.Printf("\n%s %s\n",
 		styles.CommandStyle.Render("🔍"),
 		styles.HelpStyle.Render("Validating bootstrap Terraform configuration..."))
-	if err := runBootstrapTerraformValidate(config); err != nil {
+	if err := automation.RunBootstrapTerraformValidate(config); err != nil {
 		fmt.Fprintf(os.Stderr, "\n%s %s\n",
 			styles.CommandStyle.Render("❌"),
 			styles.CommandStyle.Render(fmt.Sprintf("Bootstrap Terraform validate failed: %v", err)))
@@ -383,7 +398,7 @@ func runCreate(cmd *cobra.Command, args []string) {
 		styles.CommandStyle.Render("🕰️"),
 		styles.DescriptionStyle.Render("Installing Cilium and cert-manager..."))
 
-	if err := runBootstrapTerraformApply(config); err != nil {
+	if err := automation.RunBootstrapTerraformApply(config); err != nil {
 		fmt.Fprintf(os.Stderr, "\n%s %s\n",
 			styles.CommandStyle.Render("❌"),
 			styles.CommandStyle.Render(fmt.Sprintf("Bootstrap Terraform apply failed: %v", err)))

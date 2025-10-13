@@ -13,6 +13,8 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	"github.com/kibamail/kibaship/pkg/utils"
 )
 
 // Covers: POST/GET/DELETE application domains via API
@@ -145,7 +147,7 @@ var _ = Describe("API Server Application Domain CRUD", func() {
 		Expect(respGet.StatusCode).To(Equal(http.StatusOK))
 
 		By("verifying Certificate is created and status.certificateRef is set")
-		domainCRName = fmt.Sprintf("domain-%s", domResp.UUID)
+		domainCRName = utils.GetApplicationDomainResourceName(domResp.UUID)
 		// Certificate should be named ad-<applicationdomain-name> in the certificates namespace
 		certName := fmt.Sprintf("ad-%s", domainCRName)
 		Eventually(func() bool {
@@ -187,7 +189,7 @@ var _ = Describe("API Server Application Domain CRUD", func() {
 
 		By("verifying ApplicationDomain CR for UUID is gone")
 		// The CR name pattern for custom domains comes from service: domain-<uuid>
-		domainCRName = fmt.Sprintf("domain-%s", domResp.UUID)
+		domainCRName = utils.GetApplicationDomainResourceName(domResp.UUID)
 		Eventually(func() bool {
 			cmd := exec.Command("kubectl", "-n", "default", "get", "applicationdomains.platform.operator.kibaship.com", domainCRName)
 			_, err := cmd.CombinedOutput()

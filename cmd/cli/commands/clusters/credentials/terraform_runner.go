@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/kibamail/kibaship/cmd/cli/commands/clusters/create"
+	"github.com/kibamail/kibaship/cmd/cli/commands/clusters/create/config"
 	"github.com/kibamail/kibaship/cmd/cli/internal/styles"
 )
 
@@ -24,7 +24,7 @@ type TerraformOutput struct {
 }
 
 // extractCredentials extracts credentials from terraform output based on provider
-func extractCredentials(config *create.CreateConfig) error {
+func extractCredentials(config *config.CreateConfig) error {
 	provisionDir := filepath.Join(".kibaship", config.Name, "provision")
 
 	// Run terraform output to get all outputs in JSON format
@@ -38,7 +38,7 @@ func extractCredentials(config *create.CreateConfig) error {
 	env = append(env, fmt.Sprintf("TF_VAR_paas_features=%s", config.PaaSFeatures))
 
 	// Add Terraform state configuration variables (only for cloud providers)
-	if config.Provider != create.ProviderKind {
+	if config.Provider != "kind" {
 		env = append(env, fmt.Sprintf("TF_VAR_terraform_state_bucket=%s", config.TerraformState.S3Bucket))
 		env = append(env, fmt.Sprintf("TF_VAR_terraform_state_region=%s", config.TerraformState.S3Region))
 		env = append(env, fmt.Sprintf("TF_VAR_terraform_state_access_key=%s", config.TerraformState.S3AccessKey))
@@ -54,7 +54,7 @@ func extractCredentials(config *create.CreateConfig) error {
 			env = append(env, fmt.Sprintf("TF_VAR_do_node_count=%s", config.DigitalOcean.Nodes))
 			env = append(env, fmt.Sprintf("TF_VAR_do_node_size=%s", config.DigitalOcean.NodesSize))
 		}
-	case create.ProviderKind:
+	case "kind":
 		if config.Kind != nil {
 			env = append(env, fmt.Sprintf("TF_VAR_kind_node_count=%s", config.Kind.Nodes))
 			env = append(env, fmt.Sprintf("TF_VAR_kind_storage_per_node=%s", config.Kind.Storage))
@@ -79,7 +79,7 @@ func extractCredentials(config *create.CreateConfig) error {
 	switch config.Provider {
 	case "digital-ocean":
 		return extractDigitalOceanCredentials(config, &terraformOutput)
-	case create.ProviderKind:
+	case "kind":
 		return extractKindCredentials(config, &terraformOutput)
 	default:
 		return fmt.Errorf("credential extraction not implemented for provider: %s", config.Provider)
@@ -87,7 +87,7 @@ func extractCredentials(config *create.CreateConfig) error {
 }
 
 // extractDigitalOceanCredentials extracts and saves DigitalOcean cluster credentials
-func extractDigitalOceanCredentials(config *create.CreateConfig, output *TerraformOutput) error {
+func extractDigitalOceanCredentials(config *config.CreateConfig, output *TerraformOutput) error {
 	fmt.Printf("%s %s\n",
 		styles.CommandStyle.Render("🌊"),
 		styles.DescriptionStyle.Render("Processing DigitalOcean cluster credentials..."))
@@ -135,7 +135,7 @@ func extractDigitalOceanCredentials(config *create.CreateConfig, output *Terrafo
 }
 
 // extractKindCredentials extracts and saves Kind cluster credentials
-func extractKindCredentials(config *create.CreateConfig, output *TerraformOutput) error {
+func extractKindCredentials(config *config.CreateConfig, output *TerraformOutput) error {
 	fmt.Printf("%s %s\n",
 		styles.CommandStyle.Render("🐳"),
 		styles.DescriptionStyle.Render("Processing Kind cluster credentials..."))
@@ -232,7 +232,7 @@ func validateKubeconfig(content string) error {
 }
 
 // showUsageInstructions displays usage instructions for the extracted credentials
-func showUsageInstructions(config *create.CreateConfig) {
+func showUsageInstructions(config *config.CreateConfig) {
 	fmt.Printf("\n%s %s\n",
 		styles.HelpStyle.Render("📖"),
 		styles.HelpStyle.Render("Usage Instructions:"))
@@ -282,7 +282,7 @@ func showUsageInstructions(config *create.CreateConfig) {
 		styles.DescriptionStyle.Render("File permissions: 600 (owner read/write only)"))
 
 	// Show Kind-specific port information if it's a Kind cluster
-	if config.Provider == create.ProviderKind {
+	if config.Provider == "kind" {
 		fmt.Printf("\n%s %s\n",
 			styles.HelpStyle.Render("🐳"),
 			styles.HelpStyle.Render("Kind Cluster Port Mappings:"))

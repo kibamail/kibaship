@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/kibamail/kibaship/pkg/utils"
 )
 
 // ResourceProfile represents the available resource configuration profiles
@@ -166,7 +167,7 @@ func NewProject(name, description, workspaceUUID, slug string,
 		ResourceProfile:         *profile,
 		VolumeSettings:          *volumeSettings,
 		Status:                  "Pending",
-		NamespaceName:           fmt.Sprintf("project-%s", projectUUID),
+		NamespaceName:           utils.GetProjectResourceName(projectUUID),
 		CreatedAt:               now,
 		UpdatedAt:               now,
 	}

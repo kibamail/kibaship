@@ -13,6 +13,8 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	"github.com/kibamail/kibaship/pkg/utils"
 )
 
 var _ = Describe("API Server Application Domains Auto-Loading", func() {
@@ -110,7 +112,7 @@ var _ = Describe("API Server Application Domains Auto-Loading", func() {
 		Expect(appResp.UUID).NotTo(BeEmpty(), "application slug should be present")
 		Expect(appResp.UUID).NotTo(BeEmpty(), "application UUID should be present")
 
-		appCRName := fmt.Sprintf("application-%s", appResp.UUID)
+		appCRName := utils.GetApplicationResourceName(appResp.UUID)
 		By("waiting for Application CR to become Ready")
 		Eventually(func() bool {
 			cmd := exec.Command("kubectl", "-n", "default", "get", "application", appCRName, "-o", "jsonpath={.status.phase}")

@@ -332,7 +332,7 @@ func (s *ProjectService) convertToProjectCRD(project *models.Project, req *model
 			Kind:       "Project",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: fmt.Sprintf("project-%s", project.UUID),
+			Name: utils.GetProjectResourceName(project.UUID),
 			Labels: map[string]string{
 				validation.LabelResourceUUID:  project.UUID,
 				validation.LabelResourceSlug:  project.Slug,

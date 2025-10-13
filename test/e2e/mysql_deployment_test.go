@@ -9,7 +9,8 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/kibamail/kibaship/test/utils"
+	"github.com/kibamail/kibaship/pkg/utils"
+	testutils "github.com/kibamail/kibaship/test/utils"
 )
 
 var _ = Describe("MySQL Deployment Reconciliation", func() {
@@ -32,16 +33,16 @@ var _ = Describe("MySQL Deployment Reconciliation", func() {
 	BeforeEach(func() {
 		// Generate UUIDs for this test run
 		projectUUID = uuid.New().String()
-		projectName = fmt.Sprintf("project-%s", projectUUID)
+		projectName = utils.GetProjectResourceName(projectUUID)
 		projectNS = projectName
 		mysqlAppUUID = uuid.New().String()
-		mysqlAppName = fmt.Sprintf("application-%s", mysqlAppUUID)
+		mysqlAppName = utils.GetApplicationResourceName(mysqlAppUUID)
 		mysqlClusterAppUUID = uuid.New().String()
-		mysqlClusterAppName = fmt.Sprintf("application-%s", mysqlClusterAppUUID)
+		mysqlClusterAppName = utils.GetApplicationResourceName(mysqlClusterAppUUID)
 		mysqlDeploymentUUID = uuid.New().String()
-		mysqlDeploymentName = fmt.Sprintf("deployment-%s", mysqlDeploymentUUID)
+		mysqlDeploymentName = utils.GetDeploymentResourceName(mysqlDeploymentUUID)
 		mysqlClusterDeploymentUUID = uuid.New().String()
-		mysqlClusterDeploymentName = fmt.Sprintf("deployment-%s", mysqlClusterDeploymentUUID)
+		mysqlClusterDeploymentName = utils.GetDeploymentResourceName(mysqlClusterDeploymentUUID)
 	})
 
 	AfterEach(func() {
@@ -73,7 +74,7 @@ spec:
 
 			cmd := exec.Command("kubectl", "apply", "-f", "-")
 			cmd.Stdin = strings.NewReader(projectManifest)
-			_, err := utils.Run(cmd)
+			_, err := testutils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Waiting for project to be ready")
@@ -140,7 +141,7 @@ spec:
 
 			cmd = exec.Command("kubectl", "apply", "-f", "-")
 			cmd.Stdin = strings.NewReader(mysqlApplicationManifest)
-			_, err = utils.Run(cmd)
+			_, err = testutils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Waiting for MySQL application to be ready")
@@ -196,18 +197,18 @@ spec:
 
 			cmd = exec.Command("kubectl", "apply", "-f", "-")
 			cmd.Stdin = strings.NewReader(mysqlDeploymentManifest)
-			_, err = utils.Run(cmd)
+			_, err = testutils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Verifying MySQL Deployment resource exists and passes validation")
 			Eventually(func() bool {
 				cmd := exec.Command("kubectl", "get", deploymentResourceType, mysqlDeploymentName, "-n", projectNS)
-				_, err := utils.Run(cmd)
+				_, err := testutils.Run(cmd)
 				return err == nil
 			}, "30s", "2s").Should(BeTrue(), "MySQL Deployment should be created successfully")
 
 			By("Verifying MySQL credentials secret is created")
-			mysqlSecretName := fmt.Sprintf("mysql-secret-%s", mysqlAppUUID)
+			mysqlSecretName := fmt.Sprintf("mysql-secret-%s", mysqlAppUUID) // Note: This is not using the helper because it has a different pattern
 			Eventually(func() error {
 				cmd := exec.Command("kubectl", "get", "secret", mysqlSecretName, "-n", projectNS)
 				_, err := cmd.CombinedOutput()
@@ -228,7 +229,7 @@ spec:
 			}, "30s", "2s").Should(BeTrue(), "MySQL secret should contain rootUser, rootHost, and rootPassword")
 
 			By("Verifying InnoDBCluster resource is created")
-			mysqlClusterName := fmt.Sprintf("m-%s", mysqlAppUUID)
+			mysqlClusterName := utils.GetMySQLResourceName(mysqlAppUUID)
 			Eventually(func() error {
 				cmd := exec.Command("kubectl", "get", "innodbcluster", mysqlClusterName, "-n", projectNS)
 				_, err := cmd.CombinedOutput()
@@ -299,7 +300,7 @@ spec:
 
 			cmd := exec.Command("kubectl", "apply", "-f", "-")
 			cmd.Stdin = strings.NewReader(projectManifest)
-			_, err := utils.Run(cmd)
+			_, err := testutils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Waiting for project to be ready")
@@ -363,7 +364,7 @@ spec:
 
 			cmd = exec.Command("kubectl", "apply", "-f", "-")
 			cmd.Stdin = strings.NewReader(mysqlClusterApplicationManifest)
-			_, err = utils.Run(cmd)
+			_, err = testutils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Waiting for MySQLCluster application to be ready")
@@ -408,18 +409,18 @@ spec:
 
 			cmd = exec.Command("kubectl", "apply", "-f", "-")
 			cmd.Stdin = strings.NewReader(mysqlClusterDeploymentManifest)
-			_, err = utils.Run(cmd)
+			_, err = testutils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Verifying MySQLCluster Deployment resource exists and passes validation")
 			Eventually(func() bool {
 				cmd := exec.Command("kubectl", "get", deploymentResourceType, mysqlClusterDeploymentName, "-n", projectNS)
-				_, err := utils.Run(cmd)
+				_, err := testutils.Run(cmd)
 				return err == nil
 			}, "30s", "2s").Should(BeTrue(), "MySQLCluster Deployment should be created successfully")
 
 			By("Verifying MySQLCluster credentials secret is created")
-			mysqlClusterSecretName := fmt.Sprintf("mysql-secret-%s", mysqlClusterAppUUID)
+			mysqlClusterSecretName := fmt.Sprintf("mysql-secret-%s", mysqlClusterAppUUID) // Note: This is not using the helper because it has a different pattern
 			Eventually(func() error {
 				cmd := exec.Command("kubectl", "get", "secret", mysqlClusterSecretName, "-n", projectNS)
 				_, err := cmd.CombinedOutput()
@@ -427,7 +428,7 @@ spec:
 			}, "1m", "5s").Should(Succeed(), "MySQLCluster credentials secret should be created")
 
 			By("Verifying MySQLCluster InnoDBCluster resource is created")
-			mysqlClusterInstanceName := fmt.Sprintf("mc-%s", mysqlClusterAppUUID)
+			mysqlClusterInstanceName := utils.GetMySQLClusterResourceName(mysqlClusterAppUUID)
 			Eventually(func() error {
 				cmd := exec.Command("kubectl", "get", "innodbcluster", mysqlClusterInstanceName, "-n", projectNS)
 				_, err := cmd.CombinedOutput()
@@ -498,7 +499,7 @@ spec:
 
 			cmd := exec.Command("kubectl", "apply", "-f", "-")
 			cmd.Stdin = strings.NewReader(projectManifest)
-			_, err := utils.Run(cmd)
+			_, err := testutils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Waiting for project to be ready")
@@ -540,7 +541,7 @@ spec:
 			Expect(envName).NotTo(BeEmpty(), "Environment should have a name")
 
 			By("Creating the initial MySQL application with version 8.0.36")
-			mysqlAppName := fmt.Sprintf("application-%s", mysqlAppUUID)
+			mysqlAppName := utils.GetApplicationResourceName(mysqlAppUUID)
 			mysqlApplicationManifest := fmt.Sprintf(`apiVersion: platform.operator.kibaship.com/v1alpha1
 kind: Application
 metadata:
@@ -562,7 +563,7 @@ spec:
 
 			cmd = exec.Command("kubectl", "apply", "-f", "-")
 			cmd.Stdin = strings.NewReader(mysqlApplicationManifest)
-			_, err = utils.Run(cmd)
+			_, err = testutils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Waiting for MySQL application to be ready")
@@ -576,7 +577,7 @@ spec:
 			}, "2m", "5s").Should(BeTrue(), "MySQL Application should be Ready before creating Deployment")
 
 			By("Creating the first MySQL deployment")
-			mysqlDeploymentName := fmt.Sprintf("deployment-%s", mysqlDeploymentUUID)
+			mysqlDeploymentName := utils.GetDeploymentResourceName(mysqlDeploymentUUID)
 			mysqlDeploymentManifest := fmt.Sprintf(`apiVersion: platform.operator.kibaship.com/v1alpha1
 kind: Deployment
 metadata:
@@ -597,7 +598,7 @@ spec:
 
 			cmd = exec.Command("kubectl", "apply", "-f", "-")
 			cmd.Stdin = strings.NewReader(mysqlDeploymentManifest)
-			_, err = utils.Run(cmd)
+			_, err = testutils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Waiting for first deployment to succeed")
@@ -610,7 +611,7 @@ spec:
 				return strings.TrimSpace(string(output))
 			}, "8m", "5s").Should(Equal("Succeeded"), "First MySQL Deployment should succeed")
 
-			mysqlClusterName := fmt.Sprintf("m-%s", mysqlAppUUID)
+			mysqlClusterName := utils.GetMySQLResourceName(mysqlAppUUID)
 
 			By("Testing MySQL deployment update by changing version")
 			mysqlUpdateManifest := fmt.Sprintf(`apiVersion: platform.operator.kibaship.com/v1alpha1
@@ -634,12 +635,12 @@ spec:
 
 			cmd = exec.Command("kubectl", "apply", "-f", "-")
 			cmd.Stdin = strings.NewReader(mysqlUpdateManifest)
-			_, err = utils.Run(cmd)
+			_, err = testutils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Creating a second MySQL deployment to trigger update")
 			mysqlDeployment2UUID := uuid.New().String()
-			mysqlDeployment2Name := fmt.Sprintf("deployment-%s", mysqlDeployment2UUID)
+			mysqlDeployment2Name := utils.GetDeploymentResourceName(mysqlDeployment2UUID)
 			mysqlDeployment2Manifest := fmt.Sprintf(`apiVersion: platform.operator.kibaship.com/v1alpha1
 kind: Deployment
 metadata:
@@ -660,7 +661,7 @@ spec:
 
 			cmd = exec.Command("kubectl", "apply", "-f", "-")
 			cmd.Stdin = strings.NewReader(mysqlDeployment2Manifest)
-			_, err = utils.Run(cmd)
+			_, err = testutils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Verifying InnoDBCluster is updated with new version")

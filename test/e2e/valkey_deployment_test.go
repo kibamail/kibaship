@@ -10,7 +10,8 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/kibamail/kibaship/internal/controller"
-	"github.com/kibamail/kibaship/test/utils"
+	"github.com/kibamail/kibaship/pkg/utils"
+	testutils "github.com/kibamail/kibaship/test/utils"
 )
 
 var _ = Describe("Valkey Deployment Reconciliation", func() {
@@ -33,16 +34,16 @@ var _ = Describe("Valkey Deployment Reconciliation", func() {
 	BeforeEach(func() {
 		// Generate UUIDs for this test run
 		projectUUID = uuid.New().String()
-		projectName = fmt.Sprintf("project-%s", projectUUID)
+		projectName = utils.GetProjectResourceName(projectUUID)
 		projectNS = projectName
 		valkeyAppUUID = uuid.New().String()
-		valkeyAppName = fmt.Sprintf("application-%s", valkeyAppUUID)
+		valkeyAppName = utils.GetApplicationResourceName(valkeyAppUUID)
 		valkeyClusterAppUUID = uuid.New().String()
-		valkeyClusterAppName = fmt.Sprintf("application-%s", valkeyClusterAppUUID)
+		valkeyClusterAppName = utils.GetApplicationResourceName(valkeyClusterAppUUID)
 		valkeyDeploymentUUID = uuid.New().String()
-		valkeyDeploymentName = fmt.Sprintf("deployment-%s", valkeyDeploymentUUID)
+		valkeyDeploymentName = utils.GetDeploymentResourceName(valkeyDeploymentUUID)
 		valkeyClusterDeploymentUUID = uuid.New().String()
-		valkeyClusterDeploymentName = fmt.Sprintf("deployment-%s", valkeyClusterDeploymentUUID)
+		valkeyClusterDeploymentName = utils.GetDeploymentResourceName(valkeyClusterDeploymentUUID)
 	})
 
 	AfterEach(func() {
@@ -74,7 +75,7 @@ spec:
 
 			cmd := exec.Command("kubectl", "apply", "-f", "-")
 			cmd.Stdin = strings.NewReader(projectManifest)
-			_, err := utils.Run(cmd)
+			_, err := testutils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Waiting for project to be ready")
@@ -142,7 +143,7 @@ spec:
 
 			cmd = exec.Command("kubectl", "apply", "-f", "-")
 			cmd.Stdin = strings.NewReader(valkeyApplicationManifest)
-			_, err = utils.Run(cmd)
+			_, err = testutils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Waiting for Valkey application to be ready")
@@ -198,18 +199,18 @@ spec:
 
 			cmd = exec.Command("kubectl", "apply", "-f", "-")
 			cmd.Stdin = strings.NewReader(valkeyDeploymentManifest)
-			_, err = utils.Run(cmd)
+			_, err = testutils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Verifying Valkey Deployment resource exists and passes validation")
 			Eventually(func() bool {
 				cmd := exec.Command("kubectl", "get", deploymentResourceType, valkeyDeploymentName, "-n", projectNS)
-				_, err := utils.Run(cmd)
+				_, err := testutils.Run(cmd)
 				return err == nil
 			}, "30s", "2s").Should(BeTrue(), "Valkey Deployment should be created successfully")
 
 			By("Verifying Valkey credentials secret is created")
-			valkeySecretName := fmt.Sprintf("valkey-%s", valkeyDeploymentUUID)
+			valkeySecretName := utils.GetValkeyResourceName(valkeyDeploymentUUID)
 			Eventually(func() error {
 				cmd := exec.Command("kubectl", "get", "secret", valkeySecretName, "-n", projectNS)
 				_, err := cmd.CombinedOutput()
@@ -228,7 +229,7 @@ spec:
 			}, "30s", "2s").Should(BeTrue(), "Valkey secret should contain password")
 
 			By("Verifying Valkey instance resource is created")
-			valkeyInstanceName := fmt.Sprintf("valkey-%s", valkeyDeploymentUUID)
+			valkeyInstanceName := utils.GetValkeyResourceName(valkeyDeploymentUUID)
 			Eventually(func() error {
 				cmd := exec.Command("kubectl", "get", "valkey", valkeyInstanceName, "-n", projectNS)
 				_, err := cmd.CombinedOutput()
@@ -301,7 +302,7 @@ spec:
 
 			cmd := exec.Command("kubectl", "apply", "-f", "-")
 			cmd.Stdin = strings.NewReader(projectManifest)
-			_, err := utils.Run(cmd)
+			_, err := testutils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Waiting for project to be ready")
@@ -366,7 +367,7 @@ spec:
 
 			cmd = exec.Command("kubectl", "apply", "-f", "-")
 			cmd.Stdin = strings.NewReader(valkeyClusterApplicationManifest)
-			_, err = utils.Run(cmd)
+			_, err = testutils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Waiting for ValkeyCluster application to be ready")
@@ -411,18 +412,18 @@ spec:
 
 			cmd = exec.Command("kubectl", "apply", "-f", "-")
 			cmd.Stdin = strings.NewReader(valkeyClusterDeploymentManifest)
-			_, err = utils.Run(cmd)
+			_, err = testutils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Verifying ValkeyCluster Deployment resource exists and passes validation")
 			Eventually(func() bool {
 				cmd := exec.Command("kubectl", "get", deploymentResourceType, valkeyClusterDeploymentName, "-n", projectNS)
-				_, err := utils.Run(cmd)
+				_, err := testutils.Run(cmd)
 				return err == nil
 			}, "30s", "2s").Should(BeTrue(), "ValkeyCluster Deployment should be created successfully")
 
 			By("Verifying ValkeyCluster credentials secret is created")
-			valkeyClusterSecretName := fmt.Sprintf("valkey-%s", valkeyClusterDeploymentUUID)
+			valkeyClusterSecretName := utils.GetValkeyResourceName(valkeyClusterDeploymentUUID)
 			Eventually(func() error {
 				cmd := exec.Command("kubectl", "get", "secret", valkeyClusterSecretName, "-n", projectNS)
 				_, err := cmd.CombinedOutput()
@@ -430,7 +431,7 @@ spec:
 			}, "1m", "5s").Should(Succeed(), "ValkeyCluster credentials secret should be created")
 
 			By("Verifying ValkeyCluster instance resource is created")
-			valkeyClusterInstanceName := fmt.Sprintf("valkey-cluster-%s", valkeyClusterDeploymentUUID)
+			valkeyClusterInstanceName := utils.GetValkeyClusterResourceName(valkeyClusterDeploymentUUID)
 			Eventually(func() error {
 				cmd := exec.Command("kubectl", "get", "valkey", valkeyClusterInstanceName, "-n", projectNS)
 				_, err := cmd.CombinedOutput()
@@ -503,7 +504,7 @@ spec:
 
 			cmd := exec.Command("kubectl", "apply", "-f", "-")
 			cmd.Stdin = strings.NewReader(projectManifest)
-			_, err := utils.Run(cmd)
+			_, err := testutils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Waiting for project to be ready")
@@ -545,7 +546,7 @@ spec:
 			Expect(envName).NotTo(BeEmpty(), "Environment should have a name")
 
 			By("Creating the initial Valkey application with version 7.2")
-			valkeyAppName := fmt.Sprintf("application-%s", valkeyAppUUID)
+			valkeyAppName := utils.GetApplicationResourceName(valkeyAppUUID)
 			valkeyApplicationManifest := fmt.Sprintf(`apiVersion: platform.operator.kibaship.com/v1alpha1
 kind: Application
 metadata:
@@ -568,7 +569,7 @@ spec:
 
 			cmd = exec.Command("kubectl", "apply", "-f", "-")
 			cmd.Stdin = strings.NewReader(valkeyApplicationManifest)
-			_, err = utils.Run(cmd)
+			_, err = testutils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Waiting for Valkey application to be ready")
@@ -582,7 +583,7 @@ spec:
 			}, "2m", "5s").Should(BeTrue(), "Valkey Application should be Ready before creating Deployment")
 
 			By("Creating the first Valkey deployment")
-			valkeyDeploymentName := fmt.Sprintf("deployment-%s", valkeyDeploymentUUID)
+			valkeyDeploymentName := utils.GetDeploymentResourceName(valkeyDeploymentUUID)
 			valkeyDeploymentManifest := fmt.Sprintf(`apiVersion: platform.operator.kibaship.com/v1alpha1
 kind: Deployment
 metadata:
@@ -603,7 +604,7 @@ spec:
 
 			cmd = exec.Command("kubectl", "apply", "-f", "-")
 			cmd.Stdin = strings.NewReader(valkeyDeploymentManifest)
-			_, err = utils.Run(cmd)
+			_, err = testutils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Waiting for first deployment to succeed")
@@ -616,7 +617,7 @@ spec:
 				return strings.TrimSpace(string(output))
 			}, "6m", "5s").Should(Equal("Succeeded"), "First Valkey Deployment should succeed")
 
-			valkeyInstanceName := fmt.Sprintf("valkey-%s", valkeyDeploymentUUID)
+			valkeyInstanceName := utils.GetValkeyResourceName(valkeyDeploymentUUID)
 
 			By("Testing Valkey deployment update by changing version")
 			valkeyUpdateManifest := fmt.Sprintf(`apiVersion: platform.operator.kibaship.com/v1alpha1
@@ -641,12 +642,12 @@ spec:
 
 			cmd = exec.Command("kubectl", "apply", "-f", "-")
 			cmd.Stdin = strings.NewReader(valkeyUpdateManifest)
-			_, err = utils.Run(cmd)
+			_, err = testutils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Creating a second Valkey deployment to trigger update")
 			valkeyDeployment2UUID := uuid.New().String()
-			valkeyDeployment2Name := fmt.Sprintf("deployment-%s", valkeyDeployment2UUID)
+			valkeyDeployment2Name := utils.GetDeploymentResourceName(valkeyDeployment2UUID)
 			valkeyDeployment2Manifest := fmt.Sprintf(`apiVersion: platform.operator.kibaship.com/v1alpha1
 kind: Deployment
 metadata:
@@ -667,7 +668,7 @@ spec:
 
 			cmd = exec.Command("kubectl", "apply", "-f", "-")
 			cmd.Stdin = strings.NewReader(valkeyDeployment2Manifest)
-			_, err = utils.Run(cmd)
+			_, err = testutils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Verifying Valkey instance is updated with new version")

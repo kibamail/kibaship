@@ -207,13 +207,13 @@ func (s *DeploymentService) PromoteDeployment(ctx context.Context, deploymentUUI
 
 	// Check if already promoted
 	if application.Spec.CurrentDeploymentRef != nil &&
-		application.Spec.CurrentDeploymentRef.Name == fmt.Sprintf("deployment-%s", deploymentUUID) {
+		application.Spec.CurrentDeploymentRef.Name == utils.GetDeploymentResourceName(deploymentUUID) {
 		return nil // Already promoted
 	}
 
 	// Update the currentDeploymentRef
 	application.Spec.CurrentDeploymentRef = &corev1.LocalObjectReference{
-		Name: fmt.Sprintf("deployment-%s", deploymentUUID),
+		Name: utils.GetDeploymentResourceName(deploymentUUID),
 	}
 
 	if err := s.client.Update(ctx, application); err != nil {
@@ -308,7 +308,7 @@ func (s *DeploymentService) convertToDeploymentCRD(deployment *models.Deployment
 			Kind:       "Deployment",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("deployment-%s", deployment.UUID),
+			Name:      utils.GetDeploymentResourceName(deployment.UUID),
 			Namespace: "default",
 			Labels: map[string]string{
 				validation.LabelResourceUUID:    deployment.UUID,
@@ -323,7 +323,7 @@ func (s *DeploymentService) convertToDeploymentCRD(deployment *models.Deployment
 		},
 		Spec: v1alpha1.DeploymentSpec{
 			ApplicationRef: corev1.LocalObjectReference{
-				Name: fmt.Sprintf("application-%s", deployment.ApplicationUUID),
+				Name: utils.GetApplicationResourceName(deployment.ApplicationUUID),
 			},
 			Promote: promote,
 		},

@@ -13,7 +13,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/kibamail/kibaship/test/utils"
+	"github.com/kibamail/kibaship/pkg/utils"
+	testutils "github.com/kibamail/kibaship/test/utils"
 )
 
 var _ = Describe("Project Reconciliation", func() {
@@ -32,7 +33,7 @@ var _ = Describe("Project Reconciliation", func() {
 
 		// Generate UUID for this test run
 		projectUUID = uuid.New().String()
-		projectName = fmt.Sprintf("project-%s", projectUUID)
+		projectName = utils.GetProjectResourceName(projectUUID)
 	})
 
 	AfterEach(func() {
@@ -68,13 +69,13 @@ spec:
 
 			cmd := exec.Command("kubectl", "apply", "-f", "-")
 			cmd.Stdin = strings.NewReader(projectManifest)
-			_, err := utils.Run(cmd)
+			_, err := testutils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Verifying Project resource exists and passes validation")
 			Eventually(func() bool {
 				cmd := exec.Command("kubectl", "get", "project", projectName)
-				_, err := utils.Run(cmd)
+				_, err := testutils.Run(cmd)
 				return err == nil
 			}, "30s", "2s").Should(BeTrue(), "Project should be created successfully")
 
