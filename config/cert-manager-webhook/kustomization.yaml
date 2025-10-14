@@ -17,5 +17,3 @@ resources:
 
 images:
 - name: webhook
-  newName: kibamail/kibaship-cert-manager-webhook
-  newTag: v0.1.6

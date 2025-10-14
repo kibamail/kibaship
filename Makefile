@@ -3,7 +3,7 @@
 # To re-generate a bundle for another specific version without changing the standard setup, you can:
 # - use the VERSION as arg of the bundle target (e.g make bundle VERSION=0.0.2)
 # - use environment variables to overwrite this value (e.g export VERSION=0.0.2)
-VERSION ?= 0.1.6
+VERSION ?= 1.0.0
 
 # CHANNELS define the bundle channels used in the bundle.
 # Add a new line here if you would like to change its default config. (E.g CHANNELS = "candidate,fast,stable")
@@ -170,7 +170,7 @@ setup-test-e2e: ## Set up a Kind cluster for e2e tests if it does not exist
 	esac
 
 .PHONY: test-e2e
-test-e2e: manifests generate fmt vet ## Run the e2e tests. Test suite handles cluster lifecycle internally.
+test-e2e: build-e2e-installers ## Run the e2e tests. Test suite handles cluster lifecycle internally.
 	KIND_CLUSTER=$(KIND_CLUSTER) go test ./test/e2e/ -v -ginkgo.v -timeout 45m
 
 .PHONY: cleanup-test-e2e
@@ -520,3 +520,93 @@ catalog-build: opm ## Build a catalog image.
 .PHONY: catalog-push
 catalog-push: ## Push a catalog image.
 	$(MAKE) docker-push IMG=$(CATALOG_IMG)
+
+.PHONY: build-separate-installers
+build-separate-installers: manifests generate kustomize ## Generate separate YAML files for each component.
+	mkdir -p dist/manifests
+	@echo "Building separate installer manifests..."
+	
+	# Operator (manager)
+	@echo "Building operator.yaml..."
+	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
+	$(KUSTOMIZE) build config/default > dist/manifests/operator.yaml
+	
+	# API Server
+	@echo "Building api-server.yaml..."
+	cd config/api-server && $(KUSTOMIZE) edit set image apiserver=${IMG_APISERVER}
+	$(KUSTOMIZE) build config/api-server > dist/manifests/api-server.yaml
+	
+	# Cert Manager Webhook
+	@echo "Building cert-manager-webhook.yaml..."
+	cd config/cert-manager-webhook && $(KUSTOMIZE) edit set image webhook=${IMG_CERT_MANAGER_WEBHOOK}
+	$(KUSTOMIZE) build config/cert-manager-webhook > dist/manifests/cert-manager-webhook.yaml
+	
+	# Cert Manager Webhook Kube System
+	@echo "Building cert-manager-webhook-kube-system.yaml..."
+	$(KUSTOMIZE) build config/cert-manager-webhook-kube-system > dist/manifests/cert-manager-webhook-kube-system.yaml
+	
+	# Tekton Resources
+	@echo "Building tekton-resources.yaml..."
+	$(KUSTOMIZE) build config/tekton-resources > dist/manifests/tekton-resources.yaml
+	
+	# BuildKit
+	@echo "Building buildkit.yaml..."
+	$(KUSTOMIZE) build config/buildkit > dist/manifests/buildkit.yaml
+	
+	# Registry Auth
+	@echo "Building registry-auth.yaml..."
+	cd config/registry-auth/base && $(KUSTOMIZE) edit set image registry-auth=${IMG_REGISTRY_AUTH}
+	$(KUSTOMIZE) build config/registry-auth/base > dist/manifests/registry-auth.yaml
+	
+	# Registry
+	@echo "Building registry.yaml..."
+	$(KUSTOMIZE) build config/registry/base > dist/manifests/registry.yaml
+	
+	# Longhorn
+	@echo "Building longhorn.yaml..."
+	$(KUSTOMIZE) build config/longhorn > dist/manifests/longhorn.yaml
+	
+	@echo "✓ All manifests built successfully in dist/manifests/"
+	@echo ""
+	@ls -lh dist/manifests/
+
+.PHONY: build-e2e-installers
+build-e2e-installers: manifests generate kustomize ## Generate e2e YAML files for each component (always uses v1.0.0).
+	mkdir -p dist/e2e/manifests
+	@echo "Building e2e installer manifests (v1.0.0)..."
+
+	# Operator (manager)
+	@echo "Building operator.yaml..."
+	$(KUSTOMIZE) build config/overlays/e2e/operator > dist/e2e/manifests/operator.yaml
+
+	# API Server
+	@echo "Building api-server.yaml..."
+	$(KUSTOMIZE) build config/overlays/e2e/api-server > dist/e2e/manifests/api-server.yaml
+
+	# Cert Manager Webhook
+	@echo "Building cert-manager-webhook.yaml..."
+	$(KUSTOMIZE) build config/overlays/e2e/cert-manager-webhook > dist/e2e/manifests/cert-manager-webhook.yaml
+
+	# Cert Manager Webhook Kube System
+	@echo "Building cert-manager-webhook-kube-system.yaml..."
+	$(KUSTOMIZE) build config/cert-manager-webhook-kube-system > dist/e2e/manifests/cert-manager-webhook-kube-system.yaml
+
+	# Tekton Resources
+	@echo "Building tekton-resources.yaml..."
+	$(KUSTOMIZE) build config/tekton-resources > dist/e2e/manifests/tekton-resources.yaml
+
+	# BuildKit
+	@echo "Building buildkit.yaml..."
+	$(KUSTOMIZE) build config/buildkit > dist/e2e/manifests/buildkit.yaml
+
+	# Registry Auth
+	@echo "Building registry-auth.yaml..."
+	$(KUSTOMIZE) build config/registry-auth/overlays/e2e > dist/e2e/manifests/registry-auth.yaml
+
+	# Registry
+	@echo "Building registry.yaml..."
+	$(KUSTOMIZE) build config/registry/overlays/e2e > dist/e2e/manifests/registry.yaml
+
+	@echo "✓ All e2e manifests built successfully in dist/e2e/manifests/"
+	@echo ""
+	@ls -lh dist/e2e/manifests/

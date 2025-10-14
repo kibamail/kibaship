@@ -29,7 +29,6 @@ func PrintHelp() {
 		{"hetzner-robot", "Hetzner Robot (Dedicated Servers)"},
 		{"linode", "Linode"},
 		{"gcloud", "Google Cloud Platform"},
-		{"kind", "Kind (Kubernetes in Docker) - Local Development"},
 	}
 
 	for _, provider := range providers {

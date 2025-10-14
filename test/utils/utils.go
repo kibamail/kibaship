@@ -847,8 +847,8 @@ data:
 		return err
 	}
 
-	// Then deploy the operator
-	cmd = exec.Command("make", "deploy", "IMG=kibaship.com/kibaship:v0.0.1")
+	// Then deploy the operator using pre-built e2e manifest
+	cmd = exec.Command("kubectl", "apply", "-f", "dist/e2e/manifests/operator.yaml")
 	if _, err := Run(cmd); err != nil {
 		return err
 	}
@@ -863,17 +863,10 @@ func WaitForKibashipOperator() error {
 	return MonitorOperatorStartup("kibaship", maxWaitTime)
 }
 
-// DeployAPIServer deploys the API server into the operator namespace and sets its image
+// DeployAPIServer deploys the API server into the operator namespace using pre-built e2e manifest
 func DeployAPIServer(image string) error {
-	// Apply the api-server kustomization
-	cmd := exec.Command("kubectl", "apply", "-k", "config/api-server")
-	if _, err := Run(cmd); err != nil {
-		return err
-	}
-
-	// Update the deployment image to the locally built tag
-	cmd = exec.Command("kubectl", "-n", "kibaship", "set", "image",
-		"deployment/apiserver", fmt.Sprintf("apiserver=%s", image))
+	// Apply the pre-built e2e api-server manifest
+	cmd := exec.Command("kubectl", "apply", "-f", "dist/e2e/manifests/api-server.yaml")
 	if _, err := Run(cmd); err != nil {
 		return err
 	}
@@ -888,23 +881,16 @@ func DeployAPIServer(image string) error {
 	return nil
 }
 
-// DeployCertManagerWebhook deploys the cert-manager DNS01 webhook into the operator namespace and sets its image
+// DeployCertManagerWebhook deploys the cert-manager DNS01 webhook using pre-built e2e manifests
 func DeployCertManagerWebhook(image string) error {
-	// Apply the webhook kustomization
-	cmd := exec.Command("kubectl", "apply", "-k", "config/cert-manager-webhook")
+	// Apply the pre-built e2e webhook manifest
+	cmd := exec.Command("kubectl", "apply", "-f", "dist/e2e/manifests/cert-manager-webhook.yaml")
 	if _, err := Run(cmd); err != nil {
 		return err
 	}
 
-	// Update the deployment image to the locally built tag
-	cmd = exec.Command("kubectl", "-n", "kibaship", "set", "image",
-		"deployment/kibaship-cert-manager-webhook", fmt.Sprintf("webhook=%s", image))
-	if _, err := Run(cmd); err != nil {
-		return err
-	}
-
-	// Ensure webhook can read kube-system/extension-apiserver-authentication (installed via Kustomize in kube-system)
-	cmd = exec.Command("kubectl", "apply", "-k", "config/cert-manager-webhook-kube-system")
+	// Apply the kube-system resources
+	cmd = exec.Command("kubectl", "apply", "-f", "dist/e2e/manifests/cert-manager-webhook-kube-system.yaml")
 	if _, err := Run(cmd); err != nil {
 		return err
 	}
@@ -1130,9 +1116,9 @@ func ConfigureOperatorWebhookEnv(targetURL string) error {
 	return nil
 }
 
-// InstallBuildkitSharedDaemon applies the shared BuildKit Deployment/Service and waits for readiness.
+// InstallBuildkitSharedDaemon applies the shared BuildKit Deployment/Service using pre-built e2e manifest and waits for readiness.
 func InstallBuildkitSharedDaemon() error {
-	cmd := exec.Command("kubectl", "apply", "-k", "config/buildkit")
+	cmd := exec.Command("kubectl", "apply", "-f", "dist/e2e/manifests/buildkit.yaml")
 	if _, err := Run(cmd); err != nil {
 		return err
 	}
@@ -1147,9 +1133,9 @@ func InstallBuildkitSharedDaemon() error {
 	return nil
 }
 
-// ProvisionRegistry applies the registry deployment without waiting
+// ProvisionRegistry applies the registry deployment using pre-built e2e manifest without waiting
 func ProvisionRegistry() error {
-	cmd := exec.Command("kubectl", "apply", "-k", "config/registry/overlays/e2e")
+	cmd := exec.Command("kubectl", "apply", "-f", "dist/e2e/manifests/registry.yaml")
 	if _, err := Run(cmd); err != nil {
 		return err
 	}
@@ -1158,9 +1144,9 @@ func ProvisionRegistry() error {
 	return nil
 }
 
-// ProvisionRegistryAuth applies the registry-auth deployment without waiting
+// ProvisionRegistryAuth applies the registry-auth deployment using pre-built e2e manifest without waiting
 func ProvisionRegistryAuth() error {
-	cmd := exec.Command("kubectl", "apply", "-k", "config/registry-auth/overlays/e2e")
+	cmd := exec.Command("kubectl", "apply", "-f", "dist/e2e/manifests/registry-auth.yaml")
 	if _, err := Run(cmd); err != nil {
 		return err
 	}

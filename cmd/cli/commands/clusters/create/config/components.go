@@ -200,14 +200,6 @@ func GetComponentsConfig() ComponentsConfig {
 	}
 }
 
-// GetDefaultComponentsForKind returns the default components to install for kind clusters
-func GetDefaultComponentsForKind() []string {
-	return []string{
-		"cilium",
-		"cert-manager",
-	}
-}
-
 // GetComponentURL constructs the URL for a specific component file
 func GetComponentURL(component, provider, componentVersion, filename string) string {
 	baseURL := GetBaseURL()

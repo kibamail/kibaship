@@ -1,0 +1,213 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: registry
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: registry
+  namespace: registry
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: registry-secret-reader
+  namespace: registry
+rules:
+- apiGroups:
+  - ""
+  resourceNames:
+  - registry-registry-auth
+  resources:
+  - secrets
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: registry-secret-reader-binding
+  namespace: registry
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: registry-secret-reader
+subjects:
+- kind: ServiceAccount
+  name: registry
+  namespace: registry
+---
+apiVersion: v1
+data:
+  config.yml: |
+    version: 0.1
+    log:
+      fields:
+        service: registry
+      level: debug
+    storage:
+      cache:
+        blobdescriptor: inmemory
+      filesystem:
+        rootdirectory: /var/lib/registry
+      delete:
+        enabled: true
+    http:
+      addr: :5000
+      headers:
+        X-Content-Type-Options: [nosniff]
+      tls:
+        certificate: /etc/registry-tls/tls.crt
+        key: /etc/registry-tls/tls.key
+    auth:
+      token:
+        realm: http://registry-auth.registry.svc.cluster.local/auth
+        service: docker-registry
+        issuer: registry-token-issuer
+        rootcertbundle: /etc/registry-auth-keys/tls.crt
+        jwks: /etc/registry-auth-keys-jwks/jwks.json
+    health:
+      storagedriver:
+        enabled: true
+        interval: 10s
+        threshold: 3
+kind: ConfigMap
+metadata:
+  labels:
+    app: registry
+  name: registry-config
+  namespace: registry
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: registry
+  name: registry
+  namespace: registry
+spec:
+  ports:
+  - name: https
+    port: 443
+    protocol: TCP
+    targetPort: 5000
+  selector:
+    app: registry
+  type: ClusterIP
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  labels:
+    app: registry
+  name: registry-storage
+  namespace: registry
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: storage-replica-1
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: registry
+  name: registry
+  namespace: registry
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: registry
+  template:
+    metadata:
+      labels:
+        app: registry
+    spec:
+      containers:
+      - env:
+        - name: REGISTRY_HTTP_SECRET
+          valueFrom:
+            secretKeyRef:
+              key: http-secret
+              name: registry-registry-auth
+        image: registry:3.0.0
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /
+            port: 5000
+            scheme: HTTPS
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 5
+        name: registry
+        ports:
+        - containerPort: 5000
+          name: https
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /
+            port: 5000
+            scheme: HTTPS
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 3
+        resources:
+          limits:
+            cpu: 1000m
+            memory: 512Mi
+          requests:
+            cpu: 100m
+            memory: 128Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 65532
+        volumeMounts:
+        - mountPath: /etc/distribution
+          name: registry-config
+          readOnly: true
+        - mountPath: /var/lib/registry
+          name: registry-storage
+        - mountPath: /etc/registry-tls
+          name: registry-tls
+          readOnly: true
+        - mountPath: /etc/registry-auth-keys
+          name: registry-auth-keys
+          readOnly: true
+        - mountPath: /etc/registry-auth-keys-jwks
+          name: registry-auth-keys-jwks
+          readOnly: true
+      enableServiceLinks: false
+      serviceAccountName: registry
+      volumes:
+      - configMap:
+          name: registry-config
+        name: registry-config
+      - name: registry-storage
+        persistentVolumeClaim:
+          claimName: registry-storage
+      - name: registry-tls
+        secret:
+          secretName: registry-tls
+      - name: registry-auth-keys
+        secret:
+          items:
+          - key: tls.crt
+            path: tls.crt
+          secretName: registry-auth-keys
+      - name: registry-auth-keys-jwks
+        secret:
+          secretName: registry-auth-keys-jwks

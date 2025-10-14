@@ -1,3 +1,46 @@
 # More info: https://docs.docker.com/engine/reference/builder/#dockerignore-file
 # Ignore build and test binaries.
 bin/
+**/*.test
+*.test
+**/*.out
+*.out
+kibaship
+**/kibaship
+
+# Cluster configurations
+.kibaship/
+
+# Test files and directories
+test/
+e2e/
+testbin/
+
+# Git
+.git/
+.gitignore
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# CI/CD
+.github/
+
+# Documentation
+*.md
+!README.md
+
+# Distribution
+dist/
+
+# Cache
+.gocache/
+
+# Misc
+Makefile
+Dockerfile
+.dockerignore

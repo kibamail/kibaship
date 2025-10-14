@@ -38,12 +38,12 @@ const (
 )
 
 var (
-	projectImage             = "kibaship.com/kibaship:v0.0.1"
-	projectImageAPIServer    = "kibaship.com/kibaship-apiserver:v0.0.1"
-	projectImageCertWebhook  = "kibaship.com/kibaship-cert-manager-webhook:v0.0.1"
-	projectImageRailpackCLI  = "kibaship.com/kibaship-railpack-cli:v0.0.1"
-	projectImageRailpackBld  = "kibaship.com/kibaship-railpack-build:v0.0.1"
-	projectImageRegistryAuth = "kibaship.com/kibaship-registry-auth:v0.0.1"
+	projectImage             = "kibamail/kibaship:e2e"
+	projectImageAPIServer    = "kibamail/kibaship-apiserver:e2e"
+	projectImageCertWebhook  = "kibamail/kibaship-cert-manager-webhook:e2e"
+	projectImageRailpackCLI  = "kibamail/kibaship-railpack-cli:e2e"
+	projectImageRailpackBld  = "kibamail/kibaship-railpack-build:e2e"
+	projectImageRegistryAuth = "kibamail/kibaship-registry-auth:e2e"
 )
 
 // getKubernetesClient creates a Kubernetes client using the current context

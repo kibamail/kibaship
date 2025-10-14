@@ -1,0 +1,189 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    app.kubernetes.io/name: kibaship-cert-manager-webhook
+    app.kubernetes.io/part-of: kibaship
+  name: kibaship-cert-manager-webhook
+  namespace: kibaship
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  labels:
+    app.kubernetes.io/name: kibaship-cert-manager-webhook
+    app.kubernetes.io/part-of: kibaship
+  name: kibaship-cert-manager-webhook
+  namespace: kibaship
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - get
+- apiGroups:
+  - hyperspike.io
+  resources:
+  - valkeys
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: kibaship-cert-manager-webhook
+    app.kubernetes.io/part-of: kibaship
+  name: kibaship-certwebhook-domain-solver
+rules:
+- apiGroups:
+  - dns.kibaship.com
+  resources:
+  - '*'
+  verbs:
+  - '*'
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/name: kibaship-cert-manager-webhook
+    app.kubernetes.io/part-of: kibaship
+  name: kibaship-cert-manager-webhook
+  namespace: kibaship
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: kibaship-cert-manager-webhook
+subjects:
+- kind: ServiceAccount
+  name: kibaship-cert-manager-webhook
+  namespace: kibaship
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kibaship-certwebhook-auth-delegator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:auth-delegator
+subjects:
+- kind: ServiceAccount
+  name: kibaship-cert-manager-webhook
+  namespace: kibaship
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kibaship-certwebhook-domain-solver
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kibaship-certwebhook-domain-solver
+subjects:
+- kind: ServiceAccount
+  name: cert-manager
+  namespace: cert-manager
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/name: kibaship-cert-manager-webhook
+    app.kubernetes.io/part-of: kibaship
+  name: kibaship-cert-manager-webhook
+  namespace: kibaship
+spec:
+  ports:
+  - name: https
+    port: 443
+    protocol: TCP
+    targetPort: 8443
+  selector:
+    app.kubernetes.io/name: kibaship-cert-manager-webhook
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: kibaship-cert-manager-webhook
+    app.kubernetes.io/part-of: kibaship
+  name: kibaship-cert-manager-webhook
+  namespace: kibaship
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kibaship-cert-manager-webhook
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kibaship-cert-manager-webhook
+    spec:
+      containers:
+      - args:
+        - --tls-cert-file=/tls/tls.crt
+        - --tls-private-key-file=/tls/tls.key
+        - --secure-port=8443
+        image: kibamail/kibaship-cert-manager-webhook:e2e
+        imagePullPolicy: IfNotPresent
+        name: webhook
+        ports:
+        - containerPort: 8443
+          name: https
+        volumeMounts:
+        - mountPath: /tls
+          name: webhook-tls
+          readOnly: true
+      serviceAccountName: kibaship-cert-manager-webhook
+      volumes:
+      - name: webhook-tls
+        secret:
+          secretName: kibaship-dns01-webhook-tls
+---
+apiVersion: apiregistration.k8s.io/v1
+kind: APIService
+metadata:
+  annotations:
+    cert-manager.io/inject-ca-from: kibaship/kibaship-dns01-webhook-cert
+  name: v1alpha1.dns.kibaship.com
+spec:
+  group: dns.kibaship.com
+  groupPriorityMinimum: 1000
+  insecureSkipTLSVerify: false
+  service:
+    name: kibaship-cert-manager-webhook
+    namespace: kibaship
+    port: 443
+  version: v1alpha1
+  versionPriority: 15
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  labels:
+    app.kubernetes.io/name: kibaship-cert-manager-webhook
+    app.kubernetes.io/part-of: kibaship
+  name: kibaship-dns01-webhook-cert
+  namespace: kibaship
+spec:
+  dnsNames:
+  - kibaship-cert-manager-webhook.kibaship.svc
+  - kibaship-cert-manager-webhook.kibaship.svc.cluster.local
+  issuerRef:
+    kind: Issuer
+    name: selfsigned-issuer
+  secretName: kibaship-dns01-webhook-tls
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  labels:
+    app.kubernetes.io/name: kibaship-cert-manager-webhook
+    app.kubernetes.io/part-of: kibaship
+  name: selfsigned-issuer
+  namespace: kibaship
+spec:
+  selfSigned: {}

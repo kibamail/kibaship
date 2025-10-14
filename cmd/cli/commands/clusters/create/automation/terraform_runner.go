@@ -15,33 +15,21 @@ import (
 	"github.com/kibamail/kibaship/cmd/cli/internal/styles"
 )
 
-// Import constants from parent package
-const (
-	ProviderKind = "kind"
-)
-
 // runTerraformInit runs terraform init in the provision directory with backend configuration
 // State path: clusters/<cluster>/provision.terraform.tfstate
 // Future bootstrap state path will be: clusters/<cluster>/bootstrap.terraform.tfstate
 func RunTerraformInit(config *config.CreateConfig) error {
 	provisionDir := filepath.Join(".kibaship", config.Name, "provision")
 
-	// Prepare backend configuration arguments based on provider
-	var backendArgs []string
-	if config.Provider == ProviderKind {
-		// Kind clusters use local backend - no S3 configuration needed
-		backendArgs = []string{"init"}
-	} else {
-		// Cloud providers use S3 backend
-		backendArgs = []string{
-			"init",
-			fmt.Sprintf("-backend-config=bucket=%s", config.TerraformState.S3Bucket),
-			fmt.Sprintf("-backend-config=key=clusters/%s/provision.terraform.tfstate", config.Name),
-			fmt.Sprintf("-backend-config=region=%s", config.TerraformState.S3Region),
-			fmt.Sprintf("-backend-config=access_key=%s", config.TerraformState.S3AccessKey),
-			fmt.Sprintf("-backend-config=secret_key=%s", config.TerraformState.S3AccessSecret),
-			"-backend-config=encrypt=true",
-		}
+	// Prepare backend configuration arguments
+	backendArgs := []string{
+		"init",
+		fmt.Sprintf("-backend-config=bucket=%s", config.TerraformState.S3Bucket),
+		fmt.Sprintf("-backend-config=key=clusters/%s/provision.terraform.tfstate", config.Name),
+		fmt.Sprintf("-backend-config=region=%s", config.TerraformState.S3Region),
+		fmt.Sprintf("-backend-config=access_key=%s", config.TerraformState.S3AccessKey),
+		fmt.Sprintf("-backend-config=secret_key=%s", config.TerraformState.S3AccessSecret),
+		"-backend-config=encrypt=true",
 	}
 
 	// Create terraform command
@@ -203,13 +191,11 @@ func RunTerraformApply(config *config.CreateConfig) error {
 	env = append(env, fmt.Sprintf("TF_VAR_cluster_email=%s", config.Email))
 	env = append(env, fmt.Sprintf("TF_VAR_paas_features=%s", config.PaaSFeatures))
 
-	// Add Terraform state configuration variables (only for cloud providers)
-	if config.Provider != "kind" {
-		env = append(env, fmt.Sprintf("TF_VAR_terraform_state_bucket=%s", config.TerraformState.S3Bucket))
-		env = append(env, fmt.Sprintf("TF_VAR_terraform_state_region=%s", config.TerraformState.S3Region))
-		env = append(env, fmt.Sprintf("TF_VAR_terraform_state_access_key=%s", config.TerraformState.S3AccessKey))
-		env = append(env, fmt.Sprintf("TF_VAR_terraform_state_secret_key=%s", config.TerraformState.S3AccessSecret))
-	}
+	// Add Terraform state configuration variables
+	env = append(env, fmt.Sprintf("TF_VAR_terraform_state_bucket=%s", config.TerraformState.S3Bucket))
+	env = append(env, fmt.Sprintf("TF_VAR_terraform_state_region=%s", config.TerraformState.S3Region))
+	env = append(env, fmt.Sprintf("TF_VAR_terraform_state_access_key=%s", config.TerraformState.S3AccessKey))
+	env = append(env, fmt.Sprintf("TF_VAR_terraform_state_secret_key=%s", config.TerraformState.S3AccessSecret))
 
 	// Add provider-specific environment variables
 	switch config.Provider {
@@ -277,17 +263,6 @@ func RunTerraformApply(config *config.CreateConfig) error {
 					env = append(env, fmt.Sprintf("TF_VAR_server_%s_installation_disk=%s", server.ID, server.InstallationDisk))
 				}
 			}
-		}
-	case "kind":
-		if config.Kind != nil {
-			env = append(env, fmt.Sprintf("TF_VAR_kind_node_count=%s", config.Kind.Nodes))
-			env = append(env, fmt.Sprintf("TF_VAR_kind_storage_per_node=%s", config.Kind.Storage))
-			// Use provided Kubernetes version or default to v1.34.0
-			k8sVersion := config.Kind.KubernetesVersion
-			if k8sVersion == "" {
-				k8sVersion = "v1.34.0"
-			}
-			env = append(env, fmt.Sprintf("TF_VAR_kind_k8s_version=%s", k8sVersion))
 		}
 	}
 
@@ -376,22 +351,15 @@ func RunTerraformApply(config *config.CreateConfig) error {
 func RunBootstrapTerraformInit(config *config.CreateConfig) error {
 	bootstrapDir := filepath.Join(".kibaship", config.Name, "bootstrap")
 
-	// Prepare backend configuration arguments based on provider
-	var backendArgs []string
-	if config.Provider == ProviderKind {
-		// Kind clusters use local backend - no S3 configuration needed
-		backendArgs = []string{"init"}
-	} else {
-		// Cloud providers use S3 backend
-		backendArgs = []string{
-			"init",
-			fmt.Sprintf("-backend-config=bucket=%s", config.TerraformState.S3Bucket),
-			fmt.Sprintf("-backend-config=key=clusters/%s/bootstrap.terraform.tfstate", config.Name),
-			fmt.Sprintf("-backend-config=region=%s", config.TerraformState.S3Region),
-			fmt.Sprintf("-backend-config=access_key=%s", config.TerraformState.S3AccessKey),
-			fmt.Sprintf("-backend-config=secret_key=%s", config.TerraformState.S3AccessSecret),
-			"-backend-config=encrypt=true",
-		}
+	// Prepare backend configuration arguments
+	backendArgs := []string{
+		"init",
+		fmt.Sprintf("-backend-config=bucket=%s", config.TerraformState.S3Bucket),
+		fmt.Sprintf("-backend-config=key=clusters/%s/bootstrap.terraform.tfstate", config.Name),
+		fmt.Sprintf("-backend-config=region=%s", config.TerraformState.S3Region),
+		fmt.Sprintf("-backend-config=access_key=%s", config.TerraformState.S3AccessKey),
+		fmt.Sprintf("-backend-config=secret_key=%s", config.TerraformState.S3AccessSecret),
+		"-backend-config=encrypt=true",
 	}
 
 	// Create terraform command
@@ -570,17 +538,6 @@ func RunBootstrapTerraformApply(config *config.CreateConfig) error {
 					env = append(env, fmt.Sprintf("TF_VAR_server_%s_installation_disk=%s", server.ID, server.InstallationDisk))
 				}
 			}
-		}
-	case "kind":
-		if config.Kind != nil {
-			env = append(env, fmt.Sprintf("TF_VAR_kind_node_count=%s", config.Kind.Nodes))
-			env = append(env, fmt.Sprintf("TF_VAR_kind_storage_per_node=%s", config.Kind.Storage))
-			// Use provided Kubernetes version or default to v1.34.0
-			k8sVersion := config.Kind.KubernetesVersion
-			if k8sVersion == "" {
-				k8sVersion = "v1.34.0"
-			}
-			env = append(env, fmt.Sprintf("TF_VAR_kind_k8s_version=%s", k8sVersion))
 		}
 	}
 
@@ -1199,13 +1156,11 @@ func RunTerraformDestroy(config *config.CreateConfig) error {
 	env = append(env, fmt.Sprintf("TF_VAR_cluster_email=%s", config.Email))
 	env = append(env, fmt.Sprintf("TF_VAR_paas_features=%s", config.PaaSFeatures))
 
-	// Add Terraform state configuration variables (only for cloud providers)
-	if config.Provider != "kind" {
-		env = append(env, fmt.Sprintf("TF_VAR_terraform_state_bucket=%s", config.TerraformState.S3Bucket))
-		env = append(env, fmt.Sprintf("TF_VAR_terraform_state_region=%s", config.TerraformState.S3Region))
-		env = append(env, fmt.Sprintf("TF_VAR_terraform_state_access_key=%s", config.TerraformState.S3AccessKey))
-		env = append(env, fmt.Sprintf("TF_VAR_terraform_state_secret_key=%s", config.TerraformState.S3AccessSecret))
-	}
+	// Add Terraform state configuration variables
+	env = append(env, fmt.Sprintf("TF_VAR_terraform_state_bucket=%s", config.TerraformState.S3Bucket))
+	env = append(env, fmt.Sprintf("TF_VAR_terraform_state_region=%s", config.TerraformState.S3Region))
+	env = append(env, fmt.Sprintf("TF_VAR_terraform_state_access_key=%s", config.TerraformState.S3AccessKey))
+	env = append(env, fmt.Sprintf("TF_VAR_terraform_state_secret_key=%s", config.TerraformState.S3AccessSecret))
 
 	// Add provider-specific environment variables
 	switch config.Provider {
@@ -1273,17 +1228,6 @@ func RunTerraformDestroy(config *config.CreateConfig) error {
 					env = append(env, fmt.Sprintf("TF_VAR_server_%s_installation_disk=%s", server.ID, server.InstallationDisk))
 				}
 			}
-		}
-	case "kind":
-		if config.Kind != nil {
-			env = append(env, fmt.Sprintf("TF_VAR_kind_node_count=%s", config.Kind.Nodes))
-			env = append(env, fmt.Sprintf("TF_VAR_kind_storage_per_node=%s", config.Kind.Storage))
-			// Use provided Kubernetes version or default to v1.34.0
-			k8sVersion := config.Kind.KubernetesVersion
-			if k8sVersion == "" {
-				k8sVersion = "v1.34.0"
-			}
-			env = append(env, fmt.Sprintf("TF_VAR_kind_k8s_version=%s", k8sVersion))
 		}
 	}
 

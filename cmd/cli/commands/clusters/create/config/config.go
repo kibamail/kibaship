@@ -11,7 +11,6 @@ import (
 
 // Provider constants
 const (
-	ProviderKind         = "kind"
 	ProviderAWS          = "aws"
 	ProviderDigitalOcean = "digital-ocean"
 	ProviderHetzner      = "hetzner"
@@ -29,7 +28,6 @@ func init() {
 	_ = validate.RegisterValidation("file", validateFile)
 	_ = validate.RegisterValidation("domain_name", validateDomainName)
 	_ = validate.RegisterValidation("paas_features", validatePaaSFeatures)
-	_ = validate.RegisterValidation("kind_storage", validateKindStorage)
 }
 
 // YAMLConfig represents the nested YAML configuration structure
@@ -81,11 +79,6 @@ type YAMLConfig struct {
 				ProjectID         string `yaml:"project-id"`
 				Region            string `yaml:"region"`
 			} `yaml:"gcloud"`
-
-			Kind struct {
-				Nodes   string `yaml:"nodes"`
-				Storage string `yaml:"storage"`
-			} `yaml:"kind"`
 		} `yaml:"provider"`
 	} `yaml:"cluster"`
 }
@@ -129,22 +122,9 @@ func convertYAMLToCreateConfig(yamlConfig *YAMLConfig) (*CreateConfig, error) {
 		PaaSFeatures: yamlConfig.Cluster.PaaSFeatures,
 	}
 
-	// Derive cluster name from domain
-	// For Kind clusters, use domain as-is; for others, replace dots with dashes
+	// Derive cluster name from domain by replacing dots with dashes
 	if config.Domain != "" {
-		// Determine provider first to decide naming strategy
-		provider, _, err := determineProviderFromYAML(yamlConfig)
-		if err != nil {
-			return nil, err
-		}
-
-		if provider == ProviderKind {
-			// For Kind clusters, use domain as-is
-			config.Name = config.Domain
-		} else {
-			// For cloud providers, replace dots with dashes
-			config.Name = strings.ReplaceAll(config.Domain, ".", "-")
-		}
+		config.Name = strings.ReplaceAll(config.Domain, ".", "-")
 	}
 
 	// Set default PaaS features if not specified
@@ -174,21 +154,14 @@ func convertYAMLToCreateConfig(yamlConfig *YAMLConfig) (*CreateConfig, error) {
 		config.Linode = providerConfig.(*LinodeConfig)
 	case "gcloud":
 		config.GCloud = providerConfig.(*GCloudConfig)
-	case ProviderKind:
-		config.Kind = providerConfig.(*KindConfig)
 	}
 
-	// Set Terraform state configuration (only for cloud providers)
-	if provider != ProviderKind {
-		config.TerraformState = &TerraformStateConfig{
-			S3Bucket:       yamlConfig.State.S3.Bucket,
-			S3Region:       yamlConfig.State.S3.Region,
-			S3AccessKey:    yamlConfig.State.S3.AccessKey,
-			S3AccessSecret: yamlConfig.State.S3.AccessSecret,
-		}
-	} else {
-		// Kind clusters use local state - no S3 configuration needed
-		config.TerraformState = &TerraformStateConfig{}
+	// Set Terraform state configuration
+	config.TerraformState = &TerraformStateConfig{
+		S3Bucket:       yamlConfig.State.S3.Bucket,
+		S3Region:       yamlConfig.State.S3.Region,
+		S3AccessKey:    yamlConfig.State.S3.AccessKey,
+		S3AccessSecret: yamlConfig.State.S3.AccessSecret,
 	}
 
 	return config, nil
@@ -282,19 +255,6 @@ func determineProviderFromYAML(yamlConfig *YAMLConfig) (string, interface{}, err
 					ServiceAccountKey: yamlConfig.Cluster.Provider.GCloud.ServiceAccountKey,
 					ProjectID:         yamlConfig.Cluster.Provider.GCloud.ProjectID,
 					Region:            yamlConfig.Cluster.Provider.GCloud.Region,
-				}
-			},
-		},
-		{
-			name: ProviderKind,
-			hasData: func() bool {
-				return yamlConfig.Cluster.Provider.Kind.Nodes != "" ||
-					yamlConfig.Cluster.Provider.Kind.Storage != ""
-			},
-			getConfig: func() interface{} {
-				return &KindConfig{
-					Nodes:   yamlConfig.Cluster.Provider.Kind.Nodes,
-					Storage: yamlConfig.Cluster.Provider.Kind.Storage,
 				}
 			},
 		},

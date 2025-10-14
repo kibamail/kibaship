@@ -5,6 +5,7 @@ This directory contains the Cilium 1.18.2 manifest generated using Helm for Kiba
 ## Overview
 
 Cilium is a modern CNI (Container Network Interface) that provides:
+
 - Advanced networking capabilities
 - Network security policies
 - Load balancing
@@ -39,26 +40,26 @@ helm template cilium cilium/cilium \
   --set gatewayAPI.enableAlpn=true \
   --set gatewayAPI.enableAppProtocol=true \
   --set operator.replicas=2 \
-  > manifest.yaml
+  > cilium-v-1.18.2.yaml
 ```
 
 ## Configuration Options Explained
 
 ### Gateway API Configuration
 
-| Option | Value | Description |
-|--------|-------|-------------|
-| `gatewayAPI.enabled` | `true` | Enables Kubernetes Gateway API support, a modern alternative to Ingress |
-| `gatewayAPI.hostNetwork.enabled` | `true` | Allows Gateway pods to use the host network, binding directly to node IPs |
+| Option                                                                | Value    | Description                                                                                                  |
+| --------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------ |
+| `gatewayAPI.enabled`                                                  | `true`   | Enables Kubernetes Gateway API support, a modern alternative to Ingress                                      |
+| `gatewayAPI.hostNetwork.enabled`                                      | `true`   | Allows Gateway pods to use the host network, binding directly to node IPs                                    |
 | `gatewayAPI.hostNetwork.nodes.matchLabels.ingress.kibaship.com/ready` | `"true"` | Only schedules Gateway pods on nodes with this label, giving control over which nodes handle ingress traffic |
-| `gatewayAPI.enableAlpn` | `true` | Enables Application-Layer Protocol Negotiation for protocol detection |
-| `gatewayAPI.enableAppProtocol` | `true` | Enables application protocol detection for routing decisions |
+| `gatewayAPI.enableAlpn`                                               | `true`   | Enables Application-Layer Protocol Negotiation for protocol detection                                        |
+| `gatewayAPI.enableAppProtocol`                                        | `true`   | Enables application protocol detection for routing decisions                                                 |
 
 ### Operator Configuration
 
-| Option | Value | Description |
-|--------|-------|-------------|
-| `operator.replicas` | `2` | Runs 2 replicas of the Cilium operator for redundancy |
+| Option              | Value | Description                                           |
+| ------------------- | ----- | ----------------------------------------------------- |
+| `operator.replicas` | `2`   | Runs 2 replicas of the Cilium operator for redundancy |
 
 ## Gateway API Benefits
 
@@ -79,6 +80,7 @@ kubectl label node <node-name> ingress.kibaship.com/ready=true
 ```
 
 This ensures that Gateway pods are only scheduled on designated nodes, providing:
+
 - **Resource isolation** - Dedicated nodes for ingress traffic
 - **Performance optimization** - Predictable resource allocation
 - **Security boundaries** - Controlled access points

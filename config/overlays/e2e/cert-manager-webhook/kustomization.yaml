@@ -1,0 +1,20 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../../cert-manager-webhook
+
+images:
+  - name: webhook
+    newName: kibamail/kibaship-cert-manager-webhook
+    newTag: e2e
+
+patches:
+  # Reduce replicas to 1 for e2e tests
+  - target:
+      kind: Deployment
+      name: kibaship-cert-manager-webhook
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1

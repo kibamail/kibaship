@@ -17,10 +17,6 @@ type TerraformOutput struct {
 	Kubeconfig struct {
 		Value string `json:"value"`
 	} `json:"kubeconfig"`
-	KindClusterInfo struct {
-		StoragePerNode string `json:"storage_per_node"`
-		StorageTotal   string `json:"storage_total"`
-	} `json:"kind_cluster_info"`
 }
 
 // extractCredentials extracts credentials from terraform output based on provider
@@ -37,13 +33,11 @@ func extractCredentials(config *config.CreateConfig) error {
 	env = append(env, fmt.Sprintf("TF_VAR_cluster_email=%s", config.Email))
 	env = append(env, fmt.Sprintf("TF_VAR_paas_features=%s", config.PaaSFeatures))
 
-	// Add Terraform state configuration variables (only for cloud providers)
-	if config.Provider != "kind" {
-		env = append(env, fmt.Sprintf("TF_VAR_terraform_state_bucket=%s", config.TerraformState.S3Bucket))
-		env = append(env, fmt.Sprintf("TF_VAR_terraform_state_region=%s", config.TerraformState.S3Region))
-		env = append(env, fmt.Sprintf("TF_VAR_terraform_state_access_key=%s", config.TerraformState.S3AccessKey))
-		env = append(env, fmt.Sprintf("TF_VAR_terraform_state_secret_key=%s", config.TerraformState.S3AccessSecret))
-	}
+	// Add Terraform state configuration variables
+	env = append(env, fmt.Sprintf("TF_VAR_terraform_state_bucket=%s", config.TerraformState.S3Bucket))
+	env = append(env, fmt.Sprintf("TF_VAR_terraform_state_region=%s", config.TerraformState.S3Region))
+	env = append(env, fmt.Sprintf("TF_VAR_terraform_state_access_key=%s", config.TerraformState.S3AccessKey))
+	env = append(env, fmt.Sprintf("TF_VAR_terraform_state_secret_key=%s", config.TerraformState.S3AccessSecret))
 
 	// Add provider-specific environment variables
 	switch config.Provider {
@@ -53,11 +47,6 @@ func extractCredentials(config *config.CreateConfig) error {
 			env = append(env, fmt.Sprintf("TF_VAR_do_region=%s", config.DigitalOcean.Region))
 			env = append(env, fmt.Sprintf("TF_VAR_do_node_count=%s", config.DigitalOcean.Nodes))
 			env = append(env, fmt.Sprintf("TF_VAR_do_node_size=%s", config.DigitalOcean.NodesSize))
-		}
-	case "kind":
-		if config.Kind != nil {
-			env = append(env, fmt.Sprintf("TF_VAR_kind_node_count=%s", config.Kind.Nodes))
-			env = append(env, fmt.Sprintf("TF_VAR_kind_storage_per_node=%s", config.Kind.Storage))
 		}
 	}
 
@@ -79,8 +68,6 @@ func extractCredentials(config *config.CreateConfig) error {
 	switch config.Provider {
 	case "digital-ocean":
 		return extractDigitalOceanCredentials(config, &terraformOutput)
-	case "kind":
-		return extractKindCredentials(config, &terraformOutput)
 	case "hetzner-robot":
 		return extractHetznerRobotCredentials(config)
 	default:
@@ -131,89 +118,6 @@ func extractDigitalOceanCredentials(config *config.CreateConfig, output *Terrafo
 		fmt.Printf("%s %s\n",
 			styles.TitleStyle.Render("✅"),
 			styles.TitleStyle.Render("Kubeconfig is valid"))
-	}
-
-	return nil
-}
-
-// extractKindCredentials extracts and saves Kind cluster credentials
-func extractKindCredentials(config *config.CreateConfig, output *TerraformOutput) error {
-	fmt.Printf("%s %s\n",
-		styles.CommandStyle.Render("🐳"),
-		styles.DescriptionStyle.Render("Processing Kind cluster credentials..."))
-
-	// Check if kubeconfig output exists
-	if output.Kubeconfig.Value == "" {
-		return fmt.Errorf("kubeconfig output not found in terraform state")
-	}
-
-	fmt.Printf("%s %s\n",
-		styles.CommandStyle.Render("📝"),
-		styles.DescriptionStyle.Render("Kubeconfig found in terraform output"))
-
-	// Save kubeconfig to file
-	credentialsDir := filepath.Join(".kibaship", config.Name, "credentials")
-	kubeconfigPath := filepath.Join(credentialsDir, "kubeconfig.yaml")
-
-	// The kubeconfig from Kind is already in YAML format
-	kubeconfigContent := output.Kubeconfig.Value
-
-	// Write kubeconfig to file
-	if err := os.WriteFile(kubeconfigPath, []byte(kubeconfigContent), 0600); err != nil {
-		return fmt.Errorf("failed to write kubeconfig file: %w", err)
-	}
-
-	fmt.Printf("%s %s\n",
-		styles.TitleStyle.Render("✅"),
-		styles.TitleStyle.Render("Kubeconfig saved successfully!"))
-	fmt.Printf("%s %s\n",
-		styles.CommandStyle.Render("📁"),
-		styles.DescriptionStyle.Render(fmt.Sprintf("File: %s", kubeconfigPath)))
-
-	// Validate the kubeconfig content
-	if err := validateKubeconfig(kubeconfigContent); err != nil {
-		fmt.Printf("%s %s\n",
-			styles.CommandStyle.Render("⚠️"),
-			styles.DescriptionStyle.Render(fmt.Sprintf("Warning: kubeconfig validation failed: %v", err)))
-	} else {
-		fmt.Printf("%s %s\n",
-			styles.TitleStyle.Render("✅"),
-			styles.TitleStyle.Render("Kubeconfig is valid"))
-	}
-
-	// Show Kind-specific information
-	fmt.Printf("\n%s %s\n",
-		styles.HelpStyle.Render("🐳"),
-		styles.HelpStyle.Render("Kind Cluster Information:"))
-	fmt.Printf("   %s %s\n",
-		styles.CommandStyle.Render("Cluster Name:"),
-		styles.DescriptionStyle.Render(config.Name))
-	fmt.Printf("   %s %s\n",
-		styles.CommandStyle.Render("Context:"),
-		styles.DescriptionStyle.Render(fmt.Sprintf("kind-%s", config.Name)))
-	fmt.Printf("   %s %s\n",
-		styles.CommandStyle.Render("Docker Network:"),
-		styles.DescriptionStyle.Render("kind"))
-	fmt.Printf("   %s %s\n",
-		styles.CommandStyle.Render("CNI:"),
-		styles.DescriptionStyle.Render("Disabled (ready for Cilium)"))
-	fmt.Printf("   %s %s\n",
-		styles.CommandStyle.Render("Kube-proxy:"),
-		styles.DescriptionStyle.Render("Disabled"))
-	fmt.Printf("   %s %s\n",
-		styles.CommandStyle.Render("Longhorn Storage:"),
-		styles.DescriptionStyle.Render("Dedicated volumes per node"))
-
-	// Get storage information from Terraform outputs
-	if output.KindClusterInfo.StoragePerNode != "" {
-		fmt.Printf("   %s %s\n",
-			styles.CommandStyle.Render("Per Node:"),
-			styles.DescriptionStyle.Render(output.KindClusterInfo.StoragePerNode))
-	}
-	if output.KindClusterInfo.StorageTotal != "" {
-		fmt.Printf("   %s %s\n",
-			styles.CommandStyle.Render("Total:"),
-			styles.DescriptionStyle.Render(output.KindClusterInfo.StorageTotal))
 	}
 
 	return nil
@@ -438,65 +342,6 @@ func showUsageInstructions(config *config.CreateConfig) {
 	fmt.Printf("   %s\n",
 		styles.DescriptionStyle.Render("File permissions: 600 (owner read/write only)"))
 
-	// Show Kind-specific port information if it's a Kind cluster
-	if config.Provider == "kind" {
-		fmt.Printf("\n%s %s\n",
-			styles.HelpStyle.Render("🐳"),
-			styles.HelpStyle.Render("Kind Cluster Port Mappings:"))
-		fmt.Printf("   %s\n",
-			styles.DescriptionStyle.Render("• HTTP: localhost:14080 (instead of 80)"))
-		fmt.Printf("   %s\n",
-			styles.DescriptionStyle.Render("• HTTPS: localhost:14443 (instead of 443)"))
-		fmt.Printf("   %s\n",
-			styles.DescriptionStyle.Render("• DNS: localhost:14053 (instead of 53)"))
-		if strings.Contains(config.PaaSFeatures, "mysql") {
-			fmt.Printf("   %s\n",
-				styles.DescriptionStyle.Render("• MySQL: localhost:14306 (instead of 3306)"))
-		}
-		if strings.Contains(config.PaaSFeatures, "postgres") {
-			fmt.Printf("   %s\n",
-				styles.DescriptionStyle.Render("• PostgreSQL: localhost:14432 (instead of 5432)"))
-		}
-		if strings.Contains(config.PaaSFeatures, "valkey") {
-			fmt.Printf("   %s\n",
-				styles.DescriptionStyle.Render("• Valkey/Redis: localhost:14379 (instead of 6379)"))
-		}
-		fmt.Printf("\n%s %s\n",
-			styles.HelpStyle.Render("💡"),
-			styles.HelpStyle.Render("Next Steps:"))
-		fmt.Printf("   %s\n",
-			styles.DescriptionStyle.Render("1. Install Cilium CNI:"))
-		fmt.Printf("      %s\n",
-			styles.TitleStyle.Render("cilium install"))
-		fmt.Printf("   %s\n",
-			styles.DescriptionStyle.Render("2. Wait for Cilium to be ready:"))
-		fmt.Printf("      %s\n",
-			styles.TitleStyle.Render("cilium status --wait"))
-		fmt.Printf("   %s\n",
-			styles.DescriptionStyle.Render("3. Test cluster connectivity:"))
-		fmt.Printf("      %s\n",
-			styles.TitleStyle.Render("kubectl get nodes"))
-		fmt.Printf("   %s\n",
-			styles.DescriptionStyle.Render("4. Verify storage setup:"))
-		fmt.Printf("      %s\n",
-			styles.TitleStyle.Render("kubectl get storageclass"))
-		fmt.Printf("\n%s %s\n",
-			styles.HelpStyle.Render("💾"),
-			styles.HelpStyle.Render("Longhorn Storage Information:"))
-		fmt.Printf("   %s\n",
-			styles.DescriptionStyle.Render("Each node has dedicated Longhorn storage mounted at:"))
-		fmt.Printf("   %s\n",
-			styles.TitleStyle.Render("/tmp/kibaship-longhorn/"+config.Name+"-*"))
-		fmt.Printf("   %s\n",
-			styles.DescriptionStyle.Render("This enables Longhorn distributed storage for persistent volumes."))
-		fmt.Printf("\n%s %s\n",
-			styles.HelpStyle.Render("💡"),
-			styles.HelpStyle.Render("Example Service Access:"))
-		fmt.Printf("   %s\n",
-			styles.TitleStyle.Render("curl http://localhost:14080"))
-		fmt.Printf("   %s\n",
-			styles.TitleStyle.Render("curl https://localhost:14443"))
-	}
 }
 
 // formatEndpointsYAML formats a list of endpoints for talosconfig YAML

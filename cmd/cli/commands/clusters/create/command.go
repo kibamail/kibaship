@@ -174,30 +174,6 @@ func runCreate(cmd *cobra.Command, args []string) {
 				styles.CommandStyle.Render("Region:"),
 				styles.DescriptionStyle.Render(config.GCloud.Region))
 		}
-	case ProviderKind:
-		if config.Kind != nil {
-			fmt.Printf("\n%s %s\n",
-				styles.HelpStyle.Render("🐳"),
-				styles.HelpStyle.Render("Kind Configuration:"))
-			fmt.Printf("   %s %s\n",
-				styles.CommandStyle.Render("Nodes:"),
-				styles.DescriptionStyle.Render(config.Kind.Nodes))
-			fmt.Printf("   %s %s\n",
-				styles.CommandStyle.Render("Type:"),
-				styles.DescriptionStyle.Render("Local Docker containers"))
-			fmt.Printf("   %s %s\n",
-				styles.CommandStyle.Render("Network:"),
-				styles.DescriptionStyle.Render("kind"))
-			fmt.Printf("   %s %s\n",
-				styles.CommandStyle.Render("CNI:"),
-				styles.DescriptionStyle.Render("Disabled (ready for Cilium)"))
-			fmt.Printf("   %s %s\n",
-				styles.CommandStyle.Render("Kube-proxy:"),
-				styles.DescriptionStyle.Render("Disabled"))
-			fmt.Printf("   %s %s\n",
-				styles.CommandStyle.Render("Longhorn Storage:"),
-				styles.DescriptionStyle.Render(fmt.Sprintf("%s per node", config.Kind.Storage+"GB")))
-		}
 	}
 
 	// Handle reset flag - destroy existing infrastructure

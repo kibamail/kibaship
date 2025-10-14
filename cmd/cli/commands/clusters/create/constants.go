@@ -2,7 +2,6 @@ package create
 
 // Provider constants
 const (
-	ProviderKind         = "kind"
 	ProviderAWS          = "aws"
 	ProviderDigitalOcean = "digital-ocean"
 	ProviderHetzner      = "hetzner"

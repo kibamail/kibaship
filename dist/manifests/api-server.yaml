@@ -1,0 +1,181 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: kibaship-apiserver
+  name: apiserver
+  namespace: kibaship
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: kibaship-apiserver
+  name: apiserver-secret-access
+  namespace: kibaship
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: kibaship-apiserver
+  name: kibaship-apiserver-crd-access
+rules:
+- apiGroups:
+  - platform.operator.kibaship.com
+  resources:
+  - projects
+  - projects/status
+  - environments
+  - environments/status
+  - applications
+  - applications/status
+  - deployments
+  - deployments/status
+  - applicationdomains
+  - applicationdomains/status
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: kibaship-apiserver
+  name: apiserver-secret-access
+  namespace: kibaship
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: apiserver-secret-access
+subjects:
+- kind: ServiceAccount
+  name: apiserver
+  namespace: kibaship
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: kibaship-apiserver
+  name: kibaship-apiserver-crd-access
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kibaship-apiserver-crd-access
+subjects:
+- kind: ServiceAccount
+  name: apiserver
+  namespace: kibaship
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: kibaship-apiserver
+  name: apiserver
+  namespace: kibaship
+spec:
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+  selector:
+    app.kubernetes.io/name: kibaship-apiserver
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: kibaship-apiserver
+  name: apiserver
+  namespace: kibaship
+spec:
+  minReadySeconds: 5
+  replicas: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kibaship-apiserver
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/managed-by: kustomize
+        app.kubernetes.io/name: kibaship-apiserver
+    spec:
+      containers:
+      - env:
+        - name: GIN_MODE
+          value: release
+        - name: PORT
+          value: "8080"
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        image: kibamail/kibaship-apiserver:v1.0.0
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 15
+        name: apiserver
+        ports:
+        - containerPort: 8080
+          name: http
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          limits:
+            cpu: 500m
+            memory: 128Mi
+          requests:
+            cpu: 10m
+            memory: 64Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      serviceAccountName: apiserver

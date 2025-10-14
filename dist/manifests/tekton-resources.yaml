@@ -1,0 +1,383 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  annotations:
+    platform.kibaship.com/created-by: kibaship
+    tekton.dev/displayName: Dockerfile Build and Push
+  labels:
+    app.kubernetes.io/component: tekton-integration
+    app.kubernetes.io/managed-by: kibaship
+    app.kubernetes.io/name: kibaship
+    app.kubernetes.io/part-of: kibaship
+  name: tekton-task-dockerfile-build-kibaship-com
+  namespace: tekton-pipelines
+spec:
+  description: |
+    Build an OCI image using BuildKit with the standard Dockerfile frontend.
+    The image is built from a Dockerfile in the repository and pushed to the registry.
+  params:
+  - default: Dockerfile
+    description: Relative path to the Dockerfile within the repo workspace (e.g.,
+      'Dockerfile' or 'app/Dockerfile')
+    name: dockerfilePath
+    type: string
+  - default: .
+    description: Build context path relative to the repository root (e.g., '.' or
+      'app')
+    name: contextPath
+    type: string
+  - description: Full image tag to push (e.g., registry.registry.svc.cluster.local/namespace/app-uuid:deployment-uuid)
+    name: imageTag
+    type: string
+  - default: moby/buildkit:v0.25.1-rootless
+    description: Image for buildctl client (for kustomize override convenience)
+    name: buildImage
+    type: string
+  results:
+  - description: Full image tag that was pushed
+    name: buildOutput
+  - description: Image digest (SHA256)
+    name: imageDigest
+  stepTemplate:
+    env:
+    - name: BUILDKIT_HOST
+      value: tcp://buildkitd.buildkit.svc:1234
+    - name: DOCKER_CONFIG
+      value: /workspace/docker-config
+  steps:
+  - image: $(params.buildImage)
+    name: build
+    script: |
+      #!/usr/bin/env sh
+      set -eu
+
+      REPO_DIR="$(workspaces.output.path)/repo"
+      DOCKERFILE_PATH="$REPO_DIR/$(params.dockerfilePath)"
+      CONTEXT_DIR="$REPO_DIR/$(params.contextPath)"
+
+      # Validate Dockerfile exists
+      if [ ! -f "$DOCKERFILE_PATH" ]; then
+        echo "Dockerfile not found at $DOCKERFILE_PATH" >&2
+        echo "Available files in REPO_DIR:" >&2
+        ls -la "$REPO_DIR" >&2
+        exit 1
+      fi
+
+      # Validate context directory exists
+      if [ ! -d "$CONTEXT_DIR" ]; then
+        echo "Build context directory not found at $CONTEXT_DIR" >&2
+        exit 1
+      fi
+
+      echo "Building image from Dockerfile: $(params.dockerfilePath)"
+      echo "Build context: $(params.contextPath)"
+      echo "Pushing to: $(params.imageTag)"
+
+      # Build with standard Dockerfile frontend and push to registry
+      buildctl build \
+        --progress=plain \
+        --local context="$CONTEXT_DIR" \
+        --local dockerfile="$(dirname "$DOCKERFILE_PATH")" \
+        --frontend dockerfile.v0 \
+        --opt filename="$(basename "$DOCKERFILE_PATH")" \
+        --output type=image,name=$(params.imageTag),push=true
+
+      # Emit image tag as result
+      printf "%s" "$(params.imageTag)" > "$(results.buildOutput.path)"
+
+      # TODO: Extract and emit image digest
+      echo "" > "$(results.imageDigest.path)"
+    workingDir: $(workspaces.output.path)
+  workspaces:
+  - description: Shared workspace containing the cloned repository
+    name: output
+  - description: Docker config for registry authentication
+    name: docker-config
+  - description: Registry CA certificate for TLS trust
+    name: registry-ca
+  - description: Application environment variables from secret
+    name: app-env-vars
+    optional: true
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  annotations:
+    platform.kibaship.com/created-by: kibaship
+    tekton.dev/displayName: Simple Git Clone with Token
+  labels:
+    app.kubernetes.io/component: tekton-integration
+    app.kubernetes.io/managed-by: kibaship
+    app.kubernetes.io/name: kibaship
+  name: tekton-task-git-clone-kibaship-com
+  namespace: tekton-pipelines
+spec:
+  description: A simplified git clone task that can clone from public repositories
+    or use an access token from a secret for private repositories.
+  params:
+  - description: Repository URL to clone from.
+    name: url
+    type: string
+  - description: Branch name to checkout (required).
+    name: branch
+    type: string
+  - description: Specific commit hash to checkout (required).
+    name: commit
+    type: string
+  - default: ""
+    description: Name of the secret containing the access token (optional for public
+      repos).
+    name: token-secret
+    type: string
+  - default: "false"
+    description: Whether the repository is publicly accessible (true/false).
+    name: public-access
+    type: string
+  results:
+  - description: The commit SHA that was checked out.
+    name: commit
+  - description: The repository URL that was cloned.
+    name: url
+  steps:
+  - env:
+    - name: REPO_URL
+      value: $(params.url)
+    - name: BRANCH_NAME
+      value: $(params.branch)
+    - name: COMMIT_HASH
+      value: $(params.commit)
+    - name: PUBLIC_ACCESS
+      value: $(params.public-access)
+    - name: TOKEN_SECRET_NAME
+      value: $(params.token-secret)
+    - name: WORKSPACE_PATH
+      value: $(workspaces.output.path)
+    image: alpine/git:latest
+    name: clone
+    script: |
+      #!/bin/sh
+      set -e
+
+      echo "Starting git clone..."
+      echo "Repository: $REPO_URL"
+      echo "Public Access: $PUBLIC_ACCESS"
+
+      # Determine the URL to use based on public access
+      if [ "$PUBLIC_ACCESS" = "true" ]; then
+        echo "Using public access (no authentication)"
+        CLONE_URL="$REPO_URL"
+      else
+        echo "Using private access with token"
+        if [ -z "$TOKEN_SECRET_NAME" ] || [ "$TOKEN_SECRET_NAME" = "" ]; then
+          echo "Error: Private repository requires token-secret parameter"
+          exit 1
+        fi
+
+        # For private repos, try to read ACCESS_TOKEN from secret file
+        # The Tekton task runner will mount secrets automatically
+        ACCESS_TOKEN=""
+
+        # Try to find the token in common Tekton secret mount locations
+        if [ -f "/tekton/creds/$TOKEN_SECRET_NAME/token" ]; then
+          ACCESS_TOKEN=$(cat "/tekton/creds/$TOKEN_SECRET_NAME/token")
+        elif [ -f "/workspace/git-credentials/token" ]; then
+          ACCESS_TOKEN=$(cat "/workspace/git-credentials/token")
+        else
+          echo "Error: Could not find access token for private repository"
+          echo "Expected locations:"
+          echo "  /tekton/creds/$TOKEN_SECRET_NAME/token"
+          echo "  /workspace/git-credentials/token"
+          exit 1
+        fi
+
+        # Create authenticated URL by injecting token
+        CLONE_URL=$(echo "$REPO_URL" | sed "s|https://|https://x-access-token:${ACCESS_TOKEN}@|")
+      fi
+
+      # Clone the repository with the specific branch
+      git clone --branch "$BRANCH_NAME" --single-branch "$CLONE_URL" "$WORKSPACE_PATH/repo"
+
+      # Navigate to the cloned repository
+      cd "$WORKSPACE_PATH/repo"
+
+      # Silence detached HEAD advice
+      git config --global advice.detachedHead false
+
+
+      # Checkout the specific commit
+      git checkout "$COMMIT_HASH"
+
+      # Verify we're on the correct commit
+      ACTUAL_COMMIT=$(git rev-parse HEAD)
+      if [ "$ACTUAL_COMMIT" != "$COMMIT_HASH" ]; then
+        echo "Error: Expected commit $COMMIT_HASH but got $ACTUAL_COMMIT"
+        exit 1
+      fi
+
+      echo "Successfully cloned $REPO_URL at commit $COMMIT_HASH"
+
+      # Write results
+      echo -n "$COMMIT_HASH" > $(results.commit.path)
+      echo -n "$REPO_URL" > $(results.url.path)
+  workspaces:
+  - description: The git repo will be cloned into this workspace.
+    name: output
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  annotations:
+    platform.kibaship.com/created-by: kibaship
+    tekton.dev/displayName: Railpack Build and Push
+  labels:
+    app.kubernetes.io/component: tekton-integration
+    app.kubernetes.io/managed-by: kibaship
+    app.kubernetes.io/name: kibaship
+    app.kubernetes.io/part-of: kibaship
+  name: tekton-task-railpack-build-kibaship-com
+  namespace: tekton-pipelines
+spec:
+  description: |
+    Build an OCI image using BuildKit gateway with the Railpack frontend, based on the
+    plan generated by the railpack-prepare task. The image is pushed to the registry.
+  params:
+  - default: .
+    description: Relative path to the project root within the repo workspace (same
+      as prepare)
+    name: contextPath
+    type: string
+  - default: ghcr.io/railwayapp/railpack-frontend:v0.9.0
+    description: Railpack frontend gateway source for BuildKit (pin to CLI version)
+    name: railpackFrontendSource
+    type: string
+  - description: Full image tag to push (e.g., registry.registry.svc.cluster.local/namespace/app-uuid:deployment-uuid)
+    name: imageTag
+    type: string
+  - default: kibamail/kibaship-railpack-build:0.1.0
+    description: Image for buildctl client (for kustomize override convenience)
+    name: buildImage
+    type: string
+  results:
+  - description: Full image tag that was pushed
+    name: buildOutput
+  - description: Image digest (SHA256)
+    name: imageDigest
+  stepTemplate:
+    env:
+    - name: BUILDKIT_HOST
+      value: tcp://buildkitd.buildkit.svc:1234
+    - name: DOCKER_CONFIG
+      value: /workspace/docker-config
+  steps:
+  - image: $(params.buildImage)
+    name: build
+    script: |
+      #!/usr/bin/env sh
+      set -eu
+
+      PLAN_DIR="$(workspaces.output.path)/railpack"
+      PLAN="$PLAN_DIR/railpack-plan.json"
+      CONTEXT_DIR="$(workspaces.output.path)/repo/$(params.contextPath)"
+
+      if [ ! -f "$PLAN" ]; then
+        echo "railpack-plan.json not found at $PLAN" >&2
+        exit 1
+      fi
+      if [ ! -d "$CONTEXT_DIR" ]; then
+        echo "context directory not found at $CONTEXT_DIR" >&2
+        exit 1
+      fi
+
+      echo "Building and pushing image to $(params.imageTag)..."
+
+      # Use BuildKit gateway with Railpack frontend; push to registry
+      buildctl build \
+        --progress=plain \
+        --local context="$CONTEXT_DIR" \
+        --local dockerfile="$PLAN_DIR" \
+        --frontend=gateway.v0 \
+        --opt source=$(params.railpackFrontendSource) \
+        --output type=image,name=$(params.imageTag),push=true
+
+      # Emit image tag as result
+      printf "%s" "$(params.imageTag)" > "$(results.buildOutput.path)"
+
+      # TODO: Extract and emit image digest
+      echo "" > "$(results.imageDigest.path)"
+    workingDir: $(workspaces.output.path)
+  workspaces:
+  - description: Shared workspace containing the cloned repository and plan
+    name: output
+  - description: Docker config for registry authentication
+    name: docker-config
+    optional: true
+  - description: Registry CA certificate for TLS trust
+    name: registry-ca
+    optional: true
+  - description: Application environment variables from secret
+    name: app-env-vars
+    optional: true
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  annotations:
+    platform.kibaship.com/created-by: kibaship
+    tekton.dev/displayName: Railpack Prepare
+  labels:
+    app.kubernetes.io/component: tekton-integration
+    app.kubernetes.io/managed-by: kibaship
+    app.kubernetes.io/name: kibaship
+    app.kubernetes.io/part-of: kibaship
+  name: tekton-task-railpack-prepare-kibaship-com
+  namespace: tekton-pipelines
+spec:
+  description: |
+    Generate Railpack build plan and info without building the image. The outputs
+    are written into the shared workspace at /railpack/railpack-plan.json and /railpack/info.json.
+  params:
+  - default: .
+    description: Relative path to the project root within the workspace
+    name: contextPath
+    type: string
+  - default: 0.1.2
+    description: Railpack CLI version (image tag)
+    name: railpackVersion
+    type: string
+  - default: ""
+    description: Additional args to pass to railpack prepare, e.g. "--env FOO=bar
+      --env BAZ=qux"
+    name: envArgs
+    type: string
+  results:
+  - description: Absolute path to the generated railpack-plan.json in the workspace
+    name: plan
+  - description: Absolute path to the generated railpack-info.json in the workspace
+    name: info
+  steps:
+  - image: kibamail/kibaship-railpack-cli:$(params.railpackVersion)
+    name: prepare
+    script: |
+      #!/usr/bin/env sh
+      set -eu
+      # Ensure output directory exists at the workspace root
+      mkdir -p "$(workspaces.output.path)/railpack"
+      PLAN="$(workspaces.output.path)/railpack/railpack-plan.json"
+      INFO="$(workspaces.output.path)/railpack/railpack-info.json"
+
+      # Collect optional args to pass to prepare (string)
+      ENV_ARGS='$(params.envArgs)'
+
+      # Generate plan and info at the required paths
+      railpack prepare . \
+        --plan-out "$PLAN" \
+        --info-out "$INFO" \
+        $ENV_ARGS
+
+      # Emit Tekton results with absolute file paths
+      printf "%s" "$PLAN" > "$(results.plan.path)"
+      printf "%s" "$INFO" > "$(results.info.path)"
+    workingDir: $(workspaces.output.path)/repo/$(params.contextPath)
+  workspaces:
+  - description: Shared workspace containing the cloned repository
+    name: output

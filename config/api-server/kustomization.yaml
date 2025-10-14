@@ -19,5 +19,3 @@ resources:
 - service.yaml
 images:
 - name: apiserver
-  newName: kibamail/kibaship-apiserver
-  newTag: v0.1.6

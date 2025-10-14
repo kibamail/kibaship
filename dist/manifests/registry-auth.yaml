@@ -1,0 +1,118 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: registry-auth
+  namespace: registry
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: registry-auth-secret-reader
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: registry-auth-secret-reader-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: registry-auth-secret-reader
+subjects:
+- kind: ServiceAccount
+  name: registry-auth
+  namespace: registry
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: registry-auth
+  name: registry-auth
+  namespace: registry
+spec:
+  ports:
+  - name: http
+    port: 80
+    protocol: TCP
+    targetPort: 8080
+  selector:
+    app: registry-auth
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: registry-auth
+  name: registry-auth
+  namespace: registry
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: registry-auth
+  template:
+    metadata:
+      labels:
+        app: registry-auth
+    spec:
+      containers:
+      - image: kibamail/kibaship-registry-auth:v1.0.0
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 20
+          timeoutSeconds: 5
+        name: registry-auth
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 3
+        resources:
+          limits:
+            cpu: 500m
+            memory: 256Mi
+          requests:
+            cpu: 50m
+            memory: 64Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 65532
+        volumeMounts:
+        - mountPath: /etc/registry-auth-keys
+          name: auth-keys
+          readOnly: true
+      serviceAccountName: registry-auth
+      volumes:
+      - name: auth-keys
+        secret:
+          items:
+          - key: tls.key
+            path: tls.key
+          - key: tls.crt
+            path: tls.crt
+          secretName: registry-auth-keys
