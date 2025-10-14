@@ -15,6 +15,11 @@ terraform {
       version = "~> 2.38.0"
     }
 
+    kubectl = {
+      source  = "gavinbunney/kubectl"
+      version = ">= 1.19.0"
+    }
+
     null = {
       source  = "hashicorp/null"
       version = "~> 3.2.0"
@@ -61,6 +66,15 @@ provider "helm" {
     client_certificate     = data.terraform_remote_state.provision.outputs.cluster_client_certificate
     client_key             = data.terraform_remote_state.provision.outputs.cluster_client_key
   }
+}
+
+# Configure kubectl provider using remote state credentials
+provider "kubectl" {
+  host                   = data.terraform_remote_state.provision.outputs.cluster_endpoint
+  cluster_ca_certificate = data.terraform_remote_state.provision.outputs.cluster_ca_certificate
+  client_certificate     = data.terraform_remote_state.provision.outputs.cluster_client_certificate
+  client_key             = data.terraform_remote_state.provision.outputs.cluster_client_key
+  load_config_file       = false
 }
 
 # Local variables for component configuration
@@ -182,6 +196,19 @@ resource "helm_release" "cilium" {
       value = "10.244.0.0/16"
     }
   ]
+}
+
+# Install Tekton Pipelines after Cilium is ready
+# Tekton requires a functional CNI to be installed first
+
+data "kubectl_file_documents" "tekton_pipelines" {
+  content = file("https://storage.googleapis.com/tekton-releases/pipeline/previous/v1.4.0/release.yaml")
+}
+
+resource "kubectl_manifest" "tekton_pipelines" {
+  depends_on = [helm_release.cilium]
+  for_each   = data.kubectl_file_documents.tekton_pipelines.manifests
+  yaml_body  = each.value
 }
 
 # Install cert-manager using Helm
@@ -587,6 +614,11 @@ output "cilium_status" {
 output "cert_manager_status" {
   description = "Cert-manager installation status"
   value       = "Cert-manager ${helm_release.cert_manager.version} installed via Helm"
+}
+
+output "tekton_status" {
+  description = "Tekton Pipelines installation status"
+  value       = "Tekton Pipelines v1.4.0 installed"
 }
 
 output "cluster_info" {

@@ -49,7 +49,7 @@ resource "hcloud_network_subnet" "load_balancer_subnet" {
 # Create ingress load balancer
 resource "hcloud_load_balancer" "ingress" {
   name               = "ingress.${var.cluster_name}"
-  load_balancer_type = "lb11"
+  load_balancer_type = "lb21"
   location           = var.location
 
   labels = {
@@ -144,6 +144,38 @@ resource "hcloud_load_balancer_service" "ingress_postgres" {
   health_check {
     protocol = "tcp"
     port     = 30432
+    interval = 15
+    timeout  = 10
+    retries  = 3
+  }
+}
+
+# DNS service UDP (port 53 -> 30053)
+resource "hcloud_load_balancer_service" "ingress_dns_udp" {
+  load_balancer_id = hcloud_load_balancer.ingress.id
+  protocol         = "udp"
+  listen_port      = 53
+  destination_port = 30053
+
+  health_check {
+    protocol = "tcp"
+    port     = 30053
+    interval = 15
+    timeout  = 10
+    retries  = 3
+  }
+}
+
+# DNS service TCP (port 53 -> 30053)
+resource "hcloud_load_balancer_service" "ingress_dns_tcp" {
+  load_balancer_id = hcloud_load_balancer.ingress.id
+  protocol         = "tcp"
+  listen_port      = 53
+  destination_port = 30053
+
+  health_check {
+    protocol = "tcp"
+    port     = 30053
     interval = 15
     timeout  = 10
     retries  = 3

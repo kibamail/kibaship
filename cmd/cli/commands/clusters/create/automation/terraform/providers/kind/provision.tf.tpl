@@ -9,6 +9,10 @@ terraform {
       source  = "tehcyx/kind"
       version = "~> 0.4.0"
     }
+    kubectl = {
+      source  = "gavinbunney/kubectl"
+      version = ">= 1.19.0"
+    }
   }
 
   # Use local backend for Kind clusters - no S3 required
@@ -19,6 +23,15 @@ terraform {
 
 # Configure the Kind Provider
 provider "kind" {}
+
+# Configure kubectl provider to use the Kind cluster
+provider "kubectl" {
+  host                   = kind_cluster.cluster.endpoint
+  cluster_ca_certificate = kind_cluster.cluster.cluster_ca_certificate
+  client_certificate     = kind_cluster.cluster.client_certificate
+  client_key             = kind_cluster.cluster.client_key
+  load_config_file       = false
+}
 
 # Local variables for PaaS feature detection
 locals {
@@ -120,6 +133,69 @@ resource "kind_cluster" "cluster" {
   
   # Wait for cluster to be ready
   wait_for_ready = true
+}
+
+# Install Gateway API CRDs before Cilium
+# These CRDs are required for Cilium Gateway API support
+
+data "kubectl_file_documents" "gateway_crds_gatewayclasses" {
+  content = file("https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.2.0/config/crd/standard/gateway.networking.k8s.io_gatewayclasses.yaml")
+}
+
+data "kubectl_file_documents" "gateway_crds_gateways" {
+  content = file("https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.2.0/config/crd/standard/gateway.networking.k8s.io_gateways.yaml")
+}
+
+data "kubectl_file_documents" "gateway_crds_httproutes" {
+  content = file("https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.2.0/config/crd/standard/gateway.networking.k8s.io_httproutes.yaml")
+}
+
+data "kubectl_file_documents" "gateway_crds_referencegrants" {
+  content = file("https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.2.0/config/crd/standard/gateway.networking.k8s.io_referencegrants.yaml")
+}
+
+data "kubectl_file_documents" "gateway_crds_grpcroutes" {
+  content = file("https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.2.0/config/crd/standard/gateway.networking.k8s.io_grpcroutes.yaml")
+}
+
+data "kubectl_file_documents" "gateway_crds_tlsroutes" {
+  content = file("https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.2.0/config/crd/experimental/gateway.networking.k8s.io_tlsroutes.yaml")
+}
+
+resource "kubectl_manifest" "gateway_crd_gatewayclasses" {
+  depends_on = [kind_cluster.cluster]
+  for_each   = data.kubectl_file_documents.gateway_crds_gatewayclasses.manifests
+  yaml_body  = each.value
+}
+
+resource "kubectl_manifest" "gateway_crd_gateways" {
+  depends_on = [kind_cluster.cluster]
+  for_each   = data.kubectl_file_documents.gateway_crds_gateways.manifests
+  yaml_body  = each.value
+}
+
+resource "kubectl_manifest" "gateway_crd_httproutes" {
+  depends_on = [kind_cluster.cluster]
+  for_each   = data.kubectl_file_documents.gateway_crds_httproutes.manifests
+  yaml_body  = each.value
+}
+
+resource "kubectl_manifest" "gateway_crd_referencegrants" {
+  depends_on = [kind_cluster.cluster]
+  for_each   = data.kubectl_file_documents.gateway_crds_referencegrants.manifests
+  yaml_body  = each.value
+}
+
+resource "kubectl_manifest" "gateway_crd_grpcroutes" {
+  depends_on = [kind_cluster.cluster]
+  for_each   = data.kubectl_file_documents.gateway_crds_grpcroutes.manifests
+  yaml_body  = each.value
+}
+
+resource "kubectl_manifest" "gateway_crd_tlsroutes" {
+  depends_on = [kind_cluster.cluster]
+  for_each   = data.kubectl_file_documents.gateway_crds_tlsroutes.manifests
+  yaml_body  = each.value
 }
 
 # Output important cluster information
