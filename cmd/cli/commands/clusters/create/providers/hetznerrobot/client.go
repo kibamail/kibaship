@@ -23,11 +23,11 @@ type Client struct {
 // RescueResponse represents the direct API response for rescue activation
 type RescueResponse struct {
 	Rescue struct {
-		ServerIP     string   `json:"server_ip"`
-		ServerNumber int      `json:"server_number"`
-		OS           string   `json:"os"`
-		Active       bool     `json:"active"`
-		Password     string   `json:"password"`
+		ServerIP      string   `json:"server_ip"`
+		ServerNumber  int      `json:"server_number"`
+		OS            string   `json:"os"`
+		Active        bool     `json:"active"`
+		Password      string   `json:"password"`
 		AuthorizedKey []string `json:"authorized_key"`
 	} `json:"rescue"`
 }
@@ -48,10 +48,10 @@ type Server struct {
 
 // VSwitch represents a Hetzner Robot vswitch with formatted information
 type VSwitch struct {
-	ID                   string
-	Name                 string
-	VLAN                 int
-	Cancelled            bool
+	ID                      string
+	Name                    string
+	VLAN                    int
+	Cancelled               bool
 	HasCloudNetworkAttached bool
 }
 
@@ -108,7 +108,7 @@ func NewClientWithToken(token string) (*Client, error) {
 	if len(parts) != 2 {
 		return nil, fmt.Errorf("invalid token format, expected 'username:password'")
 	}
-	
+
 	hrobotClient := hrobot.NewClient(hrobot.WithToken(token))
 	return &Client{
 		hrobotClient: hrobotClient,
@@ -138,8 +138,6 @@ func (c *Client) ListServers(ctx context.Context) ([]Server, error) {
 			PaidUntil:  srv.PaidUntil,
 			ServerType: srv.Product, // Using product as server type
 		}
-
-
 
 		servers = append(servers, server)
 	}

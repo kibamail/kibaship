@@ -11,8 +11,6 @@ import (
 	"github.com/kibamail/kibaship/cmd/cli/internal/styles"
 )
 
-
-
 // validateFile checks if a file exists and is readable
 func validateFile(fl validator.FieldLevel) bool {
 	filePath := fl.Field().String()

@@ -411,7 +411,6 @@ func discoverSingleServer(ctx context.Context, server config.HetznerRobotServer)
 	return serverInfo, nil
 }
 
-
 // logServerNetworkInfo logs the discovered network information for a server
 func logServerNetworkInfo(info *ServerNetworkInfo) {
 	fmt.Printf("\n%s %s\n",

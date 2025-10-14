@@ -29,21 +29,21 @@ type TalosLink struct {
 
 // TalosRoute represents a network route from Talos
 type TalosRoute struct {
-	Destination  string // CIDR format (e.g., "0.0.0.0/0" for default route)
-	Gateway      string
-	OutLinkName  string
-	Family       string
-	Scope        string
-	Protocol     string
+	Destination string // CIDR format (e.g., "0.0.0.0/0" for default route)
+	Gateway     string
+	OutLinkName string
+	Family      string
+	Scope       string
+	Protocol    string
 }
 
 // NetworkInterface represents a detected network interface with its IPs
 type NetworkInterface struct {
-	LinkName    string
+	LinkName     string
 	HasPrivateIP bool
 	HasPublicIP  bool
-	PrivateIPs  []string // IPs without CIDR
-	PublicIPs   []string // IPs without CIDR
+	PrivateIPs   []string // IPs without CIDR
+	PublicIPs    []string // IPs without CIDR
 	PrivateCIDRs []string // Full CIDR addresses
 	PublicCIDRs  []string // Full CIDR addresses
 }
@@ -132,8 +132,8 @@ func (s *NetworkDiscoveryService) fetchAddresses(ctx context.Context) ([]TalosAd
 		addresses = append(addresses, TalosAddress{
 			LinkName: spec.LinkName,
 			Address:  spec.Address.String(),
-			Family:   string(spec.Family),
-			Scope:    string(spec.Scope),
+			Family:   spec.Family.String(), // FIX: Use String() method on enum
+			Scope:    spec.Scope.String(),  // FIX: Use String() method on enum
 		})
 	}
 
@@ -183,9 +183,9 @@ func (s *NetworkDiscoveryService) fetchRoutes(ctx context.Context) ([]TalosRoute
 			Destination: spec.Destination.String(),
 			Gateway:     spec.Gateway.String(),
 			OutLinkName: spec.OutLinkName,
-			Family:      string(spec.Family),
-			Scope:       string(spec.Scope),
-			Protocol:    string(spec.Protocol),
+			Family:      spec.Family.String(),   // FIX: Use String() method on enum
+			Scope:       spec.Scope.String(),    // FIX: Use String() method on enum
+			Protocol:    spec.Protocol.String(), // FIX: Use String() method on enum
 		})
 	}
 
@@ -206,13 +206,23 @@ type PublicInterfaceInfo struct {
 func FindPublicInterface(links []TalosLink, addresses []TalosAddress, routes []TalosRoute, nodeIP string) *PublicInterfaceInfo {
 	// Step 1: Find the default route (empty dst = 0.0.0.0/0)
 	// Matches TypeScript: route.spec.dst === '' && route.spec.gateway && route.spec.table === 'main'
+	// Note: Talos API may return "", "0.0.0.0/0", or "invalid Prefix" for default route destination
 	var defaultRoute *TalosRoute
 	for i := range routes {
 		route := &routes[i]
-		if route.Family == "inet4" &&
-			route.Destination == "0.0.0.0/0" &&
-			route.Gateway != "" &&
-			route.Gateway != "<nil>" {
+		// FIX: Check for all possible default route representations
+		isDefaultRoute := route.Destination == "" ||
+			route.Destination == "0.0.0.0/0" ||
+			route.Destination == "invalid Prefix" ||
+			strings.Contains(strings.ToLower(route.Destination), "invalid")
+
+		// FIX: Check for all possible invalid gateway representations
+		hasValidGateway := route.Gateway != "" &&
+			route.Gateway != "<nil>" &&
+			route.Gateway != "invalid IP" &&
+			!strings.Contains(strings.ToLower(route.Gateway), "invalid")
+
+		if route.Family == "inet4" && isDefaultRoute && hasValidGateway {
 			defaultRoute = route
 			break
 		}
@@ -348,8 +358,11 @@ func DetectGateways(routes []TalosRoute, addresses []TalosAddress) *GatewayInfo 
 	var publicGateway, privateGateway string
 
 	for _, route := range routes {
-		// Skip routes without gateways
-		if route.Gateway == "" || route.Gateway == "<nil>" {
+		// FIX: Skip routes without valid gateways (handle "invalid IP" from Talos)
+		if route.Gateway == "" ||
+			route.Gateway == "<nil>" ||
+			route.Gateway == "invalid IP" ||
+			strings.Contains(strings.ToLower(route.Gateway), "invalid") {
 			continue
 		}
 
@@ -358,8 +371,13 @@ func DetectGateways(routes []TalosRoute, addresses []TalosAddress) *GatewayInfo 
 			continue
 		}
 
-		// Default route (0.0.0.0/0) is typically the public gateway
-		if route.Destination == "0.0.0.0/0" && publicGateway == "" {
+		// FIX: Default route check - handle multiple representations
+		isDefaultRoute := route.Destination == "" ||
+			route.Destination == "0.0.0.0/0" ||
+			route.Destination == "invalid Prefix" ||
+			strings.Contains(strings.ToLower(route.Destination), "invalid")
+
+		if isDefaultRoute && publicGateway == "" {
 			publicGateway = route.Gateway
 			continue
 		}
@@ -385,9 +403,9 @@ func IsPrivateIP(ip string) bool {
 
 	// Define private IP ranges
 	privateRanges := []string{
-		"10.0.0.0/8",       // 10.0.0.0 to 10.255.255.255
-		"172.16.0.0/12",    // 172.16.0.0 to 172.31.255.255
-		"192.168.0.0/16",   // 192.168.0.0 to 192.168.255.255
+		"10.0.0.0/8",     // 10.0.0.0 to 10.255.255.255
+		"172.16.0.0/12",  // 172.16.0.0 to 172.31.255.255
+		"192.168.0.0/16", // 192.168.0.0 to 192.168.255.255
 	}
 
 	for _, cidr := range privateRanges {

@@ -157,8 +157,6 @@ func formatStatus(status string) string {
 	}
 }
 
-
-
 // truncateString truncates a string to maxLength with ellipsis
 func truncateString(s string, maxLength int) string {
 	if len(s) <= maxLength {
@@ -195,19 +193,19 @@ func DisplayServersSummary(ctx context.Context, client *Client) error {
 	fmt.Printf("\n%s %s\n",
 		styles.HelpStyle.Render("📊"),
 		styles.HelpStyle.Render("Server Summary:"))
-	
+
 	fmt.Printf("   %s %s\n",
 		styles.CommandStyle.Render("Total servers:"),
 		styles.DescriptionStyle.Render(fmt.Sprintf("%d", len(servers))))
-	
+
 	fmt.Printf("   %s %s\n",
 		styles.CommandStyle.Render("Available:"),
 		styles.DescriptionStyle.Render(fmt.Sprintf("%d", availableCount)))
-	
+
 	fmt.Printf("   %s %s\n",
 		styles.CommandStyle.Render("Ready for use:"),
 		styles.DescriptionStyle.Render(fmt.Sprintf("%d", readyCount)))
-	
+
 	if cancelledCount > 0 {
 		fmt.Printf("   %s %s\n",
 			styles.CommandStyle.Render("Cancelled:"),

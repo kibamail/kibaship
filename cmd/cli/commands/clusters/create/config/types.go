@@ -45,55 +45,56 @@ type HetznerConfig struct {
 
 // HetznerRobotServer represents a selected Hetzner Robot server for templating
 type HetznerRobotServer struct {
-	ID                        string `json:"id"`
-	Name                      string `json:"name"`
-	IP                        string `json:"ip"`
-	PrivateIP                 string `json:"private_ip"`
-	Status                    string `json:"status"`
-	Product                   string `json:"product"`
-	DC                        string `json:"dc"`
-	Role                      string `json:"role"` // "control-plane" or "worker"
-	RescuePassword            string `json:"rescue_password"`
+	ID             string `json:"id"`
+	Name           string `json:"name"`
+	IP             string `json:"ip"`
+	PrivateIP      string `json:"private_ip"`
+	Status         string `json:"status"`
+	Product        string `json:"product"`
+	DC             string `json:"dc"`
+	Role           string `json:"role"` // "control-plane" or "worker"
+	RescuePassword string `json:"rescue_password"`
 
 	// Talos network configuration
-	PublicNetworkInterface    string `json:"public_network_interface"`
-	PublicAddressSubnet       string `json:"public_address_subnet"`
-	PublicIPv4Gateway         string `json:"public_ipv4_gateway"`
-	PrivateAddressSubnet      string `json:"private_address_subnet"`
-	PrivateIPv4Gateway        string `json:"private_ipv4_gateway"`
-	InstallationDisk          string `json:"installation_disk"`
+	PublicNetworkInterface string `json:"public_network_interface"`
+	PublicAddressSubnet    string `json:"public_address_subnet"`
+	PublicIPv4Gateway      string `json:"public_ipv4_gateway"`
+	PrivateAddressSubnet   string `json:"private_address_subnet"`
+	PrivateIPv4Gateway     string `json:"private_ipv4_gateway"`
+	InstallationDisk       string `json:"installation_disk"`
 }
 
 // HetznerRobotConfig represents Hetzner Robot-specific configuration
 type HetznerRobotConfig struct {
-	Username        string                     `validate:"required_with=HetznerRobotConfig"`
-	Password        string                     `validate:"required_with=HetznerRobotConfig"`
-	CloudToken      string                     `validate:"required_with=HetznerRobotConfig"`
-	SelectedServers []HetznerRobotServer       `validate:"omitempty"`
-	RescuePasswords map[string]string          `validate:"omitempty"`
-	VSwitchID       string                     `validate:"omitempty"`
+	Username        string               `validate:"required_with=HetznerRobotConfig"`
+	Password        string               `validate:"required_with=HetznerRobotConfig"`
+	CloudToken      string               `validate:"required_with=HetznerRobotConfig"`
+	SelectedServers []HetznerRobotServer `validate:"omitempty"`
+	RescuePasswords map[string]string    `validate:"omitempty"`
+	VSwitchID       string               `validate:"omitempty"`
+	VLANID          int                  `validate:"omitempty"`
 
 	// Network configuration for cloud resources
-	NetworkConfig   *HetznerRobotNetworkConfig `validate:"omitempty"`
+	NetworkConfig *HetznerRobotNetworkConfig `validate:"omitempty"`
 
 	// Talos configuration
-	TalosConfig     *HetznerRobotTalosConfig   `validate:"omitempty"`
+	TalosConfig *HetznerRobotTalosConfig `validate:"omitempty"`
 }
 
 // HetznerRobotNetworkConfig represents network configuration for Hetzner Robot clusters
 type HetznerRobotNetworkConfig struct {
-	Location                      string `json:"location" yaml:"location"`
-	NetworkZone                   string `json:"network_zone" yaml:"network-zone"`
-	ClusterNetworkIPRange         string `json:"cluster_network_ip_range" yaml:"cluster-network-ip-range"`
-	ClusterVSwitchSubnetIPRange   string `json:"cluster_vswitch_subnet_ip_range" yaml:"cluster-vswitch-subnet-ip-range"`
-	ClusterSubnetIPRange          string `json:"cluster_subnet_ip_range" yaml:"cluster-subnet-ip-range"`
+	Location                    string `json:"location" yaml:"location"`
+	NetworkZone                 string `json:"network_zone" yaml:"network-zone"`
+	ClusterNetworkIPRange       string `json:"cluster_network_ip_range" yaml:"cluster-network-ip-range"`
+	ClusterVSwitchSubnetIPRange string `json:"cluster_vswitch_subnet_ip_range" yaml:"cluster-vswitch-subnet-ip-range"`
+	ClusterSubnetIPRange        string `json:"cluster_subnet_ip_range" yaml:"cluster-subnet-ip-range"`
 }
 
 // HetznerRobotTalosConfig represents Talos configuration for Hetzner Robot clusters
 type HetznerRobotTalosConfig struct {
-	ClusterEndpoint           string `json:"cluster_endpoint" yaml:"cluster-endpoint"`
-	VLANID                    int    `json:"vlan_id" yaml:"vlan-id"`
-	VSwitchSubnetIPRange      string `json:"vswitch_subnet_ip_range" yaml:"vswitch-subnet-ip-range"`
+	ClusterEndpoint      string `json:"cluster_endpoint" yaml:"cluster-endpoint"`
+	VLANID               int    `json:"vlan_id" yaml:"vlan-id"`
+	VSwitchSubnetIPRange string `json:"vswitch_subnet_ip_range" yaml:"vswitch-subnet-ip-range"`
 }
 
 // LinodeConfig represents Linode-specific configuration

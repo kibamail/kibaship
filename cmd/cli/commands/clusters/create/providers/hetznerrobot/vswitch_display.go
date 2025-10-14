@@ -103,12 +103,12 @@ func createVSwitchesTable(vswitches []VSwitch, options VSwitchDisplayOptions) st
 			if row == 0 {
 				return headerStyle
 			}
-			
+
 			// Special styling for status column
 			if col == 3 && row > 0 && row-1 < len(vswitches) { // Status column
 				return statusStyle.Copy().Foreground(getVSwitchStatusColor(vswitches[row-1].Cancelled))
 			}
-			
+
 			return cellStyle
 		}).
 		Headers("ID", "Name", "VLAN", "Status")
@@ -163,15 +163,15 @@ func DisplayVSwitchesSummary(ctx context.Context, client *Client) error {
 	fmt.Printf("\n%s %s\n",
 		styles.HelpStyle.Render("📊"),
 		styles.HelpStyle.Render("VSwitch Summary:"))
-	
+
 	fmt.Printf("   %s %s\n",
 		styles.CommandStyle.Render("Total vswitches:"),
 		styles.DescriptionStyle.Render(fmt.Sprintf("%d", len(vswitches))))
-	
+
 	fmt.Printf("   %s %s\n",
 		styles.CommandStyle.Render("Available:"),
 		styles.DescriptionStyle.Render(fmt.Sprintf("%d", availableCount)))
-	
+
 	if cancelledCount > 0 {
 		fmt.Printf("   %s %s\n",
 			styles.CommandStyle.Render("Cancelled:"),
@@ -185,7 +185,7 @@ func DisplayVSwitchesSummary(ctx context.Context, client *Client) error {
 func displayCompactVSwitchList(vswitches []VSwitch) {
 	for i, vswitch := range vswitches {
 		statusColor := getVSwitchStatusColor(vswitch.Cancelled)
-		
+
 		vswitchInfo := lipgloss.NewStyle().
 			Foreground(styles.TextColor).
 			Render(fmt.Sprintf("  %d. %s (%s) - VLAN %d",
@@ -209,11 +209,11 @@ func DisplayNoVSwitchesMessage() {
 	fmt.Printf("\n%s %s\n",
 		styles.CommandStyle.Render("🔗"),
 		styles.DescriptionStyle.Render("No vswitches found in your account."))
-	
+
 	fmt.Printf("%s %s\n",
 		styles.HelpStyle.Render("ℹ️"),
 		styles.HelpStyle.Render("We will create a new vswitch to enable private networking between your servers."))
-	
+
 	fmt.Printf("%s %s\n",
 		styles.DescriptionStyle.Render("📝"),
 		styles.DescriptionStyle.Render("A vswitch allows your servers to communicate privately using internal IP addresses."))

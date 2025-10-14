@@ -113,7 +113,7 @@ func SelectServersInteractive(ctx context.Context, client *Client) (*ServerSelec
 		huh.NewGroup(
 			huh.NewNote().
 				Title("🚀 Kubernetes Cluster Setup").
-				Description("Select servers and cluster configuration for your Kubernetes cluster.\n" +
+				Description("Select servers and cluster configuration for your Kubernetes cluster.\n"+
 					"Make sure selected servers meet the requirements for your chosen cluster type."),
 
 			huh.NewSelect[string]().
@@ -208,7 +208,7 @@ func displayCompactServerList(servers []Server) {
 // createFormTheme creates a custom theme for the huh form
 func createFormTheme() *huh.Theme {
 	theme := huh.ThemeCharm()
-	
+
 	// Customize colors to match our existing style
 	theme.Focused.Title = theme.Focused.Title.Foreground(styles.PrimaryColor)
 	theme.Focused.NoteTitle = theme.Focused.NoteTitle.Foreground(styles.PrimaryColor)
@@ -216,7 +216,7 @@ func createFormTheme() *huh.Theme {
 	theme.Focused.Description = theme.Focused.Description.Foreground(styles.MutedColor)
 	theme.Focused.ErrorIndicator = theme.Focused.ErrorIndicator.Foreground(lipgloss.Color("#EF4444"))
 	theme.Focused.ErrorMessage = theme.Focused.ErrorMessage.Foreground(lipgloss.Color("#EF4444"))
-	
+
 	return theme
 }
 

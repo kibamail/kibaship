@@ -57,7 +57,7 @@ func SelectVSwitchInteractive(ctx context.Context, client *Client, clusterName s
 
 	// Create vswitch selection options
 	vswitchOptions := make([]huh.Option[string], 0, len(vswitches)+1)
-	
+
 	// Add existing vswitches as options
 	for _, vswitch := range vswitches {
 		if !vswitch.Cancelled {
@@ -68,7 +68,7 @@ func SelectVSwitchInteractive(ctx context.Context, client *Client, clusterName s
 			vswitchOptions = append(vswitchOptions, huh.NewOption(label, vswitch.ID))
 		}
 	}
-	
+
 	// Add "Create New" option with cluster name
 	createNewLabel := fmt.Sprintf("🆕 Create one for %s", clusterName)
 	vswitchOptions = append(vswitchOptions, huh.NewOption(createNewLabel, "CREATE_NEW"))
@@ -81,7 +81,7 @@ func SelectVSwitchInteractive(ctx context.Context, client *Client, clusterName s
 		huh.NewGroup(
 			huh.NewNote().
 				Title("🔗 VSwitch Selection").
-				Description("Select an existing vswitch for private networking between your servers,\n" +
+				Description("Select an existing vswitch for private networking between your servers,\n"+
 					"or choose to create a new one. VSwitches enable secure internal communication."),
 
 			huh.NewSelect[string]().
@@ -103,7 +103,7 @@ func SelectVSwitchInteractive(ctx context.Context, client *Client, clusterName s
 		// Generate a random VLAN ID in the valid range (4000-4091)
 		rand.Seed(time.Now().UnixNano())
 		randomVLAN := 4000 + rand.Intn(92) // 4000 to 4091
-		
+
 		return &VSwitchSelectionResult{
 			CreateNew:      true,
 			NewVSwitchName: clusterName,
@@ -134,11 +134,11 @@ func DisplayVSwitchSelectionSummary(result *VSwitchSelectionResult) {
 		fmt.Printf("\n%s %s\n",
 			styles.CommandStyle.Render("Action:"),
 			styles.DescriptionStyle.Render("Create new vswitch"))
-		
+
 		fmt.Printf("%s %s\n",
 			styles.CommandStyle.Render("Name:"),
 			styles.DescriptionStyle.Render(result.NewVSwitchName))
-		
+
 		fmt.Printf("%s %s\n",
 			styles.CommandStyle.Render("VLAN ID:"),
 			styles.DescriptionStyle.Render(strconv.Itoa(result.NewVSwitchVLAN)))
@@ -146,15 +146,15 @@ func DisplayVSwitchSelectionSummary(result *VSwitchSelectionResult) {
 		fmt.Printf("\n%s %s\n",
 			styles.CommandStyle.Render("Action:"),
 			styles.DescriptionStyle.Render("Use existing vswitch"))
-		
+
 		fmt.Printf("%s %s\n",
 			styles.CommandStyle.Render("Name:"),
 			styles.DescriptionStyle.Render(result.SelectedVSwitch.Name))
-		
+
 		fmt.Printf("%s %s\n",
 			styles.CommandStyle.Render("ID:"),
 			styles.DescriptionStyle.Render(result.SelectedVSwitch.ID))
-		
+
 		fmt.Printf("%s %s\n",
 			styles.CommandStyle.Render("VLAN ID:"),
 			styles.DescriptionStyle.Render(strconv.Itoa(result.SelectedVSwitch.VLAN)))
@@ -174,7 +174,7 @@ func CreateVSwitchIfNeeded(ctx context.Context, client *Client, result *VSwitchS
 
 	fmt.Printf("%s %s\n",
 		styles.CommandStyle.Render("📝"),
-		styles.DescriptionStyle.Render(fmt.Sprintf("Creating vswitch '%s' with VLAN %d", 
+		styles.DescriptionStyle.Render(fmt.Sprintf("Creating vswitch '%s' with VLAN %d",
 			result.NewVSwitchName, result.NewVSwitchVLAN)))
 
 	vswitch, err := client.CreateVSwitch(ctx, result.NewVSwitchName, result.NewVSwitchVLAN)
@@ -193,11 +193,11 @@ func CreateVSwitchIfNeeded(ctx context.Context, client *Client, result *VSwitchS
 	fmt.Printf("%s %s\n",
 		styles.CommandStyle.Render("ID:"),
 		styles.DescriptionStyle.Render(vswitch.ID))
-	
+
 	fmt.Printf("%s %s\n",
 		styles.CommandStyle.Render("Name:"),
 		styles.DescriptionStyle.Render(vswitch.Name))
-	
+
 	fmt.Printf("%s %s\n",
 		styles.CommandStyle.Render("VLAN:"),
 		styles.DescriptionStyle.Render(strconv.Itoa(vswitch.VLAN)))
@@ -242,7 +242,7 @@ func DisplayFinalConfirmation(serverResult *ServerSelectionResult, vswitchResult
 		huh.NewGroup(
 			huh.NewNote().
 				Title("⚡ Ready to Deploy").
-				Description("Review the configuration above.\n" +
+				Description("Review the configuration above.\n"+
 					"Press Enter to proceed with cluster creation or Esc to cancel."),
 
 			huh.NewConfirm().

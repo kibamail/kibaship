@@ -14,19 +14,19 @@ import (
 
 // AttachmentStatus represents the status of server attachment to vswitch
 type AttachmentStatus struct {
-	ServerID     string
-	ServerName   string
-	ServerIP     string
-	Status       string // "ready", "in process", "failed", "not attached"
-	IsAttached   bool
+	ServerID   string
+	ServerName string
+	ServerIP   string
+	Status     string // "ready", "in process", "failed", "not attached"
+	IsAttached bool
 }
 
 // VSwitchAttachmentResult contains the result of the attachment process
 type VSwitchAttachmentResult struct {
-	Success          bool
-	AttachedServers  []AttachmentStatus
-	FailedServers    []AttachmentStatus
-	TimeoutReached   bool
+	Success         bool
+	AttachedServers []AttachmentStatus
+	FailedServers   []AttachmentStatus
+	TimeoutReached  bool
 }
 
 const (
@@ -107,12 +107,12 @@ func ProcessVSwitchAttachment(ctx context.Context, client *Client, vswitchResult
 
 	// Step 3: Determine which servers need to be attached
 	attachmentStatuses := determineAttachmentStatuses(selectedServers, vswitchDetails.AttachedServers)
-	
+
 	// Step 4: Display initial status table
 	fmt.Printf("\n%s %s\n",
 		styles.TitleStyle.Render("📊"),
 		styles.TitleStyle.Render("Server Attachment Status"))
-	
+
 	displayAttachmentTable(attachmentStatuses)
 
 	// Step 5: Attach servers that are not attached
@@ -232,12 +232,12 @@ func displayAttachmentTable(statuses []AttachmentStatus) {
 			if row == 0 {
 				return headerStyle
 			}
-			
+
 			// Special styling for status column
 			if col == 3 && row > 0 && row-1 < len(statuses) {
 				return statusStyle.Copy().Foreground(getAttachmentStatusColor(statuses[row-1].Status))
 			}
-			
+
 			return cellStyle
 		}).
 		Headers("Server", "ID", "IP Address", "Attachment Status")

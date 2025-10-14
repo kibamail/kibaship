@@ -15,17 +15,17 @@ import (
 
 // RescueManagementResult contains the result of the rescue management process
 type RescueManagementResult struct {
-	Success          bool
-	ReadyServers     []ServerRescueStatus
-	FailedServers    []ServerRescueStatus
-	TimeoutReached   bool
-	RescuePasswords  map[string]string // serverID -> password
+	Success         bool
+	ReadyServers    []ServerRescueStatus
+	FailedServers   []ServerRescueStatus
+	TimeoutReached  bool
+	RescuePasswords map[string]string // serverID -> password
 }
 
 const (
-	RescueTimeout       = 6 * time.Minute
-	RescueCheckInterval = 15 * time.Second
-	ConnectivityTimeout = 6 * time.Minute
+	RescueTimeout             = 6 * time.Minute
+	RescueCheckInterval       = 15 * time.Second
+	ConnectivityTimeout       = 6 * time.Minute
 	ConnectivityCheckInterval = 10 * time.Second
 
 	// Rescue status constants
@@ -145,13 +145,13 @@ func checkAllRescueStatuses(ctx context.Context, client *Client, selectedServers
 		if err != nil {
 			return nil, fmt.Errorf("failed to get rescue status for server %s: %w", server.Name, err)
 		}
-		
+
 		// Set server name from our selected servers list
 		status.ServerName = server.Name
 		if status.ServerIP == "" {
 			status.ServerIP = server.IP
 		}
-		
+
 		statuses = append(statuses, *status)
 	}
 
@@ -514,7 +514,7 @@ func resetAllServers(ctx context.Context, client *Client, statuses []ServerRescu
 	// Reset all servers
 	for i := range statuses {
 		statuses[i].Status = RescueStatusResetting
-		
+
 		fmt.Printf("%s %s\n",
 			styles.DescriptionStyle.Render("  →"),
 			styles.DescriptionStyle.Render(fmt.Sprintf("Resetting %s (%s)...", statuses[i].ServerName, statuses[i].ServerID)))
@@ -556,12 +556,12 @@ func displayRescueStatusTable(statuses []ServerRescueStatus) {
 			if row == 0 {
 				return headerStyle
 			}
-			
+
 			// Special styling for rescue status column
 			if col == 3 && row > 0 && row-1 < len(statuses) {
 				return statusStyle.Copy().Foreground(getRescueStatusColor(statuses[row-1].InRescueMode, statuses[row-1].Status))
 			}
-			
+
 			return cellStyle
 		}).
 		Headers("Server", "ID", "IP Address", "Rescue Status")
@@ -660,9 +660,9 @@ func monitorServerReadiness(ctx context.Context, client *Client, statuses []Serv
 				styles.CommandStyle.Render("Timeout reached (6 minutes). Some servers may not be ready."))
 
 			return &RescueManagementResult{
-				Success:        false,
-				TimeoutReached: true,
-				FailedServers:  getFailedRescueServers(statuses),
+				Success:         false,
+				TimeoutReached:  true,
+				FailedServers:   getFailedRescueServers(statuses),
 				RescuePasswords: extractRescuePasswords(statuses),
 			}, fmt.Errorf("rescue timeout: not all servers ready within 6 minutes")
 		}
@@ -683,8 +683,8 @@ func monitorServerReadiness(ctx context.Context, client *Client, statuses []Serv
 
 		if anyFailed {
 			return &RescueManagementResult{
-				Success:       false,
-				FailedServers: failedServers,
+				Success:         false,
+				FailedServers:   failedServers,
 				RescuePasswords: extractRescuePasswords(statuses),
 			}, fmt.Errorf("server rescue failed: %s", getFailedRescueServerNames(failedServers))
 		}

@@ -81,6 +81,8 @@ func extractCredentials(config *config.CreateConfig) error {
 		return extractDigitalOceanCredentials(config, &terraformOutput)
 	case "kind":
 		return extractKindCredentials(config, &terraformOutput)
+	case "hetzner-robot":
+		return extractHetznerRobotCredentials(config)
 	default:
 		return fmt.Errorf("credential extraction not implemented for provider: %s", config.Provider)
 	}
@@ -217,6 +219,161 @@ func extractKindCredentials(config *config.CreateConfig, output *TerraformOutput
 	return nil
 }
 
+// extractHetznerRobotCredentials extracts and saves Hetzner Robot cluster credentials from Talos terraform
+func extractHetznerRobotCredentials(config *config.CreateConfig) error {
+	fmt.Printf("%s %s\n",
+		styles.CommandStyle.Render("🤖"),
+		styles.DescriptionStyle.Render("Processing Hetzner Robot (Talos) cluster credentials..."))
+
+	talosDir := filepath.Join(".kibaship", config.Name, "talos")
+
+	// Run terraform output to get all outputs in JSON format from talos directory
+	cmd := exec.Command("terraform", "output", "-json")
+	cmd.Dir = talosDir
+	cmd.Env = os.Environ()
+
+	// Execute terraform output command
+	output, err := cmd.Output()
+	if err != nil {
+		return fmt.Errorf("terraform output failed in talos directory: %w", err)
+	}
+
+	// Parse the JSON output
+	var outputs map[string]interface{}
+	if err := json.Unmarshal(output, &outputs); err != nil {
+		return fmt.Errorf("failed to parse terraform output JSON: %w", err)
+	}
+
+	credentialsDir := filepath.Join(".kibaship", config.Name, "credentials")
+
+	// Extract talos_config (handles both string format from new template and object format from old template)
+	if talosConfigOutput, ok := outputs["talos_config"].(map[string]interface{}); ok {
+		talosConfigPath := filepath.Join(credentialsDir, "talosconfig.yaml")
+
+		// Try new format: rendered YAML string
+		if talosConfigValue, ok := talosConfigOutput["value"].(string); ok && talosConfigValue != "" {
+			if err := os.WriteFile(talosConfigPath, []byte(talosConfigValue), 0600); err != nil {
+				return fmt.Errorf("failed to write talosconfig file: %w", err)
+			}
+			fmt.Printf("%s %s\n",
+				styles.TitleStyle.Render("✅"),
+				styles.TitleStyle.Render("Talos config saved successfully!"))
+			fmt.Printf("%s %s\n",
+				styles.CommandStyle.Render("📁"),
+				styles.DescriptionStyle.Render(fmt.Sprintf("File: %s", talosConfigPath)))
+		} else if talosConfigObj, ok := talosConfigOutput["value"].(map[string]interface{}); ok {
+			// Old format: object with ca_certificate, client_certificate, client_key
+			// Construct talosconfig YAML manually
+			fmt.Printf("%s %s\n",
+				styles.CommandStyle.Render("⚠️"),
+				styles.DescriptionStyle.Render("Note: Using legacy talos_config format. Consider regenerating Terraform files."))
+
+			caCert, _ := talosConfigObj["ca_certificate"].(string)
+			clientCert, _ := talosConfigObj["client_certificate"].(string)
+			clientKey, _ := talosConfigObj["client_key"].(string)
+
+			if caCert != "" && clientCert != "" && clientKey != "" {
+				// Get cluster info for endpoints
+				endpoints := []string{}
+				if clusterInfoOutput, ok := outputs["cluster_info"].(map[string]interface{}); ok {
+					if clusterInfoValue, ok := clusterInfoOutput["value"].(map[string]interface{}); ok {
+						if cpNodes, ok := clusterInfoValue["control_plane_nodes"].([]interface{}); ok {
+							for _, node := range cpNodes {
+								if nodeMap, ok := node.(map[string]interface{}); ok {
+									if ip, ok := nodeMap["ip"].(string); ok {
+										endpoints = append(endpoints, ip)
+									}
+								}
+							}
+						}
+					}
+				}
+
+				// Construct talosconfig YAML
+				talosConfigYAML := fmt.Sprintf(`context: %s
+contexts:
+    %s:
+        endpoints:
+%s
+        ca: %s
+        crt: %s
+        key: %s
+`, config.Name, config.Name, formatEndpointsYAML(endpoints), caCert, clientCert, clientKey)
+
+				if err := os.WriteFile(talosConfigPath, []byte(talosConfigYAML), 0600); err != nil {
+					return fmt.Errorf("failed to write talosconfig file: %w", err)
+				}
+				fmt.Printf("%s %s\n",
+					styles.TitleStyle.Render("✅"),
+					styles.TitleStyle.Render("Talos config saved successfully!"))
+				fmt.Printf("%s %s\n",
+					styles.CommandStyle.Render("📁"),
+					styles.DescriptionStyle.Render(fmt.Sprintf("File: %s", talosConfigPath)))
+			}
+		}
+	}
+
+	// Extract kubeconfig
+	if kubeconfigOutput, ok := outputs["kubeconfig"].(map[string]interface{}); ok {
+		if kubeconfigValue, ok := kubeconfigOutput["value"].(string); ok && kubeconfigValue != "" {
+			kubeconfigPath := filepath.Join(credentialsDir, "kubeconfig.yaml")
+			if err := os.WriteFile(kubeconfigPath, []byte(kubeconfigValue), 0600); err != nil {
+				return fmt.Errorf("failed to write kubeconfig file: %w", err)
+			}
+			fmt.Printf("%s %s\n",
+				styles.TitleStyle.Render("✅"),
+				styles.TitleStyle.Render("Kubeconfig saved successfully!"))
+			fmt.Printf("%s %s\n",
+				styles.CommandStyle.Render("📁"),
+				styles.DescriptionStyle.Render(fmt.Sprintf("File: %s", kubeconfigPath)))
+		}
+	}
+
+	// Extract control plane machine configurations
+	if cpConfigsOutput, ok := outputs["control_plane_machine_configurations"].(map[string]interface{}); ok {
+		if cpConfigsValue, ok := cpConfigsOutput["value"].(map[string]interface{}); ok {
+			fmt.Printf("\n%s %s\n",
+				styles.HelpStyle.Render("🖥️"),
+				styles.HelpStyle.Render("Extracting control plane machine configurations..."))
+
+			for serverID, machineConfig := range cpConfigsValue {
+				if machineConfigStr, ok := machineConfig.(string); ok && machineConfigStr != "" {
+					machineConfigPath := filepath.Join(credentialsDir, fmt.Sprintf("cp-%s-machineconfig.yaml", serverID))
+					if err := os.WriteFile(machineConfigPath, []byte(machineConfigStr), 0600); err != nil {
+						return fmt.Errorf("failed to write control plane machine config for server %s: %w", serverID, err)
+					}
+					fmt.Printf("%s %s\n",
+						styles.TitleStyle.Render("✅"),
+						styles.DescriptionStyle.Render(fmt.Sprintf("Control plane machine config saved: %s", machineConfigPath)))
+				}
+			}
+		}
+	}
+
+	// Extract worker machine configurations
+	if workerConfigsOutput, ok := outputs["worker_machine_configurations"].(map[string]interface{}); ok {
+		if workerConfigsValue, ok := workerConfigsOutput["value"].(map[string]interface{}); ok && len(workerConfigsValue) > 0 {
+			fmt.Printf("\n%s %s\n",
+				styles.HelpStyle.Render("💼"),
+				styles.HelpStyle.Render("Extracting worker machine configurations..."))
+
+			for serverID, machineConfig := range workerConfigsValue {
+				if machineConfigStr, ok := machineConfig.(string); ok && machineConfigStr != "" {
+					machineConfigPath := filepath.Join(credentialsDir, fmt.Sprintf("worker-%s-machineconfig.yaml", serverID))
+					if err := os.WriteFile(machineConfigPath, []byte(machineConfigStr), 0600); err != nil {
+						return fmt.Errorf("failed to write worker machine config for server %s: %w", serverID, err)
+					}
+					fmt.Printf("%s %s\n",
+						styles.TitleStyle.Render("✅"),
+						styles.DescriptionStyle.Render(fmt.Sprintf("Worker machine config saved: %s", machineConfigPath)))
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
 // validateKubeconfig performs basic validation on the kubeconfig content
 func validateKubeconfig(content string) error {
 	// Basic validation - check for required fields
@@ -340,6 +497,19 @@ func showUsageInstructions(config *config.CreateConfig) {
 		fmt.Printf("   %s\n",
 			styles.TitleStyle.Render("curl https://localhost:14443"))
 	}
+}
+
+// formatEndpointsYAML formats a list of endpoints for talosconfig YAML
+func formatEndpointsYAML(endpoints []string) string {
+	if len(endpoints) == 0 {
+		return "            - localhost"
+	}
+
+	var formatted strings.Builder
+	for _, endpoint := range endpoints {
+		formatted.WriteString(fmt.Sprintf("            - %s\n", endpoint))
+	}
+	return strings.TrimSuffix(formatted.String(), "\n")
 }
 
 // checkTerraformInstalled checks if terraform is available in PATH

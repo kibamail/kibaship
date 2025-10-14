@@ -287,7 +287,7 @@ data "talos_client_configuration" "talosconfig" {
 # Talos Configuration Outputs
 output "talos_config" {
   description = "Talos client configuration for managing the cluster"
-  value       = talos_machine_secrets.machine_secrets.client_configuration
+  value       = data.talos_client_configuration.talosconfig.talos_config
   sensitive   = true
 }
 

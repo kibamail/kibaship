@@ -128,16 +128,21 @@ func storeSelection(cfg *config.CreateConfig, selection *CompleteSelectionResult
 		}
 	}
 
-	// Store VSwitch ID if available
+	// Store VSwitch ID and VLAN ID if available
 	if selection.VSwitchSelection != nil && selection.VSwitchSelection.SelectedVSwitch != nil {
 		cfg.HetznerRobot.VSwitchID = selection.VSwitchSelection.SelectedVSwitch.ID
+		cfg.HetznerRobot.VLANID = selection.VSwitchSelection.SelectedVSwitch.VLAN
+		fmt.Printf("%s %s %d\n",
+			styles.CommandStyle.Render("🔗"),
+			styles.DescriptionStyle.Render("Stored VLAN ID:"),
+			cfg.HetznerRobot.VLANID)
 	}
 
 	// Store network configuration
 	if selection.NetworkRanges != nil {
 		cfg.HetznerRobot.NetworkConfig = &config.HetznerRobotNetworkConfig{
-			Location:                    "nbg1",                                                       // Default location
-			NetworkZone:                 "eu-central",                                                 // Default network zone
+			Location:                    "nbg1",       // Default location
+			NetworkZone:                 "eu-central", // Default network zone
 			ClusterNetworkIPRange:       selection.NetworkRanges.ClusterNetworkIPRange,
 			ClusterVSwitchSubnetIPRange: selection.NetworkRanges.ClusterVSwitchSubnetIPRange,
 			ClusterSubnetIPRange:        selection.NetworkRanges.ClusterSubnetIPRange,
@@ -167,6 +172,75 @@ func determineServerRole(index int, clusterType string, totalServers int) string
 	}
 }
 
+// storeCloudOutputs stores the cloud phase outputs (like load balancer IPs) in the config
+func storeCloudOutputs(cfg *config.CreateConfig, outputs map[string]interface{}) error {
+	if cfg.HetznerRobot == nil {
+		return fmt.Errorf("HetznerRobot config is nil")
+	}
+
+	fmt.Printf("%s %s\n",
+		styles.CommandStyle.Render("💾"),
+		styles.DescriptionStyle.Render("Storing cloud outputs in config..."))
+
+	// Extract kube_load_balancer_public_ip output
+	// The structure from Terraform is: kube_load_balancer_public_ip = { "value" = "65.108.x.x", "sensitive" = false }
+	var kubeLoadBalancerIP string
+	if kubeLoadBalancerIPRaw, ok := outputs["kube_load_balancer_public_ip"]; ok {
+		if kubeLoadBalancerIPMap, ok := kubeLoadBalancerIPRaw.(map[string]interface{}); ok {
+			// Extract the "value" from the Terraform output structure
+			if value, ok := kubeLoadBalancerIPMap["value"].(string); ok && value != "" {
+				kubeLoadBalancerIP = value
+				fmt.Printf("%s %s %s\n",
+					styles.CommandStyle.Render("✅"),
+					styles.DescriptionStyle.Render("Kubernetes API Load Balancer IP:"),
+					styles.CommandStyle.Render(kubeLoadBalancerIP))
+			}
+		}
+	}
+
+	if kubeLoadBalancerIP == "" {
+		return fmt.Errorf("failed to extract Kubernetes API load balancer IP from cloud outputs")
+	}
+
+	// Get VLAN ID from the stored configuration (set during server selection)
+	vlanID := cfg.HetznerRobot.VLANID
+	if vlanID == 0 {
+		return fmt.Errorf("VLAN ID not found in configuration - ensure vSwitch was selected properly")
+	}
+	fmt.Printf("%s %s %d\n",
+		styles.CommandStyle.Render("✅"),
+		styles.DescriptionStyle.Render("Using VLAN ID:"),
+		vlanID)
+
+	// Get vSwitch subnet IP range
+	var vswitchSubnetIPRange string
+	if cfg.HetznerRobot.NetworkConfig != nil {
+		vswitchSubnetIPRange = cfg.HetznerRobot.NetworkConfig.ClusterVSwitchSubnetIPRange
+	}
+
+	// Initialize TalosConfig with discovered values
+	cfg.HetznerRobot.TalosConfig = &config.HetznerRobotTalosConfig{
+		ClusterEndpoint:      fmt.Sprintf("https://%s:6443", kubeLoadBalancerIP),
+		VLANID:               vlanID, // Will be populated from vSwitch data
+		VSwitchSubnetIPRange: vswitchSubnetIPRange,
+	}
+
+	fmt.Printf("%s %s\n",
+		styles.CommandStyle.Render("✅"),
+		styles.DescriptionStyle.Render("TalosConfig initialized:"))
+	fmt.Printf("  %s %s\n",
+		styles.DescriptionStyle.Render("Cluster Endpoint:"),
+		styles.CommandStyle.Render(cfg.HetznerRobot.TalosConfig.ClusterEndpoint))
+	fmt.Printf("  %s %s\n",
+		styles.DescriptionStyle.Render("VSwitch Subnet IP Range:"),
+		styles.CommandStyle.Render(cfg.HetznerRobot.TalosConfig.VSwitchSubnetIPRange))
+	fmt.Printf("  %s %d\n",
+		styles.DescriptionStyle.Render("VLAN ID:"),
+		cfg.HetznerRobot.TalosConfig.VLANID)
+
+	return nil
+}
+
 // storeProvisionOutputs stores the provision phase outputs (like discovered disks) in the config
 func storeProvisionOutputs(cfg *config.CreateConfig, outputs map[string]interface{}) error {
 	if cfg.HetznerRobot == nil {
@@ -177,32 +251,67 @@ func storeProvisionOutputs(cfg *config.CreateConfig, outputs map[string]interfac
 		styles.CommandStyle.Render("💾"),
 		styles.DescriptionStyle.Render("Storing provision outputs in config..."))
 
-	// Extract discovered_disks output
-	// The structure from Terraform is: discovered_disks = { "server_id" = { "value" = "/dev/sda", "sensitive" = false } }
-	if discoveredDisksRaw, ok := outputs["discovered_disks"]; ok {
-		if discoveredDisksMap, ok := discoveredDisksRaw.(map[string]interface{}); ok {
-			// Extract the "value" from the Terraform output structure
-			if valueMap, ok := discoveredDisksMap["value"].(map[string]interface{}); ok {
-				// Update each server with its discovered disk
-				for i := range cfg.HetznerRobot.SelectedServers {
-					server := &cfg.HetznerRobot.SelectedServers[i]
+	// FIX: Extract disk discovery outputs per server
+	// Terraform outputs individual server disk discovery: server_<ID>_disk_discovery
+	// Structure: server_2664303_disk_discovery = {
+	//   "value" = {
+	//     "all_devices" = [...]
+	//     "talos_installation" = {
+	//       "device" = "nvme0n1"
+	//       "disk_by_id" = "nvme-SAMSUNG_..."
+	//       "disk_by_id_path" = "/dev/disk/by-id/nvme-SAMSUNG_..."
+	//       "full_path" = "/dev/nvme0n1"
+	//     }
+	//   }
+	// }
+	for i := range cfg.HetznerRobot.SelectedServers {
+		server := &cfg.HetznerRobot.SelectedServers[i]
 
-					// Get disk for this server
-					if diskPath, ok := valueMap[server.ID].(string); ok && diskPath != "" {
-						server.InstallationDisk = diskPath
-						fmt.Printf("%s %s %s: %s\n",
-							styles.CommandStyle.Render("✅"),
-							styles.DescriptionStyle.Render("Stored disk for"),
-							styles.CommandStyle.Render(server.Name),
-							styles.CommandStyle.Render(diskPath))
+		// Look for server-specific disk discovery output
+		diskOutputKey := fmt.Sprintf("server_%s_disk_discovery", server.ID)
+
+		if diskDiscoveryRaw, ok := outputs[diskOutputKey]; ok {
+			// Extract the value from Terraform output structure
+			if diskDiscoveryMap, ok := diskDiscoveryRaw.(map[string]interface{}); ok {
+				if valueMap, ok := diskDiscoveryMap["value"].(map[string]interface{}); ok {
+					// Extract talos_installation nested object
+					if talosInstallation, ok := valueMap["talos_installation"].(map[string]interface{}); ok {
+						// Prefer disk_by_id_path, fallback to full_path
+						var diskPath string
+						if diskByIDPath, ok := talosInstallation["disk_by_id_path"].(string); ok && diskByIDPath != "" {
+							diskPath = diskByIDPath
+						} else if fullPath, ok := talosInstallation["full_path"].(string); ok && fullPath != "" {
+							diskPath = fullPath
+						}
+
+						if diskPath != "" {
+							server.InstallationDisk = diskPath
+							fmt.Printf("%s %s %s: %s\n",
+								styles.CommandStyle.Render("✅"),
+								styles.DescriptionStyle.Render("Stored disk for"),
+								styles.CommandStyle.Render(server.Name),
+								styles.CommandStyle.Render(diskPath))
+						} else {
+							fmt.Printf("%s %s %s (no disk path in talos_installation)\n",
+								styles.CommandStyle.Render("⚠️"),
+								styles.DescriptionStyle.Render("Warning: Could not extract disk path for"),
+								styles.CommandStyle.Render(server.Name))
+						}
+					} else {
+						fmt.Printf("%s %s %s (no talos_installation object)\n",
+							styles.CommandStyle.Render("⚠️"),
+							styles.DescriptionStyle.Render("Warning: Could not extract talos_installation for"),
+							styles.CommandStyle.Render(server.Name))
 					}
 				}
 			}
+		} else {
+			fmt.Printf("%s %s %s (key: %s)\n",
+				styles.CommandStyle.Render("⚠️"),
+				styles.DescriptionStyle.Render("Warning: No disk discovery output found for"),
+				styles.CommandStyle.Render(server.Name),
+				diskOutputKey)
 		}
-	} else {
-		fmt.Printf("%s %s\n",
-			styles.CommandStyle.Render("⚠️"),
-			styles.DescriptionStyle.Render("Warning: No discovered_disks output found"))
 	}
 
 	return nil
@@ -217,6 +326,17 @@ func storeNetworkDiscovery(cfg *config.CreateConfig, discovery *TalosDiscoveryRe
 	fmt.Printf("%s %s\n",
 		styles.CommandStyle.Render("💾"),
 		styles.DescriptionStyle.Render("Storing discovered network information in config..."))
+
+	// DEBUG: Log discovery result structure
+	fmt.Printf("\n%s %s\n",
+		styles.CommandStyle.Render("🔍"),
+		styles.CommandStyle.Render("DEBUG: Discovery Result:"))
+	fmt.Printf("  %s %d\n",
+		styles.DescriptionStyle.Render("Total servers in discovery:"),
+		len(discovery.ServersInfo))
+	fmt.Printf("  %s %v\n",
+		styles.DescriptionStyle.Render("Discovery success:"),
+		discovery.Success)
 
 	// Calculate the vSwitch gateway (first IP in the vSwitch subnet)
 	// This is the same for all servers since they all connect to the same vSwitch
@@ -241,39 +361,119 @@ func storeNetworkDiscovery(cfg *config.CreateConfig, discovery *TalosDiscoveryRe
 	for i := range cfg.HetznerRobot.SelectedServers {
 		server := &cfg.HetznerRobot.SelectedServers[i]
 
+		fmt.Printf("\n%s %s %s (ID: %s)\n",
+			styles.CommandStyle.Render("🔍"),
+			styles.DescriptionStyle.Render("Processing server:"),
+			styles.CommandStyle.Render(server.Name),
+			styles.CommandStyle.Render(server.ID))
+
 		// Get discovery info for this server
 		serverInfo, exists := discovery.ServersInfo[server.ID]
-		if !exists || !serverInfo.IsOnline {
+		if !exists {
 			fmt.Printf("%s %s %s - %s\n",
 				styles.CommandStyle.Render("⚠️"),
-				styles.DescriptionStyle.Render("Warning: No network info for server"),
+				styles.DescriptionStyle.Render("Warning: No discovery info found for server"),
 				styles.CommandStyle.Render(server.Name),
-				styles.DescriptionStyle.Render("skipping"))
+				styles.DescriptionStyle.Render("key not in ServersInfo map"))
 			continue
 		}
+
+		if !serverInfo.IsOnline {
+			fmt.Printf("%s %s %s - %s\n",
+				styles.CommandStyle.Render("⚠️"),
+				styles.DescriptionStyle.Render("Warning: Server"),
+				styles.CommandStyle.Render(server.Name),
+				styles.DescriptionStyle.Render("is marked as offline"))
+			continue
+		}
+
+		// DEBUG: Log what we received from discovery
+		fmt.Printf("  %s\n", styles.DescriptionStyle.Render("Discovered values:"))
+		fmt.Printf("    PublicInterface: '%s'\n", serverInfo.PublicInterface)
+		fmt.Printf("    PublicGW: '%s'\n", serverInfo.PublicGW)
+		fmt.Printf("    PublicCIDR: '%s'\n", serverInfo.PublicCIDR)
+		fmt.Printf("    PrivateInterface: '%s'\n", serverInfo.PrivateInterface)
+		fmt.Printf("    PrivateGW: '%s'\n", serverInfo.PrivateGW)
+		fmt.Printf("    PrivateCIDR: '%s'\n", serverInfo.PrivateCIDR)
 
 		// Store public gateway
 		if serverInfo.PublicGW != "" {
 			server.PublicIPv4Gateway = serverInfo.PublicGW
+			fmt.Printf("  %s PublicIPv4Gateway = %s\n",
+				styles.CommandStyle.Render("✅"),
+				serverInfo.PublicGW)
+		} else {
+			fmt.Printf("  %s PublicIPv4Gateway (empty, not stored)\n",
+				styles.CommandStyle.Render("⚠️"))
 		}
 
 		// Store private gateway (vSwitch gateway - same for all servers)
 		if vswitchGateway != "" {
 			server.PrivateIPv4Gateway = vswitchGateway
+			fmt.Printf("  %s PrivateIPv4Gateway = %s\n",
+				styles.CommandStyle.Render("✅"),
+				vswitchGateway)
+		} else {
+			fmt.Printf("  %s PrivateIPv4Gateway (vSwitch gateway not calculated)\n",
+				styles.CommandStyle.Render("⚠️"))
 		}
 
 		// Store public and private addresses with CIDR notation
 		if serverInfo.PublicCIDR != "" {
 			server.PublicAddressSubnet = serverInfo.PublicCIDR
+			fmt.Printf("  %s PublicAddressSubnet = %s\n",
+				styles.CommandStyle.Render("✅"),
+				serverInfo.PublicCIDR)
+		} else {
+			fmt.Printf("  %s PublicAddressSubnet (empty, not stored)\n",
+				styles.CommandStyle.Render("⚠️"))
 		}
 
-		if serverInfo.PrivateCIDR != "" {
+		// Calculate PrivateAddressSubnet manually from server.PrivateIP + vSwitch CIDR
+		// Since the VLAN interface doesn't exist yet, we can't discover it via Talos
+		// Format: {server.PrivateIP}/{CIDR-from-vSwitch-subnet}
+		// Example: if PrivateIP="172.21.224.10" and vSwitch subnet="172.21.224.0/20", result="172.21.224.10/20"
+		if server.PrivateIP != "" && cfg.HetznerRobot.NetworkConfig != nil && cfg.HetznerRobot.NetworkConfig.ClusterVSwitchSubnetIPRange != "" {
+			// Extract CIDR mask from vSwitch subnet (e.g., "/20" from "172.21.224.0/20")
+			_, ipNet, err := net.ParseCIDR(cfg.HetznerRobot.NetworkConfig.ClusterVSwitchSubnetIPRange)
+			if err == nil {
+				maskSize, _ := ipNet.Mask.Size()
+				privateAddressSubnet := fmt.Sprintf("%s/%d", server.PrivateIP, maskSize)
+				server.PrivateAddressSubnet = privateAddressSubnet
+				fmt.Printf("  %s PrivateAddressSubnet = %s (calculated from PrivateIP + vSwitch CIDR)\n",
+					styles.CommandStyle.Render("✅"),
+					privateAddressSubnet)
+			} else {
+				fmt.Printf("  %s PrivateAddressSubnet (failed to calculate: %v)\n",
+					styles.CommandStyle.Render("⚠️"), err)
+			}
+		} else if serverInfo.PrivateCIDR != "" {
+			// Fallback: use discovered private CIDR if available (for future when VLAN is already configured)
 			server.PrivateAddressSubnet = serverInfo.PrivateCIDR
+			fmt.Printf("  %s PrivateAddressSubnet = %s (discovered)\n",
+				styles.CommandStyle.Render("✅"),
+				serverInfo.PrivateCIDR)
+		} else {
+			fmt.Printf("  %s PrivateAddressSubnet (not calculated: PrivateIP=%q, vSwitch subnet=%q)\n",
+				styles.CommandStyle.Render("⚠️"),
+				server.PrivateIP,
+				func() string {
+					if cfg.HetznerRobot.NetworkConfig != nil {
+						return cfg.HetznerRobot.NetworkConfig.ClusterVSwitchSubnetIPRange
+					}
+					return ""
+				}())
 		}
 
 		// Store public network interface name
 		if serverInfo.PublicInterface != "" {
 			server.PublicNetworkInterface = serverInfo.PublicInterface
+			fmt.Printf("  %s PublicNetworkInterface = %s\n",
+				styles.CommandStyle.Render("✅"),
+				serverInfo.PublicInterface)
+		} else {
+			fmt.Printf("  %s PublicNetworkInterface (empty, not stored)\n",
+				styles.CommandStyle.Render("⚠️"))
 		}
 
 		// Note: PrivateNetworkInterface field may need to be added to HetznerRobotServer config struct
@@ -281,7 +481,7 @@ func storeNetworkDiscovery(cfg *config.CreateConfig, discovery *TalosDiscoveryRe
 
 		fmt.Printf("%s %s %s\n",
 			styles.CommandStyle.Render("✅"),
-			styles.DescriptionStyle.Render("Stored network info for"),
+			styles.DescriptionStyle.Render("Completed storing network info for"),
 			styles.CommandStyle.Render(server.Name))
 	}
 
@@ -619,6 +819,29 @@ func RunClusterCreationFlow(cfg *config.CreateConfig) {
 	fmt.Printf("\n%s %s\n",
 		styles.TitleStyle.Render("✅"),
 		styles.TitleStyle.Render("Cloud infrastructure created successfully!"))
+
+	// Read Terraform outputs from cloud phase
+	fmt.Printf("\n%s %s\n",
+		styles.CommandStyle.Render("📊"),
+		styles.HelpStyle.Render("Reading cloud Terraform outputs..."))
+	cloudOutputs, err := automation.ReadCloudTerraformOutputs(cfg)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%s %s\n",
+			styles.CommandStyle.Render("❌"),
+			styles.CommandStyle.Render(fmt.Sprintf("Failed to read cloud outputs: %v", err)))
+		os.Exit(1)
+	}
+	fmt.Printf("%s %s\n",
+		styles.CommandStyle.Render("✅"),
+		styles.DescriptionStyle.Render(fmt.Sprintf("Read %d output(s) from cloud phase", len(cloudOutputs))))
+
+	// Store cloud outputs and initialize TalosConfig
+	if err := storeCloudOutputs(cfg, cloudOutputs); err != nil {
+		fmt.Fprintf(os.Stderr, "%s %s\n",
+			styles.CommandStyle.Render("❌"),
+			styles.CommandStyle.Render(fmt.Sprintf("Failed to store cloud outputs: %v", err)))
+		os.Exit(1)
+	}
 
 	// =====================================
 	// PHASE 3: SERVER DISCOVERY (Wait for servers and discover network info)

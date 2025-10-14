@@ -130,9 +130,15 @@ func runCredentialsCommand(cmd *cobra.Command, args []string) {
 	fmt.Printf("%s %s\n",
 		styles.CommandStyle.Render("📝"),
 		styles.DescriptionStyle.Render("Running: terraform output"))
+
+	// Show appropriate working directory based on provider
+	workingDir := "provision"
+	if config.Provider == "hetzner-robot" {
+		workingDir = "talos"
+	}
 	fmt.Printf("%s %s\n\n",
 		styles.CommandStyle.Render("📂"),
-		styles.DescriptionStyle.Render(fmt.Sprintf("Working directory: %s/provision", clusterDir)))
+		styles.DescriptionStyle.Render(fmt.Sprintf("Working directory: %s/%s", clusterDir, workingDir)))
 
 	if err := extractCredentials(config); err != nil {
 		fmt.Fprintf(os.Stderr, "\n%s %s\n",

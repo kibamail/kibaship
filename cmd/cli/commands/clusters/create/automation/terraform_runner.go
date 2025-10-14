@@ -664,6 +664,30 @@ func ReadProvisionTerraformOutputs(config *config.CreateConfig) (map[string]inte
 	return outputs, nil
 }
 
+// ReadCloudTerraformOutputs reads the Terraform outputs from the cloud phase
+func ReadCloudTerraformOutputs(config *config.CreateConfig) (map[string]interface{}, error) {
+	cloudDir := filepath.Join(".kibaship", config.Name, "cloud")
+
+	// Create terraform output command to get JSON output
+	cmd := exec.Command("terraform", "output", "-json")
+	cmd.Dir = cloudDir
+	cmd.Env = os.Environ()
+
+	// Capture output
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("failed to read terraform outputs: %w", err)
+	}
+
+	// Parse JSON output
+	var outputs map[string]interface{}
+	if err := json.Unmarshal(output, &outputs); err != nil {
+		return nil, fmt.Errorf("failed to parse terraform outputs: %w", err)
+	}
+
+	return outputs, nil
+}
+
 // RunCloudTerraformInit runs terraform init in the cloud directory (for Hetzner Robot)
 func RunCloudTerraformInit(config *config.CreateConfig) error {
 	cloudDir := filepath.Join(".kibaship", config.Name, "cloud")
