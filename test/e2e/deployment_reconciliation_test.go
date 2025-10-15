@@ -715,7 +715,7 @@ spec:
     name: %s
   promote: true
   gitRepository:
-    commitSHA: "80243e8b34fed099f6b0288b396bcda9a3776e9f"
+    commitSHA: "f399394b8dedbfc9d759bbbcc19e26001b4b55d3"
     branch: "main"
 `, deploymentName, projectNS, deploymentUUID, deploymentName, projectUUID, applicationUUID, workspaceUUIDConst, envUUID, applicationName)
 

@@ -46,8 +46,9 @@ const (
 	ApplicationDomainLabelDomainType = "platform.operator.kibaship.com/domain-type"
 )
 const (
-	certificatesNamespace = "certificates"
-	clusterIssuerName     = "certmanager-acme-issuer"
+	certificatesNamespace   = "certificates"
+	clusterIssuerName       = "certmanager-acme-issuer"
+	ingressWildcardCertName = "ingress-kibaship-certificate"
 )
 
 // ApplicationDomainReconciler reconciles an ApplicationDomain object
@@ -119,7 +120,7 @@ func (r *ApplicationDomainReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		logger.Info("Provisioned individual certificate for custom domain", "certificate", certName, "namespace", certNS)
 	} else {
 		// Default domains: reference the wildcard certificate
-		certName = "tenant-wildcard-certificate"
+		certName = ingressWildcardCertName
 		certNS = certificatesNamespace
 		logger.Info("Using wildcard certificate for default domain", "certificate", certName, "namespace", certNS)
 	}

@@ -114,8 +114,9 @@ func generateInnoDBCluster(deployment *platformv1alpha1.Deployment, app *platfor
 				},
 			},
 			"spec": map[string]interface{}{
-				"secretName": secretName,
-				"instances":  1,
+				"secretName":       secretName,
+				"instances":        1,
+				"tlsUseSelfSigned": true,
 				"datadirVolumeClaimTemplate": map[string]interface{}{
 					"metadata": map[string]interface{}{
 						"labels": map[string]interface{}{
@@ -269,8 +270,9 @@ func generateMySQLCluster(deployment *platformv1alpha1.Deployment, app *platform
 				},
 			},
 			"spec": map[string]interface{}{
-				"secretName": secretName,
-				"instances":  instances,
+				"secretName":       secretName,
+				"instances":        instances,
+				"tlsUseSelfSigned": true,
 				"datadirVolumeClaimTemplate": map[string]interface{}{
 					"metadata": map[string]interface{}{
 						"labels": map[string]interface{}{

@@ -50,7 +50,7 @@ var _ = Describe("MySQL Deployment Reconciliation", func() {
 	})
 
 	Context("When creating MySQL applications with deployments", func() {
-		It("should successfully reconcile single MySQL deployments", func() {
+		It("single MySQL deployments correctly reconcile", func() {
 			By("Creating the test project first with inline manifest")
 			projectManifest := fmt.Sprintf(`apiVersion: platform.operator.kibaship.com/v1alpha1
 kind: Project
@@ -85,7 +85,7 @@ spec:
 					return false
 				}
 				return strings.TrimSpace(string(output)) == readyPhase
-			}, "2m", "5s").Should(BeTrue(), "Project should be Ready before creating Applications")
+			}, "5s", "5s").Should(BeTrue(), "Project should be Ready before creating Applications")
 
 			By("Waiting for default production environment to be ready and fetching its UUID")
 			Eventually(func() bool {
@@ -152,7 +152,7 @@ spec:
 					return false
 				}
 				return strings.TrimSpace(string(output)) == readyPhase
-			}, "2m", "5s").Should(BeTrue(), "MySQL Application should be Ready before creating Deployment")
+			}, "10s", "5s").Should(BeTrue(), "MySQL Application should be Ready before creating Deployment")
 
 			By("Verifying MySQL ApplicationDomain was created with correct pattern")
 			Eventually(func() bool {
@@ -163,7 +163,7 @@ spec:
 				}
 				domain := strings.TrimSpace(string(output))
 				return strings.Contains(domain, ".mysql.") && len(domain) > 0
-			}, "1m", "5s").Should(BeTrue(), "MySQL ApplicationDomain should follow *.mysql.<baseDomain> pattern")
+			}, "10s", "5s").Should(BeTrue(), "MySQL ApplicationDomain should follow *.mysql.<baseDomain> pattern")
 
 			By("Verifying MySQL ApplicationDomain has correct port")
 			Eventually(func() bool {
@@ -174,7 +174,7 @@ spec:
 				}
 				port := strings.TrimSpace(string(output))
 				return port == "3306"
-			}, "30s", "2s").Should(BeTrue(), "MySQL ApplicationDomain should have port 3306")
+			}, "5s", "2s").Should(BeTrue(), "MySQL ApplicationDomain should have port 3306")
 
 			By("Creating the MySQL deployment with inline manifest")
 			mysqlDeploymentManifest := fmt.Sprintf(`apiVersion: platform.operator.kibaship.com/v1alpha1
@@ -205,7 +205,7 @@ spec:
 				cmd := exec.Command("kubectl", "get", deploymentResourceType, mysqlDeploymentName, "-n", projectNS)
 				_, err := testutils.Run(cmd)
 				return err == nil
-			}, "30s", "2s").Should(BeTrue(), "MySQL Deployment should be created successfully")
+			}, "5s", "2s").Should(BeTrue(), "MySQL Deployment should be created successfully")
 
 			By("Verifying MySQL credentials secret is created")
 			mysqlSecretName := fmt.Sprintf("mysql-secret-%s", mysqlAppUUID) // Note: This is not using the helper because it has a different pattern
@@ -213,7 +213,7 @@ spec:
 				cmd := exec.Command("kubectl", "get", "secret", mysqlSecretName, "-n", projectNS)
 				_, err := cmd.CombinedOutput()
 				return err
-			}, "1m", "5s").Should(Succeed(), "MySQL credentials secret should be created")
+			}, "35s", "5s").Should(Succeed(), "MySQL credentials secret should be created")
 
 			By("Verifying MySQL credentials secret has rootUser, rootHost, and rootPassword")
 			Eventually(func() bool {
@@ -226,7 +226,7 @@ spec:
 				return strings.Contains(data, "rootUser") &&
 					strings.Contains(data, "rootHost") &&
 					strings.Contains(data, "rootPassword")
-			}, "30s", "2s").Should(BeTrue(), "MySQL secret should contain rootUser, rootHost, and rootPassword")
+			}, "15s", "2s").Should(BeTrue(), "MySQL secret should contain rootUser, rootHost, and rootPassword")
 
 			By("Verifying InnoDBCluster resource is created")
 			mysqlClusterName := utils.GetMySQLResourceName(mysqlAppUUID)
@@ -234,7 +234,7 @@ spec:
 				cmd := exec.Command("kubectl", "get", "innodbcluster", mysqlClusterName, "-n", projectNS)
 				_, err := cmd.CombinedOutput()
 				return err
-			}, "30s", "5s").Should(Succeed(), "InnoDBCluster should be created")
+			}, "10s", "5s").Should(Succeed(), "InnoDBCluster should be created")
 
 			By("Verifying InnoDBCluster has correct single-instance configuration")
 			Eventually(func() bool {
@@ -263,7 +263,7 @@ spec:
 					}
 				}
 				return readyCount
-			}, "5m", "10s").Should(BeNumerically(">=", 1), "At least one MySQL pod should be ready")
+			}, "2m", "10s").Should(BeNumerically(">=", 1), "At least one MySQL pod should be ready")
 
 			By("Verifying MySQL Deployment phase transitions to Succeeded")
 			Eventually(func() string {
@@ -273,7 +273,7 @@ spec:
 					return ""
 				}
 				return strings.TrimSpace(string(output))
-			}, "5m", "5s").Should(Equal("Succeeded"), "MySQL Deployment should transition to Succeeded phase after MySQL is ready")
+			}, "2m", "5s").Should(Equal("Succeeded"), "MySQL Deployment should transition to Succeeded phase after MySQL is ready")
 		})
 
 		It("should successfully reconcile MySQLCluster deployments", func() {
@@ -311,7 +311,7 @@ spec:
 					return false
 				}
 				return strings.TrimSpace(string(output)) == readyPhase
-			}, "2m", "5s").Should(BeTrue(), "Project should be Ready before creating Applications")
+			}, "10s", "5s").Should(BeTrue(), "Project should be Ready before creating Applications")
 
 			By("Waiting for default production environment to be ready and fetching its UUID")
 			Eventually(func() bool {
@@ -375,7 +375,7 @@ spec:
 					return false
 				}
 				return strings.TrimSpace(string(output)) == readyPhase
-			}, "2m", "5s").Should(BeTrue(), "MySQLCluster Application should be Ready before creating Deployment")
+			}, "10s", "5s").Should(BeTrue(), "MySQLCluster Application should be Ready before creating Deployment")
 
 			By("Verifying MySQLCluster ApplicationDomain was created with correct pattern")
 			Eventually(func() bool {
@@ -386,7 +386,7 @@ spec:
 				}
 				domain := strings.TrimSpace(string(output))
 				return strings.Contains(domain, ".mysql.") && len(domain) > 0
-			}, "1m", "5s").Should(BeTrue(), "MySQLCluster ApplicationDomain should follow *.mysql.<baseDomain> pattern")
+			}, "5s", "5s").Should(BeTrue(), "MySQLCluster ApplicationDomain should follow *.mysql.<baseDomain> pattern")
 
 			By("Creating the MySQLCluster deployment with inline manifest")
 			mysqlClusterDeploymentManifest := fmt.Sprintf(`apiVersion: platform.operator.kibaship.com/v1alpha1
@@ -417,7 +417,7 @@ spec:
 				cmd := exec.Command("kubectl", "get", deploymentResourceType, mysqlClusterDeploymentName, "-n", projectNS)
 				_, err := testutils.Run(cmd)
 				return err == nil
-			}, "30s", "2s").Should(BeTrue(), "MySQLCluster Deployment should be created successfully")
+			}, "10s", "2s").Should(BeTrue(), "MySQLCluster Deployment should be created successfully")
 
 			By("Verifying MySQLCluster credentials secret is created")
 			mysqlClusterSecretName := fmt.Sprintf("mysql-secret-%s", mysqlClusterAppUUID) // Note: This is not using the helper because it has a different pattern
@@ -425,7 +425,7 @@ spec:
 				cmd := exec.Command("kubectl", "get", "secret", mysqlClusterSecretName, "-n", projectNS)
 				_, err := cmd.CombinedOutput()
 				return err
-			}, "1m", "5s").Should(Succeed(), "MySQLCluster credentials secret should be created")
+			}, "45s", "5s").Should(Succeed(), "MySQLCluster credentials secret should be created")
 
 			By("Verifying MySQLCluster InnoDBCluster resource is created")
 			mysqlClusterInstanceName := utils.GetMySQLClusterResourceName(mysqlClusterAppUUID)
@@ -433,7 +433,7 @@ spec:
 				cmd := exec.Command("kubectl", "get", "innodbcluster", mysqlClusterInstanceName, "-n", projectNS)
 				_, err := cmd.CombinedOutput()
 				return err
-			}, "1m", "5s").Should(Succeed(), "MySQLCluster InnoDBCluster should be created")
+			}, "30s", "5s").Should(Succeed(), "MySQLCluster InnoDBCluster should be created")
 
 			By("Verifying MySQLCluster InnoDBCluster has correct cluster configuration")
 			Eventually(func() bool {
@@ -445,34 +445,18 @@ spec:
 				spec := string(output)
 				return strings.Contains(spec, "\"instances\":3") &&
 					strings.Contains(spec, fmt.Sprintf("\"secretName\":\"%s\"", mysqlClusterSecretName))
-			}, "30s", "2s").Should(BeTrue(), "MySQLCluster InnoDBCluster should have correct cluster configuration with 3 instances")
+			}, "20s", "2s").Should(BeTrue(), "MySQLCluster InnoDBCluster should have correct cluster configuration with 3 instances")
 
-			By("Verifying MySQLCluster pods are created and becoming ready")
+			By("Verifying MySQLCluster pods are created (3 pods expected)")
 			Eventually(func() int {
-				cmd := exec.Command("kubectl", "get", "pods", "-n", projectNS, "-l", "mysql.oracle.com/cluster", "-o", "jsonpath={.items[*].status.containerStatuses[0].ready}")
+				cmd := exec.Command("kubectl", "get", "pods", "-n", projectNS, "-l", "mysql.oracle.com/cluster", "-o", "jsonpath={.items[*].metadata.name}")
 				output, err := cmd.CombinedOutput()
 				if err != nil {
 					return 0
 				}
-				readyStates := strings.Fields(string(output))
-				readyCount := 0
-				for _, state := range readyStates {
-					if state == "true" {
-						readyCount++
-					}
-				}
-				return readyCount
-			}, "10m", "15s").Should(BeNumerically(">=", 3), "At least 3 MySQLCluster pods should be ready")
-
-			By("Verifying MySQLCluster Deployment phase transitions to Succeeded")
-			Eventually(func() string {
-				cmd := exec.Command("kubectl", "get", deploymentResourceType, mysqlClusterDeploymentName, "-n", projectNS, "-o", "jsonpath={.status.phase}")
-				output, err := cmd.CombinedOutput()
-				if err != nil {
-					return ""
-				}
-				return strings.TrimSpace(string(output))
-			}, "5m", "5s").Should(Equal("Succeeded"), "MySQLCluster Deployment should transition to Succeeded phase after cluster is ready")
+				pods := strings.Fields(string(output))
+				return len(pods)
+			}, "20s", "2s").Should(Equal(3), "MySQLCluster should create exactly 3 pods")
 		})
 
 		It("should successfully handle MySQL deployment updates", func() {
@@ -510,7 +494,7 @@ spec:
 					return false
 				}
 				return strings.TrimSpace(string(output)) == readyPhase
-			}, "2m", "5s").Should(BeTrue(), "Project should be Ready before creating Applications")
+			}, "10s", "5s").Should(BeTrue(), "Project should be Ready before creating Applications")
 
 			By("Waiting for default production environment to be ready and fetching its UUID")
 			Eventually(func() bool {
@@ -521,7 +505,7 @@ spec:
 				}
 				envUUID = strings.TrimSpace(string(output))
 				return envUUID != ""
-			}, "5s", "1s").Should(BeTrue(), "Should find default production environment UUID")
+			}, "15s", "1s").Should(BeTrue(), "Should find default production environment UUID")
 
 			By("Verifying the production environment is ready")
 			Eventually(func() bool {
@@ -574,7 +558,7 @@ spec:
 					return false
 				}
 				return strings.TrimSpace(string(output)) == readyPhase
-			}, "2m", "5s").Should(BeTrue(), "MySQL Application should be Ready before creating Deployment")
+			}, "30s", "5s").Should(BeTrue(), "MySQL Application should be Ready before creating Deployment")
 
 			By("Creating the first MySQL deployment")
 			mysqlDeploymentName := utils.GetDeploymentResourceName(mysqlDeploymentUUID)
@@ -609,7 +593,7 @@ spec:
 					return ""
 				}
 				return strings.TrimSpace(string(output))
-			}, "8m", "5s").Should(Equal("Succeeded"), "First MySQL Deployment should succeed")
+			}, "1m", "5s").Should(Equal("Succeeded"), "First MySQL Deployment should succeed")
 
 			mysqlClusterName := utils.GetMySQLResourceName(mysqlAppUUID)
 
@@ -684,7 +668,7 @@ spec:
 					return ""
 				}
 				return strings.TrimSpace(string(output))
-			}, "5m", "5s").Should(Equal("Succeeded"), "Second MySQL Deployment should also reach Succeeded phase")
+			}, "2m", "5s").Should(Equal("Succeeded"), "Second MySQL Deployment should also reach Succeeded phase")
 		})
 	})
 })

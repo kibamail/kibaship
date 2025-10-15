@@ -95,243 +95,270 @@ func TestE2E(t *testing.T) {
 	RunSpecs(t, "e2e suite")
 }
 
-var _ = BeforeSuite(func() {
-	var err error
-	var cmd *exec.Cmd
+var _ = SynchronizedBeforeSuite(
+	// This function runs ONCE on process 1 only
+	// All cluster setup, infrastructure installation, and image building happens here
+	func() []byte {
+		var err error
+		var cmd *exec.Cmd
 
-	// Check if cluster exists, create if not
-	clusterName := os.Getenv("KIND_CLUSTER")
-	if clusterName == "" {
-		clusterName = "kibaship"
-	}
+		By(fmt.Sprintf("[Process 1] Setting up cluster and infrastructure for all parallel processes"))
 
-	if !clusterExists(clusterName) {
-		By("creating kind cluster (cluster does not exist)")
-		cmd = exec.Command("make", "kind-create")
+		// Check if cluster exists, create if not
+		clusterName := os.Getenv("KIND_CLUSTER")
+		if clusterName == "" {
+			clusterName = "kibaship"
+		}
+
+		if !clusterExists(clusterName) {
+			By("[Process 1] creating kind cluster (cluster does not exist)")
+			cmd = exec.Command("make", "kind-create")
+			_, err = utils.Run(cmd)
+			ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to create kind cluster")
+		} else {
+			By("[Process 1] using existing kind cluster: " + clusterName)
+		}
+
+		// Check if infrastructure is already installed by checking for tekton-pipelines namespace
+		infrastructureInstalled := namespaceExists("tekton-pipelines")
+
+		if !infrastructureInstalled {
+			By("[Process 1] installing Gateway API CRDs")
+			Expect(utils.InstallGatewayAPI()).To(Succeed(), "Failed to install Gateway API CRDs")
+
+			By("[Process 1] installing Cilium (CNI) via Helm")
+			Expect(utils.InstallCiliumHelm("1.18.0")).To(Succeed(), "Failed to install Cilium via Helm")
+
+			By("[Process 1] configuring CoreDNS to use public resolvers for e2e")
+			Expect(utils.ConfigureCoreDNSForwarders()).To(Succeed(), "Failed to configure CoreDNS forwarders")
+
+			By("[Process 1] installing CertManager")
+			Expect(utils.InstallCertManager()).To(Succeed(), "Failed to install CertManager")
+
+			By("[Process 1] installing Prometheus Operator")
+			Expect(utils.InstallPrometheusOperator()).To(Succeed(), "Failed to install Prometheus Operator")
+
+			By("[Process 1] installing Tekton Pipelines")
+			Expect(utils.InstallTektonPipelines()).To(Succeed(), "Failed to install Tekton Pipelines")
+
+			By("[Process 1] installing shared BuildKit daemon for cluster-wide builds")
+			Expect(utils.InstallBuildkitSharedDaemon()).To(Succeed(), "Failed to install BuildKit daemon")
+
+			By("[Process 1] installing Valkey Operator")
+			Expect(utils.InstallValkeyOperator()).To(Succeed(), "Failed to install Valkey Operator")
+
+			By("[Process 1] installing MySQL Operator")
+			Expect(utils.InstallMySQLOperator()).To(Succeed(), "Failed to install MySQL Operator")
+		} else {
+			By("[Process 1] skipping infrastructure installation (tekton-pipelines namespace exists)")
+		}
+
+		// Always create storage classes (needed for every test run)
+		By("[Process 1] creating storage classes for test environment")
+		Expect(utils.CreateStorageClasses()).To(Succeed(), "Failed to create storage classes")
+
+		// Always build and load images (these need to be refreshed on every test run)
+		By("[Process 1] building the manager(Operator) image")
+		cmd = exec.Command("make", "docker-build", fmt.Sprintf("IMG=%s", projectImage))
 		_, err = utils.Run(cmd)
-		ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to create kind cluster")
-	} else {
-		By("using existing kind cluster: " + clusterName)
-	}
+		ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to build the manager(Operator) image")
 
-	// Check if infrastructure is already installed by checking for tekton-pipelines namespace
-	infrastructureInstalled := namespaceExists("tekton-pipelines")
+		By("[Process 1] loading the manager(Operator) image on Kind")
+		err = utils.LoadImageToKindClusterWithName(projectImage)
+		ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to load the manager(Operator) image into Kind")
 
-	if !infrastructureInstalled {
-		By("installing Gateway API CRDs")
-		Expect(utils.InstallGatewayAPI()).To(Succeed(), "Failed to install Gateway API CRDs")
-
-		By("installing Cilium (CNI) via Helm")
-		Expect(utils.InstallCiliumHelm("1.18.0")).To(Succeed(), "Failed to install Cilium via Helm")
-
-		By("configuring CoreDNS to use public resolvers for e2e")
-		Expect(utils.ConfigureCoreDNSForwarders()).To(Succeed(), "Failed to configure CoreDNS forwarders")
-
-		By("installing CertManager")
-		Expect(utils.InstallCertManager()).To(Succeed(), "Failed to install CertManager")
-
-		By("installing Prometheus Operator")
-		Expect(utils.InstallPrometheusOperator()).To(Succeed(), "Failed to install Prometheus Operator")
-
-		By("installing Tekton Pipelines")
-		Expect(utils.InstallTektonPipelines()).To(Succeed(), "Failed to install Tekton Pipelines")
-
-		By("installing shared BuildKit daemon for cluster-wide builds")
-		Expect(utils.InstallBuildkitSharedDaemon()).To(Succeed(), "Failed to install BuildKit daemon")
-
-		By("installing Valkey Operator")
-		Expect(utils.InstallValkeyOperator()).To(Succeed(), "Failed to install Valkey Operator")
-
-		By("installing MySQL Operator")
-		Expect(utils.InstallMySQLOperator()).To(Succeed(), "Failed to install MySQL Operator")
-	} else {
-		By("skipping infrastructure installation (tekton-pipelines namespace exists)")
-	}
-
-	// Always create storage classes (needed for every test run)
-	By("creating storage classes for test environment")
-	Expect(utils.CreateStorageClasses()).To(Succeed(), "Failed to create storage classes")
-
-	// Always build and load images (these need to be refreshed on every test run)
-	By("building the manager(Operator) image")
-	cmd = exec.Command("make", "docker-build", fmt.Sprintf("IMG=%s", projectImage))
-	_, err = utils.Run(cmd)
-	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to build the manager(Operator) image")
-
-	By("loading the manager(Operator) image on Kind")
-	err = utils.LoadImageToKindClusterWithName(projectImage)
-	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to load the manager(Operator) image into Kind")
-
-	By("building the railpack-cli image")
-	cmd = exec.Command("docker", "build", "-f", "build/railpack-cli/Dockerfile", "-t", projectImageRailpackCLI, "build/railpack-cli")
-	_, err = utils.Run(cmd)
-	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to build the railpack-cli image")
-
-	By("loading the railpack-cli image on Kind")
-	err = utils.LoadImageToKindClusterWithName(projectImageRailpackCLI)
-	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to load the railpack-cli image into Kind")
-
-	By("building the railpack-build (buildctl client) image")
-	cmd = exec.Command("docker", "build", "-f", "build/railpack-build/Dockerfile", "-t", projectImageRailpackBld, "build/railpack-build")
-	_, err = utils.Run(cmd)
-	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to build the railpack-build image")
-
-	By("loading the railpack-build image on Kind")
-	err = utils.LoadImageToKindClusterWithName(projectImageRailpackBld)
-	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to load the railpack-build image into Kind")
-
-	By("applying Tekton custom tasks (git-clone, railpack-prepare, railpack-build) with local image overrides")
-	Expect(os.Setenv("RAILPACK_CLI_IMG", projectImageRailpackCLI)).To(Succeed(), "failed to set RAILPACK_CLI_IMG env")
-	Expect(os.Setenv("RAILPACK_BUILD_IMG", projectImageRailpackBld)).To(Succeed(), "failed to set RAILPACK_BUILD_IMG env")
-	Expect(utils.ApplyTektonResources()).To(Succeed(), "Failed to apply Tekton custom tasks")
-
-	By("building the registry-auth image")
-	cmd = exec.Command("make", "docker-build-registry-auth", fmt.Sprintf("IMG_REGISTRY_AUTH=%s", projectImageRegistryAuth))
-	_, err = utils.Run(cmd)
-	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to build the registry-auth image")
-
-	By("loading the registry-auth image on Kind")
-	err = utils.LoadImageToKindClusterWithName(projectImageRegistryAuth)
-	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to load the registry-auth image into Kind")
-
-	// Check if operator and registry are already deployed
-	operatorDeployed := namespaceExists("kibaship")
-	registryDeployed := deploymentExists("registry", "registry") && deploymentExists("registry", "registry-auth")
-
-	if !operatorDeployed {
-		By("deploying test webhook receiver in-cluster")
-		Expect(utils.DeployWebhookReceiver()).To(Succeed(), "Failed to deploy test webhook receiver")
-
-		By("setting WEBHOOK_TARGET_URL for operator deploy")
-		target := "http://webhook-receiver.kibaship.svc.cluster.local:8080/webhook"
-		err = os.Setenv("WEBHOOK_TARGET_URL", target)
-		Expect(err).NotTo(HaveOccurred(), "failed to set WEBHOOK_TARGET_URL")
-
-		By("provisioning kibaship")
-		Expect(utils.ProvisionKibashipOperator()).To(Succeed(), "Failed to provision kibaship")
-
-		By("waiting for kibaship to be ready")
-		Expect(utils.WaitForKibashipOperator()).To(Succeed(), "Failed to wait for kibaship")
-	} else {
-		By("operator namespace exists - restarting deployments to pick up new images")
-		cmd = exec.Command("kubectl", "rollout", "restart", "deployment", "-n", "kibaship")
+		By("[Process 1] building the railpack-cli image")
+		cmd = exec.Command("docker", "build", "-f", "build/railpack-cli/Dockerfile", "-t", projectImageRailpackCLI, "build/railpack-cli")
 		_, err = utils.Run(cmd)
-		ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to restart operator deployments")
+		ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to build the railpack-cli image")
 
-		By("waiting for operator deployments to complete rollout")
-		cmd = exec.Command("kubectl", "rollout", "status", "deployment", "-n", "kibaship", "--timeout=5m")
+		By("[Process 1] loading the railpack-cli image on Kind")
+		err = utils.LoadImageToKindClusterWithName(projectImageRailpackCLI)
+		ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to load the railpack-cli image into Kind")
+
+		By("[Process 1] building the railpack-build (buildctl client) image")
+		cmd = exec.Command("docker", "build", "-f", "build/railpack-build/Dockerfile", "-t", projectImageRailpackBld, "build/railpack-build")
 		_, err = utils.Run(cmd)
-		ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to wait for operator rollout")
-	}
+		ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to build the railpack-build image")
 
-	if !registryDeployed {
-		By("provisioning Docker Registry v3.0.0")
-		Expect(utils.ProvisionRegistry()).To(Succeed(), "Failed to provision Docker Registry")
+		By("[Process 1] loading the railpack-build image on Kind")
+		err = utils.LoadImageToKindClusterWithName(projectImageRailpackBld)
+		ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to load the railpack-build image into Kind")
 
-		By("provisioning Registry Auth service")
-		Expect(utils.ProvisionRegistryAuth()).To(Succeed(), "Failed to provision Registry Auth service")
+		By("[Process 1] applying Tekton custom tasks (git-clone, railpack-prepare, railpack-build) with local image overrides")
+		Expect(os.Setenv("RAILPACK_CLI_IMG", projectImageRailpackCLI)).To(Succeed(), "failed to set RAILPACK_CLI_IMG env")
+		Expect(os.Setenv("RAILPACK_BUILD_IMG", projectImageRailpackBld)).To(Succeed(), "failed to set RAILPACK_BUILD_IMG env")
+		Expect(utils.ApplyTektonResources()).To(Succeed(), "Failed to apply Tekton custom tasks")
 
-		By("waiting for Docker Registry to be ready")
-		Expect(utils.WaitForRegistry()).To(Succeed(), "Failed to wait for Docker Registry")
-
-		By("waiting for Registry Auth service to be ready")
-		Expect(utils.WaitForRegistryAuth()).To(Succeed(), "Failed to wait for Registry Auth service")
-
-		By("verifying registry-auth pods are healthy")
-		Expect(utils.VerifyRegistryAuthHealthy()).To(Succeed(), "registry-auth pods are not healthy")
-
-		By("verifying registry pods are healthy")
-		Expect(utils.VerifyRegistryHealthy()).To(Succeed(), "registry pods are not healthy")
-	} else {
-		By("registry namespace exists - restarting deployments to pick up new images")
-		cmd = exec.Command("kubectl", "rollout", "restart", "deployment", "-n", "registry")
+		By("[Process 1] building the registry-auth image")
+		cmd = exec.Command("make", "docker-build-registry-auth", fmt.Sprintf("IMG_REGISTRY_AUTH=%s", projectImageRegistryAuth))
 		_, err = utils.Run(cmd)
-		ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to restart registry deployments")
+		ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to build the registry-auth image")
 
-		By("waiting for registry deployments to complete rollout")
-		cmd = exec.Command("kubectl", "rollout", "status", "deployment", "-n", "registry", "--timeout=5m")
+		By("[Process 1] loading the registry-auth image on Kind")
+		err = utils.LoadImageToKindClusterWithName(projectImageRegistryAuth)
+		ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to load the registry-auth image into Kind")
+
+		// Check if operator and registry are already deployed
+		operatorDeployed := namespaceExists("kibaship")
+		registryDeployed := deploymentExists("registry", "registry") && deploymentExists("registry", "registry-auth")
+
+		if !operatorDeployed {
+			By("[Process 1] deploying test webhook receiver in-cluster")
+			Expect(utils.DeployWebhookReceiver()).To(Succeed(), "Failed to deploy test webhook receiver")
+
+			By("[Process 1] setting WEBHOOK_TARGET_URL for operator deploy")
+			target := "http://webhook-receiver.kibaship.svc.cluster.local:8080/webhook"
+			err = os.Setenv("WEBHOOK_TARGET_URL", target)
+			Expect(err).NotTo(HaveOccurred(), "failed to set WEBHOOK_TARGET_URL")
+
+			By("[Process 1] provisioning kibaship")
+			Expect(utils.ProvisionKibashipOperator()).To(Succeed(), "Failed to provision kibaship")
+
+			By("[Process 1] waiting for kibaship to be ready")
+			Expect(utils.WaitForKibashipOperator()).To(Succeed(), "Failed to wait for kibaship")
+		} else {
+			By("[Process 1] operator namespace exists - restarting deployments to pick up new images")
+			cmd = exec.Command("kubectl", "rollout", "restart", "deployment", "-n", "kibaship")
+			_, err = utils.Run(cmd)
+			ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to restart operator deployments")
+
+			By("[Process 1] waiting for operator deployments to complete rollout")
+			cmd = exec.Command("kubectl", "rollout", "status", "deployment", "-n", "kibaship", "--timeout=5m")
+			_, err = utils.Run(cmd)
+			ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to wait for operator rollout")
+		}
+
+		if !registryDeployed {
+			By("[Process 1] provisioning Docker Registry v3.0.0")
+			Expect(utils.ProvisionRegistry()).To(Succeed(), "Failed to provision Docker Registry")
+
+			By("[Process 1] provisioning Registry Auth service")
+			Expect(utils.ProvisionRegistryAuth()).To(Succeed(), "Failed to provision Registry Auth service")
+
+			By("[Process 1] waiting for Docker Registry to be ready")
+			Expect(utils.WaitForRegistry()).To(Succeed(), "Failed to wait for Docker Registry")
+
+			By("[Process 1] waiting for Registry Auth service to be ready")
+			Expect(utils.WaitForRegistryAuth()).To(Succeed(), "Failed to wait for Registry Auth service")
+
+			By("[Process 1] verifying registry-auth pods are healthy")
+			Expect(utils.VerifyRegistryAuthHealthy()).To(Succeed(), "registry-auth pods are not healthy")
+
+			By("[Process 1] verifying registry pods are healthy")
+			Expect(utils.VerifyRegistryHealthy()).To(Succeed(), "registry pods are not healthy")
+		} else {
+			By("[Process 1] registry namespace exists - restarting deployments to pick up new images")
+			cmd = exec.Command("kubectl", "rollout", "restart", "deployment", "-n", "registry")
+			_, err = utils.Run(cmd)
+			ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to restart registry deployments")
+
+			By("[Process 1] waiting for registry deployments to complete rollout")
+			cmd = exec.Command("kubectl", "rollout", "status", "deployment", "-n", "registry", "--timeout=5m")
+			_, err = utils.Run(cmd)
+			ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to wait for registry rollout")
+		}
+
+		// Fix OrbStack DNS issue: add registry services to Kind node /etc/hosts
+		// OrbStack's DNS (0.250.250.254) cannot resolve cluster-internal service names,
+		// so containerd fails to pull images from the cluster registry.
+		By("[Process 1] configuring Kind node /etc/hosts for registry DNS resolution (OrbStack workaround)")
+		cmd = exec.Command("kubectl", "get", "svc", "-n", "registry", "registry", "-o", "jsonpath={.spec.clusterIP}")
+		registryIP, err := cmd.CombinedOutput()
+		ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to get registry service IP")
+
+		cmd = exec.Command("kubectl", "get", "svc", "-n", "registry", "registry-auth", "-o", "jsonpath={.spec.clusterIP}")
+		registryAuthIP, err := cmd.CombinedOutput()
+		ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to get registry-auth service IP")
+
+		clusterName = os.Getenv("KIND_CLUSTER")
+		if clusterName == "" {
+			clusterName = "kibaship"
+		}
+
+		By("[Process 1] adding registry service DNS entries to Kind node /etc/hosts")
+		cmd = exec.Command("docker", "exec", fmt.Sprintf("%s-control-plane", clusterName), "bash", "-c",
+			fmt.Sprintf("grep -q 'registry.registry.svc.cluster.local' /etc/hosts || echo '%s registry.registry.svc.cluster.local' >> /etc/hosts", strings.TrimSpace(string(registryIP))))
+		_, err = cmd.CombinedOutput()
+		ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to add registry DNS entry to Kind node")
+
+		cmd = exec.Command("docker", "exec", fmt.Sprintf("%s-control-plane", clusterName), "bash", "-c",
+			fmt.Sprintf("grep -q 'registry-auth.registry.svc.cluster.local' /etc/hosts || echo '%s registry-auth.registry.svc.cluster.local' >> /etc/hosts", strings.TrimSpace(string(registryAuthIP))))
+		_, err = cmd.CombinedOutput()
+		ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to add registry-auth DNS entry to Kind node")
+
+		By("[Process 1] installing registry CA certificate on Kind node")
+		cmd = exec.Command("kubectl", "get", "secret", "-n", "registry", "registry-tls", "-o", "jsonpath={.data.ca\\.crt}")
+		caCertB64, err := cmd.CombinedOutput()
+		ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to get registry CA certificate")
+
+		cmd = exec.Command("bash", "-c", fmt.Sprintf("echo '%s' | base64 -d | docker exec -i %s-control-plane tee /usr/local/share/ca-certificates/registry-ca.crt", strings.TrimSpace(string(caCertB64)), clusterName))
+		_, err = cmd.CombinedOutput()
+		ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to copy CA certificate to Kind node")
+
+		By("[Process 1] updating CA certificates on Kind node")
+		cmd = exec.Command("docker", "exec", fmt.Sprintf("%s-control-plane", clusterName), "update-ca-certificates")
+		_, err = cmd.CombinedOutput()
+		ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to update CA certificates on Kind node")
+
+		By("[Process 1] restarting containerd to pick up DNS and TLS fixes")
+		cmd = exec.Command("docker", "exec", fmt.Sprintf("%s-control-plane", clusterName), "systemctl", "restart", "containerd")
+		_, err = cmd.CombinedOutput()
+		ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to restart containerd on Kind node")
+
+		By("[Process 1] re-applying Tekton custom tasks with local railpack image override (always applies)")
+		Expect(utils.ApplyTektonResources()).To(Succeed(), "Failed to re-apply Tekton custom tasks after operator deploy")
+
+		By("[Process 1] building the API server image")
+		cmd = exec.Command("make", "build-apiserver", fmt.Sprintf("IMG_APISERVER=%s", projectImageAPIServer))
 		_, err = utils.Run(cmd)
-		ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to wait for registry rollout")
-	}
+		ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to build the API server image")
 
-	// Fix OrbStack DNS issue: add registry services to Kind node /etc/hosts
-	// OrbStack's DNS (0.250.250.254) cannot resolve cluster-internal service names,
-	// so containerd fails to pull images from the cluster registry.
-	By("configuring Kind node /etc/hosts for registry DNS resolution (OrbStack workaround)")
-	cmd = exec.Command("kubectl", "get", "svc", "-n", "registry", "registry", "-o", "jsonpath={.spec.clusterIP}")
-	registryIP, err := cmd.CombinedOutput()
-	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to get registry service IP")
+		By("[Process 1] loading the API server image on Kind")
+		err = utils.LoadImageToKindClusterWithName(projectImageAPIServer)
+		ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to load the API server image into Kind")
 
-	cmd = exec.Command("kubectl", "get", "svc", "-n", "registry", "registry-auth", "-o", "jsonpath={.spec.clusterIP}")
-	registryAuthIP, err := cmd.CombinedOutput()
-	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to get registry-auth service IP")
+		By("[Process 1] deploying API server into operator namespace (always redeploys)")
+		Expect(utils.DeployAPIServer(projectImageAPIServer)).To(Succeed(), "Failed to deploy API server")
 
-	clusterName = os.Getenv("KIND_CLUSTER")
-	if clusterName == "" {
-		clusterName = "kibaship"
-	}
+		By("[Process 1] building the cert-manager webhook image")
+		cmd = exec.Command("make", "docker-build-cert-manager-webhook", fmt.Sprintf("IMG_CERT_MANAGER_WEBHOOK=%s", projectImageCertWebhook))
+		_, err = utils.Run(cmd)
+		ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to build the cert-manager webhook image")
 
-	By("adding registry service DNS entries to Kind node /etc/hosts")
-	cmd = exec.Command("docker", "exec", fmt.Sprintf("%s-control-plane", clusterName), "bash", "-c",
-		fmt.Sprintf("grep -q 'registry.registry.svc.cluster.local' /etc/hosts || echo '%s registry.registry.svc.cluster.local' >> /etc/hosts", strings.TrimSpace(string(registryIP))))
-	_, err = cmd.CombinedOutput()
-	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to add registry DNS entry to Kind node")
+		By("[Process 1] loading the cert-manager webhook image on Kind")
+		err = utils.LoadImageToKindClusterWithName(projectImageCertWebhook)
+		ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to load the cert-manager webhook image into Kind")
 
-	cmd = exec.Command("docker", "exec", fmt.Sprintf("%s-control-plane", clusterName), "bash", "-c",
-		fmt.Sprintf("grep -q 'registry-auth.registry.svc.cluster.local' /etc/hosts || echo '%s registry-auth.registry.svc.cluster.local' >> /etc/hosts", strings.TrimSpace(string(registryAuthIP))))
-	_, err = cmd.CombinedOutput()
-	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to add registry-auth DNS entry to Kind node")
+		By("[Process 1] deploying cert-manager webhook into operator namespace (always redeploys)")
+		Expect(utils.DeployCertManagerWebhook(projectImageCertWebhook)).To(Succeed(), "Failed to deploy cert-manager webhook")
 
-	By("installing registry CA certificate on Kind node")
-	cmd = exec.Command("kubectl", "get", "secret", "-n", "registry", "registry-tls", "-o", "jsonpath={.data.ca\\.crt}")
-	caCertB64, err := cmd.CombinedOutput()
-	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to get registry CA certificate")
+		By("[Process 1] cluster setup complete - signaling other processes to start")
+		// Return data to share with other processes (cluster name)
+		return []byte(clusterName)
+	},
 
-	cmd = exec.Command("bash", "-c", fmt.Sprintf("echo '%s' | base64 -d | docker exec -i %s-control-plane tee /usr/local/share/ca-certificates/registry-ca.crt", strings.TrimSpace(string(caCertB64)), clusterName))
-	_, err = cmd.CombinedOutput()
-	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to copy CA certificate to Kind node")
+	// This function runs on EACH parallel process (including process 1)
+	// Process 1 runs this after completing the setup function above
+	// Other processes wait for process 1 to finish, then run this
+	func(data []byte) {
+		clusterName := string(data)
+		By(fmt.Sprintf("[Process %d] Ready to run tests on cluster: %s", GinkgoParallelProcess(), clusterName))
+	},
+)
 
-	By("updating CA certificates on Kind node")
-	cmd = exec.Command("docker", "exec", fmt.Sprintf("%s-control-plane", clusterName), "update-ca-certificates")
-	_, err = cmd.CombinedOutput()
-	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to update CA certificates on Kind node")
+var _ = SynchronizedAfterSuite(
+	// Runs on each parallel process after its tests complete
+	func() {
+		By(fmt.Sprintf("[Process %d] Tests completed", GinkgoParallelProcess()))
+	},
 
-	By("restarting containerd to pick up DNS and TLS fixes")
-	cmd = exec.Command("docker", "exec", fmt.Sprintf("%s-control-plane", clusterName), "systemctl", "restart", "containerd")
-	_, err = cmd.CombinedOutput()
-	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to restart containerd on Kind node")
-
-	By("re-applying Tekton custom tasks with local railpack image override (always applies)")
-	Expect(utils.ApplyTektonResources()).To(Succeed(), "Failed to re-apply Tekton custom tasks after operator deploy")
-
-	By("building the API server image")
-	cmd = exec.Command("make", "build-apiserver", fmt.Sprintf("IMG_APISERVER=%s", projectImageAPIServer))
-	_, err = utils.Run(cmd)
-	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to build the API server image")
-
-	By("loading the API server image on Kind")
-	err = utils.LoadImageToKindClusterWithName(projectImageAPIServer)
-	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to load the API server image into Kind")
-
-	By("deploying API server into operator namespace (always redeploys)")
-	Expect(utils.DeployAPIServer(projectImageAPIServer)).To(Succeed(), "Failed to deploy API server")
-
-	By("building the cert-manager webhook image")
-	cmd = exec.Command("make", "docker-build-cert-manager-webhook", fmt.Sprintf("IMG_CERT_MANAGER_WEBHOOK=%s", projectImageCertWebhook))
-	_, err = utils.Run(cmd)
-	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to build the cert-manager webhook image")
-
-	By("loading the cert-manager webhook image on Kind")
-	err = utils.LoadImageToKindClusterWithName(projectImageCertWebhook)
-	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to load the cert-manager webhook image into Kind")
-
-	By("deploying cert-manager webhook into operator namespace (always redeploys)")
-	Expect(utils.DeployCertManagerWebhook(projectImageCertWebhook)).To(Succeed(), "Failed to deploy cert-manager webhook")
-})
-
-var _ = AfterSuite(func() {
-	_, _ = fmt.Fprintf(GinkgoWriter, "Tests completed. Cluster will remain for debugging.\n")
-})
+	// Runs ONCE after all parallel processes have finished
+	func() {
+		_, _ = fmt.Fprintf(GinkgoWriter, "[Process 1] All parallel processes completed. Cluster will remain for debugging.\n")
+		_, _ = fmt.Fprintf(GinkgoWriter, "[Process 1] To delete the cluster, run: make kind-delete\n")
+	},
+)
 
 // Helper function to check if all required labels are present
 func hasRequiredLabels(actual, required map[string]string) bool {

@@ -24,11 +24,8 @@ import (
 )
 
 const (
-	certificatesNS     = "certificates"
-	gatewayAPISystemNS = "gateway-api-system"
-	issuerName         = "certmanager-acme-issuer"
-	wildcardCertName   = "tenant-wildcard-certificate"
-	gatewayName        = "kibaship-gateway"
+	// issuerName is the cert-manager ClusterIssuer for ACME certificates
+	issuerName = "certmanager-acme-issuer"
 )
 
 // EnsureStorageClasses creates Longhorn-backed StorageClasses used by the platform.
@@ -87,41 +84,26 @@ func ensureStorageClass(ctx context.Context, c client.Client, name, replicas str
 
 // ProvisionIngressAndCertificates ensures dynamic resources are present based on configured domain/email.
 // It is idempotent and safe to call on every manager start.
+//
+// This function orchestrates the provisioning of:
+//   - ClusterIssuer for ACME certificates
+//   - Ingress resources (Gateway, certificates, routes) via ProvisionIngress
 func ProvisionIngressAndCertificates(ctx context.Context, c client.Client, baseDomain, acmeEmail string) error {
 	if baseDomain == "" {
 		return nil // nothing to do without a domain
 	}
 
-	// 1) Ensure namespaces exist (in case installer omitted them)
-	for _, ns := range []string{certificatesNS, gatewayAPISystemNS} {
-		if err := ensureNamespace(ctx, c, ns); err != nil {
-			return fmt.Errorf("ensure namespace %s: %w", ns, err)
-		}
-	}
-
-	// 2) ClusterIssuer (requires cert-manager CRDs to exist)
+	// 1) ClusterIssuer (requires cert-manager CRDs to exist)
 	if acmeEmail != "" {
 		if err := ensureClusterIssuer(ctx, c, acmeEmail); err != nil {
 			return fmt.Errorf("ensure ClusterIssuer: %w", err)
 		}
 	}
 
-	// 3) Wildcard Certificate for web apps (depends on issuer and domain)
-	if acmeEmail != "" { // only create certificate if issuer/email provided
-		// Create wildcard certificate for web apps (*.apps.{domain})
-		if err := ensureWildcardCertificate(ctx, c, baseDomain); err != nil {
-			return fmt.Errorf("ensure wildcard Certificate: %w", err)
-		}
-	}
-
-	// 4) Gateway resource with multi-protocol listeners
-	if err := ensureGateway(ctx, c); err != nil {
-		return fmt.Errorf("ensure Gateway: %w", err)
-	}
-
-	// 5) ReferenceGrant for Gateway to access certificates
-	if err := ensureGatewayReferenceGrant(ctx, c); err != nil {
-		return fmt.Errorf("ensure Gateway ReferenceGrant: %w", err)
+	// 2) Ingress provisioning (wildcard certificate, Gateway, ReferenceGrant)
+	// This is handled in provision-ingress.go
+	if err := ProvisionIngress(ctx, c, baseDomain, acmeEmail); err != nil {
+		return fmt.Errorf("provision ingress: %w", err)
 	}
 
 	return nil
@@ -164,163 +146,6 @@ func ensureClusterIssuer(ctx context.Context, c client.Client, email string) err
 				},
 			},
 		}
-		return c.Create(ctx, obj)
-	}
-	return nil
-}
-
-func ensureWildcardCertificate(ctx context.Context, c client.Client, baseDomain string) error {
-	name := wildcardCertName
-	obj := &unstructured.Unstructured{}
-	obj.SetGroupVersionKind(schema.GroupVersionKind{Group: "cert-manager.io", Version: "v1", Kind: "Certificate"})
-	obj.SetNamespace(certificatesNS)
-	obj.SetName(name)
-
-	if err := c.Get(ctx, client.ObjectKey{Namespace: certificatesNS, Name: name}, obj); err != nil {
-		if !errors.IsNotFound(err) {
-			return err
-		}
-		obj.Object["spec"] = map[string]any{
-			"secretName": wildcardCertName,
-			"issuerRef":  map[string]any{"name": issuerName, "kind": "ClusterIssuer"},
-			"dnsNames":   []any{fmt.Sprintf("*.apps.%s", baseDomain)},
-		}
-		return c.Create(ctx, obj)
-	}
-	return nil
-}
-
-func ensureGateway(ctx context.Context, c client.Client) error {
-	obj := &unstructured.Unstructured{}
-	obj.SetGroupVersionKind(schema.GroupVersionKind{
-		Group:   "gateway.networking.k8s.io",
-		Version: "v1",
-		Kind:    "Gateway",
-	})
-	obj.SetNamespace(gatewayAPISystemNS)
-	obj.SetName(gatewayName)
-
-	if err := c.Get(ctx, client.ObjectKey{
-		Namespace: gatewayAPISystemNS,
-		Name:      gatewayName,
-	}, obj); err != nil {
-		if !errors.IsNotFound(err) {
-			return err
-		}
-
-		// Create Gateway with multi-protocol listeners
-		obj.Object["spec"] = map[string]any{
-			"gatewayClassName": "cilium",
-			"listeners": []any{
-				// HTTP listener
-				map[string]any{
-					"name":     "http",
-					"protocol": "HTTP",
-					"port":     int64(80),
-					"allowedRoutes": map[string]any{
-						"namespaces": map[string]any{"from": "All"},
-					},
-				},
-				// HTTPS listener
-				map[string]any{
-					"name":     "https",
-					"protocol": "HTTPS",
-					"port":     int64(443),
-					"tls": map[string]any{
-						"mode": "Terminate",
-						"certificateRefs": []any{
-							map[string]any{
-								"name":      wildcardCertName,
-								"namespace": certificatesNS,
-								"kind":      "Secret",
-							},
-						},
-					},
-					"allowedRoutes": map[string]any{
-						"namespaces": map[string]any{"from": "All"},
-					},
-				},
-				// MySQL TLS listener
-				map[string]any{
-					"name":     "mysql-tls",
-					"protocol": "TLS",
-					"port":     int64(3306),
-					"tls":      map[string]any{"mode": "Passthrough"},
-					"allowedRoutes": map[string]any{
-						"namespaces": map[string]any{"from": "All"},
-						"kinds": []any{
-							map[string]any{"kind": "TLSRoute"},
-						},
-					},
-				},
-				// Valkey TLS listener
-				map[string]any{
-					"name":     "valkey-tls",
-					"protocol": "TLS",
-					"port":     int64(6379),
-					"tls":      map[string]any{"mode": "Passthrough"},
-					"allowedRoutes": map[string]any{
-						"namespaces": map[string]any{"from": "All"},
-						"kinds": []any{
-							map[string]any{"kind": "TLSRoute"},
-						},
-					},
-				},
-				// PostgreSQL TLS listener
-				map[string]any{
-					"name":     "postgres-tls",
-					"protocol": "TLS",
-					"port":     int64(5432),
-					"tls":      map[string]any{"mode": "Passthrough"},
-					"allowedRoutes": map[string]any{
-						"namespaces": map[string]any{"from": "All"},
-						"kinds": []any{
-							map[string]any{"kind": "TLSRoute"},
-						},
-					},
-				},
-			},
-		}
-
-		return c.Create(ctx, obj)
-	}
-	return nil
-}
-
-func ensureGatewayReferenceGrant(ctx context.Context, c client.Client) error {
-	obj := &unstructured.Unstructured{}
-	obj.SetGroupVersionKind(schema.GroupVersionKind{
-		Group:   "gateway.networking.k8s.io",
-		Version: "v1beta1",
-		Kind:    "ReferenceGrant",
-	})
-	obj.SetNamespace(certificatesNS)
-	obj.SetName("gateway-to-certificates")
-
-	if err := c.Get(ctx, client.ObjectKey{
-		Namespace: certificatesNS,
-		Name:      "gateway-to-certificates",
-	}, obj); err != nil {
-		if !errors.IsNotFound(err) {
-			return err
-		}
-
-		obj.Object["spec"] = map[string]any{
-			"from": []any{
-				map[string]any{
-					"group":     "gateway.networking.k8s.io",
-					"kind":      "Gateway",
-					"namespace": gatewayAPISystemNS,
-				},
-			},
-			"to": []any{
-				map[string]any{
-					"group": "",
-					"kind":  "Secret",
-				},
-			},
-		}
-
 		return c.Create(ctx, obj)
 	}
 	return nil

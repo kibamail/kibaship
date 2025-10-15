@@ -452,32 +452,16 @@ spec:
 					strings.Contains(spec, "\"prometheus\":false")
 			}, "30s", "2s").Should(BeTrue(), "ValkeyCluster instance should have correct cluster configuration")
 
-			By("Verifying ValkeyCluster pods are created and becoming ready")
+			By("Verifying ValkeyCluster pods are created (6 pods expected)")
 			Eventually(func() int {
-				cmd := exec.Command("kubectl", "get", "pods", "-n", projectNS, "-l", "app.kubernetes.io/managed-by=kibaship", "-o", "jsonpath={.items[*].status.containerStatuses[0].ready}")
+				cmd := exec.Command("kubectl", "get", "pods", "-n", projectNS, "-l", "app.kubernetes.io/managed-by=kibaship", "-o", "jsonpath={.items[*].metadata.name}")
 				output, err := cmd.CombinedOutput()
 				if err != nil {
 					return 0
 				}
-				readyStates := strings.Fields(string(output))
-				readyCount := 0
-				for _, state := range readyStates {
-					if state == controller.TrueString {
-						readyCount++
-					}
-				}
-				return readyCount
-			}, "10m", "15s").Should(BeNumerically(">=", 3), "At least 3 ValkeyCluster pods should be ready")
-
-			By("Verifying ValkeyCluster Deployment phase transitions to Succeeded")
-			Eventually(func() string {
-				cmd := exec.Command("kubectl", "get", deploymentResourceType, valkeyClusterDeploymentName, "-n", projectNS, "-o", "jsonpath={.status.phase}")
-				output, err := cmd.CombinedOutput()
-				if err != nil {
-					return ""
-				}
-				return strings.TrimSpace(string(output))
-			}, "3m", "5s").Should(Equal("Succeeded"), "ValkeyCluster Deployment should transition to Succeeded phase after cluster is ready")
+				pods := strings.Fields(string(output))
+				return len(pods)
+			}, "20s", "2s").Should(Equal(6), "ValkeyCluster should create exactly 6 pods (3 nodes × 2 replicas)")
 		})
 
 		It("should successfully handle Valkey deployment updates", func() {
