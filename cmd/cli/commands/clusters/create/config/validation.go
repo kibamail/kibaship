@@ -507,6 +507,8 @@ func getFieldErrorMessage(fe validator.FieldError) string {
 	case "paas_features":
 		return fmt.Sprintf("%s must be a valid combination of: mysql, valkey, postgres, or 'none' "+
 			"(comma-separated, no duplicates)", field)
+	case "ip":
+		return fmt.Sprintf("%s must be a valid IP address", field)
 	default:
 		return fmt.Sprintf("%s validation failed: %s", field, fe.Tag())
 	}

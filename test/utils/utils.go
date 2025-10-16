@@ -881,31 +881,6 @@ func DeployAPIServer(image string) error {
 	return nil
 }
 
-// DeployCertManagerWebhook deploys the cert-manager DNS01 webhook using pre-built e2e manifests
-func DeployCertManagerWebhook(image string) error {
-	// Apply the pre-built e2e webhook manifest
-	cmd := exec.Command("kubectl", "apply", "-f", "dist/e2e/manifests/cert-manager-webhook.yaml")
-	if _, err := Run(cmd); err != nil {
-		return err
-	}
-
-	// Apply the kube-system resources
-	cmd = exec.Command("kubectl", "apply", "-f", "dist/e2e/manifests/cert-manager-webhook-kube-system.yaml")
-	if _, err := Run(cmd); err != nil {
-		return err
-	}
-
-	// Wait for rollout with periodic pod logging
-	waitCmd := exec.Command("kubectl", "-n", "kibaship", "rollout", "status", "deployment/kibaship-cert-manager-webhook", "--timeout=5m")
-	if err := WaitWithPodLogging(waitCmd, "kibaship", 5*time.Minute); err != nil {
-		_, _ = fmt.Fprintf(GinkgoWriter, "\n❌ Timeout or error waiting for cert-manager webhook rollout. Deployment describe:\n")
-		desc := exec.Command("kubectl", "-n", "kibaship", "describe", "deployment", "kibaship-cert-manager-webhook")
-		_, _ = Run(desc)
-		return err
-	}
-	_, _ = fmt.Fprintf(GinkgoWriter, "✅ cert-manager webhook is ready!\n")
-	return nil
-}
 
 // UndeployKibashipOperator removes the kibaship deployment
 func UndeployKibashipOperator() {

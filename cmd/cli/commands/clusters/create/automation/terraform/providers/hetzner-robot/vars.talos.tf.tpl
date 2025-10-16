@@ -9,6 +9,12 @@ variable "cluster_endpoint" {
   type        = string
 }
 
+# Talos VIP IP for control plane virtual IP
+variable "vip_ip" {
+  description = "Talos VIP IP address used by control plane"
+  type        = string
+}
+
 variable "cluster_network_ip_range" {
   description = "Main cluster network IP range (e.g., 172.25.0.0/16)"
   type        = string
@@ -55,6 +61,15 @@ variable "server_{{.ID}}_private_ipv4_gateway" {
 variable "server_{{.ID}}_installation_disk" {
   description = "Installation disk path for server {{.Name}} ({{.ID}})"
   type        = string
+}
+
+variable "server_{{.ID}}_storage_disks" {
+  description = "Storage disks (non-installation disks) for server {{.Name}} ({{.ID}})"
+  type = list(object({
+    name = string
+    path = string
+  }))
+  default = []
 }
 
 {{end}}

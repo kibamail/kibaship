@@ -1,0 +1,45 @@
+---
+apiVersion: platform.operator.kibaship.com/v1alpha1
+kind: Environment
+metadata:
+  name: environment-development
+  namespace: e2e-test-project
+  labels:
+    platform.kibaship.com/uuid: "dev-env-uuid"
+    platform.kibaship.com/slug: "environment-development"
+    platform.kibaship.com/project-uuid: "e2e-test-uuid"
+    platform.kibaship.com/workspace-uuid: "workspace-e2e-test"
+spec:
+  type: Development
+  projectRef:
+    name: project-e2e-test
+---
+apiVersion: platform.operator.kibaship.com/v1alpha1
+kind: Environment
+metadata:
+  name: environment-staging
+  namespace: e2e-test-project
+  labels:
+    platform.kibaship.com/uuid: "staging-env-uuid"
+    platform.kibaship.com/slug: "environment-staging"
+    platform.kibaship.com/project-uuid: "e2e-test-uuid"
+    platform.kibaship.com/workspace-uuid: "workspace-e2e-test"
+spec:
+  type: Staging
+  projectRef:
+    name: project-e2e-test
+---
+apiVersion: platform.operator.kibaship.com/v1alpha1
+kind: Environment
+metadata:
+  name: environment-production
+  namespace: e2e-test-project
+  labels:
+    platform.kibaship.com/uuid: "prod-env-uuid"
+    platform.kibaship.com/slug: "environment-production"
+    platform.kibaship.com/project-uuid: "e2e-test-uuid"
+    platform.kibaship.com/workspace-uuid: "workspace-e2e-test"
+spec:
+  type: Production
+  projectRef:
+    name: project-e2e-test

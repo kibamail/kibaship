@@ -35,7 +35,7 @@ resource "null_resource" "disk_discovery_{{.ID}}" {
         apt-get update && apt-get install -y jq
 
         # 1. Get all block devices (exclude md/raid devices)
-        DEVICES=$(lsblk -J -d -n -o NAME,SIZE,TYPE | jq -c '.blockdevices[] | select(.type=="disk" and (.name | startswith("md") | not))')
+        DEVICES=$(lsblk -J -b -d -n -o NAME,SIZE,TYPE | jq -c '.blockdevices[] | select(.type=="disk" and (.name | startswith("md") | not))')
 
         # 2. Wipe all block devices
         echo "$DEVICES" | jq -r '.name' | while read -r dev; do

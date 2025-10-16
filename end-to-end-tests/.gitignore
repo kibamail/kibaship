@@ -1,0 +1,11 @@
+# Cluster configuration
+kubeconfig
+*.kubeconfig
+cluster-config.yaml
+
+# Build logs
+*.log
+
+# Environment files with credentials
+.env
+.env.*

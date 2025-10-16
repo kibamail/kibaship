@@ -483,7 +483,7 @@ func TestEnsureClusterIssuer(t *testing.T) {
 				t.Errorf("ClusterIssuer email = %v, want %s", acme["email"], email)
 			}
 
-			// Verify webhook solver
+			// Verify acmeDNS solver
 			solvers, ok := acme["solvers"].([]any)
 			if !ok || len(solvers) == 0 {
 				t.Errorf("ClusterIssuer solvers is invalid")
@@ -502,19 +502,29 @@ func TestEnsureClusterIssuer(t *testing.T) {
 				return
 			}
 
-			webhook, ok := dns01["webhook"].(map[string]any)
-			if !ok {
-				t.Errorf("ClusterIssuer solver dns01.webhook is not a map")
-				return
-			}
+		acmeDNS, ok := dns01["acmeDNS"].(map[string]any)
+		if !ok {
+			t.Errorf("ClusterIssuer solver dns01.acmeDNS is not a map")
+			return
+		}
 
-			if webhook["groupName"] != "dns.kibaship.com" {
-				t.Errorf("ClusterIssuer webhook groupName = %v, want 'dns.kibaship.com'", webhook["groupName"])
-			}
+		if acmeDNS["host"] != "http://acme-dns.kibaship.svc.cluster.local" {
+			t.Errorf("ClusterIssuer acmeDNS host = %v, want 'http://acme-dns.kibaship.svc.cluster.local'", acmeDNS["host"])
+		}
 
-			if webhook["solverName"] != "kibaship" {
-				t.Errorf("ClusterIssuer webhook solverName = %v, want 'kibaship'", webhook["solverName"])
-			}
+		accountSecretRef, ok := acmeDNS["accountSecretRef"].(map[string]any)
+		if !ok {
+			t.Errorf("ClusterIssuer acmeDNS accountSecretRef is not a map")
+			return
+		}
+
+		if accountSecretRef["name"] != "acme-dns-account" {
+			t.Errorf("ClusterIssuer accountSecretRef name = %v, want 'acme-dns-account'", accountSecretRef["name"])
+		}
+
+		if accountSecretRef["key"] != "acmedns.json" {
+			t.Errorf("ClusterIssuer accountSecretRef key = %v, want 'acmedns.json'", accountSecretRef["key"])
+		}
 		})
 	}
 }

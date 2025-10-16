@@ -40,7 +40,6 @@ const (
 var (
 	projectImage             = "kibamail/kibaship:e2e"
 	projectImageAPIServer    = "kibamail/kibaship-apiserver:e2e"
-	projectImageCertWebhook  = "kibamail/kibaship-cert-manager-webhook:e2e"
 	projectImageRailpackCLI  = "kibamail/kibaship-railpack-cli:e2e"
 	projectImageRailpackBld  = "kibamail/kibaship-railpack-build:e2e"
 	projectImageRegistryAuth = "kibamail/kibaship-registry-auth:e2e"
@@ -321,17 +320,6 @@ var _ = SynchronizedBeforeSuite(
 		By("[Process 1] deploying API server into operator namespace (always redeploys)")
 		Expect(utils.DeployAPIServer(projectImageAPIServer)).To(Succeed(), "Failed to deploy API server")
 
-		By("[Process 1] building the cert-manager webhook image")
-		cmd = exec.Command("make", "docker-build-cert-manager-webhook", fmt.Sprintf("IMG_CERT_MANAGER_WEBHOOK=%s", projectImageCertWebhook))
-		_, err = utils.Run(cmd)
-		ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to build the cert-manager webhook image")
-
-		By("[Process 1] loading the cert-manager webhook image on Kind")
-		err = utils.LoadImageToKindClusterWithName(projectImageCertWebhook)
-		ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to load the cert-manager webhook image into Kind")
-
-		By("[Process 1] deploying cert-manager webhook into operator namespace (always redeploys)")
-		Expect(utils.DeployCertManagerWebhook(projectImageCertWebhook)).To(Succeed(), "Failed to deploy cert-manager webhook")
 
 		By("[Process 1] cluster setup complete - signaling other processes to start")
 		// Return data to share with other processes (cluster name)

@@ -42,6 +42,12 @@ type HetznerConfig struct {
 	Token string `validate:"required_with=HetznerConfig"`
 }
 
+// StorageDisk represents a non-installation disk available for storage
+type StorageDisk struct {
+	Name string `json:"name"` // e.g., "storage-disk-0", "storage-disk-1"
+	Path string `json:"path"` // e.g., "/dev/disk/by-id/nvme-..."
+}
+
 // HetznerRobotServer represents a selected Hetzner Robot server for templating
 type HetznerRobotServer struct {
 	ID             string `json:"id"`
@@ -61,6 +67,9 @@ type HetznerRobotServer struct {
 	PrivateAddressSubnet   string `json:"private_address_subnet"`
 	PrivateIPv4Gateway     string `json:"private_ipv4_gateway"`
 	InstallationDisk       string `json:"installation_disk"`
+
+	// Storage disks (all disks except installation disk)
+	StorageDisks []StorageDisk `json:"storage_disks"`
 }
 
 // HetznerRobotConfig represents Hetzner Robot-specific configuration
@@ -91,9 +100,13 @@ type HetznerRobotNetworkConfig struct {
 
 // HetznerRobotTalosConfig represents Talos configuration for Hetzner Robot clusters
 type HetznerRobotTalosConfig struct {
-	ClusterEndpoint      string `json:"cluster_endpoint" yaml:"cluster-endpoint"`
-	VLANID               int    `json:"vlan_id" yaml:"vlan-id"`
-	VSwitchSubnetIPRange string `json:"vswitch_subnet_ip_range" yaml:"vswitch-subnet-ip-range"`
+    ClusterEndpoint      string `json:"cluster_endpoint" yaml:"cluster-endpoint"`
+    VLANID               int    `json:"vlan_id" yaml:"vlan-id"`
+    VSwitchSubnetIPRange string `json:"vswitch_subnet_ip_range" yaml:"vswitch-subnet-ip-range"`
+    // VIPIP is the IP address used for Talos VIP
+    VIPIP               string `json:"vip_ip" yaml:"vip-ip" validate:"required,ip"`
+    // LoadBalancerIP is the IP address reserved for future load balancing
+    LoadBalancerIP      string `json:"load_balancer_ip" yaml:"load-balancer-ip" validate:"omitempty,ip"`
 }
 
 // LinodeConfig represents Linode-specific configuration

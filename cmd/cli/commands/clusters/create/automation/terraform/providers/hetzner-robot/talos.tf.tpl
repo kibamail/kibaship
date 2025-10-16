@@ -77,7 +77,7 @@ data "talos_machine_configuration" "machineconfig_cp_{{.ID}}" {
   machine_type     = "controlplane"
   machine_secrets  = talos_machine_secrets.machine_secrets.machine_secrets
 
-  config_patches = [
+  config_patches = concat([
     yamlencode({
       cluster = local.control_plane_cluster_config
     }),
@@ -117,6 +117,9 @@ data "talos_machine_configuration" "machineconfig_cp_{{.ID}}" {
                       gateway = var.server_{{.ID}}_private_ipv4_gateway
                     }
                   ]
+                  vip = {
+                    ip = var.vip_ip
+                  }
                 }
               ]
             }
@@ -124,7 +127,22 @@ data "talos_machine_configuration" "machineconfig_cp_{{.ID}}" {
         }
       }
     })
-  ]
+  ], [
+    for disk in var.server_{{.ID}}_storage_disks :
+    yamlencode({
+      apiVersion = "v1alpha1"
+      kind = "UserVolumeConfig"
+      name = disk.name
+      provisioning = {
+        diskSelector = {
+          match = format("\"%s\" in disk.symlinks", disk.path)
+        }
+      }
+      filesystem = {
+        type = "xfs"
+      }
+    })
+  ])
 }
 {{$controlPlaneIndex = add $controlPlaneIndex 1}}
 {{end}}
@@ -140,7 +158,7 @@ data "talos_machine_configuration" "machineconfig_worker_{{.ID}}" {
   machine_type     = "worker"
   machine_secrets  = talos_machine_secrets.machine_secrets.machine_secrets
 
-  config_patches = [
+  config_patches = concat([
     yamlencode(merge(
       {
         cluster = local.cluster_config
@@ -190,7 +208,22 @@ data "talos_machine_configuration" "machineconfig_worker_{{.ID}}" {
         }
       }
     })
-  ]
+  ], [
+    for disk in var.server_{{.ID}}_storage_disks :
+    yamlencode({
+      apiVersion = "v1alpha1"
+      kind = "UserVolumeConfig"
+      name = disk.name
+      provisioning = {
+        diskSelector = {
+          match = format("\"%s\" in disk.symlinks", disk.path)
+        }
+      }
+      filesystem = {
+        type = "xfs"
+      }
+    })
+  ])
 }
 {{$workerIndex = add $workerIndex 1}}
 {{end}}

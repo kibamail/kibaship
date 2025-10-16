@@ -1,0 +1,24 @@
+apiVersion: platform.operator.kibaship.com/v1alpha1
+kind: Project
+metadata:
+  name: project-e2e-test
+  labels:
+    platform.kibaship.com/uuid: "e2e-test-uuid"
+    platform.kibaship.com/slug: "project-e2e-test"
+    platform.kibaship.com/workspace-uuid: "workspace-e2e-test"
+spec:
+  applicationTypes:
+    mysql:
+      enabled: true
+    mysqlCluster:
+      enabled: true
+    valkey:
+      enabled: true
+    valkeyCluster:
+      enabled: true
+    dockerImage:
+      enabled: true
+    gitRepository:
+      enabled: true
+    imageFromRegistry:
+      enabled: true

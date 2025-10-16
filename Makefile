@@ -54,8 +54,6 @@ IMG ?= $(IMAGE_TAG_BASE):v$(VERSION)
 # API Server image URL
 IMG_APISERVER ?= $(IMAGE_TAG_BASE)-apiserver:v$(VERSION)
 
-# Cert-manager webhook image URL
-IMG_CERT_MANAGER_WEBHOOK ?= $(IMAGE_TAG_BASE)-cert-manager-webhook:v$(VERSION)
 
 # Registry auth service image URL
 IMG_REGISTRY_AUTH ?= $(IMAGE_TAG_BASE)-registry-auth:v$(VERSION)
@@ -263,18 +261,8 @@ docker-push-all: docker-push docker-push-apiserver ## Push both manager and API 
 
 ##@ Webhook
 
-.PHONY: build-cert-manager-webhook
-build-cert-manager-webhook: ## Build Kibaship cert-manager DNS01 webhook binary.
-	mkdir -p bin
-	cd webhooks/cert-manager-kibaship-webhook && go build -o ../../bin/cert-manager-kibaship-webhook .
 
-.PHONY: docker-build-cert-manager-webhook
-docker-build-cert-manager-webhook: ## Build docker image for the Kibaship cert-manager DNS01 webhook.
-	$(CONTAINER_TOOL) build -t ${IMG_CERT_MANAGER_WEBHOOK} -f webhooks/cert-manager-kibaship-webhook/Dockerfile webhooks/cert-manager-kibaship-webhook
 
-.PHONY: docker-push-cert-manager-webhook
-docker-push-cert-manager-webhook: ## Push docker image for the Kibaship cert-manager DNS01 webhook.
-	$(CONTAINER_TOOL) push ${IMG_CERT_MANAGER_WEBHOOK}
 
 ##@ Registry Auth Service
 
@@ -343,10 +331,6 @@ build-installer: manifests generate kustomize ## Generate a consolidated YAML wi
 	cd config/api-server && $(KUSTOMIZE) edit set image apiserver=${IMG_APISERVER}
 	$(KUSTOMIZE) build config/api-server >> dist/install.yaml
 	echo "---" >> dist/install.yaml
-	cd config/cert-manager-webhook && $(KUSTOMIZE) edit set image webhook=${IMG_CERT_MANAGER_WEBHOOK}
-	$(KUSTOMIZE) build config/cert-manager-webhook >> dist/install.yaml
-	echo "---" >> dist/install.yaml
-	$(KUSTOMIZE) build config/cert-manager-webhook-kube-system >> dist/install.yaml
 	echo "---" >> dist/install.yaml
 	$(KUSTOMIZE) build config/tekton-resources >> dist/install.yaml
 	echo "---" >> dist/install.yaml
@@ -548,13 +532,6 @@ build-separate-installers: manifests generate kustomize ## Generate separate YAM
 	$(KUSTOMIZE) build config/api-server > dist/manifests/api-server.yaml
 	
 	# Cert Manager Webhook
-	@echo "Building cert-manager-webhook.yaml..."
-	cd config/cert-manager-webhook && $(KUSTOMIZE) edit set image webhook=${IMG_CERT_MANAGER_WEBHOOK}
-	$(KUSTOMIZE) build config/cert-manager-webhook > dist/manifests/cert-manager-webhook.yaml
-	
-	# Cert Manager Webhook Kube System
-	@echo "Building cert-manager-webhook-kube-system.yaml..."
-	$(KUSTOMIZE) build config/cert-manager-webhook-kube-system > dist/manifests/cert-manager-webhook-kube-system.yaml
 	
 	# Tekton Resources
 	@echo "Building tekton-resources.yaml..."
@@ -595,12 +572,6 @@ build-e2e-installers: manifests generate kustomize ## Generate e2e YAML files fo
 	$(KUSTOMIZE) build config/overlays/e2e/api-server > dist/e2e/manifests/api-server.yaml
 
 	# Cert Manager Webhook
-	@echo "Building cert-manager-webhook.yaml..."
-	$(KUSTOMIZE) build config/overlays/e2e/cert-manager-webhook > dist/e2e/manifests/cert-manager-webhook.yaml
-
-	# Cert Manager Webhook Kube System
-	@echo "Building cert-manager-webhook-kube-system.yaml..."
-	$(KUSTOMIZE) build config/cert-manager-webhook-kube-system > dist/e2e/manifests/cert-manager-webhook-kube-system.yaml
 
 	# Tekton Resources
 	@echo "Building tekton-resources.yaml..."

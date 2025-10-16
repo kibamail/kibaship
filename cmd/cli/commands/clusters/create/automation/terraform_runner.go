@@ -230,12 +230,13 @@ func RunTerraformApply(config *config.CreateConfig) error {
 				env = append(env, fmt.Sprintf("TF_VAR_server_%s_password=%s", serverID, password))
 			}
 
-			// Add Talos configuration if available
-			if config.HetznerRobot.TalosConfig != nil {
-				env = append(env, fmt.Sprintf("TF_VAR_cluster_endpoint=%s", config.HetznerRobot.TalosConfig.ClusterEndpoint))
-				env = append(env, fmt.Sprintf("TF_VAR_vlan_id=%d", config.HetznerRobot.TalosConfig.VLANID))
-				env = append(env, fmt.Sprintf("TF_VAR_vswitch_subnet_ip_range=%s", config.HetznerRobot.TalosConfig.VSwitchSubnetIPRange))
-			}
+            // Add Talos configuration
+            if config.HetznerRobot.TalosConfig != nil {
+                env = append(env, fmt.Sprintf("TF_VAR_cluster_endpoint=%s", config.HetznerRobot.TalosConfig.ClusterEndpoint))
+                env = append(env, fmt.Sprintf("TF_VAR_vlan_id=%d", config.HetznerRobot.TalosConfig.VLANID))
+                env = append(env, fmt.Sprintf("TF_VAR_vswitch_subnet_ip_range=%s", config.HetznerRobot.TalosConfig.VSwitchSubnetIPRange))
+                env = append(env, fmt.Sprintf("TF_VAR_vip_ip=%s", config.HetznerRobot.TalosConfig.VIPIP))
+            }
 
 			// Add server private IPs and network configuration
 			for _, server := range config.HetznerRobot.SelectedServers {
@@ -506,11 +507,12 @@ func RunBootstrapTerraformApply(config *config.CreateConfig) error {
 			}
 
 			// Add Talos configuration if available
-			if config.HetznerRobot.TalosConfig != nil {
-				env = append(env, fmt.Sprintf("TF_VAR_cluster_endpoint=%s", config.HetznerRobot.TalosConfig.ClusterEndpoint))
-				env = append(env, fmt.Sprintf("TF_VAR_vlan_id=%d", config.HetznerRobot.TalosConfig.VLANID))
-				env = append(env, fmt.Sprintf("TF_VAR_vswitch_subnet_ip_range=%s", config.HetznerRobot.TalosConfig.VSwitchSubnetIPRange))
-			}
+            if config.HetznerRobot.TalosConfig != nil {
+                env = append(env, fmt.Sprintf("TF_VAR_cluster_endpoint=%s", config.HetznerRobot.TalosConfig.ClusterEndpoint))
+                env = append(env, fmt.Sprintf("TF_VAR_vlan_id=%d", config.HetznerRobot.TalosConfig.VLANID))
+                env = append(env, fmt.Sprintf("TF_VAR_vswitch_subnet_ip_range=%s", config.HetznerRobot.TalosConfig.VSwitchSubnetIPRange))
+                env = append(env, fmt.Sprintf("TF_VAR_vip_ip=%s", config.HetznerRobot.TalosConfig.VIPIP))
+            }
 
 			// Add server private IPs and network configuration
 			for _, server := range config.HetznerRobot.SelectedServers {
@@ -621,92 +623,10 @@ func ReadProvisionTerraformOutputs(config *config.CreateConfig) (map[string]inte
 	return outputs, nil
 }
 
-// ReadCloudTerraformOutputs reads the Terraform outputs from the cloud phase
-func ReadCloudTerraformOutputs(config *config.CreateConfig) (map[string]interface{}, error) {
-	cloudDir := filepath.Join(".kibaship", config.Name, "cloud")
-
-	// Create terraform output command to get JSON output
-	cmd := exec.Command("terraform", "output", "-json")
-	cmd.Dir = cloudDir
-	cmd.Env = os.Environ()
-
-	// Capture output
-	output, err := cmd.Output()
-	if err != nil {
-		return nil, fmt.Errorf("failed to read terraform outputs: %w", err)
-	}
-
-	// Parse JSON output
-	var outputs map[string]interface{}
-	if err := json.Unmarshal(output, &outputs); err != nil {
-		return nil, fmt.Errorf("failed to parse terraform outputs: %w", err)
-	}
-
-	return outputs, nil
-}
+// Cloud phase removed for hetzner-robot; no cloud outputs to read
 
 // RunCloudTerraformInit runs terraform init in the cloud directory (for Hetzner Robot)
-func RunCloudTerraformInit(config *config.CreateConfig) error {
-	cloudDir := filepath.Join(".kibaship", config.Name, "cloud")
-
-	// Prepare backend configuration arguments
-	backendArgs := []string{
-		"init",
-		fmt.Sprintf("-backend-config=bucket=%s", config.TerraformState.S3Bucket),
-		fmt.Sprintf("-backend-config=key=clusters/%s/cloud.terraform.tfstate", config.Name),
-		fmt.Sprintf("-backend-config=region=%s", config.TerraformState.S3Region),
-		fmt.Sprintf("-backend-config=access_key=%s", config.TerraformState.S3AccessKey),
-		fmt.Sprintf("-backend-config=secret_key=%s", config.TerraformState.S3AccessSecret),
-		"-backend-config=encrypt=true",
-	}
-
-	// Create terraform command
-	cmd := exec.Command("terraform", backendArgs...)
-	cmd.Dir = cloudDir
-
-	// Set up environment variables
-	cmd.Env = os.Environ()
-
-	// Create pipes for stdout and stderr
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return fmt.Errorf("failed to create stdout pipe: %w", err)
-	}
-
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		return fmt.Errorf("failed to create stderr pipe: %w", err)
-	}
-
-	// Start the command
-	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("failed to start cloud terraform init: %w", err)
-	}
-
-	// Stream output in real-time using channels for synchronization
-	done := make(chan bool, 2)
-	go func() {
-		streamOutput(stdout, "")
-		done <- true
-	}()
-	go func() {
-		streamOutput(stderr, "")
-		done <- true
-	}()
-
-	// Wait for command to complete
-	err = cmd.Wait()
-
-	// Wait for both output streams to finish
-	<-done
-	<-done
-
-	if err != nil {
-		return fmt.Errorf("cloud terraform init failed: %w", err)
-	}
-
-	return nil
-}
+func RunCloudTerraformInit(config *config.CreateConfig) error { return nil }
 
 // RunCloudTerraformValidate runs terraform validate in the cloud directory (for Hetzner Robot)
 func RunCloudTerraformValidate(config *config.CreateConfig) error {
@@ -1038,6 +958,14 @@ func RunTalosTerraformApply(config *config.CreateConfig) error {
 		}
 		if server.InstallationDisk != "" {
 			env = append(env, fmt.Sprintf("TF_VAR_server_%s_installation_disk=%s", server.ID, server.InstallationDisk))
+		}
+
+		// Add storage disks as JSON-encoded string
+		if len(server.StorageDisks) > 0 {
+			storageDisksJSON, err := json.Marshal(server.StorageDisks)
+			if err == nil {
+				env = append(env, fmt.Sprintf("TF_VAR_server_%s_storage_disks=%s", server.ID, string(storageDisksJSON)))
+			}
 		}
 	}
 

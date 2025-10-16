@@ -127,7 +127,6 @@ build_image "registry-auth" "${IMAGE_TAG_BASE}-registry-auth:v${VERSION}" "Docke
 PID3=$!
 
 build_image "cert-manager-webhook" "${IMAGE_TAG_BASE}-cert-manager-webhook:v${VERSION}" \
-    "webhooks/cert-manager-kibaship-webhook/Dockerfile" "webhooks/cert-manager-kibaship-webhook" &
 PID4=$!
 
 build_image "railpack-cli" "kibamail/kibaship-railpack-cli:v${VERSION}" \

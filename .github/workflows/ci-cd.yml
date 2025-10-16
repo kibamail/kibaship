@@ -100,9 +100,6 @@ jobs:
           - name: kibaship-apiserver
             context: .
             file: Dockerfile.apiserver
-          - name: kibaship-cert-manager-webhook
-            context: webhooks/cert-manager-kibaship-webhook
-            file: webhooks/cert-manager-kibaship-webhook/Dockerfile
           - name: kibaship-registry-auth
             context: .
             file: Dockerfile.registry-auth
@@ -219,7 +216,6 @@ jobs:
           IMAGES: |
             kibaship
             kibaship-apiserver
-            kibaship-cert-manager-webhook
             kibaship-registry-auth
             kibaship-railpack-cli
             kibaship-railpack-build
@@ -269,7 +265,6 @@ jobs:
           IMAGES: |
             kibaship
             kibaship-apiserver
-            kibaship-cert-manager-webhook
             kibaship-registry-auth
             kibaship-railpack-cli
             kibaship-railpack-build
@@ -407,7 +402,6 @@ jobs:
           IMAGES: |
             kibaship
             kibaship-apiserver
-            kibaship-cert-manager-webhook
             kibaship-registry-auth
             kibaship-railpack-cli
             kibaship-railpack-build
@@ -516,15 +510,12 @@ jobs:
         run: |
           make build-installer \
             IMG=${{ env.REGISTRY }}/${{ env.DOCKER_HUB_USERNAME }}/kibaship:v-${{ steps.version.outputs.version }} \
-            IMG_APISERVER=${{ env.REGISTRY }}/${{ env.DOCKER_HUB_USERNAME }}/kibaship-apiserver:v-${{ steps.version.outputs.version }} \
-            IMG_CERT_MANAGER_WEBHOOK=${{ env.REGISTRY }}/${{ env.DOCKER_HUB_USERNAME }}/kibaship-cert-manager-webhook:v-${{ steps.version.outputs.version }} \
-            IMG_REGISTRY_AUTH=${{ env.REGISTRY }}/${{ env.DOCKER_HUB_USERNAME }}/kibaship-registry-auth:v-${{ steps.version.outputs.version }}
+            IMG_APISERVER=${{ env.REGISTRY }}/${{ env.DOCKER_HUB_USERNAME }}/kibaship-apiserver:v-${{ steps.version.outputs.version }}
 
       - name: Upload deployment manifests
         uses: actions/upload-artifact@v4
         with:
           name: deployment-manifests
-          path: dist/install.yaml
 
       - name: Download CLI artifacts
         uses: actions/download-artifact@v4
@@ -573,15 +564,10 @@ jobs:
             The following container images are available for this release:
             - `docker.io/kibamail/kibaship:v-${{ steps.version.outputs.version }}`
             - `docker.io/kibamail/kibaship-apiserver:v-${{ steps.version.outputs.version }}`
-            - `docker.io/kibamail/kibaship-cert-manager-webhook:v-${{ steps.version.outputs.version }}`
-            - `docker.io/kibamail/kibaship-registry-auth:v-${{ steps.version.outputs.version }}`
-            - `docker.io/kibamail/kibaship-railpack-cli:v-${{ steps.version.outputs.version }}`
-            - `docker.io/kibamail/kibaship-railpack-build:v-${{ steps.version.outputs.version }}`
 
             ### CLI Tool
 
             Download the KibaShip CLI (minimal version with help screen and version info):
-
             **Linux (AMD64)**
             ```bash
             curl -L -o kibaship https://github.com/kibamail/kibaship/releases/download/${{ steps.version.outputs.tag_name }}/kibaship-linux-amd64

@@ -1,0 +1,154 @@
+---
+# MySQL Single Instance Application
+apiVersion: platform.operator.kibaship.com/v1alpha1
+kind: Application
+metadata:
+  name: application-mysql-single
+  namespace: e2e-test-project
+  labels:
+    platform.kibaship.com/uuid: "mysql-single-uuid"
+    platform.kibaship.com/slug: "application-mysql-single"
+    platform.kibaship.com/project-uuid: "e2e-test-uuid"
+    platform.kibaship.com/workspace-uuid: "workspace-e2e-test"
+    platform.kibaship.com/environment-uuid: "prod-env-uuid"
+spec:
+  type: MySQL
+  environmentRef:
+    name: environment-production
+  mysql:
+    version: "8.0.36"
+---
+# MySQL Cluster Application
+apiVersion: platform.operator.kibaship.com/v1alpha1
+kind: Application
+metadata:
+  name: application-mysql-cluster
+  namespace: e2e-test-project
+  labels:
+    platform.kibaship.com/uuid: "mysql-cluster-uuid"
+    platform.kibaship.com/slug: "application-mysql-cluster"
+    platform.kibaship.com/project-uuid: "e2e-test-uuid"
+    platform.kibaship.com/workspace-uuid: "workspace-e2e-test"
+    platform.kibaship.com/environment-uuid: "prod-env-uuid"
+spec:
+  type: MySQLCluster
+  environmentRef:
+    name: environment-production
+  mysqlCluster:
+    version: "8.0.36"
+    replicas: 3
+---
+# Valkey Single Instance Application
+apiVersion: platform.operator.kibaship.com/v1alpha1
+kind: Application
+metadata:
+  name: application-valkey-single
+  namespace: e2e-test-project
+  labels:
+    platform.kibaship.com/uuid: "valkey-single-uuid"
+    platform.kibaship.com/slug: "application-valkey-single"
+    platform.kibaship.com/project-uuid: "e2e-test-uuid"
+    platform.kibaship.com/workspace-uuid: "workspace-e2e-test"
+    platform.kibaship.com/environment-uuid: "prod-env-uuid"
+spec:
+  type: Valkey
+  environmentRef:
+    name: environment-production
+  valkey:
+    version: "8.0.1"
+---
+# Valkey Cluster Application
+apiVersion: platform.operator.kibaship.com/v1alpha1
+kind: Application
+metadata:
+  name: application-valkey-cluster
+  namespace: e2e-test-project
+  labels:
+    platform.kibaship.com/uuid: "valkey-cluster-uuid"
+    platform.kibaship.com/slug: "application-valkey-cluster"
+    platform.kibaship.com/project-uuid: "e2e-test-uuid"
+    platform.kibaship.com/workspace-uuid: "workspace-e2e-test"
+    platform.kibaship.com/environment-uuid: "prod-env-uuid"
+spec:
+  type: ValkeyCluster
+  environmentRef:
+    name: environment-production
+  valkeyCluster:
+    version: "8.0.1"
+    replicas: 6
+---
+# Docker Image Application
+apiVersion: platform.operator.kibaship.com/v1alpha1
+kind: Application
+metadata:
+  name: application-docker-image
+  namespace: e2e-test-project
+  labels:
+    platform.kibaship.com/uuid: "docker-image-uuid"
+    platform.kibaship.com/slug: "application-docker-image"
+    platform.kibaship.com/project-uuid: "e2e-test-uuid"
+    platform.kibaship.com/workspace-uuid: "workspace-e2e-test"
+    platform.kibaship.com/environment-uuid: "prod-env-uuid"
+spec:
+  type: DockerImage
+  environmentRef:
+    name: environment-production
+  dockerImage:
+    dockerfile: |
+      FROM nginx:alpine
+      COPY index.html /usr/share/nginx/html/
+      EXPOSE 80
+    port: 80
+    env:
+      name: application-docker-image
+---
+# Git Repository Application
+apiVersion: platform.operator.kibaship.com/v1alpha1
+kind: Application
+metadata:
+  name: application-git-repo
+  namespace: e2e-test-project
+  labels:
+    platform.kibaship.com/uuid: "git-repo-uuid"
+    platform.kibaship.com/slug: "application-git-repo"
+    platform.kibaship.com/project-uuid: "e2e-test-uuid"
+    platform.kibaship.com/workspace-uuid: "workspace-e2e-test"
+    platform.kibaship.com/environment-uuid: "prod-env-uuid"
+spec:
+  type: GitRepository
+  environmentRef:
+    name: environment-production
+  gitRepository:
+    url: "https://github.com/example/sample-app.git"
+    branch: "main"
+    dockerfile: |
+      FROM node:18-alpine
+      WORKDIR /app
+      COPY package*.json ./
+      RUN npm ci --only=production
+      COPY . .
+      EXPOSE 3000
+      CMD ["node", "server.js"]
+    port: 3000
+    env:
+      name: application-git-repo
+---
+# Image From Registry Application
+apiVersion: platform.operator.kibaship.com/v1alpha1
+kind: Application
+metadata:
+  name: application-image-registry
+  namespace: e2e-test-project
+  labels:
+    platform.kibaship.com/uuid: "image-registry-uuid"
+    platform.kibaship.com/slug: "application-image-registry"
+    platform.kibaship.com/project-uuid: "e2e-test-uuid"
+    platform.kibaship.com/workspace-uuid: "workspace-e2e-test"
+    platform.kibaship.com/environment-uuid: "prod-env-uuid"
+spec:
+  type: ImageFromRegistry
+  environmentRef:
+    name: environment-production
+  imageFromRegistry:
+    image: "nginx:latest"
+    port: 80

@@ -127,70 +127,7 @@ func BuildHetznerRobotProvisionFiles(config *config.CreateConfig) error {
 	return nil
 }
 
-// BuildHetznerRobotCloudFiles creates the cloud directory and compiles cloud.tf.tpl and vars.cloud.tf.tpl
-func BuildHetznerRobotCloudFiles(config *config.CreateConfig) error {
-	// Create .kibaship directory structure
-	kibashipDir := ".kibaship"
-	clusterDir := filepath.Join(kibashipDir, config.Name)
-	cloudDir := filepath.Join(clusterDir, "cloud")
-
-	// Create directories
-	dirs := []string{kibashipDir, clusterDir, cloudDir}
-	for _, dir := range dirs {
-		if err := os.MkdirAll(dir, 0755); err != nil {
-			return fmt.Errorf("failed to create directory %s: %w", dir, err)
-		}
-	}
-
-	// Log template variables being passed
-	fmt.Printf("\n%s %s\n",
-		"\033[36m📋\033[0m",
-		"\033[1;36mTemplate Variables for Cloud Build:\033[0m")
-	fmt.Printf("  %s: %s\n", "\033[90mName\033[0m", config.Name)
-	fmt.Printf("  %s: %s\n", "\033[90mTerraformState.S3Bucket\033[0m", config.TerraformState.S3Bucket)
-	fmt.Printf("  %s: %s\n", "\033[90mTerraformState.S3Region\033[0m", config.TerraformState.S3Region)
-
-	if config.HetznerRobot != nil {
-		fmt.Printf("  %s: %s\n", "\033[90mHetznerRobot.CloudToken\033[0m", maskSensitive(config.HetznerRobot.CloudToken))
-		fmt.Printf("  %s: %s\n", "\033[90mHetznerRobot.VSwitchID\033[0m", config.HetznerRobot.VSwitchID)
-
-		if config.HetznerRobot.NetworkConfig != nil {
-			fmt.Printf("  %s:\n", "\033[90mHetznerRobot.NetworkConfig\033[0m")
-			fmt.Printf("    %s: %s\n", "\033[90mLocation\033[0m", config.HetznerRobot.NetworkConfig.Location)
-			fmt.Printf("    %s: %s\n", "\033[90mNetworkZone\033[0m", config.HetznerRobot.NetworkConfig.NetworkZone)
-			fmt.Printf("    %s: %s\n", "\033[90mClusterNetworkIPRange\033[0m", config.HetznerRobot.NetworkConfig.ClusterNetworkIPRange)
-			fmt.Printf("    %s: %s\n", "\033[90mClusterVSwitchSubnetIPRange\033[0m", config.HetznerRobot.NetworkConfig.ClusterVSwitchSubnetIPRange)
-			fmt.Printf("    %s: %s\n", "\033[90mClusterSubnetIPRange\033[0m", config.HetznerRobot.NetworkConfig.ClusterSubnetIPRange)
-		}
-
-		fmt.Printf("  %s: %d server(s)\n", "\033[90mHetznerRobot.SelectedServers\033[0m", len(config.HetznerRobot.SelectedServers))
-		for i, server := range config.HetznerRobot.SelectedServers {
-			fmt.Printf("    %s [%d]:\n", "\033[90mServer\033[0m", i)
-			fmt.Printf("      %s: %s\n", "\033[90mID\033[0m", server.ID)
-			fmt.Printf("      %s: %s\n", "\033[90mName\033[0m", server.Name)
-			fmt.Printf("      %s: %s\n", "\033[90mIP\033[0m", server.IP)
-			fmt.Printf("      %s: %s\n", "\033[90mPrivateIP\033[0m", server.PrivateIP)
-			fmt.Printf("      %s: %s\n", "\033[90mRole\033[0m", server.Role)
-		}
-	}
-
-	// Get provider-specific template path
-	providerPath := "terraform/providers/hetzner-robot"
-
-	// Compile cloud template
-	if err := compileTemplate(providerPath, "cloud.tf.tpl",
-		filepath.Join(cloudDir, "main.tf"), config); err != nil {
-		return fmt.Errorf("failed to compile cloud template: %w", err)
-	}
-
-	// Compile cloud-specific vars template
-	if err := compileTemplate(providerPath, "vars.cloud.tf.tpl",
-		filepath.Join(cloudDir, "vars.tf"), config); err != nil {
-		return fmt.Errorf("failed to compile cloud vars template: %w", err)
-	}
-
-	return nil
-}
+// Cloud build removed for hetzner-robot (no longer used)
 
 // BuildHetznerRobotTalosFiles creates the talos directory and compiles talos.tf.tpl and vars.talos.tf.tpl
 func BuildHetznerRobotTalosFiles(config *config.CreateConfig) error {
@@ -241,6 +178,10 @@ func BuildHetznerRobotTalosFiles(config *config.CreateConfig) error {
 			fmt.Printf("      %s: %s\n", "\033[90mPrivateAddressSubnet\033[0m", server.PrivateAddressSubnet)
 			fmt.Printf("      %s: %s\n", "\033[90mPrivateIPv4Gateway\033[0m", server.PrivateIPv4Gateway)
 			fmt.Printf("      %s: %s\n", "\033[90mInstallationDisk\033[0m", server.InstallationDisk)
+			fmt.Printf("      %s: %d disk(s)\n", "\033[90mStorageDisks\033[0m", len(server.StorageDisks))
+			for j, disk := range server.StorageDisks {
+				fmt.Printf("        [%d] %s: %s\n", j, disk.Name, disk.Path)
+			}
 		}
 	}
 

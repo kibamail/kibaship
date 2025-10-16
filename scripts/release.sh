@@ -292,7 +292,6 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
     echo "   1. Build and push all 6 Docker images:"
     echo "      - kibamail/kibaship:v$NEW_VERSION"
     echo "      - kibamail/kibaship-apiserver:v$NEW_VERSION"
-    echo "      - kibamail/kibaship-cert-manager-webhook:v$NEW_VERSION"
     echo "      - kibamail/kibaship-registry-auth:v$NEW_VERSION"
     echo "      - kibamail/kibaship-railpack-cli:v$NEW_VERSION"
     echo "      - kibamail/kibaship-railpack-build:v$NEW_VERSION"

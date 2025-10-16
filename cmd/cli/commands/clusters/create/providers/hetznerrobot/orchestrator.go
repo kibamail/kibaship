@@ -173,73 +173,7 @@ func determineServerRole(index int, clusterType string, totalServers int) string
 }
 
 // storeCloudOutputs stores the cloud phase outputs (like load balancer IPs) in the config
-func storeCloudOutputs(cfg *config.CreateConfig, outputs map[string]interface{}) error {
-	if cfg.HetznerRobot == nil {
-		return fmt.Errorf("HetznerRobot config is nil")
-	}
-
-	fmt.Printf("%s %s\n",
-		styles.CommandStyle.Render("💾"),
-		styles.DescriptionStyle.Render("Storing cloud outputs in config..."))
-
-	// Extract kube_load_balancer_public_ip output
-	// The structure from Terraform is: kube_load_balancer_public_ip = { "value" = "65.108.x.x", "sensitive" = false }
-	var kubeLoadBalancerIP string
-	if kubeLoadBalancerIPRaw, ok := outputs["kube_load_balancer_public_ip"]; ok {
-		if kubeLoadBalancerIPMap, ok := kubeLoadBalancerIPRaw.(map[string]interface{}); ok {
-			// Extract the "value" from the Terraform output structure
-			if value, ok := kubeLoadBalancerIPMap["value"].(string); ok && value != "" {
-				kubeLoadBalancerIP = value
-				fmt.Printf("%s %s %s\n",
-					styles.CommandStyle.Render("✅"),
-					styles.DescriptionStyle.Render("Kubernetes API Load Balancer IP:"),
-					styles.CommandStyle.Render(kubeLoadBalancerIP))
-			}
-		}
-	}
-
-	if kubeLoadBalancerIP == "" {
-		return fmt.Errorf("failed to extract Kubernetes API load balancer IP from cloud outputs")
-	}
-
-	// Get VLAN ID from the stored configuration (set during server selection)
-	vlanID := cfg.HetznerRobot.VLANID
-	if vlanID == 0 {
-		return fmt.Errorf("VLAN ID not found in configuration - ensure vSwitch was selected properly")
-	}
-	fmt.Printf("%s %s %d\n",
-		styles.CommandStyle.Render("✅"),
-		styles.DescriptionStyle.Render("Using VLAN ID:"),
-		vlanID)
-
-	// Get vSwitch subnet IP range
-	var vswitchSubnetIPRange string
-	if cfg.HetznerRobot.NetworkConfig != nil {
-		vswitchSubnetIPRange = cfg.HetznerRobot.NetworkConfig.ClusterVSwitchSubnetIPRange
-	}
-
-	// Initialize TalosConfig with discovered values
-	cfg.HetznerRobot.TalosConfig = &config.HetznerRobotTalosConfig{
-		ClusterEndpoint:      fmt.Sprintf("https://%s:6443", kubeLoadBalancerIP),
-		VLANID:               vlanID, // Will be populated from vSwitch data
-		VSwitchSubnetIPRange: vswitchSubnetIPRange,
-	}
-
-	fmt.Printf("%s %s\n",
-		styles.CommandStyle.Render("✅"),
-		styles.DescriptionStyle.Render("TalosConfig initialized:"))
-	fmt.Printf("  %s %s\n",
-		styles.DescriptionStyle.Render("Cluster Endpoint:"),
-		styles.CommandStyle.Render(cfg.HetznerRobot.TalosConfig.ClusterEndpoint))
-	fmt.Printf("  %s %s\n",
-		styles.DescriptionStyle.Render("VSwitch Subnet IP Range:"),
-		styles.CommandStyle.Render(cfg.HetznerRobot.TalosConfig.VSwitchSubnetIPRange))
-	fmt.Printf("  %s %d\n",
-		styles.DescriptionStyle.Render("VLAN ID:"),
-		cfg.HetznerRobot.TalosConfig.VLANID)
-
-	return nil
-}
+// Cloud outputs are no longer used for hetzner-robot; Talos endpoint derives from VIP
 
 // storeProvisionOutputs stores the provision phase outputs (like discovered disks) in the config
 func storeProvisionOutputs(cfg *config.CreateConfig, outputs map[string]interface{}) error {
@@ -275,6 +209,7 @@ func storeProvisionOutputs(cfg *config.CreateConfig, outputs map[string]interfac
 			if diskDiscoveryMap, ok := diskDiscoveryRaw.(map[string]interface{}); ok {
 				if valueMap, ok := diskDiscoveryMap["value"].(map[string]interface{}); ok {
 					// Extract talos_installation nested object
+					var installationDiskByID string
 					if talosInstallation, ok := valueMap["talos_installation"].(map[string]interface{}); ok {
 						// Prefer disk_by_id_path, fallback to full_path
 						var diskPath string
@@ -291,6 +226,11 @@ func storeProvisionOutputs(cfg *config.CreateConfig, outputs map[string]interfac
 								styles.DescriptionStyle.Render("Stored disk for"),
 								styles.CommandStyle.Render(server.Name),
 								styles.CommandStyle.Render(diskPath))
+
+							// Extract disk_by_id for filtering storage disks
+							if diskByID, ok := talosInstallation["disk_by_id"].(string); ok {
+								installationDiskByID = diskByID
+							}
 						} else {
 							fmt.Printf("%s %s %s (no disk path in talos_installation)\n",
 								styles.CommandStyle.Render("⚠️"),
@@ -302,6 +242,55 @@ func storeProvisionOutputs(cfg *config.CreateConfig, outputs map[string]interfac
 							styles.CommandStyle.Render("⚠️"),
 							styles.DescriptionStyle.Render("Warning: Could not extract talos_installation for"),
 							styles.CommandStyle.Render(server.Name))
+					}
+
+					// Extract storage disks (all devices except the installation disk)
+					if allDevicesRaw, ok := valueMap["all_devices"]; ok {
+						if allDevices, ok := allDevicesRaw.([]interface{}); ok {
+							var storageDisks []config.StorageDisk
+							storageIndex := 0
+
+							for _, deviceRaw := range allDevices {
+								if device, ok := deviceRaw.(map[string]interface{}); ok {
+									// Extract disk_by_id
+									diskByID, _ := device["disk_by_id"].(string)
+
+									// Skip if this is the installation disk
+									if diskByID == installationDiskByID {
+										continue
+									}
+
+									// Create storage disk entry with disk-by-id path
+									if diskByID != "" {
+										storageDisk := config.StorageDisk{
+											Name: fmt.Sprintf("storage-disk-%d", storageIndex),
+											Path: fmt.Sprintf("/dev/disk/by-id/%s", diskByID),
+										}
+										storageDisks = append(storageDisks, storageDisk)
+										storageIndex++
+									}
+								}
+							}
+
+							server.StorageDisks = storageDisks
+							if len(storageDisks) > 0 {
+								fmt.Printf("%s %s %s: %d storage disk(s)\n",
+									styles.CommandStyle.Render("✅"),
+									styles.DescriptionStyle.Render("Stored storage disks for"),
+									styles.CommandStyle.Render(server.Name),
+									len(storageDisks))
+								for _, disk := range storageDisks {
+									fmt.Printf("  - %s: %s\n",
+										styles.CommandStyle.Render(disk.Name),
+										styles.DescriptionStyle.Render(disk.Path))
+								}
+							} else {
+								fmt.Printf("%s %s %s (no additional disks found)\n",
+									styles.CommandStyle.Render("ℹ️"),
+									styles.DescriptionStyle.Render("No storage disks for"),
+									styles.CommandStyle.Render(server.Name))
+							}
+						}
 					}
 				}
 			}
@@ -733,115 +722,7 @@ func RunClusterCreationFlow(cfg *config.CreateConfig) {
 		}
 	}
 
-	// =====================================
-	// PHASE 2: CLOUD (Networking & Load Balancers)
-	// =====================================
-	fmt.Printf("\n%s %s\n",
-		styles.TitleStyle.Render("☁️"),
-		styles.TitleStyle.Render("PHASE 2: Cloud Infrastructure Setup"))
-	fmt.Printf("%s %s\n",
-		styles.CommandStyle.Render("📝"),
-		styles.DescriptionStyle.Render("This phase will create Hetzner Cloud network and load balancers"))
-
-	// Build cloud terraform files
-	fmt.Printf("\n%s %s\n",
-		styles.CommandStyle.Render("🔨"),
-		styles.HelpStyle.Render("Building cloud Terraform files..."))
-	if err := automation.BuildHetznerRobotCloudFiles(cfg); err != nil {
-		fmt.Fprintf(os.Stderr, "%s %s\n",
-			styles.CommandStyle.Render("❌"),
-			styles.CommandStyle.Render(fmt.Sprintf("Error building cloud Terraform files: %v", err)))
-		os.Exit(1)
-	}
-	fmt.Printf("%s %s\n",
-		styles.TitleStyle.Render("✅"),
-		styles.TitleStyle.Render("Cloud Terraform files built successfully!"))
-	fmt.Printf("%s %s\n",
-		styles.CommandStyle.Render("📁"),
-		styles.DescriptionStyle.Render(fmt.Sprintf("Files created in: .kibaship/%s/cloud/", cfg.Name)))
-
-	// Run Terraform init for cloud
-	fmt.Printf("\n%s %s\n",
-		styles.TitleStyle.Render("🚀"),
-		styles.HelpStyle.Render("Initializing cloud Terraform..."))
-	fmt.Printf("%s %s\n",
-		styles.CommandStyle.Render("📝"),
-		styles.DescriptionStyle.Render("Running: terraform init with S3 backend configuration"))
-	fmt.Printf("%s %s\n\n",
-		styles.CommandStyle.Render("📄"),
-		styles.DescriptionStyle.Render(fmt.Sprintf("Backend: s3://%s/clusters/%s/cloud.terraform.tfstate",
-			cfg.TerraformState.S3Bucket, cfg.Name)))
-
-	if err := automation.RunCloudTerraformInit(cfg); err != nil {
-		fmt.Fprintf(os.Stderr, "\n%s %s\n",
-			styles.CommandStyle.Render("❌"),
-			styles.CommandStyle.Render(fmt.Sprintf("Cloud Terraform init failed: %v", err)))
-		os.Exit(1)
-	}
-	fmt.Printf("\n%s %s\n",
-		styles.TitleStyle.Render("✅"),
-		styles.TitleStyle.Render("Cloud Terraform initialization completed!"))
-
-	// Run Terraform validate for cloud
-	fmt.Printf("\n%s %s\n",
-		styles.CommandStyle.Render("🔍"),
-		styles.HelpStyle.Render("Validating cloud Terraform configuration..."))
-	if err := automation.RunCloudTerraformValidate(cfg); err != nil {
-		fmt.Fprintf(os.Stderr, "\n%s %s\n",
-			styles.CommandStyle.Render("❌"),
-			styles.CommandStyle.Render(fmt.Sprintf("Cloud Terraform validate failed: %v", err)))
-		os.Exit(1)
-	}
-	fmt.Printf("\n%s %s\n",
-		styles.TitleStyle.Render("✅"),
-		styles.TitleStyle.Render("Cloud Terraform configuration is valid!"))
-
-	// Run Terraform apply for cloud
-	fmt.Printf("\n%s %s\n",
-		styles.TitleStyle.Render("🚀"),
-		styles.HelpStyle.Render("Creating cloud infrastructure..."))
-	fmt.Printf("%s %s\n",
-		styles.CommandStyle.Render("📝"),
-		styles.DescriptionStyle.Render("Running: terraform apply -auto-approve"))
-	fmt.Printf("%s %s\n",
-		styles.CommandStyle.Render("⚠️"),
-		styles.DescriptionStyle.Render("This will create Hetzner Cloud network and load balancers..."))
-	fmt.Printf("%s %s\n\n",
-		styles.CommandStyle.Render("🕰️"),
-		styles.DescriptionStyle.Render("Please wait while the cloud infrastructure is being created..."))
-
-	if err := automation.RunCloudTerraformApply(cfg); err != nil {
-		fmt.Fprintf(os.Stderr, "\n%s %s\n",
-			styles.CommandStyle.Render("❌"),
-			styles.CommandStyle.Render(fmt.Sprintf("Cloud Terraform apply failed: %v", err)))
-		os.Exit(1)
-	}
-	fmt.Printf("\n%s %s\n",
-		styles.TitleStyle.Render("✅"),
-		styles.TitleStyle.Render("Cloud infrastructure created successfully!"))
-
-	// Read Terraform outputs from cloud phase
-	fmt.Printf("\n%s %s\n",
-		styles.CommandStyle.Render("📊"),
-		styles.HelpStyle.Render("Reading cloud Terraform outputs..."))
-	cloudOutputs, err := automation.ReadCloudTerraformOutputs(cfg)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "%s %s\n",
-			styles.CommandStyle.Render("❌"),
-			styles.CommandStyle.Render(fmt.Sprintf("Failed to read cloud outputs: %v", err)))
-		os.Exit(1)
-	}
-	fmt.Printf("%s %s\n",
-		styles.CommandStyle.Render("✅"),
-		styles.DescriptionStyle.Render(fmt.Sprintf("Read %d output(s) from cloud phase", len(cloudOutputs))))
-
-	// Store cloud outputs and initialize TalosConfig
-	if err := storeCloudOutputs(cfg, cloudOutputs); err != nil {
-		fmt.Fprintf(os.Stderr, "%s %s\n",
-			styles.CommandStyle.Render("❌"),
-			styles.CommandStyle.Render(fmt.Sprintf("Failed to store cloud outputs: %v", err)))
-		os.Exit(1)
-	}
+    // Cloud phase removed for hetzner-robot: load balancers and cloud networking are not managed here
 
 	// =====================================
 	// PHASE 3: SERVER DISCOVERY (Wait for servers and discover network info)
@@ -890,7 +771,7 @@ func RunClusterCreationFlow(cfg *config.CreateConfig) {
 		styles.TitleStyle.Render("Server network discovery completed!"))
 
 	// =====================================
-	// PHASE 4: TALOS BOOTSTRAP (Kubernetes Cluster)
+	// PHASE 3: TALOS BOOTSTRAP (Kubernetes Cluster)
 	// =====================================
 	fmt.Printf("\n%s %s\n",
 		styles.TitleStyle.Render("🎯"),
@@ -898,6 +779,22 @@ func RunClusterCreationFlow(cfg *config.CreateConfig) {
 	fmt.Printf("%s %s\n",
 		styles.CommandStyle.Render("📝"),
 		styles.DescriptionStyle.Render("This phase will bootstrap the Kubernetes cluster using Talos"))
+
+	// Ensure TalosConfig is initialized from selection + config (VIP is required)
+	if cfg.HetznerRobot.TalosConfig == nil {
+		cfg.HetznerRobot.TalosConfig = &config.HetznerRobotTalosConfig{}
+	}
+
+	// Derive ClusterEndpoint from VIP IP (VIP is required by validation)
+	cfg.HetznerRobot.TalosConfig.ClusterEndpoint = fmt.Sprintf("https://%s:6443", cfg.HetznerRobot.TalosConfig.VIPIP)
+
+	// Populate VLAN ID and vSwitch subnet if available
+	if cfg.HetznerRobot.VLANID != 0 {
+		cfg.HetznerRobot.TalosConfig.VLANID = cfg.HetznerRobot.VLANID
+	}
+	if cfg.HetznerRobot.NetworkConfig != nil {
+		cfg.HetznerRobot.TalosConfig.VSwitchSubnetIPRange = cfg.HetznerRobot.NetworkConfig.ClusterVSwitchSubnetIPRange
+	}
 
 	// Build Talos terraform files
 	fmt.Printf("\n%s %s\n",

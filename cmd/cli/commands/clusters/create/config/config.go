@@ -68,6 +68,10 @@ type YAMLConfig struct {
 				Username   string `yaml:"username"`
 				Password   string `yaml:"password"`
 				CloudToken string `yaml:"cloud-token"`
+				Talos      struct {
+					VIPIP          string `yaml:"vip-ip"`
+					LoadBalancerIP string `yaml:"load-balancer-ip"`
+				} `yaml:"talos"`
 			} `yaml:"hetzner-robot"`
 
 			Linode struct {
@@ -225,11 +229,19 @@ func determineProviderFromYAML(yamlConfig *YAMLConfig) (string, interface{}, err
 					yamlConfig.Cluster.Provider.HetznerRobot.CloudToken != ""
 			},
 			getConfig: func() interface{} {
-				return &HetznerRobotConfig{
+				cfg := &HetznerRobotConfig{
 					Username:   yamlConfig.Cluster.Provider.HetznerRobot.Username,
 					Password:   yamlConfig.Cluster.Provider.HetznerRobot.Password,
 					CloudToken: yamlConfig.Cluster.Provider.HetznerRobot.CloudToken,
 				}
+
+				// Talos config is required for Hetzner Robot; build it even if fields are empty
+				cfg.TalosConfig = &HetznerRobotTalosConfig{
+					VIPIP:          yamlConfig.Cluster.Provider.HetznerRobot.Talos.VIPIP,
+					LoadBalancerIP: yamlConfig.Cluster.Provider.HetznerRobot.Talos.LoadBalancerIP,
+				}
+
+				return cfg
 			},
 		},
 		{

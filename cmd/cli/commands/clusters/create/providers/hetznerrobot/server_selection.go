@@ -419,71 +419,20 @@ func createOrReuseVSwitchResult(ctx context.Context, client *Client, clusterName
 
 			// Check if vSwitch has cloud network attachments
 			if vswitchDetails.VSwitch.HasCloudNetworkAttached {
-				fmt.Printf("\n%s %s\n",
-					styles.CommandStyle.Render("⚠️"),
-					styles.CommandStyle.Render("VSwitch is attached to a Hetzner Cloud Network"))
-
-				fmt.Printf("%s %s\n",
-					styles.DescriptionStyle.Render("  →"),
-					styles.DescriptionStyle.Render("This vSwitch cannot be reused while attached to a cloud network"))
-
-				// Ask user if they want to delete and recreate
-				var deleteAndRecreate bool
-				deleteForm := huh.NewForm(
-					huh.NewGroup(
-						huh.NewConfirm().
-							Title("Delete and recreate this vSwitch?").
-							Description("This will delete the existing vSwitch, wait 30 seconds, recreate it with the same name, and proceed.").
-							Value(&deleteAndRecreate),
-					),
-				).WithTheme(createFormTheme())
-
-				if err := deleteForm.Run(); err != nil {
-					return nil, fmt.Errorf("failed to get user confirmation: %w", err)
-				}
-
-				if !deleteAndRecreate {
-					return nil, fmt.Errorf("vSwitch '%s' (ID: %s) is currently attached to a Hetzner Cloud Network. "+
-						"You must manually detach the vSwitch from the cloud network before reusing it. "+
-						"Go to Hetzner Cloud Console → Networks → Detach vSwitch, then try again",
-						vswitchDetails.VSwitch.Name, vswitchDetails.VSwitch.ID)
-				}
-
-				// Delete the vSwitch
-				fmt.Printf("\n%s %s\n",
-					styles.CommandStyle.Render("🗑️"),
-					styles.DescriptionStyle.Render(fmt.Sprintf("Deleting vSwitch '%s' (ID: %s)...", matchingVSwitch.Name, matchingVSwitch.ID)))
-
-				if err := client.DeleteVSwitch(ctx, matchingVSwitch.ID); err != nil {
-					return nil, fmt.Errorf("failed to delete vSwitch: %w", err)
-				}
-
-				fmt.Printf("%s %s\n",
-					styles.TitleStyle.Render("✅"),
-					styles.TitleStyle.Render("VSwitch deleted successfully"))
-
-				// Wait 30 seconds after deletion
-				fmt.Printf("\n%s %s\n",
-					styles.CommandStyle.Render("⏳"),
-					styles.DescriptionStyle.Render("Waiting 30 seconds after deletion..."))
-
-				if err := waitWithCountdown(ctx, 30); err != nil {
-					return nil, err
-				}
-
-				// Now we'll create a new vSwitch with the same name
-				// Fall through to the creation logic below by unsetting matchingVSwitch
-				matchingVSwitch = nil
-			} else {
-				fmt.Printf("\n%s %s\n",
-					styles.TitleStyle.Render("✅"),
-					styles.TitleStyle.Render("VSwitch is ready for reuse"))
-
-				return &VSwitchSelectionResult{
-					SelectedVSwitch: matchingVSwitch,
-					CreateNew:       false,
-				}, nil
+				return nil, fmt.Errorf("vSwitch '%s' (ID: %s) is currently attached to a Hetzner Cloud Network. "+
+					"You must manually detach the vSwitch from the cloud network before reusing it. "+
+					"Go to Hetzner Cloud Console → Networks → Detach vSwitch, then try again",
+					vswitchDetails.VSwitch.Name, vswitchDetails.VSwitch.ID)
 			}
+
+			fmt.Printf("\n%s %s\n",
+				styles.TitleStyle.Render("✅"),
+				styles.TitleStyle.Render("VSwitch is ready for reuse"))
+
+			return &VSwitchSelectionResult{
+				SelectedVSwitch: matchingVSwitch,
+				CreateNew:       false,
+			}, nil
 		}
 
 		// User declined to reuse - exit with error (only if matchingVSwitch still exists)

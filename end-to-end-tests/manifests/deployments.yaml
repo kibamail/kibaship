@@ -1,0 +1,126 @@
+---
+# MySQL Single Instance Deployment
+apiVersion: platform.operator.kibaship.com/v1alpha1
+kind: Deployment
+metadata:
+  name: deployment-mysql-single
+  namespace: e2e-test-project
+  labels:
+    platform.kibaship.com/uuid: "deployment-mysql-single-uuid"
+    platform.kibaship.com/slug: "deployment-mysql-single"
+    platform.kibaship.com/project-uuid: "e2e-test-uuid"
+    platform.kibaship.com/application-uuid: "mysql-single-uuid"
+    platform.kibaship.com/workspace-uuid: "workspace-e2e-test"
+    platform.kibaship.com/environment-uuid: "prod-env-uuid"
+spec:
+  applicationRef:
+    name: application-mysql-single
+  promote: true
+---
+# MySQL Cluster Deployment
+apiVersion: platform.operator.kibaship.com/v1alpha1
+kind: Deployment
+metadata:
+  name: deployment-mysql-cluster
+  namespace: e2e-test-project
+  labels:
+    platform.kibaship.com/uuid: "deployment-mysql-cluster-uuid"
+    platform.kibaship.com/slug: "deployment-mysql-cluster"
+    platform.kibaship.com/project-uuid: "e2e-test-uuid"
+    platform.kibaship.com/application-uuid: "mysql-cluster-uuid"
+    platform.kibaship.com/workspace-uuid: "workspace-e2e-test"
+    platform.kibaship.com/environment-uuid: "prod-env-uuid"
+spec:
+  applicationRef:
+    name: application-mysql-cluster
+  promote: true
+---
+# Valkey Single Instance Deployment
+apiVersion: platform.operator.kibaship.com/v1alpha1
+kind: Deployment
+metadata:
+  name: deployment-valkey-single
+  namespace: e2e-test-project
+  labels:
+    platform.kibaship.com/uuid: "deployment-valkey-single-uuid"
+    platform.kibaship.com/slug: "deployment-valkey-single"
+    platform.kibaship.com/project-uuid: "e2e-test-uuid"
+    platform.kibaship.com/application-uuid: "valkey-single-uuid"
+    platform.kibaship.com/workspace-uuid: "workspace-e2e-test"
+    platform.kibaship.com/environment-uuid: "prod-env-uuid"
+spec:
+  applicationRef:
+    name: application-valkey-single
+  promote: true
+---
+# Valkey Cluster Deployment
+apiVersion: platform.operator.kibaship.com/v1alpha1
+kind: Deployment
+metadata:
+  name: deployment-valkey-cluster
+  namespace: e2e-test-project
+  labels:
+    platform.kibaship.com/uuid: "deployment-valkey-cluster-uuid"
+    platform.kibaship.com/slug: "deployment-valkey-cluster"
+    platform.kibaship.com/project-uuid: "e2e-test-uuid"
+    platform.kibaship.com/application-uuid: "valkey-cluster-uuid"
+    platform.kibaship.com/workspace-uuid: "workspace-e2e-test"
+    platform.kibaship.com/environment-uuid: "prod-env-uuid"
+spec:
+  applicationRef:
+    name: application-valkey-cluster
+  promote: true
+---
+# Docker Image Deployment
+apiVersion: platform.operator.kibaship.com/v1alpha1
+kind: Deployment
+metadata:
+  name: deployment-docker-image
+  namespace: e2e-test-project
+  labels:
+    platform.kibaship.com/uuid: "deployment-docker-image-uuid"
+    platform.kibaship.com/slug: "deployment-docker-image"
+    platform.kibaship.com/project-uuid: "e2e-test-uuid"
+    platform.kibaship.com/application-uuid: "docker-image-uuid"
+    platform.kibaship.com/workspace-uuid: "workspace-e2e-test"
+    platform.kibaship.com/environment-uuid: "prod-env-uuid"
+spec:
+  applicationRef:
+    name: application-docker-image
+  promote: true
+---
+# Git Repository Deployment
+apiVersion: platform.operator.kibaship.com/v1alpha1
+kind: Deployment
+metadata:
+  name: deployment-git-repo
+  namespace: e2e-test-project
+  labels:
+    platform.kibaship.com/uuid: "deployment-git-repo-uuid"
+    platform.kibaship.com/slug: "deployment-git-repo"
+    platform.kibaship.com/project-uuid: "e2e-test-uuid"
+    platform.kibaship.com/application-uuid: "git-repo-uuid"
+    platform.kibaship.com/workspace-uuid: "workspace-e2e-test"
+    platform.kibaship.com/environment-uuid: "prod-env-uuid"
+spec:
+  applicationRef:
+    name: application-git-repo
+  promote: true
+---
+# Image From Registry Deployment
+apiVersion: platform.operator.kibaship.com/v1alpha1
+kind: Deployment
+metadata:
+  name: deployment-image-registry
+  namespace: e2e-test-project
+  labels:
+    platform.kibaship.com/uuid: "deployment-image-registry-uuid"
+    platform.kibaship.com/slug: "deployment-image-registry"
+    platform.kibaship.com/project-uuid: "e2e-test-uuid"
+    platform.kibaship.com/application-uuid: "image-registry-uuid"
+    platform.kibaship.com/workspace-uuid: "workspace-e2e-test"
+    platform.kibaship.com/environment-uuid: "prod-env-uuid"
+spec:
+  applicationRef:
+    name: application-image-registry
+  promote: true

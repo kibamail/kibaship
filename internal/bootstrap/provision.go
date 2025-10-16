@@ -137,9 +137,12 @@ func ensureClusterIssuer(ctx context.Context, c client.Client, email string) err
 				"solvers": []any{
 					map[string]any{
 						"dns01": map[string]any{
-							"webhook": map[string]any{
-								"groupName":  "dns.kibaship.com",
-								"solverName": "kibaship",
+							"acmeDNS": map[string]any{
+								"host": "http://acme-dns.kibaship.svc.cluster.local",
+								"accountSecretRef": map[string]any{
+									"name": "acme-dns-account",
+									"key":  "acmedns.json",
+								},
 							},
 						},
 					},
