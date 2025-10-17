@@ -125,8 +125,7 @@ func BuildHetznerRobotProvisionFiles(config *config.CreateConfig) error {
 
 // Cloud build removed for hetzner-robot (no longer used)
 
-// BuildHetznerRobotBootstrapFiles creates the bootstrap directory and compiles bootstrap.tf.tpl
-// Note: bootstrap.tf.tpl reads kubeconfig from Talos remote state, so no vars file is needed
+// BuildHetznerRobotBootstrapFiles creates the bootstrap directory and compiles bootstrap.tf.tpl and vars.bootstrap.tf.tpl
 func BuildHetznerRobotBootstrapFiles(config *config.CreateConfig) error {
 	// Create .kibaship directory structure
 	kibashipDir := ".kibaship"
@@ -147,6 +146,19 @@ func BuildHetznerRobotBootstrapFiles(config *config.CreateConfig) error {
 		"\033[1;36mTemplate Variables for Bootstrap Build:\033[0m")
 	fmt.Printf("  %s: %s\n", "\033[90mName\033[0m", config.Name)
 
+	if config.HetznerRobot != nil {
+		fmt.Printf("  %s: %d server(s)\n", "\033[90mHetznerRobot.SelectedServers\033[0m", len(config.HetznerRobot.SelectedServers))
+		for i, server := range config.HetznerRobot.SelectedServers {
+			fmt.Printf("    %s [%d]:\n", "\033[90mServer\033[0m", i)
+			fmt.Printf("      %s: %s\n", "\033[90mID\033[0m", server.ID)
+			fmt.Printf("      %s: %s\n", "\033[90mName\033[0m", server.Name)
+			fmt.Printf("      %s: %d disk(s)\n", "\033[90mStorageDisks\033[0m", len(server.StorageDisks))
+			for j, disk := range server.StorageDisks {
+				fmt.Printf("        [%d] %s: %s\n", j, disk.Name, disk.Path)
+			}
+		}
+	}
+
 	// Get provider-specific template path
 	providerPath := "terraform/providers/hetzner-robot"
 
@@ -154,6 +166,12 @@ func BuildHetznerRobotBootstrapFiles(config *config.CreateConfig) error {
 	if err := compileTemplate(providerPath, "bootstrap.tf.tpl",
 		filepath.Join(bootstrapDir, "main.tf"), config); err != nil {
 		return fmt.Errorf("failed to compile bootstrap template: %w", err)
+	}
+
+	// Compile bootstrap-specific vars template
+	if err := compileTemplate(providerPath, "vars.bootstrap.tf.tpl",
+		filepath.Join(bootstrapDir, "vars.tf"), config); err != nil {
+		return fmt.Errorf("failed to compile bootstrap vars template: %w", err)
 	}
 
 	return nil

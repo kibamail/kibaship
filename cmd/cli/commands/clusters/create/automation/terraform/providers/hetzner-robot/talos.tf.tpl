@@ -89,7 +89,7 @@ data "talos_machine_configuration" "machineconfig_cp_{{.ID}}" {
   cluster_endpoint    = var.cluster_endpoint
   machine_type        = "controlplane"
   machine_secrets     = talos_machine_secrets.machine_secrets.machine_secrets
-  kubernetes_version  = "1.33.5"
+  kubernetes_version  = "1.34.1"
 
   config_patches = concat([
     yamlencode({
@@ -190,7 +190,7 @@ data "talos_machine_configuration" "machineconfig_worker_{{.ID}}" {
   cluster_endpoint    = var.cluster_endpoint
   machine_type        = "worker"
   machine_secrets     = talos_machine_secrets.machine_secrets.machine_secrets
-  kubernetes_version  = "1.33.5"
+  kubernetes_version  = "1.34.1"
 
   config_patches = concat([
     yamlencode(merge(

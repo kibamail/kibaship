@@ -23,7 +23,7 @@ terraform {
 data "terraform_remote_state" "talos" {
   backend = "local"
   config = {
-    path = "../bare-metal-talos-bootstrap/terraform.tfstate"
+    path = "../talos/terraform.tfstate"
   }
 }
 
@@ -130,6 +130,64 @@ resource "helm_release" "cilium" {
   ]
 }
 
+# Annotate control plane nodes with Longhorn disk configuration
+{{$controlPlaneIndex := 0}}
+{{range .HetznerRobot.SelectedServers}}
+{{if eq .Role "control-plane"}}
+resource "kubernetes_annotations" "longhorn_disk_cp_{{.ID}}" {
+  api_version = "v1"
+  kind        = "Node"
+  force       = true
+  metadata {
+    name = "cp-{{$controlPlaneIndex}}"
+  }
+  annotations = {
+    "node.longhorn.io/default-disks-config" = jsonencode([
+      for disk in var.server_{{.ID}}_storage_disks : {
+        path            = "/var/mnt/${disk.name}"
+        allowScheduling = true
+        storageReserved = 0
+      }
+    ])
+  }
+
+  depends_on = [
+    helm_release.cilium
+  ]
+}
+{{$controlPlaneIndex = add $controlPlaneIndex 1}}
+{{end}}
+{{end}}
+
+# Annotate worker nodes with Longhorn disk configuration
+{{$workerIndex := 0}}
+{{range .HetznerRobot.SelectedServers}}
+{{if eq .Role "worker"}}
+resource "kubernetes_annotations" "longhorn_disk_worker_{{.ID}}" {
+  api_version = "v1"
+  kind        = "Node"
+  force       = true
+  metadata {
+    name = "worker-{{$workerIndex}}"
+  }
+  annotations = {
+    "node.longhorn.io/default-disks-config" = jsonencode([
+      for disk in var.server_{{.ID}}_storage_disks : {
+        path            = "/var/mnt/${disk.name}"
+        allowScheduling = true
+        storageReserved = 0
+      }
+    ])
+  }
+
+  depends_on = [
+    helm_release.cilium
+  ]
+}
+{{$workerIndex = add $workerIndex 1}}
+{{end}}
+{{end}}
+
 # Install Longhorn using Helm
 resource "helm_release" "longhorn" {
   name             = "longhorn"
@@ -157,7 +215,17 @@ resource "helm_release" "longhorn" {
   ]
 
   depends_on = [
-    helm_release.cilium
+    helm_release.cilium,
+{{range .HetznerRobot.SelectedServers}}
+{{if eq .Role "control-plane"}}
+    kubernetes_annotations.longhorn_disk_cp_{{.ID}},
+{{end}}
+{{end}}
+{{range .HetznerRobot.SelectedServers}}
+{{if eq .Role "worker"}}
+    kubernetes_annotations.longhorn_disk_worker_{{.ID}},
+{{end}}
+{{end}}
   ]
 }
 
@@ -168,8 +236,8 @@ resource "kubernetes_storage_class" "storage_replica_1" {
   }
 
   storage_provisioner = "driver.longhorn.io"
-  reclaim_policy      = "Delete"
-  volume_binding_mode = "WaitForFirstCustomer"
+  reclaim_policy      = "Retain"
+  volume_binding_mode = "WaitForFirstConsumer"
   allow_volume_expansion = true
 
   parameters = {
@@ -190,8 +258,8 @@ resource "kubernetes_storage_class" "storage_replica_2" {
   }
 
   storage_provisioner = "driver.longhorn.io"
-  reclaim_policy      = "Delete"
-  volume_binding_mode = "WaitForFirstCustomer"
+  reclaim_policy      = "Retain"
+  volume_binding_mode = "WaitForFirstConsumer"
   allow_volume_expansion = true
 
   parameters = {
@@ -212,8 +280,8 @@ resource "kubernetes_storage_class" "storage_replica_rwm_1" {
   }
 
   storage_provisioner = "driver.longhorn.io"
-  reclaim_policy      = "Delete"
-  volume_binding_mode = "WaitForFirstCustomer"
+  reclaim_policy      = "Retain"
+  volume_binding_mode = "WaitForFirstConsumer"
   allow_volume_expansion = true
 
   parameters = {

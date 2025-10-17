@@ -512,6 +512,14 @@ func RunBootstrapTerraformApply(config *config.CreateConfig) error {
 				if server.InstallationDisk != "" {
 					env = append(env, fmt.Sprintf("TF_VAR_server_%s_installation_disk=%s", server.ID, server.InstallationDisk))
 				}
+
+				// Add storage disks as JSON-encoded string
+				if len(server.StorageDisks) > 0 {
+					storageDisksJSON, err := json.Marshal(server.StorageDisks)
+					if err == nil {
+						env = append(env, fmt.Sprintf("TF_VAR_server_%s_storage_disks=%s", server.ID, string(storageDisksJSON)))
+					}
+				}
 			}
 		}
 	}

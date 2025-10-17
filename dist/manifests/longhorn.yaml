@@ -11,7 +11,7 @@ parameters:
   staleReplicaTimeout: "2880"
 provisioner: driver.longhorn.io
 reclaimPolicy: Delete
-volumeBindingMode: WaitForFirstCustomer
+volumeBindingMode: WaitForFirstConsumer
 ---
 allowVolumeExpansion: true
 apiVersion: storage.k8s.io/v1
@@ -26,7 +26,7 @@ parameters:
   staleReplicaTimeout: "2880"
 provisioner: driver.longhorn.io
 reclaimPolicy: Delete
-volumeBindingMode: WaitForFirstCustomer
+volumeBindingMode: WaitForFirstConsumer
 ---
 allowVolumeExpansion: true
 apiVersion: storage.k8s.io/v1
@@ -42,4 +42,4 @@ parameters:
   staleReplicaTimeout: "2880"
 provisioner: driver.longhorn.io
 reclaimPolicy: Delete
-volumeBindingMode: WaitForFirstCustomer
+volumeBindingMode: WaitForFirstConsumer
