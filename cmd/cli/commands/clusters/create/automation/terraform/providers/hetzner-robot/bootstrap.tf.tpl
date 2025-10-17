@@ -1,12 +1,16 @@
 terraform {
   required_providers {
+    helm = {
+      source  = "hashicorp/helm"
+      version = "~> 3.0.2"
+    }
+    kubernetes = {
+      source  = "hashicorp/kubernetes"
+      version = "~> 2.38.0"
+    }
     null = {
       source  = "hashicorp/null"
       version = "~> 3.0"
-    }
-    local = {
-      source  = "hashicorp/local"
-      version = "~> 2.0"
     }
   }
 
@@ -18,64 +22,647 @@ terraform {
   }
 }
 
-# Read disk discovery results from provision stage
-{{range .HetznerRobot.SelectedServers}}
-data "terraform_remote_state" "provision_{{.ID}}" {
+# Trigger for forcing recreation on every apply
+resource "null_resource" "always_run_trigger" {
+  triggers = {
+    timestamp = timestamp()
+  }
+}
+
+# Read kubeconfig from Talos stage
+data "terraform_remote_state" "talos" {
   backend = "s3"
   config = {
-    bucket = "{{$.TerraformState.S3Bucket}}"
-    key    = "clusters/{{$.Name}}/provision/terraform.tfstate"
-    region = "{{$.TerraformState.S3Region}}"
+    bucket = "{{.TerraformState.S3Bucket}}"
+    key    = "clusters/{{.Name}}/bare-metal-talos-bootstrap/terraform.tfstate"
+    region = "{{.TerraformState.S3Region}}"
   }
 }
 
-{{end}}
+# Configure Kubernetes provider with kubeconfig from Talos
+provider "kubernetes" {
+  host                   = yamldecode(data.terraform_remote_state.talos.outputs.kubeconfig).clusters[0].cluster.server
+  client_certificate     = base64decode(yamldecode(data.terraform_remote_state.talos.outputs.kubeconfig).users[0].user["client-certificate-data"])
+  client_key             = base64decode(yamldecode(data.terraform_remote_state.talos.outputs.kubeconfig).users[0].user["client-key-data"])
+  cluster_ca_certificate = base64decode(yamldecode(data.terraform_remote_state.talos.outputs.kubeconfig).clusters[0].cluster["certificate-authority-data"])
+}
 
-# Bootstrap configuration placeholder
-# This will be used for Talos cluster configuration and Cilium/cert-manager installation
-resource "null_resource" "bootstrap_placeholder" {
-  provisioner "local-exec" {
-    command = <<-EOF
-      echo "Bootstrap stage for Hetzner Robot cluster: {{.Name}}"
-      echo "Selected servers:"
-{{range .HetznerRobot.SelectedServers}}
-      echo "  - {{.Name}} ({{.ID}}) at {{.IP}}"
-{{end}}
-      echo "Disk discovery results available from provision stage"
-      echo "TODO: Implement Talos cluster bootstrap and Cilium/cert-manager installation"
-    EOF
-  }
-
-  triggers = {
-    always_run = "${timestamp()}"
+# Configure Helm provider with kubeconfig from Talos
+provider "helm" {
+  kubernetes = {
+    # Parse kubeconfig from Talos state
+    host                   = yamldecode(data.terraform_remote_state.talos.outputs.kubeconfig).clusters[0].cluster.server
+    client_certificate     = base64decode(yamldecode(data.terraform_remote_state.talos.outputs.kubeconfig).users[0].user["client-certificate-data"])
+    client_key             = base64decode(yamldecode(data.terraform_remote_state.talos.outputs.kubeconfig).users[0].user["client-key-data"])
+    cluster_ca_certificate = base64decode(yamldecode(data.terraform_remote_state.talos.outputs.kubeconfig).clusters[0].cluster["certificate-authority-data"])
   }
 }
 
-# Output disk discovery results for reference
-{{range .HetznerRobot.SelectedServers}}
-output "server_{{.ID}}_disk_info" {
-  description = "Disk information for server {{.Name}} (ID: {{.ID}})"
-  value       = data.terraform_remote_state.provision_{{.ID}}.outputs.server_{{.ID}}_disk_discovery
-}
+# Install Cilium using Helm
+resource "helm_release" "cilium" {
+  name       = "cilium"
+  repository = "https://helm.cilium.io/"
+  chart      = "cilium"
+  version    = "1.18.0"
+  namespace  = "kube-system"
 
-{{end}}
+  # Wait for resources to be ready
+  wait    = true
+  atomic  = true
 
-# Output cluster information
-output "cluster_info" {
-  description = "Hetzner Robot cluster information"
-  value = {
-    name = "{{.Name}}"
-    email = "{{.Email}}"
-    paas_features = "{{.PaaSFeatures}}"
-    servers = {
-{{range .HetznerRobot.SelectedServers}}
-      "{{.ID}}" = {
-        name = "{{.Name}}"
-        ip   = "{{.IP}}"
-        product = "{{.Product}}"
-        dc   = "{{.DC}}"
-      }
-{{end}}
+  set = [
+    {
+      name  = "k8sServiceHost"
+      value = "localhost"
+    },
+    {
+      name  = "k8sServicePort"
+      value = "7445"
+    },
+    {
+      name  = "kubeProxyReplacement"
+      value = "true"
+    },
+    {
+      name  = "tunnelProtocol"
+      value = "vxlan"
+    },
+    {
+      name  = "gatewayAPI.enabled"
+      value = "true"
+    },
+    {
+      name  = "gatewayAPI.hostNetwork.enabled"
+      value = "true"
+    },
+    {
+      name  = "gatewayAPI.enableAlpn"
+      value = "true"
+    },
+    {
+      name  = "gatewayAPI.enableAppProtocol"
+      value = "true"
+    },
+    {
+      name  = "ipam.mode"
+      value = "kubernetes"
+    },
+    {
+      name  = "loadBalancer.mode"
+      value = "snat"
+    },
+    {
+      name  = "operator.replicas"
+      value = "2"
+    },
+    {
+      name  = "bpf.masquerade"
+      value = "true"
+    },
+    {
+      name  = "securityContext.capabilities.ciliumAgent"
+      value = "{CHOWN,KILL,NET_ADMIN,NET_RAW,IPC_LOCK,SYS_ADMIN,SYS_RESOURCE,DAC_OVERRIDE,FOWNER,SETGID,SETUID}"
+    },
+    {
+      name  = "securityContext.capabilities.cleanCiliumState"
+      value = "{NET_ADMIN,SYS_ADMIN,SYS_RESOURCE}"
+    },
+    {
+      name  = "cgroup.autoMount.enabled"
+      value = "false"
+    },
+    {
+      name  = "cgroup.hostRoot"
+      value = "/sys/fs/cgroup"
     }
+  ]
+
+  depends_on = [
+    data.terraform_remote_state.talos
+  ]
+
+  lifecycle {
+    replace_triggered_by = [null_resource.always_run_trigger.id]
+  }
+}
+
+# Install Longhorn using Helm
+resource "helm_release" "longhorn" {
+  name             = "longhorn"
+  repository       = "https://charts.longhorn.io"
+  chart            = "longhorn"
+  version          = "1.10.0"
+  namespace        = "longhorn"
+  create_namespace = true
+  cleanup_on_fail  = true
+
+  # Wait for resources to be ready
+  wait    = true
+  atomic  = true
+  timeout = 600
+
+  set = [
+    {
+      name  = "persistence.defaultClass"
+      value = "false"
+    },
+    {
+      name = "defaultSettings.replicaAutoBalance"
+      value = "strict-local"
+    }
+  ]
+
+  depends_on = [
+    helm_release.cilium
+  ]
+
+  lifecycle {
+    replace_triggered_by = [null_resource.always_run_trigger.id]
+  }
+}
+
+# Create Longhorn storage classes
+resource "kubernetes_storage_class" "storage_replica_1" {
+  metadata {
+    name = "storage-replica-1"
+  }
+
+  storage_provisioner = "driver.longhorn.io"
+  reclaim_policy      = "Delete"
+  volume_binding_mode = "WaitForFirstCustomer"
+  allow_volume_expansion = true
+
+  parameters = {
+    numberOfReplicas    = "1"
+    staleReplicaTimeout = "30"
+    fromBackup          = ""
+    fsType              = "ext4"
+  }
+
+  depends_on = [
+    helm_release.longhorn
+  ]
+
+  lifecycle {
+    replace_triggered_by = [null_resource.always_run_trigger.id]
+  }
+}
+
+resource "kubernetes_storage_class" "storage_replica_2" {
+  metadata {
+    name = "storage-replica-2"
+  }
+
+  storage_provisioner = "driver.longhorn.io"
+  reclaim_policy      = "Delete"
+  volume_binding_mode = "WaitForFirstCustomer"
+  allow_volume_expansion = true
+
+  parameters = {
+    numberOfReplicas    = "2"
+    staleReplicaTimeout = "30"
+    fromBackup          = ""
+    fsType              = "ext4"
+  }
+
+  depends_on = [
+    helm_release.longhorn
+  ]
+
+  lifecycle {
+    replace_triggered_by = [null_resource.always_run_trigger.id]
+  }
+}
+
+resource "kubernetes_storage_class" "storage_replica_rwm_1" {
+  metadata {
+    name = "storage-replica-rwm-1"
+  }
+
+  storage_provisioner = "driver.longhorn.io"
+  reclaim_policy      = "Delete"
+  volume_binding_mode = "WaitForFirstCustomer"
+  allow_volume_expansion = true
+
+  parameters = {
+    numberOfReplicas    = "1"
+    staleReplicaTimeout = "30"
+    fromBackup          = ""
+    fsType              = "ext4"
+    migratable          = "true"
+  }
+
+  depends_on = [
+    helm_release.longhorn
+  ]
+
+  lifecycle {
+    replace_triggered_by = [null_resource.always_run_trigger.id]
+  }
+}
+
+# Install cert-manager (required by other operators)
+resource "helm_release" "cert_manager" {
+  name             = "cert-manager"
+  repository       = "https://charts.jetstack.io"
+  chart            = "cert-manager"
+  version          = "v1.18.2"
+  namespace        = "cert-manager"
+  create_namespace = true
+  cleanup_on_fail  = true
+
+  # Wait for resources to be ready
+  wait   = true
+  atomic = true
+
+  # Install CRDs
+  set = [
+    {
+      name  = "installCRDs"
+      value = "true"
+    },
+    {
+      name  = "global.leaderElection.namespace"
+      value = "cert-manager"
+    }
+  ]
+
+  depends_on = [
+    helm_release.cilium
+  ]
+
+  lifecycle {
+    replace_triggered_by = [null_resource.always_run_trigger.id]
+  }
+}
+
+# Install MySQL Operator using Helm
+resource "helm_release" "mysql_operator" {
+  name             = "mysql-operator"
+  repository       = "https://mysql.github.io/mysql-operator/"
+  chart            = "mysql-operator"
+  version          = "2.2.5"
+  namespace        = "mysql"
+  create_namespace = true
+  cleanup_on_fail  = true
+  replace          = true
+
+  # Wait for resources to be ready
+  wait   = true
+  atomic = true
+
+  set = [
+    {
+      name  = "replicas"
+      value = "3"
+    },
+    {
+      name  = "envs.k8sClusterDomain"
+      value = "cluster.local"
+    }
+  ]
+
+  depends_on = [
+    helm_release.cilium,
+  ]
+
+  lifecycle {
+    replace_triggered_by = [null_resource.always_run_trigger.id]
+  }
+}
+
+# Create observability namespace
+resource "kubernetes_namespace" "observability" {
+  metadata {
+    name = "observability"
+  }
+
+  depends_on = [
+    kubernetes_storage_class.storage_replica_1,
+    kubernetes_storage_class.storage_replica_2,
+    kubernetes_storage_class.storage_replica_rwm_1
+  ]
+
+  lifecycle {
+    replace_triggered_by = [null_resource.always_run_trigger.id]
+  }
+}
+
+# Install VictoriaMetrics monitoring stack
+resource "helm_release" "victoria_metrics" {
+  name       = "vc-metrics"
+  repository = "https://victoriametrics.github.io/helm-charts/"
+  chart      = "victoria-metrics-k8s-stack"
+  version    = "0.60.1"
+  namespace  = kubernetes_namespace.observability.metadata[0].name
+  cleanup_on_fail  = true
+  timeout    = 900
+  wait       = false
+  replace    = true
+
+  values = [
+    yamlencode({
+      ################################################
+      # VictoriaMetrics Operator (Auto-installed)
+      ################################################
+      victoria-metrics-operator = {
+        enabled = true
+        operator = {
+          disable_prometheus_converter = false
+        }
+      }
+
+      ################################################
+      # VictoriaMetrics Single (Metrics Storage)
+      ################################################
+      vmsingle = {
+        enabled = true
+        spec = {
+          retentionPeriod = "30d"
+          storage = {
+            storageClassName = "storage-replica-1"
+            resources = {
+              requests = {
+                storage = "100Gi"
+              }
+            }
+          }
+          resources = {
+            requests = {
+              cpu    = "500m"
+              memory = "1Gi"
+            }
+            limits = {
+              cpu    = "2"
+              memory = "4Gi"
+            }
+          }
+        }
+      }
+
+      ################################################
+      # VMAgent (Metrics Collection)
+      ################################################
+      vmagent = {
+        enabled = true
+        spec = {
+          selectAllByDefault = true
+          scrapeInterval     = "30s"
+          resources = {
+            requests = {
+              cpu    = "250m"
+              memory = "512Mi"
+            }
+            limits = {
+              cpu    = "1"
+              memory = "2Gi"
+            }
+          }
+        }
+      }
+
+      ################################################
+      # Kubernetes Component Scraping
+      ################################################
+      kubelet = {
+        enabled = true
+        spec = {
+          interval = "30s"
+        }
+      }
+
+      kubeApiServer = {
+        enabled = true
+      }
+
+      kubeControllerManager = {
+        enabled = true
+      }
+
+      kubeScheduler = {
+        enabled = true
+      }
+
+      kubeProxy = {
+        enabled = false
+      }
+
+      kubeEtcd = {
+        enabled = true
+      }
+
+      coreDns = {
+        enabled = true
+      }
+
+      ################################################
+      # Dependencies (Auto-installed)
+      ################################################
+      prometheus-node-exporter = {
+        enabled = true
+        service = {
+          labels = {
+            jobLabel = "node-exporter"
+          }
+        }
+        vmScrape = {
+          enabled = true
+        }
+      }
+
+      kube-state-metrics = {
+        enabled = true
+        vmScrape = {
+          enabled = true
+        }
+      }
+
+      grafana = {
+        enabled       = true
+        persistence = {
+          enabled = true
+          size    = "1Gi"
+          type    = "pvc"
+          storageClassName = "storage-replica-1"
+          accessModes = ["ReadWriteOnce"]
+        }
+        vmScrape = {
+          enabled = true
+        }
+      }
+
+      ################################################
+      # Default Dashboards & Rules
+      ################################################
+      defaultDashboards = {
+        enabled = true
+        dashboards = {
+          victoriametrics-operator = {
+            enabled = true
+          }
+          victoriametrics-vmalert = {
+            enabled = true
+          }
+          node-exporter-full = {
+            enabled = true
+          }
+        }
+      }
+
+      defaultRules = {
+        create = true
+        rules = {
+          vmagent   = true
+          vmsingle  = true
+          vmhealth  = true
+          k8s       = true
+        }
+      }
+    })
+  ]
+
+  depends_on = [
+    kubernetes_namespace.observability,
+    helm_release.longhorn,
+    kubernetes_storage_class.storage_replica_1
+  ]
+
+  lifecycle {
+    replace_triggered_by = [null_resource.always_run_trigger.id]
+  }
+}
+
+# Install VictoriaLogs for log aggregation
+resource "helm_release" "victoria_logs" {
+  name       = "vc-logs"
+  repository = "https://victoriametrics.github.io/helm-charts/"
+  chart      = "victoria-logs-single"
+  version    = "0.11.11"
+  namespace  = kubernetes_namespace.observability.metadata[0].name
+  cleanup_on_fail  = true
+  timeout    = 900
+  wait       = false
+  replace    = true
+
+  values = [
+    yamlencode({
+      ################################################
+      # VictoriaLogs Server
+      ################################################
+      server = {
+        retentionPeriod = "90d"
+        persistentVolume = {
+          enabled = true
+          size    = "50Gi"
+          accessModes = ["ReadWriteOnce"]
+          storageClassName = "storage-replica-1"
+        }
+        resources = {
+          requests = {
+            cpu    = "500m"
+            memory = "1Gi"
+          }
+          limits = {
+            cpu    = "2"
+            memory = "4Gi"
+          }
+        }
+
+        vmServiceScrape = {
+          enabled = true
+        }
+      }
+
+      dashboards = {
+        enabled = true
+      }
+
+      ################################################
+      # Vector Log Collector (Auto-deployed as DaemonSet)
+      ################################################
+      vector = {
+        enabled = true
+        resources = {
+          requests = {
+            cpu    = "100m"
+            memory = "256Mi"
+          }
+          limits = {
+            cpu    = "500m"
+            memory = "512Mi"
+          }
+        }
+      }
+    })
+  ]
+
+  depends_on = [
+    kubernetes_namespace.observability,
+    helm_release.victoria_metrics,
+    kubernetes_storage_class.storage_replica_1
+  ]
+
+  lifecycle {
+    replace_triggered_by = [null_resource.always_run_trigger.id]
+  }
+}
+
+# Output Cilium installation status
+output "cilium_status" {
+  description = "Cilium installation status"
+  value = {
+    chart_version = helm_release.cilium.version
+    namespace     = helm_release.cilium.namespace
+    status        = helm_release.cilium.status
+  }
+}
+
+# Output Longhorn installation status
+output "longhorn_status" {
+  description = "Longhorn installation status"
+  value = {
+    chart_version = helm_release.longhorn.version
+    namespace     = helm_release.longhorn.namespace
+    status        = helm_release.longhorn.status
+  }
+}
+
+# Output cert-manager installation status
+output "cert_manager_status" {
+  description = "cert-manager installation status"
+  value = {
+    chart_version = helm_release.cert_manager.version
+    namespace     = helm_release.cert_manager.namespace
+    status        = helm_release.cert_manager.status
+  }
+}
+
+# Output MySQL Operator installation status
+output "mysql_operator_status" {
+  description = "MySQL Operator installation status"
+  value = {
+    chart_version = helm_release.mysql_operator.version
+    namespace     = helm_release.mysql_operator.namespace
+    status        = helm_release.mysql_operator.status
+  }
+}
+
+# Output VictoriaMetrics installation status
+output "victoria_metrics_status" {
+  description = "VictoriaMetrics monitoring stack installation status"
+  value = {
+    chart_version = helm_release.victoria_metrics.version
+    namespace     = helm_release.victoria_metrics.namespace
+    status        = helm_release.victoria_metrics.status
+  }
+}
+
+# Output VictoriaLogs installation status
+output "victoria_logs_status" {
+  description = "VictoriaLogs log aggregation installation status"
+  value = {
+    chart_version = helm_release.victoria_logs.version
+    namespace     = helm_release.victoria_logs.namespace
+    status        = helm_release.victoria_logs.status
   }
 }

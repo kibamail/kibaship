@@ -103,10 +103,6 @@ type HetznerRobotTalosConfig struct {
     ClusterEndpoint      string `json:"cluster_endpoint" yaml:"cluster-endpoint"`
     VLANID               int    `json:"vlan_id" yaml:"vlan-id"`
     VSwitchSubnetIPRange string `json:"vswitch_subnet_ip_range" yaml:"vswitch-subnet-ip-range"`
-    // VIPIP is the IP address used for Talos VIP
-    VIPIP               string `json:"vip_ip" yaml:"vip-ip" validate:"required,ip"`
-    // LoadBalancerIP is the IP address reserved for future load balancing
-    LoadBalancerIP      string `json:"load_balancer_ip" yaml:"load-balancer-ip" validate:"omitempty,ip"`
 }
 
 // LinodeConfig represents Linode-specific configuration

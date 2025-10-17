@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -172,8 +173,7 @@ func determineServerRole(index int, clusterType string, totalServers int) string
 	}
 }
 
-// storeCloudOutputs stores the cloud phase outputs (like load balancer IPs) in the config
-// Cloud outputs are no longer used for hetzner-robot; Talos endpoint derives from VIP
+// Cloud phase removed: Talos endpoint uses DNS-based HA; no cloud outputs needed.
 
 // storeProvisionOutputs stores the provision phase outputs (like discovered disks) in the config
 func storeProvisionOutputs(cfg *config.CreateConfig, outputs map[string]interface{}) error {
@@ -477,6 +477,96 @@ func storeNetworkDiscovery(cfg *config.CreateConfig, discovery *TalosDiscoveryRe
 	return nil
 }
 
+// storeTalosCredentials writes Talos credentials to files
+func storeTalosCredentials(cfg *config.CreateConfig, outputs map[string]interface{}) error {
+	talosDir := filepath.Join(".kibaship", cfg.Name, "talos")
+
+	fmt.Printf("\n%s %s\n",
+		styles.CommandStyle.Render("💾"),
+		styles.DescriptionStyle.Render("Writing cluster credentials to files..."))
+
+	// Extract and write kubeconfig
+	if kubeconfigRaw, ok := outputs["kubeconfig"]; ok {
+		if kubeconfigMap, ok := kubeconfigRaw.(map[string]interface{}); ok {
+			if kubeconfigValue, ok := kubeconfigMap["value"].(string); ok {
+				kubeconfigPath := filepath.Join(talosDir, "kubeconfig")
+				if err := os.WriteFile(kubeconfigPath, []byte(kubeconfigValue), 0600); err != nil {
+					return fmt.Errorf("failed to write kubeconfig: %w", err)
+				}
+				fmt.Printf("%s %s %s\n",
+					styles.CommandStyle.Render("✅"),
+					styles.DescriptionStyle.Render("Kubeconfig written to:"),
+					styles.CommandStyle.Render(kubeconfigPath))
+			}
+		}
+	}
+
+	// Extract and write talosconfig
+	if talosconfigRaw, ok := outputs["talos_config"]; ok {
+		if talosconfigMap, ok := talosconfigRaw.(map[string]interface{}); ok {
+			if talosconfigValue, ok := talosconfigMap["value"].(string); ok {
+				talosconfigPath := filepath.Join(talosDir, "talosconfig")
+				if err := os.WriteFile(talosconfigPath, []byte(talosconfigValue), 0600); err != nil {
+					return fmt.Errorf("failed to write talosconfig: %w", err)
+				}
+				fmt.Printf("%s %s %s\n",
+					styles.CommandStyle.Render("✅"),
+					styles.DescriptionStyle.Render("Talosconfig written to:"),
+					styles.CommandStyle.Render(talosconfigPath))
+			}
+		}
+	}
+
+	// Create credentials subdirectory for machine configs
+	clusterDir := filepath.Join(".kibaship", cfg.Name)
+	credentialsDir := filepath.Join(clusterDir, "credentials")
+	if err := os.MkdirAll(credentialsDir, 0700); err != nil {
+		return fmt.Errorf("failed to create credentials directory: %w", err)
+	}
+
+	// Extract and write control plane machine configurations
+	if cpConfigsRaw, ok := outputs["control_plane_machine_configurations"]; ok {
+		if cpConfigsMap, ok := cpConfigsRaw.(map[string]interface{}); ok {
+			if valueMap, ok := cpConfigsMap["value"].(map[string]interface{}); ok {
+				for serverID, configRaw := range valueMap {
+					if configValue, ok := configRaw.(string); ok {
+						configPath := filepath.Join(credentialsDir, fmt.Sprintf("controlplane-%s.yaml", serverID))
+						if err := os.WriteFile(configPath, []byte(configValue), 0600); err != nil {
+							return fmt.Errorf("failed to write control plane config for server %s: %w", serverID, err)
+						}
+						fmt.Printf("%s %s %s\n",
+							styles.CommandStyle.Render("✅"),
+							styles.DescriptionStyle.Render(fmt.Sprintf("Control plane config (server %s):", serverID)),
+							styles.CommandStyle.Render(configPath))
+					}
+				}
+			}
+		}
+	}
+
+	// Extract and write worker machine configurations
+	if workerConfigsRaw, ok := outputs["worker_machine_configurations"]; ok {
+		if workerConfigsMap, ok := workerConfigsRaw.(map[string]interface{}); ok {
+			if valueMap, ok := workerConfigsMap["value"].(map[string]interface{}); ok {
+				for serverID, configRaw := range valueMap {
+					if configValue, ok := configRaw.(string); ok {
+						configPath := filepath.Join(credentialsDir, fmt.Sprintf("worker-%s.yaml", serverID))
+						if err := os.WriteFile(configPath, []byte(configValue), 0600); err != nil {
+							return fmt.Errorf("failed to write worker config for server %s: %w", serverID, err)
+						}
+						fmt.Printf("%s %s %s\n",
+							styles.CommandStyle.Render("✅"),
+							styles.DescriptionStyle.Render(fmt.Sprintf("Worker config (server %s):", serverID)),
+							styles.CommandStyle.Render(configPath))
+					}
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
 // generatePrivateIP generates a private IP address from a subnet CIDR and host offset
 // Example: generatePrivateIP("172.20.1.0/24", 10) returns "172.20.1.10"
 func generatePrivateIP(subnetCIDR string, hostOffset int) string {
@@ -533,7 +623,7 @@ func showCriticalWarningAndConfirm(clusterName string) bool {
 	}
 
 	// Create a prominent warning box
-	warningBox := []string{
+    warningBox := []string{
 		"",
 		"╔═══════════════════════════════════════════════════════════════════════════════╗",
 		"║                                                                               ║",
@@ -543,16 +633,15 @@ func showCriticalWarningAndConfirm(clusterName string) bool {
 		"║   only be run ONCE per cluster configuration.                                ║",
 		"║                                                                               ║",
 		"║   WHY THIS MATTERS:                                                           ║",
-		"║   • This script manages a mix of bare metal servers AND cloud resources       ║",
+        "║   • This script manages destructive operations on bare metal servers          ║",
 		"║   • Running 'terraform destroy' before 'terraform init' RESETS ALL STATE      ║",
 		"║   • Running this script again will COMPLETELY DESTROY the existing cluster    ║",
 		"║   • All data, configurations, and workloads will be PERMANENTLY LOST          ║",
 		"║                                                                               ║",
 		"║   WHAT WILL HAPPEN:                                                           ║",
-		"║   1. Bare metal servers will be wiped and reinstalled with Talos Linux        ║",
-		"║   2. Cloud networks and load balancers will be destroyed and recreated        ║",
-		"║   3. All Kubernetes state will be lost                                        ║",
-		"║   4. All applications and data will be deleted                                ║",
+        "║   1. Bare metal servers will be wiped and reinstalled with Talos Linux        ║",
+        "║   2. All Kubernetes state will be lost                                        ║",
+        "║   3. All applications and data will be deleted                                ║",
 		"║                                                                               ║",
 		"║   ⚠️  DO NOT PROCEED if this cluster is already in use!                        ║",
 		"║   ⚠️  BACKUP ALL DATA before running this script again!                        ║",
@@ -594,6 +683,361 @@ func showCriticalWarningAndConfirm(clusterName string) bool {
 	// Trim whitespace and compare (exact match required)
 	response = strings.TrimSpace(response)
 	return response == confirmCode
+}
+
+// ConfigureControlPlaneDNS prompts the user to configure DNS and waits for propagation
+func ConfigureControlPlaneDNS(cfg *config.CreateConfig) error {
+	// Calculate DNS name
+	dnsName := fmt.Sprintf("kube.%s", cfg.Domain)
+
+	fmt.Printf("\n%s %s\n",
+		styles.TitleStyle.Render("🌐"),
+		styles.TitleStyle.Render("DNS Configuration Required"))
+	fmt.Printf("%s %s\n",
+		styles.CommandStyle.Render("📝"),
+		styles.DescriptionStyle.Render("For high availability, the cluster endpoint will use multiple A records"))
+
+	// Collect control plane public IPs
+	var controlPlaneIPs []string
+	for _, server := range cfg.HetznerRobot.SelectedServers {
+		if server.Role == "control-plane" {
+			controlPlaneIPs = append(controlPlaneIPs, server.IP)
+		}
+	}
+
+	if len(controlPlaneIPs) == 0 {
+		return fmt.Errorf("no control plane servers found")
+	}
+
+	// Display DNS records table
+	fmt.Printf("\n%s %s\n",
+		styles.CommandStyle.Render("📋"),
+		styles.TitleStyle.Render("Please create the following DNS A records:"))
+	fmt.Printf("\n")
+	fmt.Printf("  ┌─────────────────────────────────────────────────────────┐\n")
+	fmt.Printf("  │ %-25s │ %-10s │ %-15s │\n", "NAME", "TYPE", "VALUE")
+	fmt.Printf("  ├─────────────────────────────────────────────────────────┤\n")
+	for _, ip := range controlPlaneIPs {
+		fmt.Printf("  │ %-25s │ %-10s │ %-15s │\n", dnsName, "A", ip)
+	}
+	fmt.Printf("  └─────────────────────────────────────────────────────────┘\n")
+
+	fmt.Printf("\n%s %s\n",
+		styles.CommandStyle.Render("ℹ️"),
+		styles.DescriptionStyle.Render("These DNS records will provide high availability for your Kubernetes API endpoint"))
+	fmt.Printf("%s %s\n",
+		styles.CommandStyle.Render("ℹ️"),
+		styles.DescriptionStyle.Render(fmt.Sprintf("Cluster endpoint will be: https://%s:6443", dnsName)))
+
+	// Ask user to confirm DNS configuration
+	fmt.Printf("\n%s %s\n",
+		styles.CommandStyle.Render("⏳"),
+		styles.TitleStyle.Render("Press ENTER once you have created these DNS records..."))
+	reader := bufio.NewReader(os.Stdin)
+	_, _ = reader.ReadString('\n')
+
+	// Start DNS propagation check
+	fmt.Printf("\n%s %s\n",
+		styles.CommandStyle.Render("🔍"),
+		styles.TitleStyle.Render("Checking DNS propagation..."))
+	fmt.Printf("%s %s\n",
+		styles.CommandStyle.Render("⏱️"),
+		styles.DescriptionStyle.Render("This will check every minute for up to 60 minutes"))
+
+	timeout := time.After(60 * time.Minute)
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
+
+	// Check immediately first
+	fmt.Printf("\n%s %s\n",
+		styles.CommandStyle.Render("🔍"),
+		styles.DescriptionStyle.Render("Initial DNS check..."))
+	statuses, allResolved := checkDNSRecordsWithStatus(dnsName, controlPlaneIPs)
+	displayDNSStatusTable(dnsName, statuses)
+
+	if allResolved {
+		fmt.Printf("\n%s %s\n",
+			styles.TitleStyle.Render("✅"),
+			styles.TitleStyle.Render("DNS records propagated successfully!"))
+		return nil
+	}
+
+	startTime := time.Now()
+	for {
+		select {
+		case <-timeout:
+			return fmt.Errorf("DNS propagation timeout after 60 minutes")
+		case <-ticker.C:
+			elapsed := time.Since(startTime).Round(time.Minute)
+			fmt.Printf("\n%s %s (elapsed: %v)\n",
+				styles.CommandStyle.Render("🔄"),
+				styles.DescriptionStyle.Render("Checking DNS records..."),
+				elapsed)
+
+			statuses, allResolved := checkDNSRecordsWithStatus(dnsName, controlPlaneIPs)
+			displayDNSStatusTable(dnsName, statuses)
+
+			if allResolved {
+				fmt.Printf("\n%s %s\n",
+					styles.TitleStyle.Render("✅"),
+					styles.TitleStyle.Render("DNS records propagated successfully!"))
+				return nil
+			}
+		}
+	}
+}
+
+// DNSRecordStatus represents the status of a single DNS record
+type DNSRecordStatus struct {
+	IP       string
+	Resolved bool
+	Status   string
+}
+
+// checkDNSRecordsWithStatus verifies that all expected IPs are returned and returns detailed status
+func checkDNSRecordsWithStatus(dnsName string, expectedIPs []string) ([]DNSRecordStatus, bool) {
+	statuses := make([]DNSRecordStatus, 0, len(expectedIPs))
+
+	// Lookup DNS
+	ips, err := net.LookupIP(dnsName)
+
+	// If DNS lookup failed completely
+	if err != nil {
+		for _, expectedIP := range expectedIPs {
+			statuses = append(statuses, DNSRecordStatus{
+				IP:       expectedIP,
+				Resolved: false,
+				Status:   "⏳ Not Found",
+			})
+		}
+		return statuses, false
+	}
+
+	// Convert resolved IPs to strings
+	resolvedIPMap := make(map[string]bool)
+	for _, ip := range ips {
+		if ipv4 := ip.To4(); ipv4 != nil {
+			resolvedIPMap[ipv4.String()] = true
+		}
+	}
+
+	// Check each expected IP
+	allResolved := true
+	for _, expectedIP := range expectedIPs {
+		if resolvedIPMap[expectedIP] {
+			statuses = append(statuses, DNSRecordStatus{
+				IP:       expectedIP,
+				Resolved: true,
+				Status:   "✅ Resolved",
+			})
+		} else {
+			statuses = append(statuses, DNSRecordStatus{
+				IP:       expectedIP,
+				Resolved: false,
+				Status:   "⏳ Waiting",
+			})
+			allResolved = false
+		}
+	}
+
+	return statuses, allResolved
+}
+
+// displayDNSStatusTable displays a table showing the status of each DNS record
+func displayDNSStatusTable(dnsName string, statuses []DNSRecordStatus) {
+	fmt.Printf("\n  ┌─────────────────────────────────────────────────────────────────┐\n")
+	fmt.Printf("  │ %-30s │ %-10s │ %-15s │\n", "DNS NAME", "IP ADDRESS", "STATUS")
+	fmt.Printf("  ├─────────────────────────────────────────────────────────────────┤\n")
+	for _, status := range statuses {
+		fmt.Printf("  │ %-30s │ %-10s │ %-15s │\n", dnsName, status.IP, status.Status)
+	}
+	fmt.Printf("  └─────────────────────────────────────────────────────────────────┘\n")
+}
+
+// checkDNSRecords verifies that all expected IPs are returned for the DNS name (backwards compatibility)
+func checkDNSRecords(dnsName string, expectedIPs []string) bool {
+	_, allResolved := checkDNSRecordsWithStatus(dnsName, expectedIPs)
+	return allResolved
+}
+
+// ServerPingStatus represents the ping status of a server
+type ServerPingStatus struct {
+	Name   string
+	IP     string
+	Status string
+	Online bool
+}
+
+// waitForServersPing pings all servers every 15 seconds until they're all up or timeout
+func waitForServersPing(cfg *config.CreateConfig, timeout time.Duration) error {
+	fmt.Printf("\n%s %s\n",
+		styles.CommandStyle.Render("🏓"),
+		styles.TitleStyle.Render("Waiting for servers to respond to ping..."))
+	fmt.Printf("%s %s\n",
+		styles.CommandStyle.Render("⏱️"),
+		styles.DescriptionStyle.Render("Checking every 15 seconds for up to 5 minutes"))
+
+	ticker := time.NewTicker(15 * time.Second)
+	defer ticker.Stop()
+	timeoutChan := time.After(timeout)
+
+	// Check immediately first
+	fmt.Printf("\n%s %s\n",
+		styles.CommandStyle.Render("🔍"),
+		styles.DescriptionStyle.Render("Initial ping check..."))
+	statuses, allOnline := checkServersPing(cfg)
+	displayServerPingTable(statuses)
+
+	if allOnline {
+		fmt.Printf("\n%s %s\n",
+			styles.TitleStyle.Render("✅"),
+			styles.TitleStyle.Render("All servers are online!"))
+		return nil
+	}
+
+	startTime := time.Now()
+	for {
+		select {
+		case <-timeoutChan:
+			return fmt.Errorf("timeout: not all servers responded to ping after %v", timeout)
+		case <-ticker.C:
+			elapsed := time.Since(startTime).Round(time.Second)
+			fmt.Printf("\n%s %s (elapsed: %v)\n",
+				styles.CommandStyle.Render("🔄"),
+				styles.DescriptionStyle.Render("Checking server connectivity..."),
+				elapsed)
+
+			statuses, allOnline := checkServersPing(cfg)
+			displayServerPingTable(statuses)
+
+			if allOnline {
+				fmt.Printf("\n%s %s\n",
+					styles.TitleStyle.Render("✅"),
+					styles.TitleStyle.Render("All servers are online!"))
+				return nil
+			}
+		}
+	}
+}
+
+// checkServersPing pings all servers and returns their status
+func checkServersPing(cfg *config.CreateConfig) ([]ServerPingStatus, bool) {
+	statuses := make([]ServerPingStatus, 0, len(cfg.HetznerRobot.SelectedServers))
+	allOnline := true
+
+	for _, server := range cfg.HetznerRobot.SelectedServers {
+		// Ping server using system ping command (1 packet, 2 second timeout)
+		cmd := fmt.Sprintf("ping -c 1 -W 2 %s > /dev/null 2>&1", server.IP)
+		err := automation.RunCommand(cmd, "", 5*time.Second)
+
+		status := ServerPingStatus{
+			Name: server.Name,
+			IP:   server.IP,
+		}
+
+		if err == nil {
+			status.Status = "✅ Online"
+			status.Online = true
+		} else {
+			status.Status = "⏳ Waiting"
+			status.Online = false
+			allOnline = false
+		}
+
+		statuses = append(statuses, status)
+	}
+
+	return statuses, allOnline
+}
+
+// displayServerPingTable displays a table showing ping status of each server
+func displayServerPingTable(statuses []ServerPingStatus) {
+	fmt.Printf("\n  ┌──────────────────────────────────────────────────────────┐\n")
+	fmt.Printf("  │ %-20s │ %-15s │ %-15s │\n", "SERVER NAME", "IP ADDRESS", "STATUS")
+	fmt.Printf("  ├──────────────────────────────────────────────────────────┤\n")
+	for _, status := range statuses {
+		fmt.Printf("  │ %-20s │ %-15s │ %-15s │\n", status.Name, status.IP, status.Status)
+	}
+	fmt.Printf("  └──────────────────────────────────────────────────────────┘\n")
+}
+
+// waitForKubernetesAPI checks if Kubernetes API is accessible every 15 seconds
+func waitForKubernetesAPI(kubeconfigPath string, timeout time.Duration) error {
+	fmt.Printf("\n%s %s\n",
+		styles.CommandStyle.Render("🔌"),
+		styles.TitleStyle.Render("Waiting for Kubernetes API to be accessible..."))
+	fmt.Printf("%s %s\n",
+		styles.CommandStyle.Render("⏱️"),
+		styles.DescriptionStyle.Render("Checking every 15 seconds for up to 5 minutes"))
+
+	ticker := time.NewTicker(15 * time.Second)
+	defer ticker.Stop()
+	timeoutChan := time.After(timeout)
+
+	// Check immediately first
+	fmt.Printf("\n%s %s\n",
+		styles.CommandStyle.Render("🔍"),
+		styles.DescriptionStyle.Render("Initial API check..."))
+
+	isAccessible, message := checkKubernetesAPI(kubeconfigPath)
+	displayKubernetesAPIStatus(isAccessible, message)
+
+	if isAccessible {
+		fmt.Printf("\n%s %s\n",
+			styles.TitleStyle.Render("✅"),
+			styles.TitleStyle.Render("Kubernetes API is accessible!"))
+		return nil
+	}
+
+	startTime := time.Now()
+	for {
+		select {
+		case <-timeoutChan:
+			return fmt.Errorf("timeout: Kubernetes API not accessible after %v", timeout)
+		case <-ticker.C:
+			elapsed := time.Since(startTime).Round(time.Second)
+			fmt.Printf("\n%s %s (elapsed: %v)\n",
+				styles.CommandStyle.Render("🔄"),
+				styles.DescriptionStyle.Render("Checking Kubernetes API..."),
+				elapsed)
+
+			isAccessible, message := checkKubernetesAPI(kubeconfigPath)
+			displayKubernetesAPIStatus(isAccessible, message)
+
+			if isAccessible {
+				fmt.Printf("\n%s %s\n",
+					styles.TitleStyle.Render("✅"),
+					styles.TitleStyle.Render("Kubernetes API is accessible!"))
+				return nil
+			}
+		}
+	}
+}
+
+// checkKubernetesAPI attempts to connect to the Kubernetes API
+func checkKubernetesAPI(kubeconfigPath string) (bool, string) {
+	// Try kubectl get nodes to check API connectivity
+	cmd := fmt.Sprintf("kubectl --kubeconfig %s get nodes -o json 2>&1", kubeconfigPath)
+	err := automation.RunCommand(cmd, "", 10*time.Second)
+
+	if err == nil {
+		return true, "API Server responding"
+	}
+	return false, "API Server not ready"
+}
+
+// displayKubernetesAPIStatus displays the Kubernetes API status
+func displayKubernetesAPIStatus(isAccessible bool, message string) {
+	statusIcon := "⏳"
+	if isAccessible {
+		statusIcon = "✅"
+	}
+
+	fmt.Printf("\n  ┌────────────────────────────────────────────────────────┐\n")
+	fmt.Printf("  │ %-30s │ %-20s │\n", "COMPONENT", "STATUS")
+	fmt.Printf("  ├────────────────────────────────────────────────────────┤\n")
+	fmt.Printf("  │ %-30s │ %s %-17s │\n", "Kubernetes API Server", statusIcon, message)
+	fmt.Printf("  └────────────────────────────────────────────────────────┘\n")
 }
 
 // RunClusterCreationFlow executes the Hetzner Robot specific cluster creation flow
@@ -771,7 +1215,25 @@ func RunClusterCreationFlow(cfg *config.CreateConfig) {
 		styles.TitleStyle.Render("Server network discovery completed!"))
 
 	// =====================================
-	// PHASE 3: TALOS BOOTSTRAP (Kubernetes Cluster)
+	// PHASE 3.5: DNS CONFIGURATION
+	// =====================================
+	fmt.Printf("\n%s %s\n",
+		styles.TitleStyle.Render("🌐"),
+		styles.TitleStyle.Render("PHASE 3.5: Control Plane DNS Configuration"))
+	fmt.Printf("%s %s\n",
+		styles.CommandStyle.Render("📝"),
+		styles.DescriptionStyle.Render("Configuring DNS for high availability control plane access"))
+
+	// Configure DNS and wait for propagation
+	if err := ConfigureControlPlaneDNS(cfg); err != nil {
+		fmt.Fprintf(os.Stderr, "\n%s %s\n",
+			styles.CommandStyle.Render("❌"),
+			styles.CommandStyle.Render(fmt.Sprintf("DNS configuration failed: %v", err)))
+		os.Exit(1)
+	}
+
+	// =====================================
+	// PHASE 4: TALOS BOOTSTRAP (Kubernetes Cluster)
 	// =====================================
 	fmt.Printf("\n%s %s\n",
 		styles.TitleStyle.Render("🎯"),
@@ -780,13 +1242,19 @@ func RunClusterCreationFlow(cfg *config.CreateConfig) {
 		styles.CommandStyle.Render("📝"),
 		styles.DescriptionStyle.Render("This phase will bootstrap the Kubernetes cluster using Talos"))
 
-	// Ensure TalosConfig is initialized from selection + config (VIP is required)
+	// Ensure TalosConfig is initialized
 	if cfg.HetznerRobot.TalosConfig == nil {
 		cfg.HetznerRobot.TalosConfig = &config.HetznerRobotTalosConfig{}
 	}
 
-	// Derive ClusterEndpoint from VIP IP (VIP is required by validation)
-	cfg.HetznerRobot.TalosConfig.ClusterEndpoint = fmt.Sprintf("https://%s:6443", cfg.HetznerRobot.TalosConfig.VIPIP)
+	// Set ClusterEndpoint to DNS name (kube.{domain})
+	dnsName := fmt.Sprintf("kube.%s", cfg.Domain)
+	cfg.HetznerRobot.TalosConfig.ClusterEndpoint = fmt.Sprintf("https://%s:6443", dnsName)
+
+	fmt.Printf("%s %s %s\n",
+		styles.CommandStyle.Render("🔗"),
+		styles.DescriptionStyle.Render("Cluster endpoint:"),
+		styles.CommandStyle.Render(cfg.HetznerRobot.TalosConfig.ClusterEndpoint))
 
 	// Populate VLAN ID and vSwitch subnet if available
 	if cfg.HetznerRobot.VLANID != 0 {
@@ -887,6 +1355,13 @@ func RunClusterCreationFlow(cfg *config.CreateConfig) {
 			styles.CommandStyle.Render("✅"),
 			styles.DescriptionStyle.Render(fmt.Sprintf("Read %d output(s) from Talos bootstrap phase", len(talosOutputs))))
 
+		// Write credentials to files
+		if err := storeTalosCredentials(cfg, talosOutputs); err != nil {
+			fmt.Fprintf(os.Stderr, "%s %s\n",
+				styles.CommandStyle.Render("⚠️"),
+				styles.DescriptionStyle.Render(fmt.Sprintf("Warning: Failed to write credentials: %v", err)))
+		}
+
 		// Display cluster access information
 		if clusterInfo, ok := talosOutputs["cluster_info"]; ok {
 			fmt.Printf("\n%s %s\n",
@@ -895,6 +1370,113 @@ func RunClusterCreationFlow(cfg *config.CreateConfig) {
 			fmt.Printf("   %s\n", styles.DescriptionStyle.Render(fmt.Sprintf("Cluster Endpoint: %v", clusterInfo)))
 		}
 	}
+
+	// =====================================
+	// PHASE 5: CLUSTER HEALTH CHECK
+	// =====================================
+	fmt.Printf("\n%s %s\n",
+		styles.TitleStyle.Render("🏥"),
+		styles.TitleStyle.Render("PHASE 5: Cluster Health Check"))
+	fmt.Printf("%s %s\n",
+		styles.CommandStyle.Render("📝"),
+		styles.DescriptionStyle.Render("Waiting for servers to be fully operational and Kubernetes API to be accessible"))
+
+	// Wait for servers to respond to ping
+	if err := waitForServersPing(cfg, 5*time.Minute); err != nil {
+		fmt.Fprintf(os.Stderr, "\n%s %s\n",
+			styles.CommandStyle.Render("❌"),
+			styles.CommandStyle.Render(fmt.Sprintf("Server ping check failed: %v", err)))
+		os.Exit(1)
+	}
+
+	// Wait for Kubernetes API to be accessible
+	kubeconfigPath := filepath.Join(".kibaship", cfg.Name, "talos", "kubeconfig")
+	if err := waitForKubernetesAPI(kubeconfigPath, 5*time.Minute); err != nil {
+		fmt.Fprintf(os.Stderr, "\n%s %s\n",
+			styles.CommandStyle.Render("❌"),
+			styles.CommandStyle.Render(fmt.Sprintf("Kubernetes API check failed: %v", err)))
+		os.Exit(1)
+	}
+
+	fmt.Printf("\n%s %s\n",
+		styles.TitleStyle.Render("✅"),
+		styles.TitleStyle.Render("Cluster is healthy and ready!"))
+
+	// =====================================
+	// PHASE 6: BOOTSTRAP INFRASTRUCTURE
+	// =====================================
+	fmt.Printf("\n%s %s\n",
+		styles.TitleStyle.Render("🏗️"),
+		styles.TitleStyle.Render("PHASE 6: Bootstrap Infrastructure"))
+	fmt.Printf("%s %s\n",
+		styles.CommandStyle.Render("📝"),
+		styles.DescriptionStyle.Render("Installing Cilium, Longhorn, and operators"))
+
+	// Build bootstrap terraform files
+	fmt.Printf("\n%s %s\n",
+		styles.CommandStyle.Render("🔨"),
+		styles.HelpStyle.Render("Building bootstrap Terraform files..."))
+	if err := automation.BuildHetznerRobotBootstrapFiles(cfg); err != nil {
+		fmt.Fprintf(os.Stderr, "%s %s\n",
+			styles.CommandStyle.Render("❌"),
+			styles.CommandStyle.Render(fmt.Sprintf("Error building bootstrap Terraform files: %v", err)))
+		os.Exit(1)
+	}
+	fmt.Printf("%s %s\n",
+		styles.TitleStyle.Render("✅"),
+		styles.TitleStyle.Render("Bootstrap Terraform files built successfully!"))
+	fmt.Printf("%s %s\n",
+		styles.CommandStyle.Render("📁"),
+		styles.DescriptionStyle.Render(fmt.Sprintf("Files created in: .kibaship/%s/bootstrap/", cfg.Name)))
+
+	// Run Terraform init for bootstrap
+	fmt.Printf("\n%s %s\n",
+		styles.TitleStyle.Render("🚀"),
+		styles.HelpStyle.Render("Initializing bootstrap Terraform..."))
+	if err := automation.RunBootstrapTerraformInit(cfg); err != nil {
+		fmt.Fprintf(os.Stderr, "\n%s %s\n",
+			styles.CommandStyle.Render("❌"),
+			styles.CommandStyle.Render(fmt.Sprintf("Bootstrap Terraform init failed: %v", err)))
+		os.Exit(1)
+	}
+	fmt.Printf("\n%s %s\n",
+		styles.TitleStyle.Render("✅"),
+		styles.TitleStyle.Render("Bootstrap Terraform initialization completed!"))
+
+	// Run Terraform validate for bootstrap
+	fmt.Printf("\n%s %s\n",
+		styles.CommandStyle.Render("🔍"),
+		styles.HelpStyle.Render("Validating bootstrap Terraform configuration..."))
+	if err := automation.RunBootstrapTerraformValidate(cfg); err != nil {
+		fmt.Fprintf(os.Stderr, "\n%s %s\n",
+			styles.CommandStyle.Render("❌"),
+			styles.CommandStyle.Render(fmt.Sprintf("Bootstrap Terraform validate failed: %v", err)))
+		os.Exit(1)
+	}
+	fmt.Printf("\n%s %s\n",
+		styles.TitleStyle.Render("✅"),
+		styles.TitleStyle.Render("Bootstrap Terraform configuration is valid!"))
+
+	// Run Terraform apply for bootstrap
+	fmt.Printf("\n%s %s\n",
+		styles.TitleStyle.Render("🚀"),
+		styles.HelpStyle.Render("Applying bootstrap infrastructure..."))
+	fmt.Printf("%s %s\n",
+		styles.CommandStyle.Render("📝"),
+		styles.DescriptionStyle.Render("Installing: Cilium, Longhorn, MySQL Operator"))
+	fmt.Printf("%s %s\n\n",
+		styles.CommandStyle.Render("🕰️"),
+		styles.DescriptionStyle.Render("This may take several minutes..."))
+
+	if err := automation.RunBootstrapTerraformApply(cfg); err != nil {
+		fmt.Fprintf(os.Stderr, "\n%s %s\n",
+			styles.CommandStyle.Render("❌"),
+			styles.CommandStyle.Render(fmt.Sprintf("Bootstrap Terraform apply failed: %v", err)))
+		os.Exit(1)
+	}
+	fmt.Printf("\n%s %s\n",
+		styles.TitleStyle.Render("✅"),
+		styles.TitleStyle.Render("Bootstrap infrastructure installed successfully!"))
 
 	// =====================================
 	// COMPLETION
@@ -910,12 +1492,16 @@ func RunClusterCreationFlow(cfg *config.CreateConfig) {
 	fmt.Printf("   %s\n", styles.DescriptionStyle.Render("✅ Hetzner Cloud network and load balancers configured"))
 	fmt.Printf("   %s\n", styles.DescriptionStyle.Render("✅ Server network configuration discovered"))
 	fmt.Printf("   %s\n", styles.DescriptionStyle.Render("✅ Kubernetes cluster bootstrapped and ready"))
+	fmt.Printf("   %s\n", styles.DescriptionStyle.Render("✅ Cilium CNI installed and configured"))
+	fmt.Printf("   %s\n", styles.DescriptionStyle.Render("✅ Longhorn storage system deployed"))
+	fmt.Printf("   %s\n", styles.DescriptionStyle.Render("✅ MySQL Operator installed"))
 
 	fmt.Printf("\n%s %s\n",
 		styles.CommandStyle.Render("📝"),
 		styles.DescriptionStyle.Render("Access your cluster:"))
 	fmt.Printf("   %s\n", styles.DescriptionStyle.Render(fmt.Sprintf("Kubeconfig: .kibaship/%s/talos/kubeconfig", cfg.Name)))
 	fmt.Printf("   %s\n", styles.DescriptionStyle.Render(fmt.Sprintf("Talosconfig: .kibaship/%s/talos/talosconfig", cfg.Name)))
+	fmt.Printf("   %s\n", styles.DescriptionStyle.Render(fmt.Sprintf("Machine configs: .kibaship/%s/credentials/", cfg.Name)))
 
 	fmt.Printf("\n%s %s\n",
 		styles.CommandStyle.Render("🚀"),

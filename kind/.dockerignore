@@ -1,9 +1,0 @@
-# Exclude everything except what we need for the build
-*
-
-# Include only necessary files
-!manifests/*.yaml
-!images/*.tar
-
-# Include docs for reference
-!README.md

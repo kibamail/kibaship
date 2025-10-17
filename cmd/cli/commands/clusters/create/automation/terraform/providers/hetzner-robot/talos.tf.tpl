@@ -4,6 +4,10 @@ terraform {
       source = "siderolabs/talos"
       version = "0.9.0"
     }
+    null = {
+      source  = "hashicorp/null"
+      version = "~> 3.0"
+    }
   }
 
   backend "s3" {
@@ -14,8 +18,19 @@ terraform {
   }
 }
 
+# Trigger for forcing recreation on every apply
+resource "null_resource" "always_run_trigger" {
+  triggers = {
+    timestamp = timestamp()
+  }
+}
+
 # Talos machine secrets for cluster bootstrapping
-resource "talos_machine_secrets" "machine_secrets" {}
+resource "talos_machine_secrets" "machine_secrets" {
+  lifecycle {
+    replace_triggered_by = [null_resource.always_run_trigger.id]
+  }
+}
 
 locals {
   # Base cluster configuration shared by all nodes
@@ -34,6 +49,9 @@ locals {
   control_plane_cluster_config = merge(local.cluster_config, {
     allowSchedulingOnControlPlanes = true
     apiServer = {
+      certSANs = [
+        var.cluster_dns_name
+      ]
       admissionControl = [
         {
           name = "PodSecurity"
@@ -49,6 +67,11 @@ locals {
           }
         }
       ]
+    }
+    etcd = {
+      extraArgs = {
+        listen-metrics-urls = "http://0.0.0.0:2381"
+      }
     }
   })
 
@@ -72,10 +95,11 @@ locals {
 {{range .HetznerRobot.SelectedServers}}
 {{if eq .Role "control-plane"}}
 data "talos_machine_configuration" "machineconfig_cp_{{.ID}}" {
-  cluster_name     = var.cluster_name
-  cluster_endpoint = var.cluster_endpoint
-  machine_type     = "controlplane"
-  machine_secrets  = talos_machine_secrets.machine_secrets.machine_secrets
+  cluster_name        = var.cluster_name
+  cluster_endpoint    = var.cluster_endpoint
+  machine_type        = "controlplane"
+  machine_secrets     = talos_machine_secrets.machine_secrets.machine_secrets
+  kubernetes_version  = "1.33.5"
 
   config_patches = concat([
     yamlencode({
@@ -117,9 +141,6 @@ data "talos_machine_configuration" "machineconfig_cp_{{.ID}}" {
                       gateway = var.server_{{.ID}}_private_ipv4_gateway
                     }
                   ]
-                  vip = {
-                    ip = var.vip_ip
-                  }
                 }
               ]
             }
@@ -137,6 +158,7 @@ data "talos_machine_configuration" "machineconfig_cp_{{.ID}}" {
         diskSelector = {
           match = format("\"%s\" in disk.symlinks", disk.path)
         }
+        minSize = "100GB"
       }
       filesystem = {
         type = "xfs"
@@ -153,10 +175,11 @@ data "talos_machine_configuration" "machineconfig_cp_{{.ID}}" {
 {{range .HetznerRobot.SelectedServers}}
 {{if eq .Role "worker"}}
 data "talos_machine_configuration" "machineconfig_worker_{{.ID}}" {
-  cluster_name     = var.cluster_name
-  cluster_endpoint = var.cluster_endpoint
-  machine_type     = "worker"
-  machine_secrets  = talos_machine_secrets.machine_secrets.machine_secrets
+  cluster_name        = var.cluster_name
+  cluster_endpoint    = var.cluster_endpoint
+  machine_type        = "worker"
+  machine_secrets     = talos_machine_secrets.machine_secrets.machine_secrets
+  kubernetes_version  = "1.33.5"
 
   config_patches = concat([
     yamlencode(merge(
@@ -218,6 +241,7 @@ data "talos_machine_configuration" "machineconfig_worker_{{.ID}}" {
         diskSelector = {
           match = format("\"%s\" in disk.symlinks", disk.path)
         }
+        minSize = "100GB"
       }
       filesystem = {
         type = "xfs"
@@ -246,6 +270,10 @@ resource "talos_machine_configuration_apply" "control_plane_{{.ID}}" {
       }
     })
   ]
+
+  lifecycle {
+    replace_triggered_by = [null_resource.always_run_trigger.id]
+  }
 }
 {{end}}
 {{end}}
@@ -267,6 +295,10 @@ resource "talos_machine_configuration_apply" "worker_{{.ID}}" {
       }
     })
   ]
+
+  lifecycle {
+    replace_triggered_by = [null_resource.always_run_trigger.id]
+  }
 }
 {{end}}
 {{end}}
@@ -290,6 +322,10 @@ resource "talos_machine_bootstrap" "this" {
   ]
   node                 = "{{range .HetznerRobot.SelectedServers}}{{if eq .Role "control-plane"}}{{.IP}}{{break}}{{end}}{{end}}"
   client_configuration = talos_machine_secrets.machine_secrets.client_configuration
+
+  lifecycle {
+    replace_triggered_by = [null_resource.always_run_trigger.id]
+  }
 }
 
 # Generate kubeconfig after cluster bootstrap
@@ -299,6 +335,10 @@ resource "talos_cluster_kubeconfig" "this" {
   ]
   client_configuration = talos_machine_secrets.machine_secrets.client_configuration
   node                 = "{{range .HetznerRobot.SelectedServers}}{{if eq .Role "control-plane"}}{{.IP}}{{break}}{{end}}{{end}}"
+
+  lifecycle {
+    replace_triggered_by = [null_resource.always_run_trigger.id]
+  }
 }
 
 # Generate Talos client configuration

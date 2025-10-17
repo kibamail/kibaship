@@ -129,6 +129,42 @@ func BuildHetznerRobotProvisionFiles(config *config.CreateConfig) error {
 
 // Cloud build removed for hetzner-robot (no longer used)
 
+// BuildHetznerRobotBootstrapFiles creates the bootstrap directory and compiles bootstrap.tf.tpl
+// Note: bootstrap.tf.tpl reads kubeconfig from Talos remote state, so no vars file is needed
+func BuildHetznerRobotBootstrapFiles(config *config.CreateConfig) error {
+	// Create .kibaship directory structure
+	kibashipDir := ".kibaship"
+	clusterDir := filepath.Join(kibashipDir, config.Name)
+	bootstrapDir := filepath.Join(clusterDir, "bootstrap")
+
+	// Create directories
+	dirs := []string{kibashipDir, clusterDir, bootstrapDir}
+	for _, dir := range dirs {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return fmt.Errorf("failed to create directory %s: %w", dir, err)
+		}
+	}
+
+	// Log template variables being passed
+	fmt.Printf("\n%s %s\n",
+		"\033[36m📋\033[0m",
+		"\033[1;36mTemplate Variables for Bootstrap Build:\033[0m")
+	fmt.Printf("  %s: %s\n", "\033[90mName\033[0m", config.Name)
+	fmt.Printf("  %s: %s\n", "\033[90mTerraformState.S3Bucket\033[0m", config.TerraformState.S3Bucket)
+	fmt.Printf("  %s: %s\n", "\033[90mTerraformState.S3Region\033[0m", config.TerraformState.S3Region)
+
+	// Get provider-specific template path
+	providerPath := "terraform/providers/hetzner-robot"
+
+	// Compile bootstrap template (reads kubeconfig from Talos remote state)
+	if err := compileTemplate(providerPath, "bootstrap.tf.tpl",
+		filepath.Join(bootstrapDir, "main.tf"), config); err != nil {
+		return fmt.Errorf("failed to compile bootstrap template: %w", err)
+	}
+
+	return nil
+}
+
 // BuildHetznerRobotTalosFiles creates the talos directory and compiles talos.tf.tpl and vars.talos.tf.tpl
 func BuildHetznerRobotTalosFiles(config *config.CreateConfig) error {
 	// Create .kibaship directory structure

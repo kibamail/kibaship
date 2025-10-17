@@ -84,6 +84,11 @@ variable "cluster_endpoint" {
   type        = string
 }
 
+variable "cluster_dns_name" {
+  description = "DNS name for Kubernetes API endpoint (e.g., kube.example.com)"
+  type        = string
+}
+
 variable "vlan_id" {
   description = "VLAN ID for private network"
   type        = number

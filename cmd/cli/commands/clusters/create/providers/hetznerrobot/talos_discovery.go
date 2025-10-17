@@ -111,7 +111,8 @@ func performServerChecks(cfg *config.CreateConfig, serverOnline map[string]bool,
 		}
 
 		// Try to check if Talos API is responding on port 50000
-		online := checkTalosAPIReady(server.IP, 3*time.Second)
+		// Use 10 second timeout to account for network latency
+		online := checkTalosAPIReady(server.IP, 10*time.Second)
 		serverOnline[server.ID] = online
 
 		if !online {
@@ -203,12 +204,19 @@ func checkTalosAPIReady(ip string, timeout time.Duration) bool {
 		InsecureSkipVerify: true,
 	}
 
+	// Explicitly specify port 50000 for Talos API
+	endpoint := fmt.Sprintf("%s:50000", ip)
+
 	// Create Talos client with insecure TLS
 	c, err := client.New(ctx,
-		client.WithEndpoints(ip),
+		client.WithEndpoints(endpoint),
 		client.WithTLSConfig(tlsConfig),
 	)
 	if err != nil {
+		fmt.Printf("    %s Failed to create Talos client for %s: %v\n",
+			styles.DescriptionStyle.Render("⚠️"),
+			ip,
+			err)
 		return false
 	}
 	defer func() { _ = c.Close() }()
@@ -219,15 +227,28 @@ func checkTalosAPIReady(ip string, timeout time.Duration) bool {
 		// Check if error is "API is not implemented in maintenance mode"
 		// This is actually a SUCCESS - the server is online, just in maintenance mode
 		if strings.Contains(err.Error(), "maintenance mode") {
+			fmt.Printf("    %s %s is online (maintenance mode)\n",
+				styles.DescriptionStyle.Render("✓"),
+				ip)
 			return true
 		}
 		// Check for "Unimplemented" which also indicates maintenance mode
 		if strings.Contains(err.Error(), "Unimplemented") {
+			fmt.Printf("    %s %s is online (maintenance mode)\n",
+				styles.DescriptionStyle.Render("✓"),
+				ip)
 			return true
 		}
+		fmt.Printf("    %s Failed to connect to Talos API at %s: %v\n",
+			styles.DescriptionStyle.Render("⚠️"),
+			ip,
+			err)
 		return false
 	}
 
+	fmt.Printf("    %s %s is online\n",
+		styles.DescriptionStyle.Render("✓"),
+		ip)
 	return true
 }
 
@@ -299,9 +320,12 @@ func discoverSingleServer(ctx context.Context, server config.HetznerRobotServer)
 		InsecureSkipVerify: true,
 	}
 
+	// Explicitly specify port 50000 for Talos API
+	endpoint := fmt.Sprintf("%s:50000", server.IP)
+
 	// Create Talos client with insecure TLS
 	c, err := client.New(ctx,
-		client.WithEndpoints(server.IP),
+		client.WithEndpoints(endpoint),
 		client.WithTLSConfig(tlsConfig),
 	)
 	if err != nil {

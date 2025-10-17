@@ -291,11 +291,14 @@ func SelectServersAndVSwitchInteractive(ctx context.Context, client *Client, clu
 		return nil, fmt.Errorf("cluster creation cancelled by user")
 	}
 
-	// Step 3: Check for existing vSwitch or create new one
-	vswitchResult, err := createOrReuseVSwitchResult(ctx, client, clusterName)
+	// Step 3: Interactive vSwitch selection (list all vswitches or create new)
+	vswitchResult, err := SelectVSwitchInteractive(ctx, client, clusterName)
 	if err != nil {
-		return nil, fmt.Errorf("vswitch configuration failed: %w", err)
+		return nil, fmt.Errorf("vswitch selection failed: %w", err)
 	}
+
+	// Display selection summary
+	DisplayVSwitchSelectionSummary(vswitchResult)
 
 	// Step 4: Final confirmation with complete summary
 	proceed, err := DisplayFinalConfirmation(serverResult, vswitchResult)
@@ -345,141 +348,6 @@ func SelectServersAndVSwitchInteractive(ctx context.Context, client *Client, clu
 		VSwitchSelection: vswitchResult,
 		RescueResult:     rescueResult,
 		NetworkRanges:    networkRanges,
-	}, nil
-}
-
-// createOrReuseVSwitchResult checks for existing vSwitch with cluster name and asks user to reuse or create new
-func createOrReuseVSwitchResult(ctx context.Context, client *Client, clusterName string) (*VSwitchSelectionResult, error) {
-	fmt.Printf("\n%s %s\n",
-		styles.TitleStyle.Render("🔗"),
-		styles.TitleStyle.Render("VSwitch Configuration"))
-
-	// Fetch existing vSwitches
-	fmt.Printf("%s %s\n",
-		styles.CommandStyle.Render("🔍"),
-		styles.DescriptionStyle.Render("Checking for existing vSwitches..."))
-
-	vswitches, err := client.ListVSwitches(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list vSwitches: %w", err)
-	}
-
-	// Check if there's a vSwitch with matching name
-	var matchingVSwitch *VSwitch
-	for _, vs := range vswitches {
-		if vs.Name == clusterName && !vs.Cancelled {
-			matchingVSwitch = &vs
-			break
-		}
-	}
-
-	// If matching vSwitch found, ask user if they want to reuse it
-	if matchingVSwitch != nil {
-		fmt.Printf("\n%s %s\n",
-			styles.CommandStyle.Render("✅"),
-			styles.CommandStyle.Render("Found existing vSwitch with matching name!"))
-
-		fmt.Printf("%s %s\n",
-			styles.DescriptionStyle.Render("  → Name:"),
-			styles.CommandStyle.Render(matchingVSwitch.Name))
-
-		fmt.Printf("%s %s\n",
-			styles.DescriptionStyle.Render("  → ID:"),
-			styles.DescriptionStyle.Render(matchingVSwitch.ID))
-
-		fmt.Printf("%s %s\n",
-			styles.DescriptionStyle.Render("  → VLAN:"),
-			styles.DescriptionStyle.Render(fmt.Sprintf("%d", matchingVSwitch.VLAN)))
-
-		// Ask user for confirmation
-		var reuseVSwitch bool
-		form := huh.NewForm(
-			huh.NewGroup(
-				huh.NewConfirm().
-					Title("Do you want to reuse this vSwitch?").
-					Description("Select 'Yes' to reuse the existing vSwitch, or 'No' to create a new one").
-					Value(&reuseVSwitch),
-			),
-		).WithTheme(createFormTheme())
-
-		if err := form.Run(); err != nil {
-			return nil, fmt.Errorf("failed to get user confirmation: %w", err)
-		}
-
-		if reuseVSwitch {
-			fmt.Printf("\n%s %s\n",
-				styles.TitleStyle.Render("♻️"),
-				styles.TitleStyle.Render("Checking vSwitch for cloud network attachments..."))
-
-			// Get full vSwitch details to check for cloud network attachments
-			vswitchDetails, err := client.GetVSwitchDetails(ctx, matchingVSwitch.ID)
-			if err != nil {
-				return nil, fmt.Errorf("failed to get vSwitch details: %w", err)
-			}
-
-			// Check if vSwitch has cloud network attachments
-			if vswitchDetails.VSwitch.HasCloudNetworkAttached {
-				return nil, fmt.Errorf("vSwitch '%s' (ID: %s) is currently attached to a Hetzner Cloud Network. "+
-					"You must manually detach the vSwitch from the cloud network before reusing it. "+
-					"Go to Hetzner Cloud Console → Networks → Detach vSwitch, then try again",
-					vswitchDetails.VSwitch.Name, vswitchDetails.VSwitch.ID)
-			}
-
-			fmt.Printf("\n%s %s\n",
-				styles.TitleStyle.Render("✅"),
-				styles.TitleStyle.Render("VSwitch is ready for reuse"))
-
-			return &VSwitchSelectionResult{
-				SelectedVSwitch: matchingVSwitch,
-				CreateNew:       false,
-			}, nil
-		}
-
-		// User declined to reuse - exit with error (only if matchingVSwitch still exists)
-		if matchingVSwitch != nil {
-			return nil, fmt.Errorf("a vSwitch named '%s' already exists (ID: %s, VLAN: %d). "+
-				"Please delete or rename the existing vSwitch before creating a new cluster with this name",
-				matchingVSwitch.Name, matchingVSwitch.ID, matchingVSwitch.VLAN)
-		}
-	}
-
-	// Create new vSwitch - find available VLAN ID
-	usedVLANs := make(map[int]bool)
-	for _, vs := range vswitches {
-		if !vs.Cancelled {
-			usedVLANs[vs.VLAN] = true
-		}
-	}
-
-	// Find an available VLAN in the range 4000-4091
-	var availableVLAN int
-	for vlan := 4000; vlan <= 4091; vlan++ {
-		if !usedVLANs[vlan] {
-			availableVLAN = vlan
-			break
-		}
-	}
-
-	if availableVLAN == 0 {
-		return nil, fmt.Errorf("no available VLAN IDs in range 4000-4091")
-	}
-
-	fmt.Printf("\n%s %s\n",
-		styles.CommandStyle.Render("📝"),
-		styles.DescriptionStyle.Render("A new vswitch will be created for this cluster"))
-
-	fmt.Printf("%s %s\n",
-		styles.CommandStyle.Render("Name:"),
-		styles.DescriptionStyle.Render(clusterName))
-
-	fmt.Printf("%s %s\n",
-		styles.CommandStyle.Render("VLAN ID:"),
-		styles.DescriptionStyle.Render(fmt.Sprintf("%d", availableVLAN)))
-
-	return &VSwitchSelectionResult{
-		CreateNew:      true,
-		NewVSwitchName: clusterName,
-		NewVSwitchVLAN: availableVLAN,
 	}, nil
 }
 

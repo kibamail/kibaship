@@ -144,7 +144,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
-        image: kibamail/kibaship-apiserver:e2e
+        image: kibamail/kibaship-apiserver:v1.0.0
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:

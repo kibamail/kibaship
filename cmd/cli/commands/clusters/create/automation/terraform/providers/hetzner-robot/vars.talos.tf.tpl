@@ -9,9 +9,8 @@ variable "cluster_endpoint" {
   type        = string
 }
 
-# Talos VIP IP for control plane virtual IP
-variable "vip_ip" {
-  description = "Talos VIP IP address used by control plane"
+variable "cluster_dns_name" {
+  description = "DNS name for Kubernetes API endpoint (e.g., kube.example.com)"
   type        = string
 }
 

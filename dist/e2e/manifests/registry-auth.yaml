@@ -64,7 +64,7 @@ spec:
         app: registry-auth
     spec:
       containers:
-      - image: kibamail/kibaship-registry-auth:e2e
+      - image: kibamail/kibaship-registry-auth:v1.0.0
         imagePullPolicy: IfNotPresent
         livenessProbe:
           failureThreshold: 3

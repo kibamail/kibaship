@@ -390,7 +390,7 @@ CONTROLLER_TOOLS_VERSION ?= v0.19.0
 #ENVTEST_VERSION is the version of controller-runtime release branch to fetch the envtest setup script (i.e. release-0.20)
 ENVTEST_VERSION ?= release-0.20
 #ENVTEST_K8S_VERSION is the version of Kubernetes to use for setting up ENVTEST binaries (i.e. 1.31)
-ENVTEST_K8S_VERSION ?= 1.34
+ENVTEST_K8S_VERSION ?= 1.31
 GOLANGCI_LINT_VERSION ?= v2.1.0
 GINKGO_VERSION ?= v2.22.2
 
@@ -553,7 +553,11 @@ build-separate-installers: manifests generate kustomize ## Generate separate YAM
 	# Longhorn
 	@echo "Building longhorn.yaml..."
 	$(KUSTOMIZE) build config/longhorn > dist/manifests/longhorn.yaml
-	
+
+	# acme-dns
+	@echo "Building acme-dns.yaml..."
+	$(KUSTOMIZE) build config/acme-dns > dist/manifests/acme-dns.yaml
+
 	@echo "✓ All manifests built successfully in dist/manifests/"
 	@echo ""
 	@ls -lh dist/manifests/
@@ -588,6 +592,10 @@ build-e2e-installers: manifests generate kustomize ## Generate e2e YAML files fo
 	# Registry
 	@echo "Building registry.yaml..."
 	$(KUSTOMIZE) build config/registry/overlays/e2e > dist/e2e/manifests/registry.yaml
+
+	# acme-dns
+	@echo "Building acme-dns.yaml..."
+	$(KUSTOMIZE) build config/acme-dns > dist/e2e/manifests/acme-dns.yaml
 
 	@echo "✓ All e2e manifests built successfully in dist/e2e/manifests/"
 	@echo ""

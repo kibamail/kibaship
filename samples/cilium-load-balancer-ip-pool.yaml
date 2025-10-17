@@ -1,0 +1,7 @@
+apiVersion: cilium.io/v2alpha1
+kind: CiliumLoadBalancerIPPool
+metadata:
+  name: ingress-load-balancer-ip-pool
+spec:
+  blocks:
+    - cidr: "91.98.208.194/32"

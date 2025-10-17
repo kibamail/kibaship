@@ -11,3 +11,5 @@ resources:
 - service.yaml
 images:
 - name: registry-auth
+  newName: kibamail/kibaship-registry-auth
+  newTag: v1.0.0
