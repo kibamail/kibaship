@@ -14,28 +14,16 @@ terraform {
     }
   }
 
-  backend "s3" {
-    bucket = "{{.TerraformState.S3Bucket}}"
-    key    = "clusters/{{.Name}}/bootstrap/terraform.tfstate"
-    region = "{{.TerraformState.S3Region}}"
-    encrypt = true
-  }
-}
-
-# Trigger for forcing recreation on every apply
-resource "null_resource" "always_run_trigger" {
-  triggers = {
-    timestamp = timestamp()
+  backend "local" {
+    path = "terraform.tfstate"
   }
 }
 
 # Read kubeconfig from Talos stage
 data "terraform_remote_state" "talos" {
-  backend = "s3"
+  backend = "local"
   config = {
-    bucket = "{{.TerraformState.S3Bucket}}"
-    key    = "clusters/{{.Name}}/bare-metal-talos-bootstrap/terraform.tfstate"
-    region = "{{.TerraformState.S3Region}}"
+    path = "../bare-metal-talos-bootstrap/terraform.tfstate"
   }
 }
 
@@ -140,10 +128,6 @@ resource "helm_release" "cilium" {
   depends_on = [
     data.terraform_remote_state.talos
   ]
-
-  lifecycle {
-    replace_triggered_by = [null_resource.always_run_trigger.id]
-  }
 }
 
 # Install Longhorn using Helm
@@ -175,10 +159,6 @@ resource "helm_release" "longhorn" {
   depends_on = [
     helm_release.cilium
   ]
-
-  lifecycle {
-    replace_triggered_by = [null_resource.always_run_trigger.id]
-  }
 }
 
 # Create Longhorn storage classes
@@ -202,10 +182,6 @@ resource "kubernetes_storage_class" "storage_replica_1" {
   depends_on = [
     helm_release.longhorn
   ]
-
-  lifecycle {
-    replace_triggered_by = [null_resource.always_run_trigger.id]
-  }
 }
 
 resource "kubernetes_storage_class" "storage_replica_2" {
@@ -228,10 +204,6 @@ resource "kubernetes_storage_class" "storage_replica_2" {
   depends_on = [
     helm_release.longhorn
   ]
-
-  lifecycle {
-    replace_triggered_by = [null_resource.always_run_trigger.id]
-  }
 }
 
 resource "kubernetes_storage_class" "storage_replica_rwm_1" {
@@ -255,10 +227,6 @@ resource "kubernetes_storage_class" "storage_replica_rwm_1" {
   depends_on = [
     helm_release.longhorn
   ]
-
-  lifecycle {
-    replace_triggered_by = [null_resource.always_run_trigger.id]
-  }
 }
 
 # Install cert-manager (required by other operators)
@@ -290,10 +258,6 @@ resource "helm_release" "cert_manager" {
   depends_on = [
     helm_release.cilium
   ]
-
-  lifecycle {
-    replace_triggered_by = [null_resource.always_run_trigger.id]
-  }
 }
 
 # Install MySQL Operator using Helm
@@ -325,10 +289,6 @@ resource "helm_release" "mysql_operator" {
   depends_on = [
     helm_release.cilium,
   ]
-
-  lifecycle {
-    replace_triggered_by = [null_resource.always_run_trigger.id]
-  }
 }
 
 # Create observability namespace
@@ -342,10 +302,6 @@ resource "kubernetes_namespace" "observability" {
     kubernetes_storage_class.storage_replica_2,
     kubernetes_storage_class.storage_replica_rwm_1
   ]
-
-  lifecycle {
-    replace_triggered_by = [null_resource.always_run_trigger.id]
-  }
 }
 
 # Install VictoriaMetrics monitoring stack
@@ -359,6 +315,7 @@ resource "helm_release" "victoria_metrics" {
   timeout    = 900
   wait       = false
   replace    = true
+  atomic     = true
 
   values = [
     yamlencode({
@@ -526,10 +483,6 @@ resource "helm_release" "victoria_metrics" {
     helm_release.longhorn,
     kubernetes_storage_class.storage_replica_1
   ]
-
-  lifecycle {
-    replace_triggered_by = [null_resource.always_run_trigger.id]
-  }
 }
 
 # Install VictoriaLogs for log aggregation
@@ -543,6 +496,7 @@ resource "helm_release" "victoria_logs" {
   timeout    = 900
   wait       = false
   replace    = true
+  atomic     = true
 
   values = [
     yamlencode({
@@ -582,6 +536,30 @@ resource "helm_release" "victoria_logs" {
       ################################################
       vector = {
         enabled = true
+        role = "Agent"
+        dataDir = "/vector-data-dir"
+
+        # Expose UDP ports for Talos logs on host network
+        containerPorts = [
+          {
+            name = "talos-kernel"
+            containerPort = 6050
+            protocol = "UDP"
+            hostPort = 6050
+          },
+          {
+            name = "talos-service"
+            containerPort = 6051
+            protocol = "UDP"
+            hostPort = 6051
+          },
+          {
+            name = "prom-exporter"
+            containerPort = 9090
+            protocol = "TCP"
+          }
+        ]
+
         resources = {
           requests = {
             cpu    = "100m"
@@ -590,6 +568,163 @@ resource "helm_release" "victoria_logs" {
           limits = {
             cpu    = "500m"
             memory = "512Mi"
+          }
+        }
+
+        # Custom Vector configuration for Talos + K8s logs
+        customConfig = {
+          data_dir = "/vector-data-dir"
+
+          api = {
+            enabled = false
+            address = "0.0.0.0:8686"
+            playground = true
+          }
+
+          # Sources: Talos logs + K8s pod logs
+          sources = {
+            # Talos kernel logs via UDP
+            talos_kernel_logs = {
+              type = "socket"
+              mode = "udp"
+              address = "0.0.0.0:6050"
+              max_length = 102400
+              decoding = {
+                codec = "json"
+              }
+              host_key = "__host"
+            }
+
+            # Talos service logs via UDP
+            talos_service_logs = {
+              type = "socket"
+              mode = "udp"
+              address = "0.0.0.0:6051"
+              max_length = 102400
+              decoding = {
+                codec = "json"
+              }
+              host_key = "__host"
+            }
+
+            # Kubernetes pod logs
+            k8s_logs = {
+              type = "kubernetes_logs"
+            }
+
+            # Internal metrics for monitoring Vector itself
+            internal_metrics = {
+              type = "internal_metrics"
+            }
+          }
+
+          # Transforms: Parse and enrich logs
+          transforms = {
+            # Parse K8s pod logs
+            k8s_parser = {
+              type = "remap"
+              inputs = ["k8s_logs"]
+              source = <<-EOT
+                .log = parse_json(.message) ?? .message
+                del(.message)
+              EOT
+            }
+
+            # Enrich Talos kernel logs with metadata
+            talos_kernel_transform = {
+              type = "remap"
+              inputs = ["talos_kernel_logs"]
+              source = <<-EOT
+                .log_type = "talos-kernel"
+                .hostname = .__host
+              EOT
+            }
+
+            # Enrich Talos service logs with metadata
+            talos_service_transform = {
+              type = "remap"
+              inputs = ["talos_service_logs"]
+              source = <<-EOT
+                .log_type = "talos-service"
+                .hostname = .__host
+              EOT
+            }
+          }
+
+          # Sinks: Send all logs to VictoriaLogs
+          sinks = {
+            # Prometheus exporter for Vector metrics
+            prom_exporter = {
+              type = "prometheus_exporter"
+              address = "0.0.0.0:9090"
+              inputs = ["internal_metrics"]
+            }
+
+            # VictoriaLogs sink for K8s pod logs
+            vlogs_k8s = {
+              type = "elasticsearch"
+              inputs = ["k8s_parser"]
+              mode = "bulk"
+              api_version = "v8"
+              compression = "gzip"
+              endpoint = "http://vc-logs-victoria-logs-single-server.observability.svc.cluster.local:9428"
+              healthcheck = {
+                enabled = false
+              }
+              request = {
+                headers = {
+                  VL-Time-Field = "timestamp"
+                  VL-Stream-Fields = "stream,kubernetes.pod_name,kubernetes.container_name,kubernetes.pod_namespace"
+                  VL-Msg-Field = "message,msg,_msg,log.msg,log.message,log"
+                  AccountID = "0"
+                  ProjectID = "0"
+                }
+              }
+            }
+
+            # VictoriaLogs sink for Talos kernel logs
+            vlogs_talos_kernel = {
+              type = "elasticsearch"
+              inputs = ["talos_kernel_transform"]
+              mode = "bulk"
+              api_version = "v8"
+              compression = "gzip"
+              endpoint = "http://vc-logs-victoria-logs-single-server.observability.svc.cluster.local:9428"
+              healthcheck = {
+                enabled = false
+              }
+              request = {
+                headers = {
+                  VL-Time-Field = "talos-time"
+                  VL-Stream-Fields = "hostname,facility,log_type"
+                  VL-Msg-Field = "msg"
+                  AccountID = "0"
+                  ProjectID = "0"
+                }
+              }
+            }
+
+            # VictoriaLogs sink for Talos service logs
+            vlogs_talos_service = {
+              type = "elasticsearch"
+              inputs = ["talos_service_transform"]
+              mode = "bulk"
+              api_version = "v8"
+              compression = "gzip"
+              endpoint = "http://vc-logs-victoria-logs-single-server.observability.svc.cluster.local:9428"
+              healthcheck = {
+                enabled = false
+              }
+              request = {
+                headers = {
+                  VL-Time-Field = "talos-time"
+                  VL-Stream-Fields = "hostname,talos-service,log_type"
+                  VL-Msg-Field = "msg"
+                  AccountID = "0"
+                  ProjectID = "0"
+                }
+              }
+            }
           }
         }
       }
@@ -601,10 +736,6 @@ resource "helm_release" "victoria_logs" {
     helm_release.victoria_metrics,
     kubernetes_storage_class.storage_replica_1
   ]
-
-  lifecycle {
-    replace_triggered_by = [null_resource.always_run_trigger.id]
-  }
 }
 
 # Output Cilium installation status

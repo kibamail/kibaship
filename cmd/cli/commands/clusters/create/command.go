@@ -94,12 +94,6 @@ func runCreate(cmd *cobra.Command, args []string) {
 	fmt.Printf("   %s %s\n",
 		styles.CommandStyle.Render("PaaS Features:"),
 		styles.DescriptionStyle.Render(config.PaaSFeatures))
-	fmt.Printf("   %s %s\n",
-		styles.CommandStyle.Render("Terraform State Bucket:"),
-		styles.DescriptionStyle.Render(config.TerraformState.S3Bucket))
-	fmt.Printf("   %s %s\n",
-		styles.CommandStyle.Render("Terraform State Region:"),
-		styles.DescriptionStyle.Render(config.TerraformState.S3Region))
 
 	fmt.Printf("\n%s %s %s\n",
 		styles.CommandStyle.Render("📄"),
@@ -256,16 +250,9 @@ func runCreate(cmd *cobra.Command, args []string) {
 	fmt.Printf("\n%s %s\n",
 		styles.TitleStyle.Render("🚀"),
 		styles.HelpStyle.Render("Initializing Terraform..."))
-	fmt.Printf("%s %s\n",
-		styles.CommandStyle.Render("📝"),
-		styles.DescriptionStyle.Render("Running: terraform init with S3 backend configuration"))
-	fmt.Printf("%s %s\n",
-		styles.CommandStyle.Render("📄"),
-		styles.DescriptionStyle.Render(fmt.Sprintf("Backend: s3://%s/clusters/%s/provision.terraform.tfstate",
-			config.TerraformState.S3Bucket, config.Name)))
 	fmt.Printf("%s %s\n\n",
-		styles.CommandStyle.Render("🌍"),
-		styles.DescriptionStyle.Render(fmt.Sprintf("Region: %s", config.TerraformState.S3Region)))
+		styles.CommandStyle.Render("📝"),
+		styles.DescriptionStyle.Render("Running: terraform init with local backend configuration"))
 
 	if err := automation.RunTerraformInit(config); err != nil {
 		fmt.Fprintf(os.Stderr, "\n%s %s\n",

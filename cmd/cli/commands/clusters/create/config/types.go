@@ -10,9 +10,6 @@ type CreateConfig struct {
 	Email         string `validate:"required,email"`
 	PaaSFeatures  string `validate:"omitempty,paas_features"`
 
-	// Terraform state configuration
-	TerraformState *TerraformStateConfig `validate:"omitempty"`
-
 	// Provider-specific configurations will be validated by their respective providers
 	AWS          *AWSConfig          `validate:"omitempty"`
 	DigitalOcean *DigitalOceanConfig `validate:"omitempty"`
@@ -115,12 +112,4 @@ type GCloudConfig struct {
 	ServiceAccountKey string `validate:"required_with=GCloudConfig,file"`
 	ProjectID         string `validate:"required_with=GCloudConfig"`
 	Region            string `validate:"required_with=GCloudConfig"`
-}
-
-// TerraformStateConfig represents Terraform state storage configuration
-type TerraformStateConfig struct {
-	S3Bucket       string `validate:"required_with=TerraformStateConfig"`
-	S3Region       string `validate:"required_with=TerraformStateConfig"`
-	S3AccessKey    string `validate:"required_with=TerraformStateConfig"`
-	S3AccessSecret string `validate:"required_with=TerraformStateConfig"`
 }

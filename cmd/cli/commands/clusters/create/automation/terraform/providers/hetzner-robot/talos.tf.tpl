@@ -10,27 +10,13 @@ terraform {
     }
   }
 
-  backend "s3" {
-    bucket = "{{.TerraformState.S3Bucket}}"
-    key    = "clusters/{{.Name}}/bare-metal-talos-bootstrap/terraform.tfstate"
-    region = "{{.TerraformState.S3Region}}"
-    encrypt = true
-  }
-}
-
-# Trigger for forcing recreation on every apply
-resource "null_resource" "always_run_trigger" {
-  triggers = {
-    timestamp = timestamp()
+  backend "local" {
+    path = "terraform.tfstate"
   }
 }
 
 # Talos machine secrets for cluster bootstrapping
-resource "talos_machine_secrets" "machine_secrets" {
-  lifecycle {
-    replace_triggered_by = [null_resource.always_run_trigger.id]
-  }
-}
+resource "talos_machine_secrets" "machine_secrets" {}
 
 locals {
   # Base cluster configuration shared by all nodes
@@ -73,6 +59,10 @@ locals {
         listen-metrics-urls = "http://0.0.0.0:2381"
       }
     }
+    extraManifests = [
+      "https://github.com/kubernetes-sigs/metrics-server/releases/download/v0.8.0/components.yaml",
+      "https://raw.githubusercontent.com/alex1989hu/kubelet-serving-cert-approver/main/deploy/standalone-install.yaml"
+    ]
   })
 
   worker_machine_config = {
@@ -113,6 +103,27 @@ data "talos_machine_configuration" "machineconfig_cp_{{.ID}}" {
               var.vswitch_subnet_ip_range
             ]
           }
+          extraArgs = {
+            rotate-server-certificates = "true"
+          }
+        }
+        logging = {
+          destinations = [
+            {
+              endpoint = "udp://127.0.0.1:6050/"
+              format = "json_lines"
+              extraTags = {
+                source = "kernel"
+              }
+            },
+            {
+              endpoint = "udp://127.0.0.1:6051/"
+              format = "json_lines"
+              extraTags = {
+                source = "service"
+              }
+            }
+          ]
         }
         network = {
           hostname = "cp-{{$controlPlaneIndex}}"
@@ -196,6 +207,27 @@ data "talos_machine_configuration" "machineconfig_worker_{{.ID}}" {
               var.vswitch_subnet_ip_range
             ]
           }
+          extraArgs = {
+            rotate-server-certificates = "true"
+          }
+        }
+        logging = {
+          destinations = [
+            {
+              endpoint = "udp://127.0.0.1:6050/"
+              format = "json_lines"
+              extraTags = {
+                source = "kernel"
+              }
+            },
+            {
+              endpoint = "udp://127.0.0.1:6051/"
+              format = "json_lines"
+              extraTags = {
+                source = "service"
+              }
+            }
+          ]
         }
         network = {
           hostname = "worker-{{$workerIndex}}"
@@ -270,10 +302,6 @@ resource "talos_machine_configuration_apply" "control_plane_{{.ID}}" {
       }
     })
   ]
-
-  lifecycle {
-    replace_triggered_by = [null_resource.always_run_trigger.id]
-  }
 }
 {{end}}
 {{end}}
@@ -295,10 +323,6 @@ resource "talos_machine_configuration_apply" "worker_{{.ID}}" {
       }
     })
   ]
-
-  lifecycle {
-    replace_triggered_by = [null_resource.always_run_trigger.id]
-  }
 }
 {{end}}
 {{end}}
@@ -322,10 +346,6 @@ resource "talos_machine_bootstrap" "this" {
   ]
   node                 = "{{range .HetznerRobot.SelectedServers}}{{if eq .Role "control-plane"}}{{.IP}}{{break}}{{end}}{{end}}"
   client_configuration = talos_machine_secrets.machine_secrets.client_configuration
-
-  lifecycle {
-    replace_triggered_by = [null_resource.always_run_trigger.id]
-  }
 }
 
 # Generate kubeconfig after cluster bootstrap
@@ -335,10 +355,6 @@ resource "talos_cluster_kubeconfig" "this" {
   ]
   client_configuration = talos_machine_secrets.machine_secrets.client_configuration
   node                 = "{{range .HetznerRobot.SelectedServers}}{{if eq .Role "control-plane"}}{{.IP}}{{break}}{{end}}{{end}}"
-
-  lifecycle {
-    replace_triggered_by = [null_resource.always_run_trigger.id]
-  }
 }
 
 # Generate Talos client configuration

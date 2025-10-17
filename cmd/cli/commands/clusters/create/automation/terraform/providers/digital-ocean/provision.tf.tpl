@@ -11,9 +11,8 @@ terraform {
     }
   }
   
-  backend "s3" {
-    # Backend configuration will be provided via terraform init -backend-config
-    # or via environment variables
+  backend "local" {
+    path = "terraform.tfstate"
   }
 }
 

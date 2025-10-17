@@ -17,25 +17,12 @@ import (
 	"github.com/kibamail/kibaship/cmd/cli/internal/styles"
 )
 
-// runTerraformInit runs terraform init in the provision directory with backend configuration
-// State path: clusters/<cluster>/provision.terraform.tfstate
-// Future bootstrap state path will be: clusters/<cluster>/bootstrap.terraform.tfstate
+// runTerraformInit runs terraform init in the provision directory with local backend
 func RunTerraformInit(config *config.CreateConfig) error {
 	provisionDir := filepath.Join(".kibaship", config.Name, "provision")
 
-	// Prepare backend configuration arguments
-	backendArgs := []string{
-		"init",
-		fmt.Sprintf("-backend-config=bucket=%s", config.TerraformState.S3Bucket),
-		fmt.Sprintf("-backend-config=key=clusters/%s/provision.terraform.tfstate", config.Name),
-		fmt.Sprintf("-backend-config=region=%s", config.TerraformState.S3Region),
-		fmt.Sprintf("-backend-config=access_key=%s", config.TerraformState.S3AccessKey),
-		fmt.Sprintf("-backend-config=secret_key=%s", config.TerraformState.S3AccessSecret),
-		"-backend-config=encrypt=true",
-	}
-
-	// Create terraform command
-	cmd := exec.Command("terraform", backendArgs...)
+	// Create terraform command with init
+	cmd := exec.Command("terraform", "init")
 	cmd.Dir = provisionDir
 
 	// Set up environment variables
@@ -193,12 +180,6 @@ func RunTerraformApply(config *config.CreateConfig) error {
 	env = append(env, fmt.Sprintf("TF_VAR_cluster_email=%s", config.Email))
 	env = append(env, fmt.Sprintf("TF_VAR_paas_features=%s", config.PaaSFeatures))
 
-	// Add Terraform state configuration variables
-	env = append(env, fmt.Sprintf("TF_VAR_terraform_state_bucket=%s", config.TerraformState.S3Bucket))
-	env = append(env, fmt.Sprintf("TF_VAR_terraform_state_region=%s", config.TerraformState.S3Region))
-	env = append(env, fmt.Sprintf("TF_VAR_terraform_state_access_key=%s", config.TerraformState.S3AccessKey))
-	env = append(env, fmt.Sprintf("TF_VAR_terraform_state_secret_key=%s", config.TerraformState.S3AccessSecret))
-
 	// Add provider-specific environment variables
 	switch config.Provider {
 	case "digital-ocean":
@@ -354,20 +335,8 @@ func RunTerraformApply(config *config.CreateConfig) error {
 func RunBootstrapTerraformInit(config *config.CreateConfig) error {
 	bootstrapDir := filepath.Join(".kibaship", config.Name, "bootstrap")
 
-	// Prepare backend configuration arguments
-	backendArgs := []string{
-		"init",
-		"-reconfigure",
-		fmt.Sprintf("-backend-config=bucket=%s", config.TerraformState.S3Bucket),
-		fmt.Sprintf("-backend-config=key=clusters/%s/bootstrap.terraform.tfstate", config.Name),
-		fmt.Sprintf("-backend-config=region=%s", config.TerraformState.S3Region),
-		fmt.Sprintf("-backend-config=access_key=%s", config.TerraformState.S3AccessKey),
-		fmt.Sprintf("-backend-config=secret_key=%s", config.TerraformState.S3AccessSecret),
-		"-backend-config=encrypt=true",
-	}
-
-	// Create terraform command
-	cmd := exec.Command("terraform", backendArgs...)
+	// Create terraform command with init and reconfigure
+	cmd := exec.Command("terraform", "init", "-reconfigure")
 	cmd.Dir = bootstrapDir
 
 	// Set up environment variables
@@ -422,12 +391,8 @@ func RunBootstrapTerraformValidate(config *config.CreateConfig) error {
 	cmd := exec.Command("terraform", "validate")
 	cmd.Dir = bootstrapDir
 
-	// Set up environment variables including AWS credentials for remote state access
-	env := os.Environ()
-	env = append(env, fmt.Sprintf("AWS_ACCESS_KEY_ID=%s", config.TerraformState.S3AccessKey))
-	env = append(env, fmt.Sprintf("AWS_SECRET_ACCESS_KEY=%s", config.TerraformState.S3AccessSecret))
-	env = append(env, fmt.Sprintf("AWS_REGION=%s", config.TerraformState.S3Region))
-	cmd.Env = env
+	// Set up environment variables
+	cmd.Env = os.Environ()
 
 	// Create pipes for stdout and stderr
 	stdout, err := cmd.StdoutPipe()
@@ -476,11 +441,6 @@ func RunBootstrapTerraformApply(config *config.CreateConfig) error {
 
 	// Set up TF_VAR environment variables for Terraform
 	env := os.Environ()
-
-	// Add AWS credentials for remote state access
-	env = append(env, fmt.Sprintf("AWS_ACCESS_KEY_ID=%s", config.TerraformState.S3AccessKey))
-	env = append(env, fmt.Sprintf("AWS_SECRET_ACCESS_KEY=%s", config.TerraformState.S3AccessSecret))
-	env = append(env, fmt.Sprintf("AWS_REGION=%s", config.TerraformState.S3Region))
 
 	env = append(env, fmt.Sprintf("TF_VAR_cluster_name=%s", config.Name))
 	env = append(env, fmt.Sprintf("TF_VAR_cluster_email=%s", config.Email))
@@ -644,19 +604,8 @@ func ReadProvisionTerraformOutputs(config *config.CreateConfig) (map[string]inte
 func RunTalosTerraformInit(config *config.CreateConfig) error {
 	talosDir := filepath.Join(".kibaship", config.Name, "talos")
 
-	// Prepare backend configuration arguments
-	backendArgs := []string{
-		"init",
-		fmt.Sprintf("-backend-config=bucket=%s", config.TerraformState.S3Bucket),
-		fmt.Sprintf("-backend-config=key=clusters/%s/bare-metal-talos-bootstrap/terraform.tfstate", config.Name),
-		fmt.Sprintf("-backend-config=region=%s", config.TerraformState.S3Region),
-		fmt.Sprintf("-backend-config=access_key=%s", config.TerraformState.S3AccessKey),
-		fmt.Sprintf("-backend-config=secret_key=%s", config.TerraformState.S3AccessSecret),
-		"-backend-config=encrypt=true",
-	}
-
-	// Create terraform command
-	cmd := exec.Command("terraform", backendArgs...)
+	// Create terraform command with init
+	cmd := exec.Command("terraform", "init")
 	cmd.Dir = talosDir
 
 	// Set up environment variables
@@ -920,12 +869,6 @@ func RunTerraformDestroy(config *config.CreateConfig) error {
 	env = append(env, fmt.Sprintf("TF_VAR_cluster_name=%s", config.Name))
 	env = append(env, fmt.Sprintf("TF_VAR_cluster_email=%s", config.Email))
 	env = append(env, fmt.Sprintf("TF_VAR_paas_features=%s", config.PaaSFeatures))
-
-	// Add Terraform state configuration variables
-	env = append(env, fmt.Sprintf("TF_VAR_terraform_state_bucket=%s", config.TerraformState.S3Bucket))
-	env = append(env, fmt.Sprintf("TF_VAR_terraform_state_region=%s", config.TerraformState.S3Region))
-	env = append(env, fmt.Sprintf("TF_VAR_terraform_state_access_key=%s", config.TerraformState.S3AccessKey))
-	env = append(env, fmt.Sprintf("TF_VAR_terraform_state_secret_key=%s", config.TerraformState.S3AccessSecret))
 
 	// Add provider-specific environment variables
 	switch config.Provider {

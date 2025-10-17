@@ -98,10 +98,6 @@ func BuildHetznerRobotProvisionFiles(config *config.CreateConfig) error {
 		"\033[36m📋\033[0m",
 		"\033[1;36mTemplate Variables for Provision Build:\033[0m")
 	fmt.Printf("  %s: %s\n", "\033[90mName\033[0m", config.Name)
-	fmt.Printf("  %s: %s\n", "\033[90mTerraformState.S3Bucket\033[0m", config.TerraformState.S3Bucket)
-	fmt.Printf("  %s: %s\n", "\033[90mTerraformState.S3Region\033[0m", config.TerraformState.S3Region)
-	fmt.Printf("  %s: %s\n", "\033[90mTerraformState.S3AccessKey\033[0m", maskSensitive(config.TerraformState.S3AccessKey))
-	fmt.Printf("  %s: %s\n", "\033[90mTerraformState.S3AccessSecret\033[0m", maskSensitive(config.TerraformState.S3AccessSecret))
 
 	if config.HetznerRobot != nil {
 		fmt.Printf("  %s: %d server(s)\n", "\033[90mHetznerRobot.SelectedServers\033[0m", len(config.HetznerRobot.SelectedServers))
@@ -150,8 +146,6 @@ func BuildHetznerRobotBootstrapFiles(config *config.CreateConfig) error {
 		"\033[36m📋\033[0m",
 		"\033[1;36mTemplate Variables for Bootstrap Build:\033[0m")
 	fmt.Printf("  %s: %s\n", "\033[90mName\033[0m", config.Name)
-	fmt.Printf("  %s: %s\n", "\033[90mTerraformState.S3Bucket\033[0m", config.TerraformState.S3Bucket)
-	fmt.Printf("  %s: %s\n", "\033[90mTerraformState.S3Region\033[0m", config.TerraformState.S3Region)
 
 	// Get provider-specific template path
 	providerPath := "terraform/providers/hetzner-robot"
@@ -185,8 +179,6 @@ func BuildHetznerRobotTalosFiles(config *config.CreateConfig) error {
 		"\033[36m📋\033[0m",
 		"\033[1;36mTemplate Variables for Talos Bootstrap Build:\033[0m")
 	fmt.Printf("  %s: %s\n", "\033[90mName\033[0m", config.Name)
-	fmt.Printf("  %s: %s\n", "\033[90mTerraformState.S3Bucket\033[0m", config.TerraformState.S3Bucket)
-	fmt.Printf("  %s: %s\n", "\033[90mTerraformState.S3Region\033[0m", config.TerraformState.S3Region)
 
 	if config.HetznerRobot != nil {
 		if config.HetznerRobot.TalosConfig != nil {

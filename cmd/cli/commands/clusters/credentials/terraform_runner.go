@@ -33,12 +33,6 @@ func extractCredentials(config *config.CreateConfig) error {
 	env = append(env, fmt.Sprintf("TF_VAR_cluster_email=%s", config.Email))
 	env = append(env, fmt.Sprintf("TF_VAR_paas_features=%s", config.PaaSFeatures))
 
-	// Add Terraform state configuration variables
-	env = append(env, fmt.Sprintf("TF_VAR_terraform_state_bucket=%s", config.TerraformState.S3Bucket))
-	env = append(env, fmt.Sprintf("TF_VAR_terraform_state_region=%s", config.TerraformState.S3Region))
-	env = append(env, fmt.Sprintf("TF_VAR_terraform_state_access_key=%s", config.TerraformState.S3AccessKey))
-	env = append(env, fmt.Sprintf("TF_VAR_terraform_state_secret_key=%s", config.TerraformState.S3AccessSecret))
-
 	// Add provider-specific environment variables
 	switch config.Provider {
 	case "digital-ocean":

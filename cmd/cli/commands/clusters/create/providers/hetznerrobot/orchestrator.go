@@ -1087,13 +1087,9 @@ func RunClusterCreationFlow(cfg *config.CreateConfig) {
 	fmt.Printf("\n%s %s\n",
 		styles.TitleStyle.Render("🚀"),
 		styles.HelpStyle.Render("Initializing provision Terraform..."))
-	fmt.Printf("%s %s\n",
-		styles.CommandStyle.Render("📝"),
-		styles.DescriptionStyle.Render("Running: terraform init with S3 backend configuration"))
 	fmt.Printf("%s %s\n\n",
-		styles.CommandStyle.Render("📄"),
-		styles.DescriptionStyle.Render(fmt.Sprintf("Backend: s3://%s/clusters/%s/provision.terraform.tfstate",
-			cfg.TerraformState.S3Bucket, cfg.Name)))
+		styles.CommandStyle.Render("📝"),
+		styles.DescriptionStyle.Render("Running: terraform init with local backend configuration"))
 
 	if err := automation.RunTerraformInit(cfg); err != nil {
 		fmt.Fprintf(os.Stderr, "\n%s %s\n",
@@ -1285,13 +1281,9 @@ func RunClusterCreationFlow(cfg *config.CreateConfig) {
 	fmt.Printf("\n%s %s\n",
 		styles.TitleStyle.Render("🚀"),
 		styles.HelpStyle.Render("Initializing Talos bootstrap Terraform..."))
-	fmt.Printf("%s %s\n",
-		styles.CommandStyle.Render("📝"),
-		styles.DescriptionStyle.Render("Running: terraform init with S3 backend configuration"))
 	fmt.Printf("%s %s\n\n",
-		styles.CommandStyle.Render("📄"),
-		styles.DescriptionStyle.Render(fmt.Sprintf("Backend: s3://%s/clusters/%s/bare-metal-talos-bootstrap/terraform.tfstate",
-			cfg.TerraformState.S3Bucket, cfg.Name)))
+		styles.CommandStyle.Render("📝"),
+		styles.DescriptionStyle.Render("Running: terraform init with local backend configuration"))
 
 	if err := automation.RunTalosTerraformInit(cfg); err != nil {
 		fmt.Fprintf(os.Stderr, "\n%s %s\n",

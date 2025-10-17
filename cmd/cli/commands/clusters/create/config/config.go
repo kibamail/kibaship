@@ -32,15 +32,6 @@ func init() {
 
 // YAMLConfig represents the nested YAML configuration structure
 type YAMLConfig struct {
-	State struct {
-		S3 struct {
-			Bucket       string `yaml:"bucket"`
-			Region       string `yaml:"region"`
-			AccessKey    string `yaml:"access-key"`
-			AccessSecret string `yaml:"access-secret"`
-		} `yaml:"s3"`
-	} `yaml:"state"`
-
 	Cluster struct {
 		Domain       string `yaml:"domain"`
 		Email        string `yaml:"email"`
@@ -154,14 +145,6 @@ func convertYAMLToCreateConfig(yamlConfig *YAMLConfig) (*CreateConfig, error) {
 		config.Linode = providerConfig.(*LinodeConfig)
 	case "gcloud":
 		config.GCloud = providerConfig.(*GCloudConfig)
-	}
-
-	// Set Terraform state configuration
-	config.TerraformState = &TerraformStateConfig{
-		S3Bucket:       yamlConfig.State.S3.Bucket,
-		S3Region:       yamlConfig.State.S3.Region,
-		S3AccessKey:    yamlConfig.State.S3.AccessKey,
-		S3AccessSecret: yamlConfig.State.S3.AccessSecret,
 	}
 
 	return config, nil

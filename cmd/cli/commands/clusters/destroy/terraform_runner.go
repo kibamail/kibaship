@@ -34,21 +34,10 @@ func buildTerraformFiles(config *config.CreateConfig) error {
 	return automation.BuildTerraformFilesForConfig(config)
 }
 
-// runTerraformInitInDir runs terraform init in a specific directory with backend configuration
+// runTerraformInitInDir runs terraform init in a specific directory with local backend
 func runTerraformInitInDir(config *config.CreateConfig, dir string, stateKey string) error {
-	// Prepare backend configuration arguments
-	backendArgs := []string{
-		"init",
-		fmt.Sprintf("-backend-config=bucket=%s", config.TerraformState.S3Bucket),
-		fmt.Sprintf("-backend-config=key=%s", stateKey),
-		fmt.Sprintf("-backend-config=region=%s", config.TerraformState.S3Region),
-		fmt.Sprintf("-backend-config=access_key=%s", config.TerraformState.S3AccessKey),
-		fmt.Sprintf("-backend-config=secret_key=%s", config.TerraformState.S3AccessSecret),
-		"-backend-config=encrypt=true",
-	}
-
-	// Create terraform command
-	cmd := exec.Command("terraform", backendArgs...)
+	// Create terraform command with local backend (no backend config needed)
+	cmd := exec.Command("terraform", "init")
 	cmd.Dir = dir
 
 	// Set up environment variables
@@ -118,12 +107,6 @@ func runTerraformDestroy(config *config.CreateConfig) error {
 	env = append(env, fmt.Sprintf("TF_VAR_cluster_name=%s", config.Name))
 	env = append(env, fmt.Sprintf("TF_VAR_cluster_email=%s", config.Email))
 	env = append(env, fmt.Sprintf("TF_VAR_paas_features=%s", config.PaaSFeatures))
-
-	// Add Terraform state configuration variables
-	env = append(env, fmt.Sprintf("TF_VAR_terraform_state_bucket=%s", config.TerraformState.S3Bucket))
-	env = append(env, fmt.Sprintf("TF_VAR_terraform_state_region=%s", config.TerraformState.S3Region))
-	env = append(env, fmt.Sprintf("TF_VAR_terraform_state_access_key=%s", config.TerraformState.S3AccessKey))
-	env = append(env, fmt.Sprintf("TF_VAR_terraform_state_secret_key=%s", config.TerraformState.S3AccessSecret))
 
 	// Add provider-specific environment variables
 	switch config.Provider {

@@ -144,15 +144,6 @@ func extractCoreFlags(cmd *cobra.Command) *CreateConfig {
 	return config
 }
 
-// extractTerraformStateFlags extracts Terraform state configuration flags
-func extractTerraformStateFlags(cmd *cobra.Command) (string, string, string, string) {
-	stateS3Bucket, _ := cmd.Flags().GetString("state-s3-bucket")
-	stateS3Region, _ := cmd.Flags().GetString("state-s3-region")
-	stateS3AccessKey, _ := cmd.Flags().GetString("state-s3-access-key")
-	stateS3AccessSecret, _ := cmd.Flags().GetString("state-s3-access-secret")
-	return stateS3Bucket, stateS3Region, stateS3AccessKey, stateS3AccessSecret
-}
-
 // buildProviderConfig builds provider-specific configuration
 func buildProviderConfig(config *CreateConfig, cmd *cobra.Command) error {
 	switch config.Provider {
@@ -214,9 +205,6 @@ func ValidateCreateCommand(cmd *cobra.Command) (*CreateConfig, error) {
 		config.Name = strings.ReplaceAll(config.Domain, ".", "-")
 	}
 
-	// Get Terraform state flags
-	stateS3Bucket, stateS3Region, stateS3AccessKey, stateS3AccessSecret := extractTerraformStateFlags(cmd)
-
 	// Validate that we have either configuration file OR provider flags
 	if config.Configuration == "" && config.Provider == "" {
 		return nil, fmt.Errorf("must specify either --configuration file or --provider with credentials")
@@ -250,20 +238,6 @@ func ValidateCreateCommand(cmd *cobra.Command) (*CreateConfig, error) {
 			yamlConfig.PaaSFeatures = config.PaaSFeatures
 		}
 
-		// Override Terraform state with CLI flags if provided
-		if stateS3Bucket != "" {
-			yamlConfig.TerraformState.S3Bucket = stateS3Bucket
-		}
-		if stateS3Region != "" {
-			yamlConfig.TerraformState.S3Region = stateS3Region
-		}
-		if stateS3AccessKey != "" {
-			yamlConfig.TerraformState.S3AccessKey = stateS3AccessKey
-		}
-		if stateS3AccessSecret != "" {
-			yamlConfig.TerraformState.S3AccessSecret = stateS3AccessSecret
-		}
-
 		// Validate the final configuration
 		if err := validate.Struct(yamlConfig); err != nil {
 			return nil, formatValidationError(err)
@@ -276,18 +250,6 @@ func ValidateCreateCommand(cmd *cobra.Command) (*CreateConfig, error) {
 	if err := validate.Var(config.Provider,
 		"required,oneof=aws digital-ocean hetzner hetzner-robot linode gcloud"); err != nil {
 		return nil, fmt.Errorf("invalid provider: must be one of: aws, digital-ocean, hetzner, hetzner-robot, linode, gcloud")
-	}
-
-	// Validate Terraform state configuration
-	if err := validateTerraformStateFlags(stateS3Bucket, stateS3Region,
-		stateS3AccessKey, stateS3AccessSecret); err != nil {
-		return nil, fmt.Errorf("terraform state configuration validation failed: %w", err)
-	}
-	config.TerraformState = &TerraformStateConfig{
-		S3Bucket:       stateS3Bucket,
-		S3Region:       stateS3Region,
-		S3AccessKey:    stateS3AccessKey,
-		S3AccessSecret: stateS3AccessSecret,
 	}
 
 	// Build provider-specific configuration based on selected provider
@@ -304,20 +266,6 @@ func ValidateCreateCommand(cmd *cobra.Command) (*CreateConfig, error) {
 	}
 	if config.Email == "" {
 		return nil, fmt.Errorf("email is required (specify in YAML or use --email flag)")
-	}
-	if config.TerraformState == nil || config.TerraformState.S3Bucket == "" {
-		return nil, fmt.Errorf("terraform state S3 bucket is required (specify in YAML or use --state-s3-bucket flag)")
-	}
-	if config.TerraformState.S3Region == "" {
-		return nil, fmt.Errorf("terraform state S3 region is required (specify in YAML or use --state-s3-region flag)")
-	}
-	if config.TerraformState.S3AccessKey == "" {
-		return nil, fmt.Errorf("terraform state S3 access key is required " +
-			"(specify in YAML or use --state-s3-access-key flag)")
-	}
-	if config.TerraformState.S3AccessSecret == "" {
-		return nil, fmt.Errorf("terraform state S3 access secret is required " +
-			"(specify in YAML or use --state-s3-access-secret flag)")
 	}
 
 	// Final validation of the complete configuration
@@ -514,39 +462,3 @@ func getFieldErrorMessage(fe validator.FieldError) string {
 	}
 }
 
-// validateTerraformStateFlags validates the Terraform state configuration flags
-func validateTerraformStateFlags(bucket, region, accessKey, accessSecret string) error {
-	// All Terraform state flags are required
-	if bucket == "" {
-		return fmt.Errorf("--state-s3-bucket is required for Terraform state storage")
-	}
-	if region == "" {
-		return fmt.Errorf("--state-s3-region is required for Terraform state storage")
-	}
-	if accessKey == "" {
-		return fmt.Errorf("--state-s3-access-key is required for Terraform state storage")
-	}
-	if accessSecret == "" {
-		return fmt.Errorf("--state-s3-access-secret is required for Terraform state storage")
-	}
-
-	// Validate S3 bucket name format
-	if err := validate.Var(bucket, "required,min=3,max=63"); err != nil {
-		return fmt.Errorf("S3 bucket name must be between 3 and 63 characters")
-	}
-
-	// Validate AWS region format for S3
-	if err := validate.Var(region, "required"); err != nil {
-		return fmt.Errorf("S3 region is required")
-	}
-
-	// Basic validation for access credentials (non-empty)
-	if len(accessKey) < 16 {
-		return fmt.Errorf("S3 access key appears to be invalid (too short)")
-	}
-	if len(accessSecret) < 32 {
-		return fmt.Errorf("S3 access secret appears to be invalid (too short)")
-	}
-
-	return nil
-}

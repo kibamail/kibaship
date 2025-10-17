@@ -6,11 +6,8 @@ terraform {
     }
   }
 
-  backend "s3" {
-    bucket = "{{.TerraformState.S3Bucket}}"
-    key    = "clusters/{{.Name}}/provision/terraform.tfstate"
-    region = "{{.TerraformState.S3Region}}"
-    encrypt = true
+  backend "local" {
+    path = "terraform.tfstate"
   }
 }
 
