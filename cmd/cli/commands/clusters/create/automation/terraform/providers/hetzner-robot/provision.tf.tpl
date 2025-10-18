@@ -4,11 +4,21 @@ terraform {
       source  = "hashicorp/null"
       version = "~> 3.0"
     }
+    tls = {
+      source  = "hashicorp/tls"
+      version = "~> 4.0"
+    }
   }
 
   backend "local" {
     path = "terraform.tfstate"
   }
+}
+
+# Generate SSH keypair for cluster access
+resource "tls_private_key" "cluster_ssh" {
+  algorithm = "RSA"
+  rsa_bits  = 4096
 }
 
 {{range .HetznerRobot.SelectedServers}}
@@ -77,7 +87,7 @@ resource "null_resource" "disk_discovery_{{.ID}}" {
           --arg talos_disk_by_id "$SMALLEST_DISK_BY_ID" \
           '{
             "all_devices": $devices,
-            "talos_installation": {
+            "os_installation": {
               "device": $talos_device,
               "disk_by_id": $talos_disk_by_id,
               "full_path": ("/dev/" + $talos_device),
@@ -88,37 +98,51 @@ resource "null_resource" "disk_discovery_{{.ID}}" {
         # Output the result
         cat /tmp/disk_discovery_{{.ID}}.json
 
-        # 6. Detect architecture
+        # 6. Detect architecture and select Ubuntu 24.04 image
         ARCH=$(uname -m)
-        TALOS_VERSION="v1.11.3"
         if [ "$ARCH" = "x86_64" ]; then
-          TALOS_ARCH="amd64"
+          UBUNTU_IMAGE="./images/Ubuntu-2404-noble-amd64-base.tar.gz"
         elif [ "$ARCH" = "aarch64" ]; then
-          TALOS_ARCH="arm64"
+          UBUNTU_IMAGE="./images/Ubuntu-2404-noble-arm64-base.tar.gz"
         else
           echo "Unsupported architecture: $ARCH"
           exit 1
         fi
 
-        # 7. Download Talos image
-        echo "Downloading Talos image for $TALOS_ARCH..."
-        wget -O /tmp/metal-$TALOS_ARCH.raw.zst https://factory.talos.dev/image/4b512670bff09ccd8f57db4a77fecb67e495d6ffc635633d9444a4895980f90e/$TALOS_VERSION/metal-$TALOS_ARCH.raw.zst
+        echo "Selected Ubuntu image: $UBUNTU_IMAGE"
 
-        # 8. Extract Talos image
-        echo "Extracting Talos image..."
-        apt-get install -y zstd
-        zstd -d /tmp/metal-$TALOS_ARCH.raw.zst -o /tmp/metal-$TALOS_ARCH.raw
+        # 7. Install Ubuntu 24.04 using installimage
+        TARGET_DISK="/dev/$SMALLEST_NAME"
+        HOSTNAME="{{.Name}}"
 
-        # 9. Write Talos image to target disk
-        TARGET_DISK="/dev/disk/by-id/$SMALLEST_DISK_BY_ID"
-        echo "Writing Talos image to $TARGET_DISK..."
-        dd if=/tmp/metal-$TALOS_ARCH.raw of=$TARGET_DISK bs=1M status=progress
+        echo $HOSTNAME
+        echo $UBUNTU_IMAGE
+        echo $TARGET_DISK
 
-        # 10. Sync to ensure all writes are flushed
-        echo "Syncing..."
-        sync
+        # Create installimage config file
+        cat > /tmp/installimage.conf <<INSTALLCONFIG
+DRIVE1 $TARGET_DISK
 
-        echo "Talos image installation complete on $TARGET_DISK"
+SWRAID 0
+HOSTNAME $HOSTNAME
+IPV4_ONLY yes
+
+USE_KERNEL_MODE_SETTING yes
+
+PART /boot/efi esp 256M
+PART /boot ext3 1024M
+PART / ext4 all
+
+IMAGE $UBUNTU_IMAGE
+INSTALLCONFIG
+
+        echo "Generated installimage config:"
+        cat /tmp/installimage.conf
+
+        echo "Installing Ubuntu 24.04 on $TARGET_DISK..."
+        /root/.oldroot/nfs/install/installimage -a -c /tmp/installimage.conf
+
+        echo "Ubuntu 24.04 installation complete on $TARGET_DISK"
       EOF
     ]
   }
@@ -164,7 +188,7 @@ EXPECT_EOF
     }
 
     inline = [
-      "echo 'Rebooting server to boot into Talos...'",
+      "echo 'Rebooting server to boot into Ubuntu 24.04...'",
       "reboot"
     ]
 

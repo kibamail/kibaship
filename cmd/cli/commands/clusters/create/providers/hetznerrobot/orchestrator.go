@@ -190,7 +190,7 @@ func storeProvisionOutputs(cfg *config.CreateConfig, outputs map[string]interfac
 	// Structure: server_2664303_disk_discovery = {
 	//   "value" = {
 	//     "all_devices" = [...]
-	//     "talos_installation" = {
+	//     "os_installation" = {
 	//       "device" = "nvme0n1"
 	//       "disk_by_id" = "nvme-SAMSUNG_..."
 	//       "disk_by_id_path" = "/dev/disk/by-id/nvme-SAMSUNG_..."
@@ -208,9 +208,9 @@ func storeProvisionOutputs(cfg *config.CreateConfig, outputs map[string]interfac
 			// Extract the value from Terraform output structure
 			if diskDiscoveryMap, ok := diskDiscoveryRaw.(map[string]interface{}); ok {
 				if valueMap, ok := diskDiscoveryMap["value"].(map[string]interface{}); ok {
-					// Extract talos_installation nested object
+					// Extract os_installation nested object
 					var installationDiskByID string
-					if talosInstallation, ok := valueMap["talos_installation"].(map[string]interface{}); ok {
+					if talosInstallation, ok := valueMap["os_installation"].(map[string]interface{}); ok {
 						// Prefer disk_by_id_path, fallback to full_path
 						var diskPath string
 						if diskByIDPath, ok := talosInstallation["disk_by_id_path"].(string); ok && diskByIDPath != "" {
@@ -232,15 +232,15 @@ func storeProvisionOutputs(cfg *config.CreateConfig, outputs map[string]interfac
 								installationDiskByID = diskByID
 							}
 						} else {
-							fmt.Printf("%s %s %s (no disk path in talos_installation)\n",
+							fmt.Printf("%s %s %s (no disk path in os_installation)\n",
 								styles.CommandStyle.Render("⚠️"),
 								styles.DescriptionStyle.Render("Warning: Could not extract disk path for"),
 								styles.CommandStyle.Render(server.Name))
 						}
 					} else {
-						fmt.Printf("%s %s %s (no talos_installation object)\n",
+						fmt.Printf("%s %s %s (no os_installation object)\n",
 							styles.CommandStyle.Render("⚠️"),
-							styles.DescriptionStyle.Render("Warning: Could not extract talos_installation for"),
+							styles.DescriptionStyle.Render("Warning: Could not extract os_installation for"),
 							styles.CommandStyle.Render(server.Name))
 					}
 
@@ -550,7 +550,7 @@ func storeTalosCredentials(cfg *config.CreateConfig, outputs map[string]interfac
 			if valueMap, ok := workerConfigsMap["value"].(map[string]interface{}); ok {
 				for serverID, configRaw := range valueMap {
 					if configValue, ok := configRaw.(string); ok {
-						configPath := filepath.Join(credentialsDir, fmt.Sprintf("worker-%s.yaml", serverID))
+						configPath := filepath.Join(credentialsDir, fmt.Sprintf("worker-node-%s.yaml", serverID))
 						if err := os.WriteFile(configPath, []byte(configValue), 0600); err != nil {
 							return fmt.Errorf("failed to write worker config for server %s: %w", serverID, err)
 						}
@@ -1161,6 +1161,8 @@ func RunClusterCreationFlow(cfg *config.CreateConfig) {
 				styles.DescriptionStyle.Render(fmt.Sprintf("Warning: Failed to store provision outputs: %v", err)))
 		}
 	}
+
+	os.Exit(0)
 
     // Cloud phase removed for hetzner-robot: load balancers and cloud networking are not managed here
 

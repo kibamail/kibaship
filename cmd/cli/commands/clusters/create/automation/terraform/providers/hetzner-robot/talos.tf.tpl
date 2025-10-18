@@ -126,7 +126,7 @@ data "talos_machine_configuration" "machineconfig_cp_{{.ID}}" {
           ]
         }
         network = {
-          hostname = "cp-{{$controlPlaneIndex}}"
+          hostname = "control-node-{{$controlPlaneIndex}}"
           interfaces = [
             {
               interface = var.server_{{.ID}}_public_network_interface
@@ -230,7 +230,7 @@ data "talos_machine_configuration" "machineconfig_worker_{{.ID}}" {
           ]
         }
         network = {
-          hostname = "worker-{{$workerIndex}}"
+          hostname = "worker-node-{{$workerIndex}}"
           interfaces = [
             {
               interface = var.server_{{.ID}}_public_network_interface

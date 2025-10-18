@@ -236,7 +236,7 @@ contexts:
 
 			for serverID, machineConfig := range cpConfigsValue {
 				if machineConfigStr, ok := machineConfig.(string); ok && machineConfigStr != "" {
-					machineConfigPath := filepath.Join(credentialsDir, fmt.Sprintf("cp-%s-machineconfig.yaml", serverID))
+					machineConfigPath := filepath.Join(credentialsDir, fmt.Sprintf("control-node-%s-machineconfig.yaml", serverID))
 					if err := os.WriteFile(machineConfigPath, []byte(machineConfigStr), 0600); err != nil {
 						return fmt.Errorf("failed to write control plane machine config for server %s: %w", serverID, err)
 					}
@@ -257,7 +257,7 @@ contexts:
 
 			for serverID, machineConfig := range workerConfigsValue {
 				if machineConfigStr, ok := machineConfig.(string); ok && machineConfigStr != "" {
-					machineConfigPath := filepath.Join(credentialsDir, fmt.Sprintf("worker-%s-machineconfig.yaml", serverID))
+					machineConfigPath := filepath.Join(credentialsDir, fmt.Sprintf("worker-node-%s-machineconfig.yaml", serverID))
 					if err := os.WriteFile(machineConfigPath, []byte(machineConfigStr), 0600); err != nil {
 						return fmt.Errorf("failed to write worker machine config for server %s: %w", serverID, err)
 					}
