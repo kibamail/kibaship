@@ -4,6 +4,7 @@ kind: StorageClass
 metadata:
   name: storage-replica-1
 parameters:
+  dataEngine: v1
   dataLocality: disabled
   fromBackup: ""
   fsType: ext4
@@ -19,6 +20,7 @@ kind: StorageClass
 metadata:
   name: storage-replica-2
 parameters:
+  dataEngine: v1
   dataLocality: disabled
   fromBackup: ""
   fsType: ext4
@@ -34,6 +36,7 @@ kind: StorageClass
 metadata:
   name: storage-replica-rwx
 parameters:
+  dataEngine: v1
   dataLocality: disabled
   fromBackup: ""
   fsType: ext4

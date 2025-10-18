@@ -130,64 +130,6 @@ resource "helm_release" "cilium" {
   ]
 }
 
-# Annotate control plane nodes with Longhorn disk configuration
-{{$controlPlaneIndex := 0}}
-{{range .HetznerRobot.SelectedServers}}
-{{if eq .Role "control-plane"}}
-resource "kubernetes_annotations" "longhorn_disk_cp_{{.ID}}" {
-  api_version = "v1"
-  kind        = "Node"
-  force       = true
-  metadata {
-    name = "cp-{{$controlPlaneIndex}}"
-  }
-  annotations = {
-    "node.longhorn.io/default-disks-config" = jsonencode([
-      for disk in var.server_{{.ID}}_storage_disks : {
-        path            = "/var/mnt/${disk.name}"
-        allowScheduling = true
-        storageReserved = 0
-      }
-    ])
-  }
-
-  depends_on = [
-    helm_release.cilium
-  ]
-}
-{{$controlPlaneIndex = add $controlPlaneIndex 1}}
-{{end}}
-{{end}}
-
-# Annotate worker nodes with Longhorn disk configuration
-{{$workerIndex := 0}}
-{{range .HetznerRobot.SelectedServers}}
-{{if eq .Role "worker"}}
-resource "kubernetes_annotations" "longhorn_disk_worker_{{.ID}}" {
-  api_version = "v1"
-  kind        = "Node"
-  force       = true
-  metadata {
-    name = "worker-{{$workerIndex}}"
-  }
-  annotations = {
-    "node.longhorn.io/default-disks-config" = jsonencode([
-      for disk in var.server_{{.ID}}_storage_disks : {
-        path            = "/var/mnt/${disk.name}"
-        allowScheduling = true
-        storageReserved = 0
-      }
-    ])
-  }
-
-  depends_on = [
-    helm_release.cilium
-  ]
-}
-{{$workerIndex = add $workerIndex 1}}
-{{end}}
-{{end}}
-
 # Install Longhorn using Helm
 resource "helm_release" "longhorn" {
   name             = "longhorn"
@@ -211,21 +153,15 @@ resource "helm_release" "longhorn" {
     {
       name = "defaultSettings.replicaAutoBalance"
       value = "strict-local"
-    }
+    },
+    {
+      name = "defaultSettings.defaultDataPath"
+      value = "/var/mnt/storage-disk-0"
+    },
   ]
 
   depends_on = [
-    helm_release.cilium,
-{{range .HetznerRobot.SelectedServers}}
-{{if eq .Role "control-plane"}}
-    kubernetes_annotations.longhorn_disk_cp_{{.ID}},
-{{end}}
-{{end}}
-{{range .HetznerRobot.SelectedServers}}
-{{if eq .Role "worker"}}
-    kubernetes_annotations.longhorn_disk_worker_{{.ID}},
-{{end}}
-{{end}}
+    helm_release.cilium
   ]
 }
 
@@ -241,6 +177,7 @@ resource "kubernetes_storage_class" "storage_replica_1" {
   allow_volume_expansion = true
 
   parameters = {
+    dataEngine          = "v1"
     numberOfReplicas    = "1"
     staleReplicaTimeout = "30"
     fromBackup          = ""
@@ -263,6 +200,7 @@ resource "kubernetes_storage_class" "storage_replica_2" {
   allow_volume_expansion = true
 
   parameters = {
+    dataEngine          = "v1"
     numberOfReplicas    = "2"
     staleReplicaTimeout = "30"
     fromBackup          = ""
@@ -285,6 +223,7 @@ resource "kubernetes_storage_class" "storage_replica_rwm_1" {
   allow_volume_expansion = true
 
   parameters = {
+    dataEngine          = "v1"
     numberOfReplicas    = "1"
     staleReplicaTimeout = "30"
     fromBackup          = ""

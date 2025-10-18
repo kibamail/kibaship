@@ -90,7 +90,7 @@ resource "null_resource" "disk_discovery_{{.ID}}" {
 
         # 6. Detect architecture
         ARCH=$(uname -m)
-        TALOS_VERSION="v1.11.2"
+        TALOS_VERSION="v1.11.3"
         if [ "$ARCH" = "x86_64" ]; then
           TALOS_ARCH="amd64"
         elif [ "$ARCH" = "aarch64" ]; then
@@ -102,7 +102,7 @@ resource "null_resource" "disk_discovery_{{.ID}}" {
 
         # 7. Download Talos image
         echo "Downloading Talos image for $TALOS_ARCH..."
-        wget -O /tmp/metal-$TALOS_ARCH.raw.zst https://factory.talos.dev/image/3df38c5e5faf43879e6ff0f13c6b0ba02aaa0eb5f9291f28749c4056c1974e7b/$TALOS_VERSION/metal-$TALOS_ARCH.raw.zst
+        wget -O /tmp/metal-$TALOS_ARCH.raw.zst https://factory.talos.dev/image/4b512670bff09ccd8f57db4a77fecb67e495d6ffc635633d9444a4895980f90e/$TALOS_VERSION/metal-$TALOS_ARCH.raw.zst
 
         # 8. Extract Talos image
         echo "Extracting Talos image..."
