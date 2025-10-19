@@ -306,6 +306,77 @@ func storeProvisionOutputs(cfg *config.CreateConfig, outputs map[string]interfac
 	return nil
 }
 
+// storeSSHKeypair writes the SSH keypair to .kibaship/<cluster>/credentials/.ssh/
+func storeSSHKeypair(cfg *config.CreateConfig, outputs map[string]interface{}) error {
+	fmt.Printf("%s %s\n",
+		styles.CommandStyle.Render("🔑"),
+		styles.DescriptionStyle.Render("Storing SSH keypair to filesystem..."))
+
+	// Get current working directory
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to get current working directory: %w", err)
+	}
+
+	// Create .kibaship/<cluster>/credentials/.ssh directory relative to pwd
+	sshDir := filepath.Join(cwd, ".kibaship", cfg.Name, "credentials", ".ssh")
+	if err := os.MkdirAll(sshDir, 0700); err != nil {
+		return fmt.Errorf("failed to create SSH directory: %w", err)
+	}
+
+	// Extract SSH private key from outputs
+	var privateKey string
+	if sshPrivateKeyRaw, ok := outputs["ssh_private_key"]; ok {
+		if sshPrivateKeyMap, ok := sshPrivateKeyRaw.(map[string]interface{}); ok {
+			if value, ok := sshPrivateKeyMap["value"].(string); ok {
+				privateKey = value
+			}
+		}
+	}
+
+	if privateKey == "" {
+		return fmt.Errorf("ssh_private_key not found in outputs")
+	}
+
+	// Extract SSH public key from outputs
+	var publicKey string
+	if sshPublicKeyRaw, ok := outputs["ssh_public_key"]; ok {
+		if sshPublicKeyMap, ok := sshPublicKeyRaw.(map[string]interface{}); ok {
+			if value, ok := sshPublicKeyMap["value"].(string); ok {
+				publicKey = value
+			}
+		}
+	}
+
+	if publicKey == "" {
+		return fmt.Errorf("ssh_public_key not found in outputs")
+	}
+
+	// Write private key to id_rsa
+	privateKeyPath := filepath.Join(sshDir, "id_rsa")
+	if err := os.WriteFile(privateKeyPath, []byte(privateKey), 0600); err != nil {
+		return fmt.Errorf("failed to write private key: %w", err)
+	}
+
+	fmt.Printf("%s %s: %s\n",
+		styles.CommandStyle.Render("✅"),
+		styles.DescriptionStyle.Render("Wrote SSH private key to"),
+		styles.CommandStyle.Render(privateKeyPath))
+
+	// Write public key to id_rsa.pub
+	publicKeyPath := filepath.Join(sshDir, "id_rsa.pub")
+	if err := os.WriteFile(publicKeyPath, []byte(publicKey), 0644); err != nil {
+		return fmt.Errorf("failed to write public key: %w", err)
+	}
+
+	fmt.Printf("%s %s: %s\n",
+		styles.CommandStyle.Render("✅"),
+		styles.DescriptionStyle.Render("Wrote SSH public key to"),
+		styles.CommandStyle.Render(publicKeyPath))
+
+	return nil
+}
+
 // storeNetworkDiscovery stores the discovered network information in the config
 func storeNetworkDiscovery(cfg *config.CreateConfig, discovery *TalosDiscoveryResult) error {
 	if cfg.HetznerRobot == nil {
@@ -1045,14 +1116,49 @@ func RunClusterCreationFlow(cfg *config.CreateConfig) {
 	// =====================================
 	// PHASE 1: PROVISION (Bare Metal Setup)
 	// =====================================
-	fmt.Printf("\n%s %s\n",
-		styles.TitleStyle.Render("🚀"),
-		styles.TitleStyle.Render("PHASE 1: Bare Metal Provisioning"))
-	fmt.Printf("%s %s\n",
-		styles.CommandStyle.Render("📝"),
-		styles.DescriptionStyle.Render("This phase will install Talos Linux on your bare metal servers"))
+	var provisionOutputs map[string]interface{}
 
-	// Build provision terraform files
+	if cfg.Resume == "ubuntu" || cfg.Resume == "microk8s" {
+		// Resume mode: Skip provision phase and load outputs from storage
+		fmt.Printf("\n%s %s\n",
+			styles.TitleStyle.Render("⏭️"),
+			styles.TitleStyle.Render("PHASE 1: Bare Metal Provisioning (SKIPPED - Resume Mode)"))
+		fmt.Printf("%s %s\n",
+			styles.CommandStyle.Render("📊"),
+			styles.HelpStyle.Render("Loading provision outputs from previous run..."))
+
+		var err error
+		provisionOutputs, err = automation.ReadProvisionTerraformOutputs(cfg)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%s %s\n",
+				styles.CommandStyle.Render("❌"),
+				styles.CommandStyle.Render(fmt.Sprintf("Failed to read provision outputs: %v", err)))
+			fmt.Fprintf(os.Stderr, "%s %s\n",
+				styles.CommandStyle.Render("💡"),
+				styles.DescriptionStyle.Render("Make sure PHASE 1 was completed successfully before resuming"))
+			os.Exit(1)
+		}
+
+		fmt.Printf("%s %s\n",
+			styles.CommandStyle.Render("✅"),
+			styles.DescriptionStyle.Render(fmt.Sprintf("Loaded %d output(s) from provision phase", len(provisionOutputs))))
+
+		// Store outputs in config
+		if err := storeProvisionOutputs(cfg, provisionOutputs); err != nil {
+			fmt.Fprintf(os.Stderr, "%s %s\n",
+				styles.CommandStyle.Render("⚠️"),
+				styles.DescriptionStyle.Render(fmt.Sprintf("Warning: Failed to store provision outputs: %v", err)))
+		}
+	} else {
+		// Normal mode: Run provision phase
+		fmt.Printf("\n%s %s\n",
+			styles.TitleStyle.Render("🚀"),
+			styles.TitleStyle.Render("PHASE 1: Bare Metal Provisioning"))
+		fmt.Printf("%s %s\n",
+			styles.CommandStyle.Render("📝"),
+			styles.DescriptionStyle.Render("This phase will install Talos Linux on your bare metal servers"))
+
+		// Build provision terraform files
 	fmt.Printf("\n%s %s\n",
 		styles.CommandStyle.Render("🔨"),
 		styles.HelpStyle.Render("Building provision Terraform files..."))
@@ -1139,28 +1245,120 @@ func RunClusterCreationFlow(cfg *config.CreateConfig) {
 		styles.TitleStyle.Render("✅"),
 		styles.TitleStyle.Render("Bare metal servers provisioned successfully!"))
 
-	// Read Terraform outputs from provision phase
-	fmt.Printf("\n%s %s\n",
-		styles.CommandStyle.Render("📊"),
-		styles.HelpStyle.Render("Reading provision Terraform outputs..."))
-	provisionOutputs, err := automation.ReadProvisionTerraformOutputs(cfg)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "%s %s\n",
-			styles.CommandStyle.Render("⚠️"),
-			styles.DescriptionStyle.Render(fmt.Sprintf("Warning: Failed to read provision outputs: %v", err)))
-		// Don't exit here, as outputs might not be critical for cloud phase
-	} else {
-		fmt.Printf("%s %s\n",
-			styles.CommandStyle.Render("✅"),
-			styles.DescriptionStyle.Render(fmt.Sprintf("Read %d output(s) from provision phase", len(provisionOutputs))))
-
-		// Store disk discovery outputs in config
-		if err := storeProvisionOutputs(cfg, provisionOutputs); err != nil {
+		// Read Terraform outputs from provision phase
+		fmt.Printf("\n%s %s\n",
+			styles.CommandStyle.Render("📊"),
+			styles.HelpStyle.Render("Reading provision Terraform outputs..."))
+		var err error
+		provisionOutputs, err = automation.ReadProvisionTerraformOutputs(cfg)
+		if err != nil {
 			fmt.Fprintf(os.Stderr, "%s %s\n",
 				styles.CommandStyle.Render("⚠️"),
-				styles.DescriptionStyle.Render(fmt.Sprintf("Warning: Failed to store provision outputs: %v", err)))
+				styles.DescriptionStyle.Render(fmt.Sprintf("Warning: Failed to read provision outputs: %v", err)))
+			// Don't exit here, as outputs might not be critical for cloud phase
+		} else {
+			fmt.Printf("%s %s\n",
+				styles.CommandStyle.Render("✅"),
+				styles.DescriptionStyle.Render(fmt.Sprintf("Read %d output(s) from provision phase", len(provisionOutputs))))
+
+			// Store disk discovery outputs in config
+			if err := storeProvisionOutputs(cfg, provisionOutputs); err != nil {
+				fmt.Fprintf(os.Stderr, "%s %s\n",
+					styles.CommandStyle.Render("⚠️"),
+					styles.DescriptionStyle.Render(fmt.Sprintf("Warning: Failed to store provision outputs: %v", err)))
+			}
+
+			// Store SSH keypair to filesystem
+			if err := storeSSHKeypair(cfg, provisionOutputs); err != nil {
+				fmt.Fprintf(os.Stderr, "%s %s\n",
+					styles.CommandStyle.Render("⚠️"),
+					styles.DescriptionStyle.Render(fmt.Sprintf("Warning: Failed to store SSH keypair: %v", err)))
+			}
 		}
 	}
+
+	// Wait for servers to come back online after OS installation (skip if resuming)
+	if cfg.Resume == "" {
+		if err := WaitForServersAvailability(cfg); err != nil {
+			fmt.Fprintf(os.Stderr, "\n%s %s\n",
+				styles.CommandStyle.Render("❌"),
+				styles.CommandStyle.Render(fmt.Sprintf("Servers did not come online: %v", err)))
+			os.Exit(1)
+		}
+	} else {
+		fmt.Printf("\n%s %s\n",
+			styles.CommandStyle.Render("⏭️"),
+			styles.DescriptionStyle.Render("Skipping server availability check (Resume Mode)"))
+	}
+
+	os.Exit(0)
+
+	// =====================================
+	// PHASE 2: UBUNTU SETUP (MicroK8s prereqs)
+	// =====================================
+	fmt.Printf("\n%s %s\n",
+		styles.TitleStyle.Render("🛠️"),
+		styles.TitleStyle.Render("PHASE 2: Ubuntu Preflight for MicroK8s"))
+	fmt.Printf("%s %s\n",
+		styles.CommandStyle.Render("📝"),
+		styles.DescriptionStyle.Render("Preparing Ubuntu on each server (swap off, kernel mods, sysctl, packages)"))
+
+	// Build ubuntu terraform files
+	fmt.Printf("\n%s %s\n",
+		styles.CommandStyle.Render("🔨"),
+		styles.HelpStyle.Render("Building Ubuntu Terraform files..."))
+	if err := automation.BuildHetznerRobotUbuntuFiles(cfg); err != nil {
+		fmt.Fprintf(os.Stderr, "%s %s\n",
+			styles.CommandStyle.Render("❌"),
+			styles.CommandStyle.Render(fmt.Sprintf("Error building Ubuntu Terraform files: %v", err)))
+		os.Exit(1)
+	}
+	fmt.Printf("%s %s\n",
+		styles.TitleStyle.Render("✅"),
+		styles.TitleStyle.Render("Ubuntu Terraform files built successfully!"))
+	fmt.Printf("%s %s\n",
+		styles.CommandStyle.Render("📁"),
+		styles.DescriptionStyle.Render(fmt.Sprintf("Files created in: .kibaship/%s/ubuntu/", cfg.Name)))
+
+	// Init/Validate/Apply Ubuntu terraform
+	fmt.Printf("\n%s %s\n",
+		styles.TitleStyle.Render("🚀"),
+		styles.HelpStyle.Render("Initializing Ubuntu Terraform..."))
+	if err := automation.RunUbuntuTerraformInit(cfg); err != nil {
+		fmt.Fprintf(os.Stderr, "\n%s %s\n",
+			styles.CommandStyle.Render("❌"),
+			styles.CommandStyle.Render(fmt.Sprintf("Ubuntu Terraform init failed: %v", err)))
+		os.Exit(1)
+	}
+	fmt.Printf("\n%s %s\n",
+		styles.TitleStyle.Render("✅"),
+		styles.TitleStyle.Render("Ubuntu Terraform initialization completed!"))
+
+	fmt.Printf("\n%s %s\n",
+		styles.CommandStyle.Render("🔍"),
+		styles.HelpStyle.Render("Validating Ubuntu Terraform configuration..."))
+	if err := automation.RunUbuntuTerraformValidate(cfg); err != nil {
+		fmt.Fprintf(os.Stderr, "\n%s %s\n",
+			styles.CommandStyle.Render("❌"),
+			styles.CommandStyle.Render(fmt.Sprintf("Ubuntu Terraform validate failed: %v", err)))
+		os.Exit(1)
+	}
+	fmt.Printf("\n%s %s\n",
+		styles.TitleStyle.Render("✅"),
+		styles.TitleStyle.Render("Ubuntu Terraform configuration is valid!"))
+
+	fmt.Printf("\n%s %s\n",
+		styles.TitleStyle.Render("🚀"),
+		styles.HelpStyle.Render("Applying Ubuntu setup on servers..."))
+	if err := automation.RunUbuntuTerraformApply(cfg); err != nil {
+		fmt.Fprintf(os.Stderr, "\n%s %s\n",
+			styles.CommandStyle.Render("❌"),
+			styles.CommandStyle.Render(fmt.Sprintf("Ubuntu Terraform apply failed: %v", err)))
+		os.Exit(1)
+	}
+	fmt.Printf("\n%s %s\n",
+		styles.TitleStyle.Render("✅"),
+		styles.TitleStyle.Render("Ubuntu preflight completed on all servers!"))
 
 	os.Exit(0)
 
@@ -1500,4 +1698,88 @@ func RunClusterCreationFlow(cfg *config.CreateConfig) {
 	fmt.Printf("\n%s %s\n",
 		styles.CommandStyle.Render("🚀"),
 		styles.DescriptionStyle.Render("Your Kubernetes cluster is now ready for workload deployment!"))
+}
+
+// WaitForServersAvailability checks if all servers are reachable via SSH after reboot
+// It pings all servers every 15 seconds for up to 5 minutes
+func WaitForServersAvailability(cfg *config.CreateConfig) error {
+	if cfg.HetznerRobot == nil || len(cfg.HetznerRobot.SelectedServers) == 0 {
+		return fmt.Errorf("no servers configured")
+	}
+
+	fmt.Printf("\n%s %s\n",
+		styles.TitleStyle.Render("⏳"),
+		styles.TitleStyle.Render("Waiting for servers to come online after OS installation..."))
+	fmt.Printf("%s %s\n",
+		styles.CommandStyle.Render("📡"),
+		styles.DescriptionStyle.Render("Checking SSH connectivity every 15 seconds (timeout: 5 minutes)"))
+
+	timeout := 5 * time.Minute
+	checkInterval := 15 * time.Second
+	deadline := time.Now().Add(timeout)
+
+	servers := cfg.HetznerRobot.SelectedServers
+	serverStatus := make(map[string]bool) // Track which servers are online
+	totalServers := len(servers)
+
+	for time.Now().Before(deadline) {
+		onlineCount := 0
+		allOnline := true
+
+		for _, server := range servers {
+			if serverStatus[server.ID] {
+				// Server already confirmed online
+				onlineCount++
+				continue
+			}
+
+			// Try to connect to SSH port
+			conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:22", server.IP), 5*time.Second)
+			if err == nil {
+				conn.Close()
+				serverStatus[server.ID] = true
+				onlineCount++
+				fmt.Printf("%s %s\n",
+					styles.TitleStyle.Render("✅"),
+					styles.DescriptionStyle.Render(fmt.Sprintf("Server %s (%s) is now online", server.Name, server.IP)))
+			} else {
+				allOnline = false
+			}
+		}
+
+		if allOnline {
+			fmt.Printf("\n%s %s\n",
+				styles.TitleStyle.Render("✅"),
+				styles.TitleStyle.Render(fmt.Sprintf("All %d servers are online and ready!", totalServers)))
+			return nil
+		}
+
+		// Show progress
+		remaining := time.Until(deadline)
+		fmt.Printf("%s %s\n",
+			styles.CommandStyle.Render("⏳"),
+			styles.DescriptionStyle.Render(fmt.Sprintf("Status: %d/%d servers online | Time remaining: %s",
+				onlineCount, totalServers, remaining.Round(time.Second))))
+
+		// Wait before next check
+		time.Sleep(checkInterval)
+	}
+
+	// Timeout reached
+	onlineCount := 0
+	var offlineServers []string
+	for _, server := range servers {
+		if serverStatus[server.ID] {
+			onlineCount++
+		} else {
+			offlineServers = append(offlineServers, fmt.Sprintf("%s (%s)", server.Name, server.IP))
+		}
+	}
+
+	if onlineCount == totalServers {
+		return nil // All came online just before timeout
+	}
+
+	return fmt.Errorf("timeout waiting for servers: %d/%d online, offline servers: %s",
+		onlineCount, totalServers, strings.Join(offlineServers, ", "))
 }

@@ -39,6 +39,9 @@ func setupFlags(cmd *cobra.Command) {
 	// Reset flag to destroy existing infrastructure before creating
 	cmd.Flags().Bool("reset", false, "Destroy existing cluster infrastructure before creating new one")
 
+	// Resume flag to skip to a specific phase
+	cmd.Flags().String("resume", "", "Resume from a specific phase (ubuntu, microk8s)")
+
 	// Mark configuration as required
 	_ = cmd.MarkFlagRequired("configuration")
 }
@@ -54,6 +57,7 @@ func runCreate(cmd *cobra.Command, args []string) {
 	// Get configuration file path and flags
 	configuration, _ := cmd.Flags().GetString("configuration")
 	reset, _ := cmd.Flags().GetBool("reset")
+	resume, _ := cmd.Flags().GetString("resume")
 
 	// Load and validate configuration from YAML file
 	fmt.Printf("%s %s\n",
@@ -69,6 +73,14 @@ func runCreate(cmd *cobra.Command, args []string) {
 			styles.CommandStyle.Render("❌"),
 			styles.CommandStyle.Render(fmt.Sprintf("Failed to load configuration: %v", err)))
 		os.Exit(1)
+	}
+
+	// Set resume flag from command line if provided
+	if resume != "" {
+		config.Resume = resume
+		fmt.Printf("\n%s %s\n",
+			styles.CommandStyle.Render("⏭️"),
+			styles.TitleStyle.Render(fmt.Sprintf("RESUME MODE: Starting from %s phase", resume)))
 	}
 
 	// Configuration validated successfully

@@ -143,6 +143,88 @@ INSTALLCONFIG
         /root/.oldroot/nfs/install/installimage -a -c /tmp/installimage.conf
 
         echo "Ubuntu 24.04 installation complete on $TARGET_DISK"
+
+        # 8. Post-installation: Configure SSH access
+        echo "[*] Starting post-installation configuration..."
+
+        # Activate LVM if present (harmless if none exists)
+        echo "[*] Activating LVM (harmless if none)"
+        vgchange -ay || true
+
+        # Detect root filesystem intelligently
+        echo "[*] Detecting root filesystem"
+        ROOT_LV="/dev/vg0/root"
+        if [ -b "$ROOT_LV" ]; then
+          ROOT="$ROOT_LV"
+          echo "    -> Found LVM root: $ROOT"
+        else
+          # Pick the largest ext* partition on TARGET_DISK as root
+          CANDIDATES=$(lsblk -lnpo NAME,FSTYPE,SIZE | awk -v d="$TARGET_DISK" '$1 ~ d && ($2 ~ /ext[234]/) {print $0}' | sort -k3 -h)
+          ROOT="$(echo "$CANDIDATES" | tail -1 | awk '{print $1}')"
+          echo "    -> Found partition root: $ROOT"
+        fi
+
+        if [ -z "$ROOT" ]; then
+          echo "ERROR: Could not determine root partition"
+          exit 1
+        fi
+
+        # Mount root filesystem
+        mkdir -p /mnt/newroot
+        mount "$ROOT" /mnt/newroot
+        echo "    -> Mounted $ROOT at /mnt/newroot"
+
+        # Try to find and mount dedicated /boot partition
+        echo "[*] Attempting to mount /boot and ESP if present"
+        BOOT_PART="$(lsblk -lnpo NAME,PARTLABEL,FSTYPE | awk -v d="$TARGET_DISK" '($1 ~ d && ($3 ~ /ext[234]/) && ($2 ~ /boot/i)) {print $1; exit}')"
+        if [ -n "$BOOT_PART" ]; then
+          mkdir -p /mnt/newroot/boot
+          mount "$BOOT_PART" /mnt/newroot/boot && echo "    -> Mounted $BOOT_PART at /boot" || true
+        fi
+
+        # Find and mount ESP (EFI System Partition)
+        ESP_PART="$(lsblk -lnpo NAME,PARTLABEL,FSTYPE | awk -v d="$TARGET_DISK" '($1 ~ d && ($2 ~ /EFI System/ || $3 ~ /vfat|fat32/)) {print $1; exit}')"
+        if [ -n "$ESP_PART" ]; then
+          mkdir -p /mnt/newroot/boot/efi
+          mount "$ESP_PART" /mnt/newroot/boot/efi && echo "    -> Mounted $ESP_PART at /boot/efi" || true
+        fi
+
+        # Bind mount necessary filesystems for chroot
+        echo "[*] Setting up chroot environment"
+        mount --bind /dev  /mnt/newroot/dev
+        mount --bind /proc /mnt/newroot/proc
+        mount --bind /sys  /mnt/newroot/sys
+
+        # Install and configure OpenSSH in the new system
+        echo "[*] Installing and configuring OpenSSH"
+        chroot /mnt/newroot bash -c '
+          set -e
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y openssh-server
+          systemctl enable ssh
+
+          # SSH hardening: key-only authentication
+          sed -i "s/^#\?PasswordAuthentication .*/PasswordAuthentication no/" /etc/ssh/sshd_config
+          if grep -q "^#\?PermitRootLogin" /etc/ssh/sshd_config; then
+            sed -i "s/^#\?PermitRootLogin .*/PermitRootLogin prohibit-password/" /etc/ssh/sshd_config
+          else
+            echo "PermitRootLogin prohibit-password" >> /etc/ssh/sshd_config
+          fi
+        '
+
+        # Add SSH public key to root authorized_keys
+        echo "[*] Adding root authorized_keys"
+        install -d -m 700 -o root -g root /mnt/newroot/root/.ssh
+        cat > /mnt/newroot/root/.ssh/authorized_keys <<'SSHKEY'
+${tls_private_key.cluster_ssh.public_key_openssh}
+SSHKEY
+        chroot /mnt/newroot bash -c 'chown root:root /root/.ssh/authorized_keys && chmod 600 /root/.ssh/authorized_keys'
+
+        # Cleanup mounts
+        echo "[*] Cleaning up mounts"
+        umount -R /mnt/newroot || true
+
+        echo "[*] Post-installation configuration complete!"
       EOF
     ]
   }
@@ -227,3 +309,15 @@ output "server_{{.ID}}_disk_discovery" {
 }
 
 {{end}}
+
+# SSH keypair outputs
+output "ssh_private_key" {
+  description = "Private SSH key for cluster access"
+  value       = tls_private_key.cluster_ssh.private_key_pem
+  sensitive   = true
+}
+
+output "ssh_public_key" {
+  description = "Public SSH key for cluster access"
+  value       = tls_private_key.cluster_ssh.public_key_openssh
+}

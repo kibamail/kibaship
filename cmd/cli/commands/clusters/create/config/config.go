@@ -56,9 +56,10 @@ type YAMLConfig struct {
 			} `yaml:"hetzner"`
 
 			HetznerRobot struct {
-				Username   string `yaml:"username"`
-				Password   string `yaml:"password"`
-				CloudToken string `yaml:"cloud-token"`
+				Username     string `yaml:"username"`
+				Password     string `yaml:"password"`
+				CloudToken   string `yaml:"cloud-token"`
+				PublicSubnet string `yaml:"public-subnet"`
 			} `yaml:"hetzner-robot"`
 
 			Linode struct {
@@ -209,9 +210,10 @@ func determineProviderFromYAML(yamlConfig *YAMLConfig) (string, interface{}, err
 			},
 			getConfig: func() interface{} {
 				return &HetznerRobotConfig{
-					Username:   yamlConfig.Cluster.Provider.HetznerRobot.Username,
-					Password:   yamlConfig.Cluster.Provider.HetznerRobot.Password,
-					CloudToken: yamlConfig.Cluster.Provider.HetznerRobot.CloudToken,
+					Username:     yamlConfig.Cluster.Provider.HetznerRobot.Username,
+					Password:     yamlConfig.Cluster.Provider.HetznerRobot.Password,
+					CloudToken:   yamlConfig.Cluster.Provider.HetznerRobot.CloudToken,
+					PublicSubnet: yamlConfig.Cluster.Provider.HetznerRobot.PublicSubnet,
 				}
 			},
 		},

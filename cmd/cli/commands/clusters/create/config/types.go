@@ -9,6 +9,7 @@ type CreateConfig struct {
 	Name          string `validate:"-"` // Derived from Domain by replacing dots with dashes
 	Email         string `validate:"required,email"`
 	PaaSFeatures  string `validate:"omitempty,paas_features"`
+	Resume        string `validate:"omitempty,oneof=ubuntu microk8s"` // Phase to resume from
 
 	// Provider-specific configurations will be validated by their respective providers
 	AWS          *AWSConfig          `validate:"omitempty"`
@@ -71,13 +72,14 @@ type HetznerRobotServer struct {
 
 // HetznerRobotConfig represents Hetzner Robot-specific configuration
 type HetznerRobotConfig struct {
-	Username        string               `validate:"required_with=HetznerRobotConfig"`
-	Password        string               `validate:"required_with=HetznerRobotConfig"`
-	CloudToken      string               `validate:"required_with=HetznerRobotConfig"`
-	SelectedServers []HetznerRobotServer `validate:"omitempty"`
-	RescuePasswords map[string]string    `validate:"omitempty"`
-	VSwitchID       string               `validate:"omitempty"`
-	VLANID          int                  `validate:"omitempty"`
+    Username        string               `validate:"required_with=HetznerRobotConfig"`
+    Password        string               `validate:"required_with=HetznerRobotConfig"`
+    CloudToken      string               `validate:"required_with=HetznerRobotConfig"`
+    PublicSubnet    string               `json:"public_subnet" yaml:"public-subnet" validate:"omitempty,cidr"`
+    SelectedServers []HetznerRobotServer `validate:"omitempty"`
+    RescuePasswords map[string]string    `validate:"omitempty"`
+    VSwitchID       string               `validate:"omitempty"`
+    VLANID          int                  `validate:"omitempty"`
 
 	// Network configuration for cloud resources
 	NetworkConfig *HetznerRobotNetworkConfig `validate:"omitempty"`
