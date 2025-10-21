@@ -619,138 +619,37 @@ func IsTektonPipelinesCRDsInstalled() bool {
 	return false
 }
 
-// InstallValkeyOperator installs the full Valkey operator
+// TODO: InstallValkeyOperator - Valkey operator installation will be reimplemented
 func InstallValkeyOperator() error {
-	url := "https://github.com/hyperspike/valkey-operator/releases/download/v0.0.59/install.yaml"
-	cmd := exec.Command("kubectl", "apply", "-f", url)
-	if _, err := Run(cmd); err != nil {
-		return err
-	}
-
-	// Wait for Valkey operator components to be ready (increased timeout for CI environments)
-	cmd = exec.Command("kubectl", "wait", "deployment.apps/valkey-operator-controller-manager",
-		"--for", "condition=Available",
-		"--namespace", "valkey-operator-system",
-		"--timeout", "5m",
-	)
-	if _, err := Run(cmd); err != nil {
-		return err
-	}
-
+	// TODO: Implement new Valkey operator installation logic here
 	return nil
 }
 
-// UninstallValkeyOperator uninstalls the full Valkey operator
+// TODO: UninstallValkeyOperator - Valkey operator uninstallation will be reimplemented
 func UninstallValkeyOperator() {
-	url := "https://github.com/hyperspike/valkey-operator/releases/download/v0.0.59/install.yaml"
-	cmd := exec.Command("kubectl", "delete", "-f", url)
-	if _, err := Run(cmd); err != nil {
-		warnError(err)
-	}
+	// TODO: Implement new Valkey operator uninstallation logic here
 }
 
-// IsValkeyOperatorCRDsInstalled checks if any Valkey operator CRDs are installed
+// TODO: IsValkeyOperatorCRDsInstalled - Valkey CRD check will be reimplemented
 func IsValkeyOperatorCRDsInstalled() bool {
-	valkeyCRDs := []string{
-		"valkeys.hyperspike.io",
-	}
-
-	cmd := exec.Command("kubectl", "get", "crds")
-	output, err := Run(cmd)
-	if err != nil {
-		return false
-	}
-
-	crdList := GetNonEmptyLines(output)
-	for _, crd := range valkeyCRDs {
-		for _, line := range crdList {
-			if strings.Contains(line, crd) {
-				return true
-			}
-		}
-	}
-
+	// TODO: Implement new Valkey CRD check logic here
 	return false
 }
 
-// InstallMySQLOperator installs the MySQL operator CRDs and operator
+// TODO: InstallMySQLOperator - MySQL operator installation will be reimplemented
 func InstallMySQLOperator() error {
-	// Install CRDs first
-	crdsURL := "https://raw.githubusercontent.com/mysql/mysql-operator/9.4.0-2.2.5/deploy/deploy-crds.yaml"
-	cmd := exec.Command("kubectl", "apply", "-f", crdsURL)
-	if _, err := Run(cmd); err != nil {
-		return err
-	}
-
-	// Wait for InnoDBCluster CRD to be established
-	cmd = exec.Command("kubectl", "wait", "--for", "condition=Established", "crd", "innodbclusters.mysql.oracle.com", "--timeout=300s")
-	if _, err := Run(cmd); err != nil {
-		return err
-	}
-
-	// Install operator
-	operatorURL := "https://raw.githubusercontent.com/mysql/mysql-operator/9.4.0-2.2.5/deploy/deploy-operator.yaml"
-	cmd = exec.Command("kubectl", "apply", "-f", operatorURL)
-	if _, err := Run(cmd); err != nil {
-		return err
-	}
-
-	// Set the cluster domain environment variable to fix "Failed to detect cluster domain" error
-	cmd = exec.Command("kubectl", "-n", "mysql-operator", "set", "env", "deployment/mysql-operator",
-		"MYSQL_OPERATOR_K8S_CLUSTER_DOMAIN=cluster.local")
-	if _, err := Run(cmd); err != nil {
-		return err
-	}
-
-	// Wait for MySQL operator components to be ready (reduced timeout)
-	cmd = exec.Command("kubectl", "wait", "deployment.apps/mysql-operator",
-		"--for", "condition=Available",
-		"--namespace", "mysql-operator",
-		"--timeout", "3m",
-	)
-	if _, err := Run(cmd); err != nil {
-		return err
-	}
-
+	// TODO: Implement new MySQL operator installation logic here
 	return nil
 }
 
-// UninstallMySQLOperator uninstalls the MySQL operator
+// TODO: UninstallMySQLOperator - MySQL operator uninstallation will be reimplemented
 func UninstallMySQLOperator() {
-	operatorURL := "https://raw.githubusercontent.com/mysql/mysql-operator/9.4.0-2.2.5/deploy/deploy-operator.yaml"
-	cmd := exec.Command("kubectl", "delete", "-f", operatorURL)
-	if _, err := Run(cmd); err != nil {
-		warnError(err)
-	}
-
-	crdsURL := "https://raw.githubusercontent.com/mysql/mysql-operator/9.4.0-2.2.5/deploy/deploy-crds.yaml"
-	cmd = exec.Command("kubectl", "delete", "-f", crdsURL)
-	if _, err := Run(cmd); err != nil {
-		warnError(err)
-	}
+	// TODO: Implement new MySQL operator uninstallation logic here
 }
 
-// IsMySQLOperatorCRDsInstalled checks if any MySQL operator CRDs are installed
+// TODO: IsMySQLOperatorCRDsInstalled - MySQL CRD check will be reimplemented
 func IsMySQLOperatorCRDsInstalled() bool {
-	mysqlCRDs := []string{
-		"innodbclusters.mysql.oracle.com",
-	}
-
-	cmd := exec.Command("kubectl", "get", "crds")
-	output, err := Run(cmd)
-	if err != nil {
-		return false
-	}
-
-	crdList := GetNonEmptyLines(output)
-	for _, crd := range mysqlCRDs {
-		for _, line := range crdList {
-			if strings.Contains(line, crd) {
-				return true
-			}
-		}
-	}
-
+	// TODO: Implement new MySQL CRD check logic here
 	return false
 }
 
@@ -881,7 +780,6 @@ func DeployAPIServer(image string) error {
 	return nil
 }
 
-
 // UndeployKibashipOperator removes the kibaship deployment
 func UndeployKibashipOperator() {
 	cmd := exec.Command("make", "undeploy")
@@ -917,9 +815,9 @@ func CheckOperatorHealthStatus(namespace string) {
 			_, _ = fmt.Fprintf(GinkgoWriter, "\n--- Health Endpoint Status ---\n")
 			CheckOperatorHealthEndpoints(namespace, strings.TrimPrefix(podName, "pod/"))
 
-			// Check Valkey dependency status
-			_, _ = fmt.Fprintf(GinkgoWriter, "\n--- Valkey Dependency Status ---\n")
-			CheckValkeyStatus(namespace)
+			// TODO: Database dependency status checks removed - will be reimplemented
+			_, _ = fmt.Fprintf(GinkgoWriter, "\n--- Database Dependency Status ---\n")
+			_, _ = fmt.Fprintf(GinkgoWriter, "Database status checks removed - TODO: implement new checks\n")
 		}
 	}
 }
@@ -945,38 +843,10 @@ func CheckOperatorHealthEndpoints(namespace, podName string) {
 	}
 }
 
-// CheckValkeyStatus checks if Valkey cluster is ready and accessible
+// TODO: CheckValkeyStatus - Valkey status check will be reimplemented
 func CheckValkeyStatus(operatorNamespace string) {
-	// First, show ALL pods in the operator namespace for full context
-	_, _ = fmt.Fprintf(GinkgoWriter, "\n=== ALL PODS IN NAMESPACE %s ===\n", operatorNamespace)
-	cmd := exec.Command("kubectl", "get", "pods", "-n", operatorNamespace, "-o", "wide", "--show-labels")
-	if _, err := Run(cmd); err != nil {
-		_, _ = fmt.Fprintf(GinkgoWriter, "  Error listing pods in namespace %s: %v\n", operatorNamespace, err)
-	}
-
-	// Also show pod status details
-	_, _ = fmt.Fprintf(GinkgoWriter, "\n--- Pod Status Details ---\n")
-	cmd = exec.Command("kubectl", "describe", "pods", "-n", operatorNamespace)
-	if _, err := Run(cmd); err != nil {
-		_, _ = fmt.Fprintf(GinkgoWriter, "  Error describing pods: %v\n", err)
-	}
-
-	// Show all services (including Valkey services)
-	_, _ = fmt.Fprintf(GinkgoWriter, "\n--- Services in Namespace ---\n")
-	cmd = exec.Command("kubectl", "get", "svc", "-n", operatorNamespace, "-o", "wide")
-	if _, err := Run(cmd); err != nil {
-		_, _ = fmt.Fprintf(GinkgoWriter, "  Error listing services: %v\n", err)
-	}
-
-	// Check if Valkey CRD exists
-	_, _ = fmt.Fprintf(GinkgoWriter, "\n=== VALKEY CLUSTER STATUS ===\n")
-	_, _ = fmt.Fprintf(GinkgoWriter, "Checking Valkey CRDs:\n")
-	cmd = exec.Command("kubectl", "get", "crd", "valkeys.hyperspike.io")
-	if _, err := Run(cmd); err != nil {
-		_, _ = fmt.Fprintf(GinkgoWriter, "  ❌ Valkey CRD not found: %v\n", err)
-		return
-	}
-	_, _ = fmt.Fprintf(GinkgoWriter, "  ✅ Valkey CRD exists\n")
+	// TODO: Implement new Valkey status check logic here
+	_, _ = fmt.Fprintf(GinkgoWriter, "Valkey status check removed - TODO: implement new check\n")
 }
 
 // MonitorOperatorStartup waits for the operator deployment to roll out, logging pods every 30s.

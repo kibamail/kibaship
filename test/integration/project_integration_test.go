@@ -176,13 +176,10 @@ var _ = Describe("Project Creation Integration", func() {
 				Expect(labels[validation.LabelResourceSlug]).To(Equal(resp.Slug))
 				Expect(labels[validation.LabelWorkspaceUUID]).To(Equal(resp.WorkspaceUUID))
 
-				// Verify CRD spec has correct defaults
-				Expect(project.Spec.ApplicationTypes.MySQL.Enabled).To(BeTrue())
-				Expect(project.Spec.ApplicationTypes.Postgres.Enabled).To(BeTrue())
+				// TODO: Database application type verification removed - will be reimplemented
+				// Verify CRD spec has correct defaults for non-database types
 				Expect(project.Spec.ApplicationTypes.DockerImage.Enabled).To(BeTrue())
 				Expect(project.Spec.ApplicationTypes.GitRepository.Enabled).To(BeTrue())
-				Expect(project.Spec.ApplicationTypes.MySQLCluster.Enabled).To(BeFalse())
-				Expect(project.Spec.ApplicationTypes.PostgresCluster.Enabled).To(BeFalse())
 				Expect(project.Spec.Volumes.MaxStorageSize).To(Equal("50Gi"))
 
 				// Clean up - delete the created project
@@ -196,12 +193,9 @@ var _ = Describe("Project Creation Integration", func() {
 				Description:   "A production environment project",
 				WorkspaceUUID: "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
 				EnabledApplicationTypes: &models.ApplicationTypeSettings{
-					MySQL:           boolPtr(true),
-					MySQLCluster:    boolPtr(false),
-					Postgres:        boolPtr(false),
-					PostgresCluster: boolPtr(false),
-					DockerImage:     boolPtr(true),
-					GitRepository:   boolPtr(true),
+					// TODO: Database application types removed - will be reimplemented
+					DockerImage:   boolPtr(true),
+					GitRepository: boolPtr(true),
 				},
 				ResourceProfile: resourceProfilePtr(models.ResourceProfileProduction),
 				VolumeSettings: &models.VolumeSettings{
@@ -215,11 +209,8 @@ var _ = Describe("Project Creation Integration", func() {
 				Expect(resp.ResourceProfile).To(Equal(models.ResourceProfileProduction))
 				Expect(resp.VolumeSettings.MaxStorageSize).To(Equal("200Gi"))
 
-				// Verify enablement settings
-				Expect(*resp.EnabledApplicationTypes.MySQL).To(BeTrue())
-				Expect(*resp.EnabledApplicationTypes.MySQLCluster).To(BeFalse())
-				Expect(*resp.EnabledApplicationTypes.Postgres).To(BeFalse())
-				Expect(*resp.EnabledApplicationTypes.PostgresCluster).To(BeFalse())
+				// TODO: Database application type verification removed - will be reimplemented
+				// Verify enablement settings for non-database types
 				Expect(*resp.EnabledApplicationTypes.DockerImage).To(BeTrue())
 				Expect(*resp.EnabledApplicationTypes.GitRepository).To(BeTrue())
 
@@ -230,11 +221,8 @@ var _ = Describe("Project Creation Integration", func() {
 				}, &project)
 				Expect(err).NotTo(HaveOccurred())
 
-				// Verify application type settings in CRD
-				Expect(project.Spec.ApplicationTypes.MySQL.Enabled).To(BeTrue())
-				Expect(project.Spec.ApplicationTypes.MySQLCluster.Enabled).To(BeFalse())
-				Expect(project.Spec.ApplicationTypes.Postgres.Enabled).To(BeFalse())
-				Expect(project.Spec.ApplicationTypes.PostgresCluster.Enabled).To(BeFalse())
+				// TODO: Database application type CRD verification removed - will be reimplemented
+				// Verify application type settings in CRD for non-database types
 				Expect(project.Spec.ApplicationTypes.DockerImage.Enabled).To(BeTrue())
 				Expect(project.Spec.ApplicationTypes.GitRepository.Enabled).To(BeTrue())
 

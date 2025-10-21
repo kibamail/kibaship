@@ -320,7 +320,6 @@ var _ = SynchronizedBeforeSuite(
 		By("[Process 1] deploying API server into operator namespace (always redeploys)")
 		Expect(utils.DeployAPIServer(projectImageAPIServer)).To(Succeed(), "Failed to deploy API server")
 
-
 		By("[Process 1] cluster setup complete - signaling other processes to start")
 		// Return data to share with other processes (cluster name)
 		return []byte(clusterName)

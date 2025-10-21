@@ -20,4 +20,4 @@ resources:
 images:
 - name: apiserver
   newName: kibamail/kibaship-apiserver
-  newTag: v1.0.0
+  newTag: e2e

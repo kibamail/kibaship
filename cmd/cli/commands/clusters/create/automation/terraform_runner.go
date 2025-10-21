@@ -213,13 +213,13 @@ func RunTerraformApply(config *config.CreateConfig) error {
 				env = append(env, fmt.Sprintf("TF_VAR_server_%s_password=%s", serverID, password))
 			}
 
-            // Add Talos configuration
-            if config.HetznerRobot.TalosConfig != nil {
-                env = append(env, fmt.Sprintf("TF_VAR_cluster_endpoint=%s", config.HetznerRobot.TalosConfig.ClusterEndpoint))
-                env = append(env, fmt.Sprintf("TF_VAR_cluster_dns_name=%s", fmt.Sprintf("kube.%s", config.Domain)))
-                env = append(env, fmt.Sprintf("TF_VAR_vlan_id=%d", config.HetznerRobot.TalosConfig.VLANID))
-                env = append(env, fmt.Sprintf("TF_VAR_vswitch_subnet_ip_range=%s", config.HetznerRobot.TalosConfig.VSwitchSubnetIPRange))
-            }
+			// Add Talos configuration
+			if config.HetznerRobot.TalosConfig != nil {
+				env = append(env, fmt.Sprintf("TF_VAR_cluster_endpoint=%s", config.HetznerRobot.TalosConfig.ClusterEndpoint))
+				env = append(env, fmt.Sprintf("TF_VAR_cluster_dns_name=%s", fmt.Sprintf("kube.%s", config.Domain)))
+				env = append(env, fmt.Sprintf("TF_VAR_vlan_id=%d", config.HetznerRobot.TalosConfig.VLANID))
+				env = append(env, fmt.Sprintf("TF_VAR_vswitch_subnet_ip_range=%s", config.HetznerRobot.TalosConfig.VSwitchSubnetIPRange))
+			}
 
 			// Add server private IPs and network configuration
 			for _, server := range config.HetznerRobot.SelectedServers {
@@ -480,12 +480,12 @@ func RunBootstrapTerraformApply(config *config.CreateConfig) error {
 			}
 
 			// Add Talos configuration if available
-            if config.HetznerRobot.TalosConfig != nil {
-                env = append(env, fmt.Sprintf("TF_VAR_cluster_endpoint=%s", config.HetznerRobot.TalosConfig.ClusterEndpoint))
-                env = append(env, fmt.Sprintf("TF_VAR_cluster_dns_name=%s", fmt.Sprintf("kube.%s", config.Domain)))
-                env = append(env, fmt.Sprintf("TF_VAR_vlan_id=%d", config.HetznerRobot.TalosConfig.VLANID))
-                env = append(env, fmt.Sprintf("TF_VAR_vswitch_subnet_ip_range=%s", config.HetznerRobot.TalosConfig.VSwitchSubnetIPRange))
-            }
+			if config.HetznerRobot.TalosConfig != nil {
+				env = append(env, fmt.Sprintf("TF_VAR_cluster_endpoint=%s", config.HetznerRobot.TalosConfig.ClusterEndpoint))
+				env = append(env, fmt.Sprintf("TF_VAR_cluster_dns_name=%s", fmt.Sprintf("kube.%s", config.Domain)))
+				env = append(env, fmt.Sprintf("TF_VAR_vlan_id=%d", config.HetznerRobot.TalosConfig.VLANID))
+				env = append(env, fmt.Sprintf("TF_VAR_vswitch_subnet_ip_range=%s", config.HetznerRobot.TalosConfig.VSwitchSubnetIPRange))
+			}
 
 			// Add server private IPs and network configuration
 			for _, server := range config.HetznerRobot.SelectedServers {
@@ -606,82 +606,107 @@ func ReadProvisionTerraformOutputs(config *config.CreateConfig) (map[string]inte
 
 // Cloud phase removed for hetzner-robot; no cloud outputs to read
 
-
-
 // RunUbuntuTerraformInit runs terraform init in the ubuntu directory (for Hetzner Robot)
 func RunUbuntuTerraformInit(config *config.CreateConfig) error {
-    ubuntuDir := filepath.Join(".kibaship", config.Name, "ubuntu")
+	ubuntuDir := filepath.Join(".kibaship", config.Name, "ubuntu")
 
-    cmd := exec.Command("terraform", "init", "-reconfigure")
-    cmd.Dir = ubuntuDir
-    cmd.Env = os.Environ()
+	cmd := exec.Command("terraform", "init", "-reconfigure")
+	cmd.Dir = ubuntuDir
+	cmd.Env = os.Environ()
 
-    stdout, err := cmd.StdoutPipe()
-    if err != nil { return fmt.Errorf("failed to create stdout pipe: %w", err) }
-    stderr, err := cmd.StderrPipe()
-    if err != nil { return fmt.Errorf("failed to create stderr pipe: %w", err) }
-    if err := cmd.Start(); err != nil { return fmt.Errorf("failed to start ubuntu terraform init: %w", err) }
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return fmt.Errorf("failed to create stdout pipe: %w", err)
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return fmt.Errorf("failed to create stderr pipe: %w", err)
+	}
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("failed to start ubuntu terraform init: %w", err)
+	}
 
-    done := make(chan bool, 2)
-    go func(){ streamOutput(stdout, ""); done <- true }()
-    go func(){ streamOutput(stderr, ""); done <- true }()
+	done := make(chan bool, 2)
+	go func() { streamOutput(stdout, ""); done <- true }()
+	go func() { streamOutput(stderr, ""); done <- true }()
 
-    err = cmd.Wait()
-    <-done; <-done
-    if err != nil { return fmt.Errorf("ubuntu terraform init failed: %w", err) }
-    return nil
+	err = cmd.Wait()
+	<-done
+	<-done
+	if err != nil {
+		return fmt.Errorf("ubuntu terraform init failed: %w", err)
+	}
+	return nil
 }
 
 // RunUbuntuTerraformValidate runs terraform validate in the ubuntu directory
 func RunUbuntuTerraformValidate(config *config.CreateConfig) error {
-    ubuntuDir := filepath.Join(".kibaship", config.Name, "ubuntu")
+	ubuntuDir := filepath.Join(".kibaship", config.Name, "ubuntu")
 
-    cmd := exec.Command("terraform", "validate")
-    cmd.Dir = ubuntuDir
-    cmd.Env = os.Environ()
+	cmd := exec.Command("terraform", "validate")
+	cmd.Dir = ubuntuDir
+	cmd.Env = os.Environ()
 
-    stdout, err := cmd.StdoutPipe()
-    if err != nil { return fmt.Errorf("failed to create stdout pipe: %w", err) }
-    stderr, err := cmd.StderrPipe()
-    if err != nil { return fmt.Errorf("failed to create stderr pipe: %w", err) }
-    if err := cmd.Start(); err != nil { return fmt.Errorf("failed to start ubuntu terraform validate: %w", err) }
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return fmt.Errorf("failed to create stdout pipe: %w", err)
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return fmt.Errorf("failed to create stderr pipe: %w", err)
+	}
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("failed to start ubuntu terraform validate: %w", err)
+	}
 
-    done := make(chan bool, 2)
-    go func(){ streamOutput(stdout, ""); done <- true }()
-    go func(){ streamOutput(stderr, ""); done <- true }()
+	done := make(chan bool, 2)
+	go func() { streamOutput(stdout, ""); done <- true }()
+	go func() { streamOutput(stderr, ""); done <- true }()
 
-    err = cmd.Wait()
-    <-done; <-done
-    if err != nil { return fmt.Errorf("ubuntu terraform validate failed: %w", err) }
-    return nil
+	err = cmd.Wait()
+	<-done
+	<-done
+	if err != nil {
+		return fmt.Errorf("ubuntu terraform validate failed: %w", err)
+	}
+	return nil
 }
 
 // RunUbuntuTerraformApply runs terraform apply in the ubuntu directory
 func RunUbuntuTerraformApply(config *config.CreateConfig) error {
-    ubuntuDir := filepath.Join(".kibaship", config.Name, "ubuntu")
+	ubuntuDir := filepath.Join(".kibaship", config.Name, "ubuntu")
 
-    // Minimal TF_VARs; most data is from remote_state of provision
-    env := os.Environ()
-    env = append(env, fmt.Sprintf("TF_VAR_cluster_name=%s", config.Name))
+	// Minimal TF_VARs; most data is from remote_state of provision
+	env := os.Environ()
+	env = append(env, fmt.Sprintf("TF_VAR_cluster_name=%s", config.Name))
 
-    cmd := exec.Command("terraform", "apply", "-auto-approve")
-    cmd.Dir = ubuntuDir
-    cmd.Env = env
+	cmd := exec.Command("terraform", "apply", "-auto-approve")
+	cmd.Dir = ubuntuDir
+	cmd.Env = env
 
-    stdout, err := cmd.StdoutPipe()
-    if err != nil { return fmt.Errorf("failed to create stdout pipe: %w", err) }
-    stderr, err := cmd.StderrPipe()
-    if err != nil { return fmt.Errorf("failed to create stderr pipe: %w", err) }
-    if err := cmd.Start(); err != nil { return fmt.Errorf("failed to start ubuntu terraform apply: %w", err) }
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return fmt.Errorf("failed to create stdout pipe: %w", err)
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return fmt.Errorf("failed to create stderr pipe: %w", err)
+	}
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("failed to start ubuntu terraform apply: %w", err)
+	}
 
-    done := make(chan bool, 2)
-    go func(){ streamOutput(stdout, ""); done <- true }()
-    go func(){ streamOutput(stderr, ""); done <- true }()
+	done := make(chan bool, 2)
+	go func() { streamOutput(stdout, ""); done <- true }()
+	go func() { streamOutput(stderr, ""); done <- true }()
 
-    err = cmd.Wait()
-    <-done; <-done
-    if err != nil { return fmt.Errorf("ubuntu terraform apply failed: %w", err) }
-    return nil
+	err = cmd.Wait()
+	<-done
+	<-done
+	if err != nil {
+		return fmt.Errorf("ubuntu terraform apply failed: %w", err)
+	}
+	return nil
 }
 
 // RunTalosTerraformInit runs terraform init in the talos directory (for Hetzner Robot)

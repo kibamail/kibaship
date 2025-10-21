@@ -27,7 +27,7 @@ state:
 cluster:
   name: "app.kibaship.com"  # Domain format required
   email: "admin@kibaship.com"  # For credentials and Let's Encrypt
-  paas-features: "mysql,valkey,postgres"  # Optional, defaults to all
+  paas-features: "none"  # TODO: Database features removed - will be reimplemented
 
   # Provider configuration (choose one)
   provider:
@@ -41,14 +41,14 @@ cluster:
 ## Available Examples
 
 ### `digitalocean-cluster.yaml`
-**Production DigitalOcean cluster with full PaaS stack**
+**Production DigitalOcean cluster**
 - 5 high-performance nodes (s-8vcpu-16gb)
-- MySQL, Valkey (Redis), and PostgreSQL
+- TODO: Database features removed - will be reimplemented
 - NYC3 region
 
 ### `aws-minimal-cluster.yaml`
 **Minimal AWS staging cluster**
-- PostgreSQL only (cost-optimized)
+- TODO: Database features removed - will be reimplemented
 - US West 2 region
 - Staging environment setup
 
@@ -59,21 +59,21 @@ cluster:
 - Development environment
 
 ### `hetzner-cloud-cluster.yaml`
-**Hetzner Cloud cluster with selective PaaS**
-- MySQL and Valkey only (no PostgreSQL)
+**Hetzner Cloud cluster**
+- TODO: Database features removed - will be reimplemented
 - EU Central region
 - Cost-effective cloud setup
 
 ### `gcloud-enterprise-cluster.yaml`
 **Enterprise Google Cloud cluster**
-- MySQL and PostgreSQL (no Redis)
+- TODO: Database features removed - will be reimplemented
 - Service account authentication
 - Enterprise-grade configuration
 
 ### `linode-cluster.yaml`
-**Linode cluster with cache focus**
-- Valkey only (Redis alternative)
-- Simple caching cluster setup
+**Linode cluster**
+- TODO: Database features removed - will be reimplemented
+- Simple cluster setup
 
 ## Field Reference
 
@@ -93,9 +93,9 @@ cluster:
 
 #### PaaS Features
 - `cluster.paas-features`: Comma-separated list of PaaS features
-  - Options: `mysql`, `valkey`, `postgres`, `none`
-  - Default: `mysql,valkey,postgres`
-  - Examples: `"mysql,postgres"`, `"valkey"`, `"none"`
+  - Options: `none` (TODO: Database features removed - will be reimplemented)
+  - Default: `none`
+  - Examples: `"none"`
 
 ### Provider-Specific Fields
 

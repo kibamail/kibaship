@@ -694,7 +694,7 @@ func showCriticalWarningAndConfirm(clusterName string) bool {
 	}
 
 	// Create a prominent warning box
-    warningBox := []string{
+	warningBox := []string{
 		"",
 		"╔═══════════════════════════════════════════════════════════════════════════════╗",
 		"║                                                                               ║",
@@ -704,15 +704,15 @@ func showCriticalWarningAndConfirm(clusterName string) bool {
 		"║   only be run ONCE per cluster configuration.                                ║",
 		"║                                                                               ║",
 		"║   WHY THIS MATTERS:                                                           ║",
-        "║   • This script manages destructive operations on bare metal servers          ║",
+		"║   • This script manages destructive operations on bare metal servers          ║",
 		"║   • Running 'terraform destroy' before 'terraform init' RESETS ALL STATE      ║",
 		"║   • Running this script again will COMPLETELY DESTROY the existing cluster    ║",
 		"║   • All data, configurations, and workloads will be PERMANENTLY LOST          ║",
 		"║                                                                               ║",
 		"║   WHAT WILL HAPPEN:                                                           ║",
-        "║   1. Bare metal servers will be wiped and reinstalled with Talos Linux        ║",
-        "║   2. All Kubernetes state will be lost                                        ║",
-        "║   3. All applications and data will be deleted                                ║",
+		"║   1. Bare metal servers will be wiped and reinstalled with Talos Linux        ║",
+		"║   2. All Kubernetes state will be lost                                        ║",
+		"║   3. All applications and data will be deleted                                ║",
 		"║                                                                               ║",
 		"║   ⚠️  DO NOT PROCEED if this cluster is already in use!                        ║",
 		"║   ⚠️  BACKUP ALL DATA before running this script again!                        ║",
@@ -1159,91 +1159,91 @@ func RunClusterCreationFlow(cfg *config.CreateConfig) {
 			styles.DescriptionStyle.Render("This phase will install Talos Linux on your bare metal servers"))
 
 		// Build provision terraform files
-	fmt.Printf("\n%s %s\n",
-		styles.CommandStyle.Render("🔨"),
-		styles.HelpStyle.Render("Building provision Terraform files..."))
-	if err := automation.BuildHetznerRobotProvisionFiles(cfg); err != nil {
-		fmt.Fprintf(os.Stderr, "%s %s\n",
-			styles.CommandStyle.Render("❌"),
-			styles.CommandStyle.Render(fmt.Sprintf("Error building provision Terraform files: %v", err)))
-		os.Exit(1)
-	}
-	fmt.Printf("%s %s\n",
-		styles.TitleStyle.Render("✅"),
-		styles.TitleStyle.Render("Provision Terraform files built successfully!"))
-	fmt.Printf("%s %s\n",
-		styles.CommandStyle.Render("📁"),
-		styles.DescriptionStyle.Render(fmt.Sprintf("Files created in: .kibaship/%s/provision/", cfg.Name)))
+		fmt.Printf("\n%s %s\n",
+			styles.CommandStyle.Render("🔨"),
+			styles.HelpStyle.Render("Building provision Terraform files..."))
+		if err := automation.BuildHetznerRobotProvisionFiles(cfg); err != nil {
+			fmt.Fprintf(os.Stderr, "%s %s\n",
+				styles.CommandStyle.Render("❌"),
+				styles.CommandStyle.Render(fmt.Sprintf("Error building provision Terraform files: %v", err)))
+			os.Exit(1)
+		}
+		fmt.Printf("%s %s\n",
+			styles.TitleStyle.Render("✅"),
+			styles.TitleStyle.Render("Provision Terraform files built successfully!"))
+		fmt.Printf("%s %s\n",
+			styles.CommandStyle.Render("📁"),
+			styles.DescriptionStyle.Render(fmt.Sprintf("Files created in: .kibaship/%s/provision/", cfg.Name)))
 
-	// Check if Terraform is installed
-	fmt.Printf("\n%s %s\n",
-		styles.CommandStyle.Render("🔍"),
-		styles.HelpStyle.Render("Checking Terraform installation..."))
-	if err := automation.CheckTerraformInstalled(); err != nil {
-		fmt.Fprintf(os.Stderr, "%s %s\n",
-			styles.CommandStyle.Render("❌"),
-			styles.CommandStyle.Render(err.Error()))
-		os.Exit(1)
-	}
-	fmt.Printf("%s %s\n",
-		styles.TitleStyle.Render("✅"),
-		styles.TitleStyle.Render("Terraform is installed and available"))
+		// Check if Terraform is installed
+		fmt.Printf("\n%s %s\n",
+			styles.CommandStyle.Render("🔍"),
+			styles.HelpStyle.Render("Checking Terraform installation..."))
+		if err := automation.CheckTerraformInstalled(); err != nil {
+			fmt.Fprintf(os.Stderr, "%s %s\n",
+				styles.CommandStyle.Render("❌"),
+				styles.CommandStyle.Render(err.Error()))
+			os.Exit(1)
+		}
+		fmt.Printf("%s %s\n",
+			styles.TitleStyle.Render("✅"),
+			styles.TitleStyle.Render("Terraform is installed and available"))
 
-	// Run Terraform init for provision
-	fmt.Printf("\n%s %s\n",
-		styles.TitleStyle.Render("🚀"),
-		styles.HelpStyle.Render("Initializing provision Terraform..."))
-	fmt.Printf("%s %s\n\n",
-		styles.CommandStyle.Render("📝"),
-		styles.DescriptionStyle.Render("Running: terraform init with local backend configuration"))
+		// Run Terraform init for provision
+		fmt.Printf("\n%s %s\n",
+			styles.TitleStyle.Render("🚀"),
+			styles.HelpStyle.Render("Initializing provision Terraform..."))
+		fmt.Printf("%s %s\n\n",
+			styles.CommandStyle.Render("📝"),
+			styles.DescriptionStyle.Render("Running: terraform init with local backend configuration"))
 
-	if err := automation.RunTerraformInit(cfg); err != nil {
-		fmt.Fprintf(os.Stderr, "\n%s %s\n",
-			styles.CommandStyle.Render("❌"),
-			styles.CommandStyle.Render(fmt.Sprintf("Provision Terraform init failed: %v", err)))
-		os.Exit(1)
-	}
-	fmt.Printf("\n%s %s\n",
-		styles.TitleStyle.Render("✅"),
-		styles.TitleStyle.Render("Provision Terraform initialization completed!"))
+		if err := automation.RunTerraformInit(cfg); err != nil {
+			fmt.Fprintf(os.Stderr, "\n%s %s\n",
+				styles.CommandStyle.Render("❌"),
+				styles.CommandStyle.Render(fmt.Sprintf("Provision Terraform init failed: %v", err)))
+			os.Exit(1)
+		}
+		fmt.Printf("\n%s %s\n",
+			styles.TitleStyle.Render("✅"),
+			styles.TitleStyle.Render("Provision Terraform initialization completed!"))
 
-	// Run Terraform validate for provision
-	fmt.Printf("\n%s %s\n",
-		styles.CommandStyle.Render("🔍"),
-		styles.HelpStyle.Render("Validating provision Terraform configuration..."))
-	if err := automation.RunTerraformValidate(cfg); err != nil {
-		fmt.Fprintf(os.Stderr, "\n%s %s\n",
-			styles.CommandStyle.Render("❌"),
-			styles.CommandStyle.Render(fmt.Sprintf("Provision Terraform validate failed: %v", err)))
-		os.Exit(1)
-	}
-	fmt.Printf("\n%s %s\n",
-		styles.TitleStyle.Render("✅"),
-		styles.TitleStyle.Render("Provision Terraform configuration is valid!"))
+		// Run Terraform validate for provision
+		fmt.Printf("\n%s %s\n",
+			styles.CommandStyle.Render("🔍"),
+			styles.HelpStyle.Render("Validating provision Terraform configuration..."))
+		if err := automation.RunTerraformValidate(cfg); err != nil {
+			fmt.Fprintf(os.Stderr, "\n%s %s\n",
+				styles.CommandStyle.Render("❌"),
+				styles.CommandStyle.Render(fmt.Sprintf("Provision Terraform validate failed: %v", err)))
+			os.Exit(1)
+		}
+		fmt.Printf("\n%s %s\n",
+			styles.TitleStyle.Render("✅"),
+			styles.TitleStyle.Render("Provision Terraform configuration is valid!"))
 
-	// Run Terraform apply for provision
-	fmt.Printf("\n%s %s\n",
-		styles.TitleStyle.Render("🚀"),
-		styles.HelpStyle.Render("Provisioning bare metal servers..."))
-	fmt.Printf("%s %s\n",
-		styles.CommandStyle.Render("📝"),
-		styles.DescriptionStyle.Render("Running: terraform apply -auto-approve"))
-	fmt.Printf("%s %s\n",
-		styles.CommandStyle.Render("⚠️"),
-		styles.DescriptionStyle.Render("This will install Talos Linux on your servers and may take several minutes..."))
-	fmt.Printf("%s %s\n\n",
-		styles.CommandStyle.Render("🕰️"),
-		styles.DescriptionStyle.Render("Please wait while the servers are being provisioned..."))
+		// Run Terraform apply for provision
+		fmt.Printf("\n%s %s\n",
+			styles.TitleStyle.Render("🚀"),
+			styles.HelpStyle.Render("Provisioning bare metal servers..."))
+		fmt.Printf("%s %s\n",
+			styles.CommandStyle.Render("📝"),
+			styles.DescriptionStyle.Render("Running: terraform apply -auto-approve"))
+		fmt.Printf("%s %s\n",
+			styles.CommandStyle.Render("⚠️"),
+			styles.DescriptionStyle.Render("This will install Talos Linux on your servers and may take several minutes..."))
+		fmt.Printf("%s %s\n\n",
+			styles.CommandStyle.Render("🕰️"),
+			styles.DescriptionStyle.Render("Please wait while the servers are being provisioned..."))
 
-	if err := automation.RunTerraformApply(cfg); err != nil {
-		fmt.Fprintf(os.Stderr, "\n%s %s\n",
-			styles.CommandStyle.Render("❌"),
-			styles.CommandStyle.Render(fmt.Sprintf("Provision Terraform apply failed: %v", err)))
-		os.Exit(1)
-	}
-	fmt.Printf("\n%s %s\n",
-		styles.TitleStyle.Render("✅"),
-		styles.TitleStyle.Render("Bare metal servers provisioned successfully!"))
+		if err := automation.RunTerraformApply(cfg); err != nil {
+			fmt.Fprintf(os.Stderr, "\n%s %s\n",
+				styles.CommandStyle.Render("❌"),
+				styles.CommandStyle.Render(fmt.Sprintf("Provision Terraform apply failed: %v", err)))
+			os.Exit(1)
+		}
+		fmt.Printf("\n%s %s\n",
+			styles.TitleStyle.Render("✅"),
+			styles.TitleStyle.Render("Bare metal servers provisioned successfully!"))
 
 		// Read Terraform outputs from provision phase
 		fmt.Printf("\n%s %s\n",
@@ -1362,7 +1362,7 @@ func RunClusterCreationFlow(cfg *config.CreateConfig) {
 
 	os.Exit(0)
 
-    // Cloud phase removed for hetzner-robot: load balancers and cloud networking are not managed here
+	// Cloud phase removed for hetzner-robot: load balancers and cloud networking are not managed here
 
 	// =====================================
 	// PHASE 3: SERVER DISCOVERY (Wait for servers and discover network info)

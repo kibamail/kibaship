@@ -25,13 +25,26 @@ import (
 	"github.com/kibamail/kibaship/api/v1alpha1"
 	"github.com/kibamail/kibaship/pkg/validation"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 // EnvironmentVariable represents a Kubernetes environment variable
-type EnvironmentVariable = corev1.EnvVar
+type EnvironmentVariable struct {
+	Name      string `json:"name" example:"DATABASE_URL"`
+	Value     string `json:"value,omitempty" example:"postgres://localhost:5432/mydb"`
+	ValueFrom *struct {
+		SecretKeyRef *struct {
+			Name string `json:"name" example:"db-secret"`
+			Key  string `json:"key" example:"url"`
+		} `json:"secretKeyRef,omitempty"`
+	} `json:"valueFrom,omitempty"`
+}
 
 // ResourceRequirements represents Kubernetes resource requirements
-type ResourceRequirements = corev1.ResourceRequirements
+type ResourceRequirements struct {
+	Limits   map[string]string `json:"limits,omitempty" example:"cpu:500m,memory:512Mi"`
+	Requests map[string]string `json:"requests,omitempty" example:"cpu:100m,memory:128Mi"`
+}
 
 // ApplicationType represents the type of application
 type ApplicationType string
@@ -826,4 +839,73 @@ func (a *Application) ConvertFromCRD(crd *v1alpha1.Application) {
 			a.ValkeyCluster = valkeyClusterConfig
 		}
 	}
+}
+
+// ToKubernetesEnvVar converts our EnvironmentVariable to Kubernetes EnvVar
+func (e EnvironmentVariable) ToKubernetesEnvVar() corev1.EnvVar {
+	envVar := corev1.EnvVar{
+		Name:  e.Name,
+		Value: e.Value,
+	}
+
+	if e.ValueFrom != nil && e.ValueFrom.SecretKeyRef != nil {
+		envVar.ValueFrom = &corev1.EnvVarSource{
+			SecretKeyRef: &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: e.ValueFrom.SecretKeyRef.Name,
+				},
+				Key: e.ValueFrom.SecretKeyRef.Key,
+			},
+		}
+	}
+
+	return envVar
+}
+
+// FromKubernetesEnvVar converts Kubernetes EnvVar to our EnvironmentVariable
+func FromKubernetesEnvVar(envVar corev1.EnvVar) EnvironmentVariable {
+	e := EnvironmentVariable{
+		Name:  envVar.Name,
+		Value: envVar.Value,
+	}
+
+	if envVar.ValueFrom != nil && envVar.ValueFrom.SecretKeyRef != nil {
+		e.ValueFrom = &struct {
+			SecretKeyRef *struct {
+				Name string `json:"name" example:"db-secret"`
+				Key  string `json:"key" example:"url"`
+			} `json:"secretKeyRef,omitempty"`
+		}{
+			SecretKeyRef: &struct {
+				Name string `json:"name" example:"db-secret"`
+				Key  string `json:"key" example:"url"`
+			}{
+				Name: envVar.ValueFrom.SecretKeyRef.Name,
+				Key:  envVar.ValueFrom.SecretKeyRef.Key,
+			},
+		}
+	}
+
+	return e
+}
+
+// ToKubernetesResourceRequirements converts our ResourceRequirements to Kubernetes ResourceRequirements
+func (r ResourceRequirements) ToKubernetesResourceRequirements() corev1.ResourceRequirements {
+	req := corev1.ResourceRequirements{}
+
+	if r.Limits != nil {
+		req.Limits = make(corev1.ResourceList)
+		for k, v := range r.Limits {
+			req.Limits[corev1.ResourceName(k)] = resource.MustParse(v)
+		}
+	}
+
+	if r.Requests != nil {
+		req.Requests = make(corev1.ResourceList)
+		for k, v := range r.Requests {
+			req.Requests[corev1.ResourceName(k)] = resource.MustParse(v)
+		}
+	}
+
+	return req
 }

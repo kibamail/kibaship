@@ -44,9 +44,9 @@ const (
 //   - Cilium Gateway API support must be enabled
 //
 // Resources created (in order):
-//   1. Wildcard Certificate for all app domains (*.apps, *.valkey, *.mysql, *.postgres)
-//   2. ReferenceGrant for Gateway to access certificates
-//   3. Gateway resource with multi-protocol listeners (only if certificate exists)
+//  1. Wildcard Certificate for all app domains (*.apps, *.valkey, *.mysql, *.postgres)
+//  2. ReferenceGrant for Gateway to access certificates
+//  3. Gateway resource with multi-protocol listeners (only if certificate exists)
 func ProvisionIngress(ctx context.Context, c client.Client, baseDomain, acmeEmail string) error {
 	log := ctrl.Log.WithName("bootstrap").WithName("ingress")
 

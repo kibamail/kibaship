@@ -4,7 +4,7 @@ This plan replaces Valkey (Redis-compatible) Streams–based event publishing wi
 
 ## Goals
 
-- Remove all Valkey/Streams code paths and dependencies from the operator and tests.
+- Remove all Valkey/Streams code paths and dependencies from the operator and tests. ✅ COMPLETED
 - Introduce a reliable, secure webhook notifier used by all controllers to publish lifecycle events.
 - Provide configuration, retry/backoff, metrics, and structured payloads.
 - Preserve at-least-once delivery semantics with idempotent event design.
@@ -51,16 +51,16 @@ RUNNING TESTS YOU ARE MIGRAATING OVER GRADUALLY AND ENSURING YOU ARE NOT BREAKIN
 
 ### 0) Discovery and Freeze
 
-- [ ] Identify all Valkey/Streams usages and entry points
+- [x] Identify all Valkey/Streams usages and entry points ✅ COMPLETED
   - Code:
-    - `pkg/streaming/*` (interfaces, connection, redis client, publisher, tests)
-    - `cmd/main.go` (Valkey connection init and publisher wiring)
-    - `internal/controller/valkey_provisioner.go` (provisions Valkey CR)
+    - `pkg/streaming/*` (interfaces, connection, redis client, publisher, tests) ✅ REMOVED
+    - `cmd/main.go` (Valkey connection init and publisher wiring) ✅ REMOVED
+    - `internal/controller/valkey_provisioner.go` (provisions Valkey CR) ✅ REMOVED
   - Tests:
-    - `test/e2e/infra_test.go` (checks Valkey pods)
-    - `test/e2e/suite_test.go` (installs Valkey Operator during bootstrap)
+    - `test/e2e/infra_test.go` (checks Valkey pods) ✅ REMOVED
+    - `test/e2e/suite_test.go` (installs Valkey Operator during bootstrap) ✅ REMOVED
   - Other:
-    - Any references in docs/READMEs or kustomize overlays
+    - Any references in docs/READMEs or kustomize overlays ✅ UPDATED
 
 ### 1) Config and Secrets
 
@@ -111,8 +111,8 @@ RUNNING TESTS YOU ARE MIGRAATING OVER GRADUALLY AND ENSURING YOU ARE NOT BREAKIN
 
 ### 5) E2E Test Refactor
 
-- [ ] Remove Valkey operator installation from e2e bootstrap (`test/e2e/suite_test.go`)
-- [ ] Remove infra assertions about Valkey pods (`test/e2e/infra_test.go`)
+- [x] Remove Valkey operator installation from e2e bootstrap (`test/e2e/suite_test.go`) ✅ COMPLETED
+- [x] Remove infra assertions about Valkey pods (`test/e2e/infra_test.go`) ✅ COMPLETED
 - [ ] Add webhook receiver test fixture:
   - Option A: In-process HTTP server in tests with port-forward from cluster (keeps test local)
   - Option B: Deploy a tiny HTTP receiver pod (e.g., `neondatabase/http-echo` or custom) + Service; assert logs
@@ -162,15 +162,15 @@ RUNNING TESTS YOU ARE MIGRAATING OVER GRADUALLY AND ENSURING YOU ARE NOT BREAKIN
 
 ## File/Code Touch Points (Initial Inventory)
 
-- Remove/Replace:
-  - `pkg/streaming/interfaces.go`
-  - `pkg/streaming/connection.go`
-  - `pkg/streaming/redis.go`
-  - `pkg/streaming/publisher.go`
-  - `pkg/streaming/redis_test.go`
-  - `pkg/streaming/redis_test_impl.go`
-  - `internal/controller/valkey_provisioner.go`
-  - `cmd/main.go` (Valkey init + publisher wiring)
+- Remove/Replace: ✅ COMPLETED
+  - `pkg/streaming/interfaces.go` ✅ REMOVED
+  - `pkg/streaming/connection.go` ✅ REMOVED
+  - `pkg/streaming/redis.go` ✅ REMOVED
+  - `pkg/streaming/publisher.go` ✅ REMOVED
+  - `pkg/streaming/redis_test.go` ✅ REMOVED
+  - `pkg/streaming/redis_test_impl.go` ✅ REMOVED
+  - `internal/controller/valkey_provisioner.go` ✅ REMOVED
+  - `cmd/main.go` (Valkey init + publisher wiring) ✅ REMOVED
 - Add:
   - `pkg/webhooks/event.go`
   - `pkg/webhooks/signature.go`
@@ -178,10 +178,10 @@ RUNNING TESTS YOU ARE MIGRAATING OVER GRADUALLY AND ENSURING YOU ARE NOT BREAKIN
   - `pkg/webhooks/notifier.go`
   - `pkg/config/webhooks.go`
   - Kustomize env/secret wiring under `config/manager/`
-- Tests:
-  - Remove Valkey checks in `test/e2e/infra_test.go`
-  - Remove Valkey operator bootstrap in `test/e2e/suite_test.go`
-  - Add webhook receiver harness in e2e and associated assertions
+- Tests: ✅ PARTIALLY COMPLETED
+  - Remove Valkey checks in `test/e2e/infra_test.go` ✅ COMPLETED
+  - Remove Valkey operator bootstrap in `test/e2e/suite_test.go` ✅ COMPLETED
+  - Add webhook receiver harness in e2e and associated assertions ⏳ TODO
 
 ---
 

@@ -563,16 +563,18 @@ build-separate-installers: manifests generate kustomize ## Generate separate YAM
 	@ls -lh dist/manifests/
 
 .PHONY: build-e2e-installers
-build-e2e-installers: manifests generate kustomize ## Generate e2e YAML files for each component (always uses v1.0.0).
+build-e2e-installers: manifests generate kustomize ## Generate e2e YAML files for each component (uses e2e tags).
 	mkdir -p dist/e2e/manifests
-	@echo "Building e2e installer manifests (v1.0.0)..."
+	@echo "Building e2e installer manifests (e2e tags)..."
 
 	# Operator (manager)
 	@echo "Building operator.yaml..."
+	cd config/manager && $(KUSTOMIZE) edit set image controller=kibamail/kibaship:e2e
 	$(KUSTOMIZE) build config/overlays/e2e/operator > dist/e2e/manifests/operator.yaml
 
 	# API Server
 	@echo "Building api-server.yaml..."
+	cd config/api-server && $(KUSTOMIZE) edit set image apiserver=kibamail/kibaship-apiserver:e2e
 	$(KUSTOMIZE) build config/overlays/e2e/api-server > dist/e2e/manifests/api-server.yaml
 
 	# Cert Manager Webhook
@@ -587,6 +589,7 @@ build-e2e-installers: manifests generate kustomize ## Generate e2e YAML files fo
 
 	# Registry Auth
 	@echo "Building registry-auth.yaml..."
+	cd config/registry-auth/base && $(KUSTOMIZE) edit set image registry-auth=kibamail/kibaship-registry-auth:e2e
 	$(KUSTOMIZE) build config/registry-auth/overlays/e2e > dist/e2e/manifests/registry-auth.yaml
 
 	# Registry

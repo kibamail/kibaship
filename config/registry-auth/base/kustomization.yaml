@@ -12,4 +12,4 @@ resources:
 images:
 - name: registry-auth
   newName: kibamail/kibaship-registry-auth
-  newTag: v1.0.0
+  newTag: e2e

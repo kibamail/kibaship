@@ -364,23 +364,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	// New: ValkeyStatusWatcherReconciler - watches Valkey resources and updates Deployment CR conditions
-	if err := (&controller.ValkeyStatusWatcherReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "ValkeyStatusWatcher")
-		os.Exit(1)
-	}
-
-	// New: MySQLStatusWatcherReconciler - watches InnoDBCluster resources and updates Deployment CR conditions
-	if err := (&controller.MySQLStatusWatcherReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "MySQLStatusWatcher")
-		os.Exit(1)
-	}
+	// TODO: Database status watcher controllers will be reimplemented
+	// Current MySQL and Valkey status watcher controller initialization removed
+	// TODO: Implement new database status watcher controller initialization here
 
 	if err := (&platformv1alpha1.ApplicationDomain{}).SetupWebhookWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create webhook", "webhook", "ApplicationDomain")

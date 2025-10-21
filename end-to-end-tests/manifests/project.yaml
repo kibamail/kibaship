@@ -8,14 +8,8 @@ metadata:
     platform.kibaship.com/workspace-uuid: "workspace-e2e-test"
 spec:
   applicationTypes:
-    mysql:
-      enabled: true
-    mysqlCluster:
-      enabled: true
-    valkey:
-      enabled: true
-    valkeyCluster:
-      enabled: true
+    # TODO: Database application types removed - will be reimplemented
+    # mysql, mysqlCluster, valkey, valkeyCluster, postgres, postgresCluster removed
     dockerImage:
       enabled: true
     gitRepository:

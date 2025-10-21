@@ -1,17 +1,6 @@
 components:
-  mysql-operator:
-    versions:
-      - name: 9.4.0-2.2.5
-        crds: https://raw.githubusercontent.com/mysql/mysql-operator/9.4.0-2.2.5/deploy/deploy-crds.yaml
-        operator: https://raw.githubusercontent.com/mysql/mysql-operator/9.4.0-2.2.5/deploy/deploy-operator.yaml
-  valkey-operator:
-    versions:
-      - name: 0.0.59
-        operator: https://github.com/hyperspike/valkey-operator/releases/download/0.0.59/install.yaml
-  postgres-operator:
-    versions:
-      - name: 9.4.0
-        operator: consider-zalando
+  # TODO: Database operators removed - will be reimplemented
+  # mysql-operator, valkey-operator, postgres-operator configurations removed
   cilium:
     versions:
       - name: 1.18.0

@@ -53,7 +53,7 @@ Project (Cluster-scoped)
 
    - References `spec.environmentName` (string field)
    - Creates Tekton pipelines and pipeline runs
-   - Manages MySQL/Postgres deployments
+   - TODO: Database deployment management removed - will be reimplemented
    - Tracks deployment phase
 
 4. **ApplicationDomainController** (`internal/controller/applicationdomain_controller.go`)

@@ -72,14 +72,14 @@ type HetznerRobotServer struct {
 
 // HetznerRobotConfig represents Hetzner Robot-specific configuration
 type HetznerRobotConfig struct {
-    Username        string               `validate:"required_with=HetznerRobotConfig"`
-    Password        string               `validate:"required_with=HetznerRobotConfig"`
-    CloudToken      string               `validate:"required_with=HetznerRobotConfig"`
-    PublicSubnet    string               `json:"public_subnet" yaml:"public-subnet" validate:"omitempty,cidr"`
-    SelectedServers []HetznerRobotServer `validate:"omitempty"`
-    RescuePasswords map[string]string    `validate:"omitempty"`
-    VSwitchID       string               `validate:"omitempty"`
-    VLANID          int                  `validate:"omitempty"`
+	Username        string               `validate:"required_with=HetznerRobotConfig"`
+	Password        string               `validate:"required_with=HetznerRobotConfig"`
+	CloudToken      string               `validate:"required_with=HetznerRobotConfig"`
+	PublicSubnet    string               `json:"public_subnet" yaml:"public-subnet" validate:"omitempty,cidr"`
+	SelectedServers []HetznerRobotServer `validate:"omitempty"`
+	RescuePasswords map[string]string    `validate:"omitempty"`
+	VSwitchID       string               `validate:"omitempty"`
+	VLANID          int                  `validate:"omitempty"`
 
 	// Network configuration for cloud resources
 	NetworkConfig *HetznerRobotNetworkConfig `validate:"omitempty"`
@@ -99,9 +99,9 @@ type HetznerRobotNetworkConfig struct {
 
 // HetznerRobotTalosConfig represents Talos configuration for Hetzner Robot clusters
 type HetznerRobotTalosConfig struct {
-    ClusterEndpoint      string `json:"cluster_endpoint" yaml:"cluster-endpoint"`
-    VLANID               int    `json:"vlan_id" yaml:"vlan-id"`
-    VSwitchSubnetIPRange string `json:"vswitch_subnet_ip_range" yaml:"vswitch-subnet-ip-range"`
+	ClusterEndpoint      string `json:"cluster_endpoint" yaml:"cluster-endpoint"`
+	VLANID               int    `json:"vlan_id" yaml:"vlan-id"`
+	VSwitchSubnetIPRange string `json:"vswitch_subnet_ip_range" yaml:"vswitch-subnet-ip-range"`
 }
 
 // LinodeConfig represents Linode-specific configuration

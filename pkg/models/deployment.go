@@ -22,6 +22,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/kibamail/kibaship/api/v1alpha1"
 	"github.com/kibamail/kibaship/pkg/validation"
+	corev1 "k8s.io/api/core/v1"
 )
 
 type DeploymentPhase string
@@ -180,7 +181,28 @@ func (d *Deployment) ConvertFromCRD(crd *v1alpha1.Deployment, applicationSlug st
 
 		// Convert resource requirements
 		if crd.Spec.ImageFromRegistry.Resources != nil {
-			d.ImageFromRegistry.Resources = crd.Spec.ImageFromRegistry.Resources.DeepCopy()
+			d.ImageFromRegistry.Resources = fromKubernetesResourceRequirements(*crd.Spec.ImageFromRegistry.Resources)
 		}
 	}
+}
+
+// fromKubernetesResourceRequirements converts Kubernetes ResourceRequirements to our ResourceRequirements
+func fromKubernetesResourceRequirements(k8sReq corev1.ResourceRequirements) *ResourceRequirements {
+	req := &ResourceRequirements{}
+
+	if k8sReq.Limits != nil {
+		req.Limits = make(map[string]string)
+		for k, v := range k8sReq.Limits {
+			req.Limits[string(k)] = v.String()
+		}
+	}
+
+	if k8sReq.Requests != nil {
+		req.Requests = make(map[string]string)
+		for k, v := range k8sReq.Requests {
+			req.Requests[string(k)] = v.String()
+		}
+	}
+
+	return req
 }

@@ -1,2176 +1,2603 @@
 {
-  "swagger": "2.0",
-  "info": {
-    "description": "REST API server for managing Kibaship Operator resources",
-    "title": "Kibaship Operator API",
-    "termsOfService": "https://github.com/kibamail/kibaship",
-    "contact": {
-      "name": "API Support",
-      "email": "support@kibamail.com"
+    "swagger": "2.0",
+    "info": {
+        "description": "REST API server for managing Kibaship Operator resources",
+        "title": "Kibaship Operator API",
+        "termsOfService": "https://github.com/kibamail/kibaship",
+        "contact": {
+            "name": "API Support",
+            "email": "support@kibamail.com"
+        },
+        "license": {
+            "name": "Apache 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.html"
+        },
+        "version": "1.0"
     },
-    "license": {
-      "name": "Apache 2.0",
-      "url": "http://www.apache.org/licenses/LICENSE-2.0.html"
+    "host": "localhost:8080",
+    "basePath": "/v1",
+    "paths": {
+        "/healthz": {
+            "get": {
+                "description": "Check if the API server is healthy",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "health"
+                ],
+                "summary": "Health check",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/main.HealthResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/openapi.yaml": {
+            "get": {
+                "description": "Get the OpenAPI specification in YAML format",
+                "produces": [
+                    "text/plain"
+                ],
+                "tags": [
+                    "documentation"
+                ],
+                "summary": "Get OpenAPI specification",
+                "responses": {
+                    "200": {
+                        "description": "OpenAPI YAML specification",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/readyz": {
+            "get": {
+                "description": "Check if the API server is ready to serve requests",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "health"
+                ],
+                "summary": "Readiness check",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/main.ReadyResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/applications/{uuid}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieve an application by its unique UUID or slug identifier",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "applications"
+                ],
+                "summary": "Get application by UUID",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Application UUID or slug",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Application details",
+                        "schema": {
+                            "$ref": "#/definitions/models.ApplicationResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Application not found",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Delete an application by its unique UUID or slug identifier",
+                "tags": [
+                    "applications"
+                ],
+                "summary": "Delete application by UUID",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Application UUID or slug",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "Application deleted successfully"
+                    },
+                    "401": {
+                        "description": "Authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Application not found",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Update an application by its unique UUID or slug identifier with partial updates",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "applications"
+                ],
+                "summary": "Update application by UUID",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Application UUID or slug",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Application update data",
+                        "name": "application",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.ApplicationUpdateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Updated application details",
+                        "schema": {
+                            "$ref": "#/definitions/models.ApplicationResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Validation errors in request data",
+                        "schema": {
+                            "$ref": "#/definitions/models.ValidationErrors"
+                        }
+                    },
+                    "401": {
+                        "description": "Authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Application not found",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/applications/{uuid}/deployments": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieve all deployments for a specific application",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "deployments"
+                ],
+                "summary": "Get deployments by application",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Application UUID or slug (8-character identifier)",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "List of deployments",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.DeploymentResponse"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Application not found",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Create a new deployment for an application",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "deployments"
+                ],
+                "summary": "Create a new deployment",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Application UUID or slug",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Deployment creation data",
+                        "name": "deployment",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.DeploymentCreateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Deployment created successfully",
+                        "schema": {
+                            "$ref": "#/definitions/models.DeploymentResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Validation errors in request data",
+                        "schema": {
+                            "$ref": "#/definitions/models.ValidationErrors"
+                        }
+                    },
+                    "401": {
+                        "description": "Authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Application not found",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/applications/{uuid}/domains": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Create a new domain for an application",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "application-domains"
+                ],
+                "summary": "Create a new application domain",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Application UUID or slug (8-character identifier)",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Application domain creation data",
+                        "name": "domain",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.ApplicationDomainCreateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Application domain created successfully",
+                        "schema": {
+                            "$ref": "#/definitions/models.ApplicationDomainResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Validation errors in request data",
+                        "schema": {
+                            "$ref": "#/definitions/models.ValidationErrors"
+                        }
+                    },
+                    "401": {
+                        "description": "Authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Application not found",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/applications/{uuid}/env": {
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Update environment variables for a GitRepository application by merging new variables with existing ones",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "applications"
+                ],
+                "summary": "Update environment variables for an application",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Application UUID or slug",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Environment variables to set/update",
+                        "name": "variables",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.ApplicationEnvUpdateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Environment variables updated successfully",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request data",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Application not found",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/deployments/{uuid}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieve a deployment by its unique UUID or slug identifier",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "deployments"
+                ],
+                "summary": "Get deployment by UUID",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Deployment UUID or slug (8-character identifier)",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Deployment details",
+                        "schema": {
+                            "$ref": "#/definitions/models.DeploymentResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Deployment not found",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/deployments/{uuid}/promote": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Promote a deployment by updating the application's currentDeploymentRef to point to this deployment",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "deployments"
+                ],
+                "summary": "Promote a deployment",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Deployment UUID or slug",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Deployment promoted successfully",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Deployment not found",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/domains/{uuid}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieve an application domain by its unique UUID identifier",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "application-domains"
+                ],
+                "summary": "Get application domain by UUID",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Application domain UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Application domain details",
+                        "schema": {
+                            "$ref": "#/definitions/models.ApplicationDomainResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Application domain not found",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Delete an application domain by its unique UUID identifier",
+                "tags": [
+                    "application-domains"
+                ],
+                "summary": "Delete application domain by UUID",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Application domain UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "Application domain deleted successfully"
+                    },
+                    "401": {
+                        "description": "Authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Application domain not found",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/environments/{uuid}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieve an environment by its unique UUID or slug identifier",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "environments"
+                ],
+                "summary": "Get environment by UUID",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Environment UUID or slug (8-character identifier)",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Environment details",
+                        "schema": {
+                            "$ref": "#/definitions/models.EnvironmentResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Environment not found",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Delete an environment by its unique UUID or slug identifier",
+                "tags": [
+                    "environments"
+                ],
+                "summary": "Delete environment by UUID",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Environment UUID or slug (8-character identifier)",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "Environment deleted successfully"
+                    },
+                    "401": {
+                        "description": "Authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Environment not found",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Update an environment by its unique UUID or slug identifier with partial updates",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "environments"
+                ],
+                "summary": "Update environment by UUID",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Environment UUID or slug (8-character identifier)",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Environment update data",
+                        "name": "environment",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.EnvironmentUpdateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Updated environment details",
+                        "schema": {
+                            "$ref": "#/definitions/models.EnvironmentResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Validation errors in request data",
+                        "schema": {
+                            "$ref": "#/definitions/models.ValidationErrors"
+                        }
+                    },
+                    "401": {
+                        "description": "Authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Environment not found",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/environments/{uuid}/applications": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieve all applications for a specific environment",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "applications"
+                ],
+                "summary": "Get applications by environment",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Environment UUID or slug",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "List of applications",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.ApplicationResponse"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Environment not found",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Create a new application within an environment with type-specific configuration",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "applications"
+                ],
+                "summary": "Create a new application",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Environment UUID or slug",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Application creation data",
+                        "name": "application",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.ApplicationCreateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Application created successfully",
+                        "schema": {
+                            "$ref": "#/definitions/models.ApplicationResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Validation errors in request data",
+                        "schema": {
+                            "$ref": "#/definitions/models.ValidationErrors"
+                        }
+                    },
+                    "401": {
+                        "description": "Authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Environment not found",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/projects": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Create a new project with comprehensive resource management and application type configuration. The project will be assigned a random 8-character slug and configured with the specified resource profile.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "projects"
+                ],
+                "summary": "Create a new project",
+                "parameters": [
+                    {
+                        "description": "Project creation data",
+                        "name": "project",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.ProjectCreateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Project created successfully",
+                        "schema": {
+                            "$ref": "#/definitions/models.ProjectResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Validation errors in request data",
+                        "schema": {
+                            "$ref": "#/definitions/models.ValidationErrors"
+                        }
+                    },
+                    "401": {
+                        "description": "Authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/projects/{uuid}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieve a project by its unique UUID or slug identifier",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "projects"
+                ],
+                "summary": "Get project by UUID",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Project UUID or slug (8-character identifier)",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Project details",
+                        "schema": {
+                            "$ref": "#/definitions/models.ProjectResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Project not found",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Delete a project by its unique UUID or slug identifier",
+                "tags": [
+                    "projects"
+                ],
+                "summary": "Delete project by UUID",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Project UUID or slug (8-character identifier)",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "Project deleted successfully"
+                    },
+                    "401": {
+                        "description": "Authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Project not found",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Update a project by its unique UUID or slug identifier with partial updates",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "projects"
+                ],
+                "summary": "Update project by UUID",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Project UUID or slug (8-character identifier)",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Project update data",
+                        "name": "project",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.ProjectUpdateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Updated project details",
+                        "schema": {
+                            "$ref": "#/definitions/models.ProjectResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Validation errors in request data",
+                        "schema": {
+                            "$ref": "#/definitions/models.ValidationErrors"
+                        }
+                    },
+                    "401": {
+                        "description": "Authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Project not found",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/projects/{uuid}/applications": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieve all applications for a specific project",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "applications"
+                ],
+                "summary": "Get applications by project",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Project UUID or slug",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "List of applications",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.ApplicationResponse"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Project not found",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/projects/{uuid}/environments": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieve all environments for a specific project",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "environments"
+                ],
+                "summary": "List environments for a project",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Project UUID or slug (8-character identifier)",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "List of environments",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.EnvironmentResponse"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Project not found",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Create a new environment within a project. The environment will be assigned a random 8-character slug.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "environments"
+                ],
+                "summary": "Create a new environment",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Project UUID or slug (8-character identifier)",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Environment creation data",
+                        "name": "environment",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.EnvironmentCreateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Environment created successfully",
+                        "schema": {
+                            "$ref": "#/definitions/models.EnvironmentResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Validation errors in request data",
+                        "schema": {
+                            "$ref": "#/definitions/models.ValidationErrors"
+                        }
+                    },
+                    "401": {
+                        "description": "Authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Project not found",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        }
     },
-    "version": "1.0"
-  },
-  "host": "localhost:8080",
-  "basePath": "/v1",
-  "paths": {
-    "/healthz": {
-      "get": {
-        "description": "Check if the API server is healthy",
-        "produces": ["application/json"],
-        "tags": ["health"],
-        "summary": "Health check",
-        "responses": {
-          "200": {
-            "description": "OK",
-            "schema": {
-              "$ref": "#/definitions/main.HealthResponse"
+    "definitions": {
+        "auth.ErrorResponse": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "type": "string",
+                    "example": "Unauthorized"
+                },
+                "message": {
+                    "type": "string",
+                    "example": "Invalid API key"
+                }
             }
-          }
+        },
+        "main.HealthResponse": {
+            "type": "object",
+            "properties": {
+                "status": {
+                    "type": "string",
+                    "example": "ok"
+                }
+            }
+        },
+        "main.ReadyResponse": {
+            "type": "object",
+            "properties": {
+                "status": {
+                    "type": "string",
+                    "example": "ready"
+                }
+            }
+        },
+        "models.ApplicationCreateRequest": {
+            "type": "object",
+            "properties": {
+                "dockerImage": {
+                    "$ref": "#/definitions/models.DockerImageConfig"
+                },
+                "environmentUuid": {
+                    "type": "string",
+                    "example": "123e4567-e89b-12d3-a456-426614174000"
+                },
+                "gitRepository": {
+                    "$ref": "#/definitions/models.GitRepositoryConfig"
+                },
+                "imageFromRegistry": {
+                    "$ref": "#/definitions/models.ImageFromRegistryConfig"
+                },
+                "mysql": {
+                    "$ref": "#/definitions/models.MySQLConfig"
+                },
+                "mysqlCluster": {
+                    "$ref": "#/definitions/models.MySQLClusterConfig"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "my-web-app"
+                },
+                "postgres": {
+                    "$ref": "#/definitions/models.PostgresConfig"
+                },
+                "postgresCluster": {
+                    "$ref": "#/definitions/models.PostgresClusterConfig"
+                },
+                "type": {
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.ApplicationType"
+                        }
+                    ],
+                    "example": "DockerImage"
+                },
+                "valkey": {
+                    "$ref": "#/definitions/models.ValkeyConfig"
+                },
+                "valkeyCluster": {
+                    "$ref": "#/definitions/models.ValkeyClusterConfig"
+                }
+            }
+        },
+        "models.ApplicationDomainCreateRequest": {
+            "type": "object",
+            "required": [
+                "applicationSlug",
+                "domain",
+                "port"
+            ],
+            "properties": {
+                "applicationSlug": {
+                    "type": "string",
+                    "example": "abc123de"
+                },
+                "default": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "domain": {
+                    "type": "string",
+                    "example": "my-app.example.com"
+                },
+                "port": {
+                    "type": "integer",
+                    "maximum": 65535,
+                    "minimum": 1,
+                    "example": 3000
+                },
+                "tlsEnabled": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "type": {
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.ApplicationDomainType"
+                        }
+                    ],
+                    "example": "custom"
+                }
+            }
+        },
+        "models.ApplicationDomainPhase": {
+            "type": "string",
+            "enum": [
+                "Pending",
+                "Ready",
+                "Failed"
+            ],
+            "x-enum-varnames": [
+                "ApplicationDomainPhasePending",
+                "ApplicationDomainPhaseReady",
+                "ApplicationDomainPhaseFailed"
+            ]
+        },
+        "models.ApplicationDomainResponse": {
+            "type": "object",
+            "properties": {
+                "applicationSlug": {
+                    "type": "string",
+                    "example": "abc123de"
+                },
+                "applicationUuid": {
+                    "type": "string",
+                    "example": "550e8400-e29b-41d4-a716-446655440001"
+                },
+                "certificateReady": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "createdAt": {
+                    "type": "string",
+                    "example": "2023-01-01T12:00:00Z"
+                },
+                "default": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "dnsConfigured": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "domain": {
+                    "type": "string",
+                    "example": "my-app.example.com"
+                },
+                "ingressReady": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "phase": {
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.ApplicationDomainPhase"
+                        }
+                    ],
+                    "example": "Pending"
+                },
+                "port": {
+                    "type": "integer",
+                    "example": 3000
+                },
+                "projectUuid": {
+                    "type": "string",
+                    "example": "550e8400-e29b-41d4-a716-446655440002"
+                },
+                "slug": {
+                    "type": "string",
+                    "example": "def456gh"
+                },
+                "tlsEnabled": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "type": {
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.ApplicationDomainType"
+                        }
+                    ],
+                    "example": "custom"
+                },
+                "updatedAt": {
+                    "type": "string",
+                    "example": "2023-01-01T12:00:00Z"
+                },
+                "uuid": {
+                    "type": "string",
+                    "example": "550e8400-e29b-41d4-a716-446655440000"
+                }
+            }
+        },
+        "models.ApplicationDomainType": {
+            "type": "string",
+            "enum": [
+                "default",
+                "custom"
+            ],
+            "x-enum-varnames": [
+                "ApplicationDomainTypeDefault",
+                "ApplicationDomainTypeCustom"
+            ]
+        },
+        "models.ApplicationEnvUpdateRequest": {
+            "type": "object",
+            "properties": {
+                "variables": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    },
+                    "example": {
+                        "\"DB_HOST\"": "\"localhost\"}",
+                        "{\"API_KEY\"": "\"secret123\""
+                    }
+                }
+            }
+        },
+        "models.ApplicationResponse": {
+            "type": "object",
+            "properties": {
+                "createdAt": {
+                    "type": "string",
+                    "example": "2023-01-01T12:00:00Z"
+                },
+                "dockerImage": {
+                    "$ref": "#/definitions/models.DockerImageConfig"
+                },
+                "domains": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.ApplicationDomainResponse"
+                    }
+                },
+                "gitRepository": {
+                    "$ref": "#/definitions/models.GitRepositoryConfig"
+                },
+                "imageFromRegistry": {
+                    "$ref": "#/definitions/models.ImageFromRegistryConfig"
+                },
+                "latestDeployment": {
+                    "$ref": "#/definitions/models.DeploymentResponse"
+                },
+                "mysql": {
+                    "$ref": "#/definitions/models.MySQLConfig"
+                },
+                "mysqlCluster": {
+                    "$ref": "#/definitions/models.MySQLClusterConfig"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "my-web-app"
+                },
+                "postgres": {
+                    "$ref": "#/definitions/models.PostgresConfig"
+                },
+                "postgresCluster": {
+                    "$ref": "#/definitions/models.PostgresClusterConfig"
+                },
+                "projectSlug": {
+                    "type": "string",
+                    "example": "xyz789ab"
+                },
+                "projectUuid": {
+                    "type": "string",
+                    "example": "123e4567-e89b-12d3-a456-426614174001"
+                },
+                "slug": {
+                    "type": "string",
+                    "example": "abc123de"
+                },
+                "status": {
+                    "type": "string",
+                    "example": "Running"
+                },
+                "type": {
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.ApplicationType"
+                        }
+                    ],
+                    "example": "DockerImage"
+                },
+                "updatedAt": {
+                    "type": "string",
+                    "example": "2023-01-01T12:00:00Z"
+                },
+                "uuid": {
+                    "type": "string",
+                    "example": "123e4567-e89b-12d3-a456-426614174000"
+                },
+                "valkey": {
+                    "$ref": "#/definitions/models.ValkeyConfig"
+                },
+                "valkeyCluster": {
+                    "$ref": "#/definitions/models.ValkeyClusterConfig"
+                }
+            }
+        },
+        "models.ApplicationType": {
+            "type": "string",
+            "enum": [
+                "MySQL",
+                "MySQLCluster",
+                "Postgres",
+                "PostgresCluster",
+                "Valkey",
+                "ValkeyCluster",
+                "DockerImage",
+                "GitRepository",
+                "ImageFromRegistry"
+            ],
+            "x-enum-varnames": [
+                "ApplicationTypeMySQL",
+                "ApplicationTypeMySQLCluster",
+                "ApplicationTypePostgres",
+                "ApplicationTypePostgresCluster",
+                "ApplicationTypeValkey",
+                "ApplicationTypeValkeyCluster",
+                "ApplicationTypeDockerImage",
+                "ApplicationTypeGitRepository",
+                "ApplicationTypeImageFromRegistry"
+            ]
+        },
+        "models.ApplicationTypeResourceConfig": {
+            "type": "object",
+            "properties": {
+                "defaultLimits": {
+                    "$ref": "#/definitions/models.ResourceLimitsSpec"
+                },
+                "resourceBounds": {
+                    "$ref": "#/definitions/models.ResourceBoundsSpec"
+                }
+            }
+        },
+        "models.ApplicationTypeSettings": {
+            "type": "object",
+            "properties": {
+                "dockerImage": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "gitRepository": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "imageFromRegistry": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "mysql": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "mysqlCluster": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "postgres": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "postgresCluster": {
+                    "type": "boolean",
+                    "example": false
+                }
+            }
+        },
+        "models.ApplicationUpdateRequest": {
+            "type": "object",
+            "properties": {
+                "dockerImage": {
+                    "$ref": "#/definitions/models.DockerImageConfig"
+                },
+                "gitRepository": {
+                    "$ref": "#/definitions/models.GitRepositoryConfig"
+                },
+                "imageFromRegistry": {
+                    "$ref": "#/definitions/models.ImageFromRegistryConfig"
+                },
+                "mysql": {
+                    "$ref": "#/definitions/models.MySQLConfig"
+                },
+                "mysqlCluster": {
+                    "$ref": "#/definitions/models.MySQLClusterConfig"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "updated-web-app"
+                },
+                "postgres": {
+                    "$ref": "#/definitions/models.PostgresConfig"
+                },
+                "postgresCluster": {
+                    "$ref": "#/definitions/models.PostgresClusterConfig"
+                },
+                "valkey": {
+                    "$ref": "#/definitions/models.ValkeyConfig"
+                },
+                "valkeyCluster": {
+                    "$ref": "#/definitions/models.ValkeyClusterConfig"
+                }
+            }
+        },
+        "models.BuildType": {
+            "type": "string",
+            "enum": [
+                "Railpack",
+                "Dockerfile"
+            ],
+            "x-enum-varnames": [
+                "BuildTypeRailpack",
+                "BuildTypeDockerfile"
+            ]
+        },
+        "models.CustomResourceLimits": {
+            "type": "object",
+            "properties": {
+                "dockerImage": {
+                    "$ref": "#/definitions/models.ApplicationTypeResourceConfig"
+                },
+                "gitRepository": {
+                    "$ref": "#/definitions/models.ApplicationTypeResourceConfig"
+                },
+                "imageFromRegistry": {
+                    "$ref": "#/definitions/models.ApplicationTypeResourceConfig"
+                },
+                "mysql": {
+                    "$ref": "#/definitions/models.ApplicationTypeResourceConfig"
+                },
+                "postgres": {
+                    "$ref": "#/definitions/models.ApplicationTypeResourceConfig"
+                }
+            }
+        },
+        "models.DeploymentCreateRequest": {
+            "type": "object",
+            "required": [
+                "applicationUuid"
+            ],
+            "properties": {
+                "applicationUuid": {
+                    "type": "string",
+                    "example": "550e8400-e29b-41d4-a716-446655440001"
+                },
+                "gitRepository": {
+                    "$ref": "#/definitions/models.GitRepositoryDeploymentConfig"
+                },
+                "imageFromRegistry": {
+                    "$ref": "#/definitions/models.ImageFromRegistryDeploymentConfig"
+                },
+                "promote": {
+                    "type": "boolean",
+                    "example": false
+                }
+            }
+        },
+        "models.DeploymentPhase": {
+            "type": "string",
+            "enum": [
+                "Initializing",
+                "Running",
+                "Succeeded",
+                "Failed",
+                "Waiting"
+            ],
+            "x-enum-varnames": [
+                "DeploymentPhaseInitializing",
+                "DeploymentPhaseRunning",
+                "DeploymentPhaseSucceeded",
+                "DeploymentPhaseFailed",
+                "DeploymentPhaseWaiting"
+            ]
+        },
+        "models.DeploymentResponse": {
+            "type": "object",
+            "properties": {
+                "applicationSlug": {
+                    "type": "string",
+                    "example": "abc123de"
+                },
+                "applicationUuid": {
+                    "type": "string",
+                    "example": "550e8400-e29b-41d4-a716-446655440001"
+                },
+                "createdAt": {
+                    "type": "string",
+                    "example": "2023-01-01T12:00:00Z"
+                },
+                "gitRepository": {
+                    "$ref": "#/definitions/models.GitRepositoryDeploymentConfig"
+                },
+                "imageFromRegistry": {
+                    "$ref": "#/definitions/models.ImageFromRegistryDeploymentConfig"
+                },
+                "phase": {
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.DeploymentPhase"
+                        }
+                    ],
+                    "example": "Initializing"
+                },
+                "projectUuid": {
+                    "type": "string",
+                    "example": "550e8400-e29b-41d4-a716-446655440002"
+                },
+                "slug": {
+                    "type": "string",
+                    "example": "def456gh"
+                },
+                "updatedAt": {
+                    "type": "string",
+                    "example": "2023-01-01T12:00:00Z"
+                },
+                "uuid": {
+                    "type": "string",
+                    "example": "550e8400-e29b-41d4-a716-446655440000"
+                }
+            }
+        },
+        "models.DockerImageConfig": {
+            "type": "object",
+            "properties": {
+                "healthCheck": {
+                    "$ref": "#/definitions/models.HealthCheckConfig"
+                },
+                "image": {
+                    "type": "string",
+                    "example": "nginx:latest"
+                },
+                "imagePullSecretRef": {
+                    "type": "string",
+                    "example": "docker-registry-secret"
+                },
+                "tag": {
+                    "type": "string",
+                    "example": "v1.0.0"
+                }
+            }
+        },
+        "models.DockerfileBuildConfig": {
+            "type": "object",
+            "properties": {
+                "buildContext": {
+                    "type": "string",
+                    "example": "."
+                },
+                "dockerfilePath": {
+                    "type": "string",
+                    "example": "Dockerfile"
+                }
+            }
+        },
+        "models.EnvironmentCreateRequest": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string",
+                    "example": "Production environment"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "production"
+                },
+                "projectUuid": {
+                    "type": "string",
+                    "example": "123e4567-e89b-12d3-a456-426614174001"
+                },
+                "variables": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "models.EnvironmentResponse": {
+            "type": "object",
+            "properties": {
+                "applicationCount": {
+                    "type": "integer",
+                    "example": 5
+                },
+                "createdAt": {
+                    "type": "string",
+                    "example": "2023-01-01T00:00:00Z"
+                },
+                "description": {
+                    "type": "string",
+                    "example": "Production environment"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "production"
+                },
+                "projectSlug": {
+                    "type": "string",
+                    "example": "xyz789ab"
+                },
+                "projectUuid": {
+                    "type": "string",
+                    "example": "123e4567-e89b-12d3-a456-426614174001"
+                },
+                "slug": {
+                    "type": "string",
+                    "example": "abc123de"
+                },
+                "updatedAt": {
+                    "type": "string",
+                    "example": "2023-01-01T00:00:00Z"
+                },
+                "uuid": {
+                    "type": "string",
+                    "example": "123e4567-e89b-12d3-a456-426614174000"
+                },
+                "variables": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "models.EnvironmentUpdateRequest": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string",
+                    "example": "Updated production environment"
+                },
+                "variables": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "models.EnvironmentVariable": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "example": "DATABASE_URL"
+                },
+                "value": {
+                    "type": "string",
+                    "example": "postgres://localhost:5432/mydb"
+                },
+                "valueFrom": {
+                    "type": "object",
+                    "properties": {
+                        "secretKeyRef": {
+                            "type": "object",
+                            "properties": {
+                                "key": {
+                                    "type": "string",
+                                    "example": "url"
+                                },
+                                "name": {
+                                    "type": "string",
+                                    "example": "db-secret"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "models.GitProvider": {
+            "type": "string",
+            "enum": [
+                "github.com",
+                "gitlab.com",
+                "bitbucket.com"
+            ],
+            "x-enum-varnames": [
+                "GitProviderGitHub",
+                "GitProviderGitLab",
+                "GitProviderBitbucket"
+            ]
+        },
+        "models.GitRepositoryConfig": {
+            "type": "object",
+            "properties": {
+                "branch": {
+                    "type": "string",
+                    "example": "main"
+                },
+                "buildCommand": {
+                    "type": "string",
+                    "example": "npm run build"
+                },
+                "buildType": {
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.BuildType"
+                        }
+                    ],
+                    "example": "Railpack"
+                },
+                "dockerfileBuild": {
+                    "$ref": "#/definitions/models.DockerfileBuildConfig"
+                },
+                "healthCheck": {
+                    "$ref": "#/definitions/models.HealthCheckConfig"
+                },
+                "path": {
+                    "type": "string",
+                    "example": ""
+                },
+                "provider": {
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.GitProvider"
+                        }
+                    ],
+                    "example": "github.com"
+                },
+                "publicAccess": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "repository": {
+                    "type": "string",
+                    "example": "myorg/myapp"
+                },
+                "rootDirectory": {
+                    "type": "string",
+                    "example": "./"
+                },
+                "secretRef": {
+                    "type": "string",
+                    "example": "git-credentials"
+                },
+                "spaOutputDirectory": {
+                    "type": "string",
+                    "example": "dist"
+                },
+                "startCommand": {
+                    "type": "string",
+                    "example": "npm start"
+                }
+            }
+        },
+        "models.GitRepositoryDeploymentConfig": {
+            "type": "object",
+            "required": [
+                "commitSHA"
+            ],
+            "properties": {
+                "branch": {
+                    "type": "string",
+                    "example": "main"
+                },
+                "commitSHA": {
+                    "type": "string",
+                    "example": "abc123def456"
+                }
+            }
+        },
+        "models.HealthCheckConfig": {
+            "type": "object",
+            "properties": {
+                "failureThreshold": {
+                    "type": "integer",
+                    "example": 3
+                },
+                "initialDelaySeconds": {
+                    "type": "integer",
+                    "example": 30
+                },
+                "path": {
+                    "type": "string",
+                    "example": "/health"
+                },
+                "periodSeconds": {
+                    "type": "integer",
+                    "example": 10
+                },
+                "port": {
+                    "type": "integer",
+                    "example": 3000
+                },
+                "successThreshold": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "timeoutSeconds": {
+                    "type": "integer",
+                    "example": 5
+                }
+            }
+        },
+        "models.ImageFromRegistryConfig": {
+            "type": "object",
+            "properties": {
+                "defaultTag": {
+                    "type": "string",
+                    "example": "latest"
+                },
+                "env": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.EnvironmentVariable"
+                    }
+                },
+                "healthCheck": {
+                    "$ref": "#/definitions/models.HealthCheckConfig"
+                },
+                "port": {
+                    "type": "integer",
+                    "example": 3000
+                },
+                "registry": {
+                    "type": "string",
+                    "example": "dockerhub"
+                },
+                "repository": {
+                    "type": "string",
+                    "example": "nginx/nginx"
+                },
+                "resources": {
+                    "$ref": "#/definitions/models.ResourceRequirements"
+                }
+            }
+        },
+        "models.ImageFromRegistryDeploymentConfig": {
+            "type": "object",
+            "required": [
+                "tag"
+            ],
+            "properties": {
+                "env": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.EnvironmentVariable"
+                    }
+                },
+                "resources": {
+                    "$ref": "#/definitions/models.ResourceRequirements"
+                },
+                "tag": {
+                    "type": "string",
+                    "example": "1.22"
+                }
+            }
+        },
+        "models.MySQLClusterConfig": {
+            "type": "object",
+            "properties": {
+                "database": {
+                    "type": "string",
+                    "example": "myapp"
+                },
+                "replicas": {
+                    "type": "integer",
+                    "example": 3
+                },
+                "secretRef": {
+                    "type": "string",
+                    "example": "mysql-cluster-credentials"
+                },
+                "version": {
+                    "type": "string",
+                    "example": "8.0"
+                }
+            }
+        },
+        "models.MySQLConfig": {
+            "type": "object",
+            "properties": {
+                "database": {
+                    "type": "string",
+                    "example": "myapp"
+                },
+                "secretRef": {
+                    "type": "string",
+                    "example": "mysql-credentials"
+                },
+                "version": {
+                    "type": "string",
+                    "example": "8.0"
+                }
+            }
+        },
+        "models.PostgresClusterConfig": {
+            "type": "object",
+            "properties": {
+                "database": {
+                    "type": "string",
+                    "example": "myapp"
+                },
+                "replicas": {
+                    "type": "integer",
+                    "example": 3
+                },
+                "secretRef": {
+                    "type": "string",
+                    "example": "postgres-cluster-credentials"
+                },
+                "version": {
+                    "type": "string",
+                    "example": "15"
+                }
+            }
+        },
+        "models.PostgresConfig": {
+            "type": "object",
+            "properties": {
+                "database": {
+                    "type": "string",
+                    "example": "myapp"
+                },
+                "secretRef": {
+                    "type": "string",
+                    "example": "postgres-credentials"
+                },
+                "version": {
+                    "type": "string",
+                    "example": "15"
+                }
+            }
+        },
+        "models.ProjectCreateRequest": {
+            "type": "object",
+            "properties": {
+                "customResourceLimits": {
+                    "$ref": "#/definitions/models.CustomResourceLimits"
+                },
+                "description": {
+                    "type": "string",
+                    "example": "A project for my awesome application"
+                },
+                "enabledApplicationTypes": {
+                    "$ref": "#/definitions/models.ApplicationTypeSettings"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "my-awesome-project"
+                },
+                "resourceProfile": {
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.ResourceProfile"
+                        }
+                    ],
+                    "example": "development"
+                },
+                "volumeSettings": {
+                    "$ref": "#/definitions/models.VolumeSettings"
+                },
+                "workspaceUuid": {
+                    "type": "string",
+                    "example": "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+                }
+            }
+        },
+        "models.ProjectResponse": {
+            "type": "object",
+            "properties": {
+                "createdAt": {
+                    "type": "string",
+                    "example": "2023-01-01T12:00:00Z"
+                },
+                "description": {
+                    "type": "string",
+                    "example": "A project for my awesome application"
+                },
+                "enabledApplicationTypes": {
+                    "$ref": "#/definitions/models.ApplicationTypeSettings"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "my-awesome-project"
+                },
+                "namespaceName": {
+                    "type": "string",
+                    "example": "project-550e8400-e29b-41d4-a716-446655440000"
+                },
+                "resourceProfile": {
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.ResourceProfile"
+                        }
+                    ],
+                    "example": "development"
+                },
+                "slug": {
+                    "type": "string",
+                    "example": "abc123de"
+                },
+                "status": {
+                    "type": "string",
+                    "example": "Ready"
+                },
+                "updatedAt": {
+                    "type": "string",
+                    "example": "2023-01-01T12:00:00Z"
+                },
+                "uuid": {
+                    "type": "string",
+                    "example": "123e4567-e89b-12d3-a456-426614174000"
+                },
+                "volumeSettings": {
+                    "$ref": "#/definitions/models.VolumeSettings"
+                },
+                "workspaceUuid": {
+                    "type": "string",
+                    "example": "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+                }
+            }
+        },
+        "models.ProjectUpdateRequest": {
+            "type": "object",
+            "properties": {
+                "customResourceLimits": {
+                    "$ref": "#/definitions/models.CustomResourceLimits"
+                },
+                "description": {
+                    "type": "string",
+                    "example": "Updated project description"
+                },
+                "enabledApplicationTypes": {
+                    "$ref": "#/definitions/models.ApplicationTypeSettings"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "updated-project-name"
+                },
+                "resourceProfile": {
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.ResourceProfile"
+                        }
+                    ],
+                    "example": "production"
+                },
+                "volumeSettings": {
+                    "$ref": "#/definitions/models.VolumeSettings"
+                }
+            }
+        },
+        "models.ResourceBoundsSpec": {
+            "type": "object",
+            "properties": {
+                "maxLimits": {
+                    "$ref": "#/definitions/models.ResourceLimitsSpec"
+                },
+                "minLimits": {
+                    "$ref": "#/definitions/models.ResourceLimitsSpec"
+                }
+            }
+        },
+        "models.ResourceLimitsSpec": {
+            "type": "object",
+            "properties": {
+                "cpu": {
+                    "type": "string",
+                    "example": "1"
+                },
+                "memory": {
+                    "type": "string",
+                    "example": "2Gi"
+                },
+                "storage": {
+                    "type": "string",
+                    "example": "10Gi"
+                }
+            }
+        },
+        "models.ResourceProfile": {
+            "type": "string",
+            "enum": [
+                "development",
+                "production",
+                "custom"
+            ],
+            "x-enum-varnames": [
+                "ResourceProfileDevelopment",
+                "ResourceProfileProduction",
+                "ResourceProfileCustom"
+            ]
+        },
+        "models.ResourceRequirements": {
+            "type": "object",
+            "properties": {
+                "limits": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    },
+                    "example": {
+                        "cpu": "500m",
+                        "memory": "512Mi"
+                    }
+                },
+                "requests": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    },
+                    "example": {
+                        "cpu": "100m",
+                        "memory": "128Mi"
+                    }
+                }
+            }
+        },
+        "models.ValidationError": {
+            "type": "object",
+            "properties": {
+                "field": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.ValidationErrors": {
+            "type": "object",
+            "properties": {
+                "errors": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.ValidationError"
+                    }
+                }
+            }
+        },
+        "models.ValkeyClusterConfig": {
+            "type": "object",
+            "properties": {
+                "database": {
+                    "type": "integer",
+                    "example": 0
+                },
+                "replicas": {
+                    "type": "integer",
+                    "example": 6
+                },
+                "secretRef": {
+                    "type": "string",
+                    "example": "valkey-cluster-credentials"
+                },
+                "version": {
+                    "type": "string",
+                    "example": "7.2"
+                }
+            }
+        },
+        "models.ValkeyConfig": {
+            "type": "object",
+            "properties": {
+                "database": {
+                    "type": "integer",
+                    "example": 0
+                },
+                "secretRef": {
+                    "type": "string",
+                    "example": "valkey-credentials"
+                },
+                "version": {
+                    "type": "string",
+                    "example": "7.2"
+                }
+            }
+        },
+        "models.VolumeSettings": {
+            "type": "object",
+            "properties": {
+                "maxStorageSize": {
+                    "type": "string",
+                    "example": "100Gi"
+                }
+            }
         }
-      }
     },
-    "/openapi.yaml": {
-      "get": {
-        "description": "Get the OpenAPI specification in YAML format",
-        "produces": ["text/plain"],
-        "tags": ["documentation"],
-        "summary": "Get OpenAPI specification",
-        "responses": {
-          "200": {
-            "description": "OpenAPI YAML specification",
-            "schema": {
-              "type": "string"
-            }
-          }
+    "securityDefinitions": {
+        "BearerAuth": {
+            "description": "Type \"Bearer\" followed by a space and JWT token.",
+            "type": "apiKey",
+            "name": "Authorization",
+            "in": "header"
         }
-      }
-    },
-    "/readyz": {
-      "get": {
-        "description": "Check if the API server is ready to serve requests",
-        "produces": ["application/json"],
-        "tags": ["health"],
-        "summary": "Readiness check",
-        "responses": {
-          "200": {
-            "description": "OK",
-            "schema": {
-              "$ref": "#/definitions/main.ReadyResponse"
-            }
-          }
-        }
-      }
-    },
-    "/v1/applications/{uuid}": {
-      "get": {
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
-        "description": "Retrieve an application by its unique UUID or slug identifier",
-        "produces": ["application/json"],
-        "tags": ["applications"],
-        "summary": "Get application by UUID",
-        "parameters": [
-          {
-            "type": "string",
-            "description": "Application UUID or slug",
-            "name": "uuid",
-            "in": "path",
-            "required": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Application details",
-            "schema": {
-              "$ref": "#/definitions/models.ApplicationResponse"
-            }
-          },
-          "401": {
-            "description": "Authentication required",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          },
-          "404": {
-            "description": "Application not found",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          },
-          "500": {
-            "description": "Internal server error",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          }
-        }
-      },
-      "delete": {
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
-        "description": "Delete an application by its unique UUID or slug identifier",
-        "tags": ["applications"],
-        "summary": "Delete application by UUID",
-        "parameters": [
-          {
-            "type": "string",
-            "description": "Application UUID or slug",
-            "name": "uuid",
-            "in": "path",
-            "required": true
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Application deleted successfully"
-          },
-          "401": {
-            "description": "Authentication required",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          },
-          "404": {
-            "description": "Application not found",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          },
-          "500": {
-            "description": "Internal server error",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          }
-        }
-      },
-      "patch": {
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
-        "description": "Update an application by its unique UUID or slug identifier with partial updates",
-        "consumes": ["application/json"],
-        "produces": ["application/json"],
-        "tags": ["applications"],
-        "summary": "Update application by UUID",
-        "parameters": [
-          {
-            "type": "string",
-            "description": "Application UUID or slug",
-            "name": "uuid",
-            "in": "path",
-            "required": true
-          },
-          {
-            "description": "Application update data",
-            "name": "application",
-            "in": "body",
-            "required": true,
-            "schema": {
-              "$ref": "#/definitions/models.ApplicationUpdateRequest"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Updated application details",
-            "schema": {
-              "$ref": "#/definitions/models.ApplicationResponse"
-            }
-          },
-          "400": {
-            "description": "Validation errors in request data",
-            "schema": {
-              "$ref": "#/definitions/models.ValidationErrors"
-            }
-          },
-          "401": {
-            "description": "Authentication required",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          },
-          "404": {
-            "description": "Application not found",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          },
-          "500": {
-            "description": "Internal server error",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          }
-        }
-      }
-    },
-    "/v1/applications/{uuid}/deployments": {
-      "get": {
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
-        "description": "Retrieve all deployments for a specific application",
-        "produces": ["application/json"],
-        "tags": ["deployments"],
-        "summary": "Get deployments by application",
-        "parameters": [
-          {
-            "type": "string",
-            "description": "Application UUID or slug (8-character identifier)",
-            "name": "uuid",
-            "in": "path",
-            "required": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "List of deployments",
-            "schema": {
-              "type": "array",
-              "items": {
-                "$ref": "#/definitions/models.DeploymentResponse"
-              }
-            }
-          },
-          "401": {
-            "description": "Authentication required",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          },
-          "404": {
-            "description": "Application not found",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          },
-          "500": {
-            "description": "Internal server error",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          }
-        }
-      },
-      "post": {
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
-        "description": "Create a new deployment for an application",
-        "consumes": ["application/json"],
-        "produces": ["application/json"],
-        "tags": ["deployments"],
-        "summary": "Create a new deployment",
-        "parameters": [
-          {
-            "type": "string",
-            "description": "Application UUID or slug",
-            "name": "uuid",
-            "in": "path",
-            "required": true
-          },
-          {
-            "description": "Deployment creation data",
-            "name": "deployment",
-            "in": "body",
-            "required": true,
-            "schema": {
-              "$ref": "#/definitions/models.DeploymentCreateRequest"
-            }
-          }
-        ],
-        "responses": {
-          "201": {
-            "description": "Deployment created successfully",
-            "schema": {
-              "$ref": "#/definitions/models.DeploymentResponse"
-            }
-          },
-          "400": {
-            "description": "Validation errors in request data",
-            "schema": {
-              "$ref": "#/definitions/models.ValidationErrors"
-            }
-          },
-          "401": {
-            "description": "Authentication required",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          },
-          "404": {
-            "description": "Application not found",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          },
-          "500": {
-            "description": "Internal server error",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          }
-        }
-      }
-    },
-    "/v1/applications/{uuid}/domains": {
-      "post": {
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
-        "description": "Create a new domain for an application",
-        "consumes": ["application/json"],
-        "produces": ["application/json"],
-        "tags": ["application-domains"],
-        "summary": "Create a new application domain",
-        "parameters": [
-          {
-            "type": "string",
-            "description": "Application UUID or slug (8-character identifier)",
-            "name": "uuid",
-            "in": "path",
-            "required": true
-          },
-          {
-            "description": "Application domain creation data",
-            "name": "domain",
-            "in": "body",
-            "required": true,
-            "schema": {
-              "$ref": "#/definitions/models.ApplicationDomainCreateRequest"
-            }
-          }
-        ],
-        "responses": {
-          "201": {
-            "description": "Application domain created successfully",
-            "schema": {
-              "$ref": "#/definitions/models.ApplicationDomainResponse"
-            }
-          },
-          "400": {
-            "description": "Validation errors in request data",
-            "schema": {
-              "$ref": "#/definitions/models.ValidationErrors"
-            }
-          },
-          "401": {
-            "description": "Authentication required",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          },
-          "404": {
-            "description": "Application not found",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          },
-          "500": {
-            "description": "Internal server error",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          }
-        }
-      }
-    },
-    "/v1/applications/{uuid}/env": {
-      "patch": {
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
-        "description": "Update environment variables for a GitRepository application by merging new variables with existing ones",
-        "consumes": ["application/json"],
-        "produces": ["application/json"],
-        "tags": ["applications"],
-        "summary": "Update environment variables for an application",
-        "parameters": [
-          {
-            "type": "string",
-            "description": "Application UUID or slug",
-            "name": "uuid",
-            "in": "path",
-            "required": true
-          },
-          {
-            "description": "Environment variables to set/update",
-            "name": "variables",
-            "in": "body",
-            "required": true,
-            "schema": {
-              "$ref": "#/definitions/models.ApplicationEnvUpdateRequest"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Environment variables updated successfully",
-            "schema": {
-              "type": "string"
-            }
-          },
-          "400": {
-            "description": "Invalid request data",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          },
-          "401": {
-            "description": "Authentication required",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          },
-          "404": {
-            "description": "Application not found",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          },
-          "500": {
-            "description": "Internal server error",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          }
-        }
-      }
-    },
-    "/v1/deployments/{uuid}": {
-      "get": {
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
-        "description": "Retrieve a deployment by its unique UUID or slug identifier",
-        "produces": ["application/json"],
-        "tags": ["deployments"],
-        "summary": "Get deployment by UUID",
-        "parameters": [
-          {
-            "type": "string",
-            "description": "Deployment UUID or slug (8-character identifier)",
-            "name": "uuid",
-            "in": "path",
-            "required": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Deployment details",
-            "schema": {
-              "$ref": "#/definitions/models.DeploymentResponse"
-            }
-          },
-          "401": {
-            "description": "Authentication required",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          },
-          "404": {
-            "description": "Deployment not found",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          },
-          "500": {
-            "description": "Internal server error",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          }
-        }
-      }
-    },
-    "/v1/domains/{uuid}": {
-      "get": {
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
-        "description": "Retrieve an application domain by its unique UUID or slug identifier",
-        "produces": ["application/json"],
-        "tags": ["application-domains"],
-        "summary": "Get application domain by UUID",
-        "parameters": [
-          {
-            "type": "string",
-            "description": "Application domain UUID or slug (8-character identifier)",
-            "name": "uuid",
-            "in": "path",
-            "required": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Application domain details",
-            "schema": {
-              "$ref": "#/definitions/models.ApplicationDomainResponse"
-            }
-          },
-          "401": {
-            "description": "Authentication required",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          },
-          "404": {
-            "description": "Application domain not found",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          },
-          "500": {
-            "description": "Internal server error",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          }
-        }
-      },
-      "delete": {
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
-        "description": "Delete an application domain by its unique UUID or slug identifier",
-        "tags": ["application-domains"],
-        "summary": "Delete application domain by UUID",
-        "parameters": [
-          {
-            "type": "string",
-            "description": "Application domain UUID or slug (8-character identifier)",
-            "name": "uuid",
-            "in": "path",
-            "required": true
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Application domain deleted successfully"
-          },
-          "401": {
-            "description": "Authentication required",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          },
-          "404": {
-            "description": "Application domain not found",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          },
-          "500": {
-            "description": "Internal server error",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          }
-        }
-      }
-    },
-    "/v1/environments/{uuid}": {
-      "get": {
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
-        "description": "Retrieve an environment by its unique UUID or slug identifier",
-        "produces": ["application/json"],
-        "tags": ["environments"],
-        "summary": "Get environment by UUID",
-        "parameters": [
-          {
-            "type": "string",
-            "description": "Environment UUID or slug (8-character identifier)",
-            "name": "uuid",
-            "in": "path",
-            "required": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Environment details",
-            "schema": {
-              "$ref": "#/definitions/models.EnvironmentResponse"
-            }
-          },
-          "401": {
-            "description": "Authentication required",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          },
-          "404": {
-            "description": "Environment not found",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          },
-          "500": {
-            "description": "Internal server error",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          }
-        }
-      },
-      "delete": {
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
-        "description": "Delete an environment by its unique UUID or slug identifier",
-        "tags": ["environments"],
-        "summary": "Delete environment by UUID",
-        "parameters": [
-          {
-            "type": "string",
-            "description": "Environment UUID or slug (8-character identifier)",
-            "name": "uuid",
-            "in": "path",
-            "required": true
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Environment deleted successfully"
-          },
-          "401": {
-            "description": "Authentication required",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          },
-          "404": {
-            "description": "Environment not found",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          },
-          "500": {
-            "description": "Internal server error",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          }
-        }
-      },
-      "patch": {
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
-        "description": "Update an environment by its unique UUID or slug identifier with partial updates",
-        "consumes": ["application/json"],
-        "produces": ["application/json"],
-        "tags": ["environments"],
-        "summary": "Update environment by UUID",
-        "parameters": [
-          {
-            "type": "string",
-            "description": "Environment UUID or slug (8-character identifier)",
-            "name": "uuid",
-            "in": "path",
-            "required": true
-          },
-          {
-            "description": "Environment update data",
-            "name": "environment",
-            "in": "body",
-            "required": true,
-            "schema": {
-              "$ref": "#/definitions/models.EnvironmentUpdateRequest"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Updated environment details",
-            "schema": {
-              "$ref": "#/definitions/models.EnvironmentResponse"
-            }
-          },
-          "400": {
-            "description": "Validation errors in request data",
-            "schema": {
-              "$ref": "#/definitions/models.ValidationErrors"
-            }
-          },
-          "401": {
-            "description": "Authentication required",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          },
-          "404": {
-            "description": "Environment not found",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          },
-          "500": {
-            "description": "Internal server error",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          }
-        }
-      }
-    },
-    "/v1/environments/{uuid}/applications": {
-      "get": {
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
-        "description": "Retrieve all applications for a specific environment",
-        "produces": ["application/json"],
-        "tags": ["applications"],
-        "summary": "Get applications by environment",
-        "parameters": [
-          {
-            "type": "string",
-            "description": "Environment UUID or slug",
-            "name": "uuid",
-            "in": "path",
-            "required": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "List of applications",
-            "schema": {
-              "type": "array",
-              "items": {
-                "$ref": "#/definitions/models.ApplicationResponse"
-              }
-            }
-          },
-          "401": {
-            "description": "Authentication required",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          },
-          "404": {
-            "description": "Environment not found",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          },
-          "500": {
-            "description": "Internal server error",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          }
-        }
-      },
-      "post": {
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
-        "description": "Create a new application within an environment with type-specific configuration",
-        "consumes": ["application/json"],
-        "produces": ["application/json"],
-        "tags": ["applications"],
-        "summary": "Create a new application",
-        "parameters": [
-          {
-            "type": "string",
-            "description": "Environment UUID or slug",
-            "name": "uuid",
-            "in": "path",
-            "required": true
-          },
-          {
-            "description": "Application creation data",
-            "name": "application",
-            "in": "body",
-            "required": true,
-            "schema": {
-              "$ref": "#/definitions/models.ApplicationCreateRequest"
-            }
-          }
-        ],
-        "responses": {
-          "201": {
-            "description": "Application created successfully",
-            "schema": {
-              "$ref": "#/definitions/models.ApplicationResponse"
-            }
-          },
-          "400": {
-            "description": "Validation errors in request data",
-            "schema": {
-              "$ref": "#/definitions/models.ValidationErrors"
-            }
-          },
-          "401": {
-            "description": "Authentication required",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          },
-          "404": {
-            "description": "Environment not found",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          },
-          "500": {
-            "description": "Internal server error",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          }
-        }
-      }
-    },
-    "/v1/projects": {
-      "post": {
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
-        "description": "Create a new project with comprehensive resource management and application type configuration. The project will be assigned a random 8-character slug and configured with the specified resource profile.",
-        "consumes": ["application/json"],
-        "produces": ["application/json"],
-        "tags": ["projects"],
-        "summary": "Create a new project",
-        "parameters": [
-          {
-            "description": "Project creation data",
-            "name": "project",
-            "in": "body",
-            "required": true,
-            "schema": {
-              "$ref": "#/definitions/models.ProjectCreateRequest"
-            }
-          }
-        ],
-        "responses": {
-          "201": {
-            "description": "Project created successfully",
-            "schema": {
-              "$ref": "#/definitions/models.ProjectResponse"
-            }
-          },
-          "400": {
-            "description": "Validation errors in request data",
-            "schema": {
-              "$ref": "#/definitions/models.ValidationErrors"
-            }
-          },
-          "401": {
-            "description": "Authentication required",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          },
-          "500": {
-            "description": "Internal server error",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          }
-        }
-      }
-    },
-    "/v1/projects/{uuid}": {
-      "get": {
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
-        "description": "Retrieve a project by its unique UUID or slug identifier",
-        "produces": ["application/json"],
-        "tags": ["projects"],
-        "summary": "Get project by UUID",
-        "parameters": [
-          {
-            "type": "string",
-            "description": "Project UUID or slug (8-character identifier)",
-            "name": "uuid",
-            "in": "path",
-            "required": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Project details",
-            "schema": {
-              "$ref": "#/definitions/models.ProjectResponse"
-            }
-          },
-          "401": {
-            "description": "Authentication required",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          },
-          "404": {
-            "description": "Project not found",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          },
-          "500": {
-            "description": "Internal server error",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          }
-        }
-      },
-      "delete": {
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
-        "description": "Delete a project by its unique UUID or slug identifier",
-        "tags": ["projects"],
-        "summary": "Delete project by UUID",
-        "parameters": [
-          {
-            "type": "string",
-            "description": "Project UUID or slug (8-character identifier)",
-            "name": "uuid",
-            "in": "path",
-            "required": true
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Project deleted successfully"
-          },
-          "401": {
-            "description": "Authentication required",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          },
-          "404": {
-            "description": "Project not found",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          },
-          "500": {
-            "description": "Internal server error",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          }
-        }
-      },
-      "patch": {
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
-        "description": "Update a project by its unique UUID or slug identifier with partial updates",
-        "consumes": ["application/json"],
-        "produces": ["application/json"],
-        "tags": ["projects"],
-        "summary": "Update project by UUID",
-        "parameters": [
-          {
-            "type": "string",
-            "description": "Project UUID or slug (8-character identifier)",
-            "name": "uuid",
-            "in": "path",
-            "required": true
-          },
-          {
-            "description": "Project update data",
-            "name": "project",
-            "in": "body",
-            "required": true,
-            "schema": {
-              "$ref": "#/definitions/models.ProjectUpdateRequest"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Updated project details",
-            "schema": {
-              "$ref": "#/definitions/models.ProjectResponse"
-            }
-          },
-          "400": {
-            "description": "Validation errors in request data",
-            "schema": {
-              "$ref": "#/definitions/models.ValidationErrors"
-            }
-          },
-          "401": {
-            "description": "Authentication required",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          },
-          "404": {
-            "description": "Project not found",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          },
-          "500": {
-            "description": "Internal server error",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          }
-        }
-      }
-    },
-    "/v1/projects/{uuid}/applications": {
-      "get": {
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
-        "description": "Retrieve all applications for a specific project",
-        "produces": ["application/json"],
-        "tags": ["applications"],
-        "summary": "Get applications by project",
-        "parameters": [
-          {
-            "type": "string",
-            "description": "Project UUID or slug",
-            "name": "uuid",
-            "in": "path",
-            "required": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "List of applications",
-            "schema": {
-              "type": "array",
-              "items": {
-                "$ref": "#/definitions/models.ApplicationResponse"
-              }
-            }
-          },
-          "401": {
-            "description": "Authentication required",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          },
-          "404": {
-            "description": "Project not found",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          },
-          "500": {
-            "description": "Internal server error",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          }
-        }
-      }
-    },
-    "/v1/projects/{uuid}/environments": {
-      "get": {
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
-        "description": "Retrieve all environments for a specific project",
-        "produces": ["application/json"],
-        "tags": ["environments"],
-        "summary": "List environments for a project",
-        "parameters": [
-          {
-            "type": "string",
-            "description": "Project UUID or slug (8-character identifier)",
-            "name": "uuid",
-            "in": "path",
-            "required": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "List of environments",
-            "schema": {
-              "type": "array",
-              "items": {
-                "$ref": "#/definitions/models.EnvironmentResponse"
-              }
-            }
-          },
-          "401": {
-            "description": "Authentication required",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          },
-          "404": {
-            "description": "Project not found",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          },
-          "500": {
-            "description": "Internal server error",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          }
-        }
-      },
-      "post": {
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
-        "description": "Create a new environment within a project. The environment will be assigned a random 8-character slug.",
-        "consumes": ["application/json"],
-        "produces": ["application/json"],
-        "tags": ["environments"],
-        "summary": "Create a new environment",
-        "parameters": [
-          {
-            "type": "string",
-            "description": "Project UUID or slug (8-character identifier)",
-            "name": "uuid",
-            "in": "path",
-            "required": true
-          },
-          {
-            "description": "Environment creation data",
-            "name": "environment",
-            "in": "body",
-            "required": true,
-            "schema": {
-              "$ref": "#/definitions/models.EnvironmentCreateRequest"
-            }
-          }
-        ],
-        "responses": {
-          "201": {
-            "description": "Environment created successfully",
-            "schema": {
-              "$ref": "#/definitions/models.EnvironmentResponse"
-            }
-          },
-          "400": {
-            "description": "Validation errors in request data",
-            "schema": {
-              "$ref": "#/definitions/models.ValidationErrors"
-            }
-          },
-          "401": {
-            "description": "Authentication required",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          },
-          "404": {
-            "description": "Project not found",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          },
-          "500": {
-            "description": "Internal server error",
-            "schema": {
-              "$ref": "#/definitions/auth.ErrorResponse"
-            }
-          }
-        }
-      }
     }
-  },
-  "definitions": {
-    "auth.ErrorResponse": {
-      "type": "object",
-      "properties": {
-        "error": {
-          "type": "string",
-          "example": "Unauthorized"
-        },
-        "message": {
-          "type": "string",
-          "example": "Invalid API key"
-        }
-      }
-    },
-    "main.HealthResponse": {
-      "type": "object",
-      "properties": {
-        "status": {
-          "type": "string",
-          "example": "ok"
-        }
-      }
-    },
-    "main.ReadyResponse": {
-      "type": "object",
-      "properties": {
-        "status": {
-          "type": "string",
-          "example": "ready"
-        }
-      }
-    },
-    "models.ApplicationCreateRequest": {
-      "type": "object",
-      "properties": {
-        "dockerImage": {
-          "$ref": "#/definitions/models.DockerImageConfig"
-        },
-        "environmentUuid": {
-          "type": "string",
-          "example": "123e4567-e89b-12d3-a456-426614174000"
-        },
-        "gitRepository": {
-          "$ref": "#/definitions/models.GitRepositoryConfig"
-        },
-        "mysql": {
-          "$ref": "#/definitions/models.MySQLConfig"
-        },
-        "mysqlCluster": {
-          "$ref": "#/definitions/models.MySQLClusterConfig"
-        },
-        "name": {
-          "type": "string",
-          "example": "my-web-app"
-        },
-        "postgres": {
-          "$ref": "#/definitions/models.PostgresConfig"
-        },
-        "postgresCluster": {
-          "$ref": "#/definitions/models.PostgresClusterConfig"
-        },
-        "type": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/models.ApplicationType"
-            }
-          ],
-          "example": "DockerImage"
-        }
-      }
-    },
-    "models.ApplicationDomainCreateRequest": {
-      "type": "object",
-      "required": ["applicationSlug", "domain", "port"],
-      "properties": {
-        "applicationSlug": {
-          "type": "string",
-          "example": "abc123de"
-        },
-        "default": {
-          "type": "boolean",
-          "example": false
-        },
-        "domain": {
-          "type": "string",
-          "example": "my-app.example.com"
-        },
-        "port": {
-          "type": "integer",
-          "maximum": 65535,
-          "minimum": 1,
-          "example": 3000
-        },
-        "tlsEnabled": {
-          "type": "boolean",
-          "example": true
-        },
-        "type": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/models.ApplicationDomainType"
-            }
-          ],
-          "example": "custom"
-        }
-      }
-    },
-    "models.ApplicationDomainPhase": {
-      "type": "string",
-      "enum": ["Pending", "Ready", "Failed"],
-      "x-enum-varnames": [
-        "ApplicationDomainPhasePending",
-        "ApplicationDomainPhaseReady",
-        "ApplicationDomainPhaseFailed"
-      ]
-    },
-    "models.ApplicationDomainResponse": {
-      "type": "object",
-      "properties": {
-        "applicationSlug": {
-          "type": "string",
-          "example": "abc123de"
-        },
-        "applicationUuid": {
-          "type": "string",
-          "example": "550e8400-e29b-41d4-a716-446655440001"
-        },
-        "certificateReady": {
-          "type": "boolean",
-          "example": false
-        },
-        "createdAt": {
-          "type": "string",
-          "example": "2023-01-01T12:00:00Z"
-        },
-        "default": {
-          "type": "boolean",
-          "example": false
-        },
-        "dnsConfigured": {
-          "type": "boolean",
-          "example": false
-        },
-        "domain": {
-          "type": "string",
-          "example": "my-app.example.com"
-        },
-        "ingressReady": {
-          "type": "boolean",
-          "example": false
-        },
-        "phase": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/models.ApplicationDomainPhase"
-            }
-          ],
-          "example": "Pending"
-        },
-        "port": {
-          "type": "integer",
-          "example": 3000
-        },
-        "projectUuid": {
-          "type": "string",
-          "example": "550e8400-e29b-41d4-a716-446655440002"
-        },
-        "slug": {
-          "type": "string",
-          "example": "def456gh"
-        },
-        "tlsEnabled": {
-          "type": "boolean",
-          "example": true
-        },
-        "type": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/models.ApplicationDomainType"
-            }
-          ],
-          "example": "custom"
-        },
-        "updatedAt": {
-          "type": "string",
-          "example": "2023-01-01T12:00:00Z"
-        },
-        "uuid": {
-          "type": "string",
-          "example": "550e8400-e29b-41d4-a716-446655440000"
-        }
-      }
-    },
-    "models.ApplicationDomainType": {
-      "type": "string",
-      "enum": ["default", "custom"],
-      "x-enum-varnames": [
-        "ApplicationDomainTypeDefault",
-        "ApplicationDomainTypeCustom"
-      ]
-    },
-    "models.ApplicationEnvUpdateRequest": {
-      "type": "object",
-      "properties": {
-        "variables": {
-          "type": "object",
-          "additionalProperties": {
-            "type": "string"
-          },
-          "example": {
-            "\"DB_HOST\"": "\"localhost\"}",
-            "{\"API_KEY\"": "\"secret123\""
-          }
-        }
-      }
-    },
-    "models.ApplicationResponse": {
-      "type": "object",
-      "properties": {
-        "createdAt": {
-          "type": "string",
-          "example": "2023-01-01T12:00:00Z"
-        },
-        "dockerImage": {
-          "$ref": "#/definitions/models.DockerImageConfig"
-        },
-        "domains": {
-          "type": "array",
-          "items": {
-            "$ref": "#/definitions/models.ApplicationDomainResponse"
-          }
-        },
-        "gitRepository": {
-          "$ref": "#/definitions/models.GitRepositoryConfig"
-        },
-        "latestDeployment": {
-          "$ref": "#/definitions/models.DeploymentResponse"
-        },
-        "mysql": {
-          "$ref": "#/definitions/models.MySQLConfig"
-        },
-        "mysqlCluster": {
-          "$ref": "#/definitions/models.MySQLClusterConfig"
-        },
-        "name": {
-          "type": "string",
-          "example": "my-web-app"
-        },
-        "postgres": {
-          "$ref": "#/definitions/models.PostgresConfig"
-        },
-        "postgresCluster": {
-          "$ref": "#/definitions/models.PostgresClusterConfig"
-        },
-        "projectSlug": {
-          "type": "string",
-          "example": "xyz789ab"
-        },
-        "projectUuid": {
-          "type": "string",
-          "example": "123e4567-e89b-12d3-a456-426614174001"
-        },
-        "slug": {
-          "type": "string",
-          "example": "abc123de"
-        },
-        "status": {
-          "type": "string",
-          "example": "Running"
-        },
-        "type": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/models.ApplicationType"
-            }
-          ],
-          "example": "DockerImage"
-        },
-        "updatedAt": {
-          "type": "string",
-          "example": "2023-01-01T12:00:00Z"
-        },
-        "uuid": {
-          "type": "string",
-          "example": "123e4567-e89b-12d3-a456-426614174000"
-        }
-      }
-    },
-    "models.ApplicationType": {
-      "type": "string",
-      "enum": [
-        "MySQL",
-        "MySQLCluster",
-        "Postgres",
-        "PostgresCluster",
-        "DockerImage",
-        "GitRepository"
-      ],
-      "x-enum-varnames": [
-        "ApplicationTypeMySQL",
-        "ApplicationTypeMySQLCluster",
-        "ApplicationTypePostgres",
-        "ApplicationTypePostgresCluster",
-        "ApplicationTypeDockerImage",
-        "ApplicationTypeGitRepository"
-      ]
-    },
-    "models.ApplicationTypeResourceConfig": {
-      "type": "object",
-      "properties": {
-        "defaultLimits": {
-          "$ref": "#/definitions/models.ResourceLimitsSpec"
-        },
-        "resourceBounds": {
-          "$ref": "#/definitions/models.ResourceBoundsSpec"
-        }
-      }
-    },
-    "models.ApplicationTypeSettings": {
-      "type": "object",
-      "properties": {
-        "dockerImage": {
-          "type": "boolean",
-          "example": true
-        },
-        "gitRepository": {
-          "type": "boolean",
-          "example": true
-        },
-        "mysql": {
-          "type": "boolean",
-          "example": true
-        },
-        "mysqlCluster": {
-          "type": "boolean",
-          "example": false
-        },
-        "postgres": {
-          "type": "boolean",
-          "example": true
-        },
-        "postgresCluster": {
-          "type": "boolean",
-          "example": false
-        }
-      }
-    },
-    "models.ApplicationUpdateRequest": {
-      "type": "object",
-      "properties": {
-        "dockerImage": {
-          "$ref": "#/definitions/models.DockerImageConfig"
-        },
-        "gitRepository": {
-          "$ref": "#/definitions/models.GitRepositoryConfig"
-        },
-        "mysql": {
-          "$ref": "#/definitions/models.MySQLConfig"
-        },
-        "mysqlCluster": {
-          "$ref": "#/definitions/models.MySQLClusterConfig"
-        },
-        "name": {
-          "type": "string",
-          "example": "updated-web-app"
-        },
-        "postgres": {
-          "$ref": "#/definitions/models.PostgresConfig"
-        },
-        "postgresCluster": {
-          "$ref": "#/definitions/models.PostgresClusterConfig"
-        }
-      }
-    },
-    "models.CustomResourceLimits": {
-      "type": "object",
-      "properties": {
-        "dockerImage": {
-          "$ref": "#/definitions/models.ApplicationTypeResourceConfig"
-        },
-        "gitRepository": {
-          "$ref": "#/definitions/models.ApplicationTypeResourceConfig"
-        },
-        "mysql": {
-          "$ref": "#/definitions/models.ApplicationTypeResourceConfig"
-        },
-        "postgres": {
-          "$ref": "#/definitions/models.ApplicationTypeResourceConfig"
-        }
-      }
-    },
-    "models.DeploymentCreateRequest": {
-      "type": "object",
-      "required": ["applicationUuid"],
-      "properties": {
-        "applicationUuid": {
-          "type": "string",
-          "example": "550e8400-e29b-41d4-a716-446655440001"
-        },
-        "gitRepository": {
-          "$ref": "#/definitions/models.GitRepositoryDeploymentConfig"
-        }
-      }
-    },
-    "models.DeploymentPhase": {
-      "type": "string",
-      "enum": ["Initializing", "Running", "Succeeded", "Failed", "Waiting"],
-      "x-enum-varnames": [
-        "DeploymentPhaseInitializing",
-        "DeploymentPhaseRunning",
-        "DeploymentPhaseSucceeded",
-        "DeploymentPhaseFailed",
-        "DeploymentPhaseWaiting"
-      ]
-    },
-    "models.DeploymentResponse": {
-      "type": "object",
-      "properties": {
-        "applicationSlug": {
-          "type": "string",
-          "example": "abc123de"
-        },
-        "applicationUuid": {
-          "type": "string",
-          "example": "550e8400-e29b-41d4-a716-446655440001"
-        },
-        "createdAt": {
-          "type": "string",
-          "example": "2023-01-01T12:00:00Z"
-        },
-        "gitRepository": {
-          "$ref": "#/definitions/models.GitRepositoryDeploymentConfig"
-        },
-        "phase": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/models.DeploymentPhase"
-            }
-          ],
-          "example": "Initializing"
-        },
-        "projectUuid": {
-          "type": "string",
-          "example": "550e8400-e29b-41d4-a716-446655440002"
-        },
-        "slug": {
-          "type": "string",
-          "example": "def456gh"
-        },
-        "updatedAt": {
-          "type": "string",
-          "example": "2023-01-01T12:00:00Z"
-        },
-        "uuid": {
-          "type": "string",
-          "example": "550e8400-e29b-41d4-a716-446655440000"
-        }
-      }
-    },
-    "models.DockerImageConfig": {
-      "type": "object",
-      "properties": {
-        "healthCheck": {
-          "$ref": "#/definitions/models.HealthCheckConfig"
-        },
-        "image": {
-          "type": "string",
-          "example": "nginx:latest"
-        },
-        "imagePullSecretRef": {
-          "type": "string",
-          "example": "docker-registry-secret"
-        },
-        "tag": {
-          "type": "string",
-          "example": "v1.0.0"
-        }
-      }
-    },
-    "models.EnvironmentCreateRequest": {
-      "type": "object",
-      "properties": {
-        "description": {
-          "type": "string",
-          "example": "Production environment"
-        },
-        "name": {
-          "type": "string",
-          "example": "production"
-        },
-        "projectUuid": {
-          "type": "string",
-          "example": "123e4567-e89b-12d3-a456-426614174001"
-        },
-        "variables": {
-          "type": "object",
-          "additionalProperties": {
-            "type": "string"
-          }
-        }
-      }
-    },
-    "models.EnvironmentResponse": {
-      "type": "object",
-      "properties": {
-        "applicationCount": {
-          "type": "integer",
-          "example": 5
-        },
-        "createdAt": {
-          "type": "string",
-          "example": "2023-01-01T00:00:00Z"
-        },
-        "description": {
-          "type": "string",
-          "example": "Production environment"
-        },
-        "name": {
-          "type": "string",
-          "example": "production"
-        },
-        "projectSlug": {
-          "type": "string",
-          "example": "xyz789ab"
-        },
-        "projectUuid": {
-          "type": "string",
-          "example": "123e4567-e89b-12d3-a456-426614174001"
-        },
-        "slug": {
-          "type": "string",
-          "example": "abc123de"
-        },
-        "updatedAt": {
-          "type": "string",
-          "example": "2023-01-01T00:00:00Z"
-        },
-        "uuid": {
-          "type": "string",
-          "example": "123e4567-e89b-12d3-a456-426614174000"
-        },
-        "variables": {
-          "type": "object",
-          "additionalProperties": {
-            "type": "string"
-          }
-        }
-      }
-    },
-    "models.EnvironmentUpdateRequest": {
-      "type": "object",
-      "properties": {
-        "description": {
-          "type": "string",
-          "example": "Updated production environment"
-        },
-        "variables": {
-          "type": "object",
-          "additionalProperties": {
-            "type": "string"
-          }
-        }
-      }
-    },
-    "models.GitProvider": {
-      "type": "string",
-      "enum": ["github.com", "gitlab.com", "bitbucket.com"],
-      "x-enum-varnames": [
-        "GitProviderGitHub",
-        "GitProviderGitLab",
-        "GitProviderBitbucket"
-      ]
-    },
-    "models.GitRepositoryConfig": {
-      "type": "object",
-      "properties": {
-        "branch": {
-          "type": "string",
-          "example": "main"
-        },
-        "buildCommand": {
-          "type": "string",
-          "example": "npm run build"
-        },
-        "healthCheck": {
-          "$ref": "#/definitions/models.HealthCheckConfig"
-        },
-        "path": {
-          "type": "string",
-          "example": ""
-        },
-        "provider": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/models.GitProvider"
-            }
-          ],
-          "example": "github.com"
-        },
-        "publicAccess": {
-          "type": "boolean",
-          "example": false
-        },
-        "repository": {
-          "type": "string",
-          "example": "myorg/myapp"
-        },
-        "rootDirectory": {
-          "type": "string",
-          "example": "./"
-        },
-        "secretRef": {
-          "type": "string",
-          "example": "git-credentials"
-        },
-        "spaOutputDirectory": {
-          "type": "string",
-          "example": "dist"
-        },
-        "startCommand": {
-          "type": "string",
-          "example": "npm start"
-        }
-      }
-    },
-    "models.GitRepositoryDeploymentConfig": {
-      "type": "object",
-      "required": ["commitSHA"],
-      "properties": {
-        "branch": {
-          "type": "string",
-          "example": "main"
-        },
-        "commitSHA": {
-          "type": "string",
-          "example": "abc123def456"
-        }
-      }
-    },
-    "models.HealthCheckConfig": {
-      "type": "object",
-      "properties": {
-        "failureThreshold": {
-          "type": "integer",
-          "example": 3
-        },
-        "initialDelaySeconds": {
-          "type": "integer",
-          "example": 30
-        },
-        "path": {
-          "type": "string",
-          "example": "/health"
-        },
-        "periodSeconds": {
-          "type": "integer",
-          "example": 10
-        },
-        "port": {
-          "type": "integer",
-          "example": 3000
-        },
-        "successThreshold": {
-          "type": "integer",
-          "example": 1
-        },
-        "timeoutSeconds": {
-          "type": "integer",
-          "example": 5
-        }
-      }
-    },
-    "models.MySQLClusterConfig": {
-      "type": "object",
-      "properties": {
-        "database": {
-          "type": "string",
-          "example": "myapp"
-        },
-        "replicas": {
-          "type": "integer",
-          "example": 3
-        },
-        "secretRef": {
-          "type": "string",
-          "example": "mysql-cluster-credentials"
-        },
-        "version": {
-          "type": "string",
-          "example": "8.0"
-        }
-      }
-    },
-    "models.MySQLConfig": {
-      "type": "object",
-      "properties": {
-        "database": {
-          "type": "string",
-          "example": "myapp"
-        },
-        "secretRef": {
-          "type": "string",
-          "example": "mysql-credentials"
-        },
-        "version": {
-          "type": "string",
-          "example": "8.0"
-        }
-      }
-    },
-    "models.PostgresClusterConfig": {
-      "type": "object",
-      "properties": {
-        "database": {
-          "type": "string",
-          "example": "myapp"
-        },
-        "replicas": {
-          "type": "integer",
-          "example": 3
-        },
-        "secretRef": {
-          "type": "string",
-          "example": "postgres-cluster-credentials"
-        },
-        "version": {
-          "type": "string",
-          "example": "15"
-        }
-      }
-    },
-    "models.PostgresConfig": {
-      "type": "object",
-      "properties": {
-        "database": {
-          "type": "string",
-          "example": "myapp"
-        },
-        "secretRef": {
-          "type": "string",
-          "example": "postgres-credentials"
-        },
-        "version": {
-          "type": "string",
-          "example": "15"
-        }
-      }
-    },
-    "models.ProjectCreateRequest": {
-      "type": "object",
-      "properties": {
-        "customResourceLimits": {
-          "$ref": "#/definitions/models.CustomResourceLimits"
-        },
-        "description": {
-          "type": "string",
-          "example": "A project for my awesome application"
-        },
-        "enabledApplicationTypes": {
-          "$ref": "#/definitions/models.ApplicationTypeSettings"
-        },
-        "name": {
-          "type": "string",
-          "example": "my-awesome-project"
-        },
-        "resourceProfile": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/models.ResourceProfile"
-            }
-          ],
-          "example": "development"
-        },
-        "volumeSettings": {
-          "$ref": "#/definitions/models.VolumeSettings"
-        },
-        "workspaceUuid": {
-          "type": "string",
-          "example": "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
-        }
-      }
-    },
-    "models.ProjectResponse": {
-      "type": "object",
-      "properties": {
-        "createdAt": {
-          "type": "string",
-          "example": "2023-01-01T12:00:00Z"
-        },
-        "description": {
-          "type": "string",
-          "example": "A project for my awesome application"
-        },
-        "enabledApplicationTypes": {
-          "$ref": "#/definitions/models.ApplicationTypeSettings"
-        },
-        "name": {
-          "type": "string",
-          "example": "my-awesome-project"
-        },
-        "namespaceName": {
-          "type": "string",
-          "example": "project-550e8400-e29b-41d4-a716-446655440000"
-        },
-        "resourceProfile": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/models.ResourceProfile"
-            }
-          ],
-          "example": "development"
-        },
-        "slug": {
-          "type": "string",
-          "example": "abc123de"
-        },
-        "status": {
-          "type": "string",
-          "example": "Ready"
-        },
-        "updatedAt": {
-          "type": "string",
-          "example": "2023-01-01T12:00:00Z"
-        },
-        "uuid": {
-          "type": "string",
-          "example": "123e4567-e89b-12d3-a456-426614174000"
-        },
-        "volumeSettings": {
-          "$ref": "#/definitions/models.VolumeSettings"
-        },
-        "workspaceUuid": {
-          "type": "string",
-          "example": "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
-        }
-      }
-    },
-    "models.ProjectUpdateRequest": {
-      "type": "object",
-      "properties": {
-        "customResourceLimits": {
-          "$ref": "#/definitions/models.CustomResourceLimits"
-        },
-        "description": {
-          "type": "string",
-          "example": "Updated project description"
-        },
-        "enabledApplicationTypes": {
-          "$ref": "#/definitions/models.ApplicationTypeSettings"
-        },
-        "name": {
-          "type": "string",
-          "example": "updated-project-name"
-        },
-        "resourceProfile": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/models.ResourceProfile"
-            }
-          ],
-          "example": "production"
-        },
-        "volumeSettings": {
-          "$ref": "#/definitions/models.VolumeSettings"
-        }
-      }
-    },
-    "models.ResourceBoundsSpec": {
-      "type": "object",
-      "properties": {
-        "maxLimits": {
-          "$ref": "#/definitions/models.ResourceLimitsSpec"
-        },
-        "minLimits": {
-          "$ref": "#/definitions/models.ResourceLimitsSpec"
-        }
-      }
-    },
-    "models.ResourceLimitsSpec": {
-      "type": "object",
-      "properties": {
-        "cpu": {
-          "type": "string",
-          "example": "1"
-        },
-        "memory": {
-          "type": "string",
-          "example": "2Gi"
-        },
-        "storage": {
-          "type": "string",
-          "example": "10Gi"
-        }
-      }
-    },
-    "models.ResourceProfile": {
-      "type": "string",
-      "enum": ["development", "production", "custom"],
-      "x-enum-varnames": [
-        "ResourceProfileDevelopment",
-        "ResourceProfileProduction",
-        "ResourceProfileCustom"
-      ]
-    },
-    "models.ValidationError": {
-      "type": "object",
-      "properties": {
-        "field": {
-          "type": "string"
-        },
-        "message": {
-          "type": "string"
-        }
-      }
-    },
-    "models.ValidationErrors": {
-      "type": "object",
-      "properties": {
-        "errors": {
-          "type": "array",
-          "items": {
-            "$ref": "#/definitions/models.ValidationError"
-          }
-        }
-      }
-    },
-    "models.VolumeSettings": {
-      "type": "object",
-      "properties": {
-        "maxStorageSize": {
-          "type": "string",
-          "example": "100Gi"
-        }
-      }
-    }
-  },
-  "securityDefinitions": {
-    "BearerAuth": {
-      "description": "Type \"Bearer\" followed by a space and JWT token.",
-      "type": "apiKey",
-      "name": "Authorization",
-      "in": "header"
-    }
-  }
 }

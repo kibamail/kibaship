@@ -179,51 +179,51 @@ func BuildHetznerRobotBootstrapFiles(config *config.CreateConfig) error {
 
 // BuildHetznerRobotUbuntuFiles creates the ubuntu directory and compiles ubuntu.tf.tpl and vars.ubuntu.tf.tpl
 func BuildHetznerRobotUbuntuFiles(config *config.CreateConfig) error {
-    // Create .kibaship directory structure
-    kibashipDir := ".kibaship"
-    clusterDir := filepath.Join(kibashipDir, config.Name)
-    ubuntuDir := filepath.Join(clusterDir, "ubuntu")
+	// Create .kibaship directory structure
+	kibashipDir := ".kibaship"
+	clusterDir := filepath.Join(kibashipDir, config.Name)
+	ubuntuDir := filepath.Join(clusterDir, "ubuntu")
 
-    // Create directories
-    dirs := []string{kibashipDir, clusterDir, ubuntuDir}
-    for _, dir := range dirs {
-        if err := os.MkdirAll(dir, 0755); err != nil {
-            return fmt.Errorf("failed to create directory %s: %w", dir, err)
-        }
-    }
+	// Create directories
+	dirs := []string{kibashipDir, clusterDir, ubuntuDir}
+	for _, dir := range dirs {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return fmt.Errorf("failed to create directory %s: %w", dir, err)
+		}
+	}
 
-    // Log template variables being passed
-    fmt.Printf("\n%s %s\n",
-        "\033[36m📋\033[0m",
-        "\033[1;36mTemplate Variables for Ubuntu Setup Build:\033[0m")
-    fmt.Printf("  %s: %s\n", "\033[90mName\033[0m", config.Name)
+	// Log template variables being passed
+	fmt.Printf("\n%s %s\n",
+		"\033[36m📋\033[0m",
+		"\033[1;36mTemplate Variables for Ubuntu Setup Build:\033[0m")
+	fmt.Printf("  %s: %s\n", "\033[90mName\033[0m", config.Name)
 
-    if config.HetznerRobot != nil {
-        fmt.Printf("  %s: %d server(s)\n", "\033[90mHetznerRobot.SelectedServers\033[0m", len(config.HetznerRobot.SelectedServers))
-        for i, server := range config.HetznerRobot.SelectedServers {
-            fmt.Printf("    %s [%d]:\n", "\033[90mServer\033[0m", i)
-            fmt.Printf("      %s: %s\n", "\033[90mID\033[0m", server.ID)
-            fmt.Printf("      %s: %s\n", "\033[90mName\033[0m", server.Name)
-            fmt.Printf("      %s: %s\n", "\033[90mIP\033[0m", server.IP)
-        }
-    }
+	if config.HetznerRobot != nil {
+		fmt.Printf("  %s: %d server(s)\n", "\033[90mHetznerRobot.SelectedServers\033[0m", len(config.HetznerRobot.SelectedServers))
+		for i, server := range config.HetznerRobot.SelectedServers {
+			fmt.Printf("    %s [%d]:\n", "\033[90mServer\033[0m", i)
+			fmt.Printf("      %s: %s\n", "\033[90mID\033[0m", server.ID)
+			fmt.Printf("      %s: %s\n", "\033[90mName\033[0m", server.Name)
+			fmt.Printf("      %s: %s\n", "\033[90mIP\033[0m", server.IP)
+		}
+	}
 
-    // Get provider-specific template path
-    providerPath := "terraform/providers/hetzner-robot"
+	// Get provider-specific template path
+	providerPath := "terraform/providers/hetzner-robot"
 
-    // Compile ubuntu template
-    if err := compileTemplate(providerPath, "ubuntu.tf.tpl",
-        filepath.Join(ubuntuDir, "main.tf"), config); err != nil {
-        return fmt.Errorf("failed to compile ubuntu template: %w", err)
-    }
+	// Compile ubuntu template
+	if err := compileTemplate(providerPath, "ubuntu.tf.tpl",
+		filepath.Join(ubuntuDir, "main.tf"), config); err != nil {
+		return fmt.Errorf("failed to compile ubuntu template: %w", err)
+	}
 
-    // Compile ubuntu-specific vars template
-    if err := compileTemplate(providerPath, "vars.ubuntu.tf.tpl",
-        filepath.Join(ubuntuDir, "vars.tf"), config); err != nil {
-        return fmt.Errorf("failed to compile ubuntu vars template: %w", err)
-    }
+	// Compile ubuntu-specific vars template
+	if err := compileTemplate(providerPath, "vars.ubuntu.tf.tpl",
+		filepath.Join(ubuntuDir, "vars.tf"), config); err != nil {
+		return fmt.Errorf("failed to compile ubuntu vars template: %w", err)
+	}
 
-    return nil
+	return nil
 }
 
 // BuildHetznerRobotTalosFiles creates the talos directory and compiles talos.tf.tpl and vars.talos.tf.tpl

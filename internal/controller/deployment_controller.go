@@ -27,9 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/tools/record"
@@ -161,36 +159,16 @@ func (r *DeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 	}
 
-	// Check if Application is of type MySQL
-	if app.Spec.Type == platformv1alpha1.ApplicationTypeMySQL {
-		if err := r.handleMySQLDeployment(ctx, &deployment, &app); err != nil {
-			log.Error(err, "Failed to handle MySQL deployment")
-			return ctrl.Result{}, err
-		}
-	}
-
-	// Check if Application is of type MySQLCluster
-	if app.Spec.Type == platformv1alpha1.ApplicationTypeMySQLCluster {
-		if err := r.handleMySQLClusterDeployment(ctx, &deployment, &app); err != nil {
-			log.Error(err, "Failed to handle MySQLCluster deployment")
-			return ctrl.Result{}, err
-		}
-	}
-
-	// Check if Application is of type Valkey
-	if app.Spec.Type == platformv1alpha1.ApplicationTypeValkey {
-		if err := r.handleValkeyDeployment(ctx, &deployment, &app); err != nil {
-			log.Error(err, "Failed to handle Valkey deployment")
-			return ctrl.Result{}, err
-		}
-	}
-
-	// Check if Application is of type ValkeyCluster
-	if app.Spec.Type == platformv1alpha1.ApplicationTypeValkeyCluster {
-		if err := r.handleValkeyClusterDeployment(ctx, &deployment, &app); err != nil {
-			log.Error(err, "Failed to handle ValkeyCluster deployment")
-			return ctrl.Result{}, err
-		}
+	// TODO: Database application type handling (MySQL, MySQLCluster, Valkey, ValkeyCluster, Postgres, PostgresCluster)
+	// will be completely reimplemented. Current implementation removed.
+	if app.Spec.Type == platformv1alpha1.ApplicationTypeMySQL ||
+		app.Spec.Type == platformv1alpha1.ApplicationTypeMySQLCluster ||
+		app.Spec.Type == platformv1alpha1.ApplicationTypeValkey ||
+		app.Spec.Type == platformv1alpha1.ApplicationTypeValkeyCluster ||
+		app.Spec.Type == platformv1alpha1.ApplicationTypePostgres ||
+		app.Spec.Type == platformv1alpha1.ApplicationTypePostgresCluster {
+		log.Info("Database application type deployment handling - TODO: implement new logic", "appType", app.Spec.Type)
+		// TODO: Implement new database deployment logic here
 	}
 
 	// Track previous phase before updating status
@@ -271,13 +249,16 @@ func (r *DeploymentReconciler) handleDeletion(ctx context.Context, deployment *p
 func (r *DeploymentReconciler) ensureDeploymentSecret(ctx context.Context, deployment *platformv1alpha1.Deployment, app *platformv1alpha1.Application) error {
 	log := logf.FromContext(ctx).WithValues("deployment", deployment.Name, "namespace", deployment.Namespace)
 
-	// Skip deployment secret creation for database types - they manage their own secrets
-	// with different naming patterns (e.g., m-{hash} for MySQL, v-{hash} for Valkey)
+	// TODO: Database application types will handle their own secrets differently
+	// Current database-specific secret handling removed - will be reimplemented
 	if app.Spec.Type == platformv1alpha1.ApplicationTypeMySQL ||
 		app.Spec.Type == platformv1alpha1.ApplicationTypeMySQLCluster ||
 		app.Spec.Type == platformv1alpha1.ApplicationTypeValkey ||
-		app.Spec.Type == platformv1alpha1.ApplicationTypeValkeyCluster {
-		log.V(1).Info("Skipping deployment secret creation for database application type", "appType", app.Spec.Type)
+		app.Spec.Type == platformv1alpha1.ApplicationTypeValkeyCluster ||
+		app.Spec.Type == platformv1alpha1.ApplicationTypePostgres ||
+		app.Spec.Type == platformv1alpha1.ApplicationTypePostgresCluster {
+		log.V(1).Info("Database application secret handling - TODO: implement new logic", "appType", app.Spec.Type)
+		// TODO: Implement new database secret handling logic here
 		return nil
 	}
 
@@ -810,214 +791,16 @@ func (r *DeploymentReconciler) ensureApplicationDomain(ctx context.Context, depl
 // handleMySQLDeployment handles deployments for MySQL applications
 func (r *DeploymentReconciler) handleMySQLDeployment(ctx context.Context, deployment *platformv1alpha1.Deployment, app *platformv1alpha1.Application) error {
 	log := logf.FromContext(ctx).WithValues("deployment", deployment.Name, "application", app.Name)
-
-	// Validate MySQL configuration
-	if err := validateMySQLConfiguration(app); err != nil {
-		return fmt.Errorf("invalid MySQL configuration: %w", err)
-	}
-
-	// Get project for resource metadata
-	var project platformv1alpha1.Project
-	if err := r.Get(ctx, types.NamespacedName{
-		Name: utils.GetProjectResourceName(deployment.GetProjectUUID()),
-	}, &project); err != nil {
-		return fmt.Errorf("failed to get project: %w", err)
-	}
-
-	// Get project and app slugs from labels
-	projectSlug, err := r.getProjectSlug(ctx, deployment.GetProjectUUID())
-	if err != nil {
-		return fmt.Errorf("failed to get project slug: %w", err)
-	}
-	appSlug, err := r.getApplicationSlug(ctx, deployment.GetApplicationUUID(), deployment.Namespace)
-	if err != nil {
-		return fmt.Errorf("failed to get application slug: %w", err)
-	}
-
-	// Check for existing deployments of this application
-	var deploymentList platformv1alpha1.DeploymentList
-	if err := r.List(ctx, &deploymentList, client.InNamespace(deployment.Namespace)); err != nil {
-		return fmt.Errorf("failed to list deployments: %w", err)
-	}
-
-	// Generate resource names
-	secretName, clusterName := generateMySQLResourceNames(deployment, app, projectSlug, appSlug)
-
-	// Check if secret already exists
-	existingSecret := &corev1.Secret{}
-	err = r.Get(ctx, types.NamespacedName{
-		Name:      secretName,
-		Namespace: deployment.Namespace,
-	}, existingSecret)
-
-	if err != nil && !errors.IsNotFound(err) {
-		return fmt.Errorf("failed to check for existing secret: %w", err)
-	}
-
-	// Create secret if it doesn't exist
-	if errors.IsNotFound(err) {
-		log.Info("Creating MySQL credentials secret", "secretName", secretName)
-		secret, err := generateMySQLCredentialsSecret(secretName, deployment, project.Name, projectSlug, appSlug, deployment.Namespace)
-		if err != nil {
-			return fmt.Errorf("failed to generate MySQL credentials secret: %w", err)
-		}
-
-		// Set owner reference to the deployment
-		if err := controllerutil.SetControllerReference(deployment, secret, r.Scheme); err != nil {
-			return fmt.Errorf("failed to set controller reference on secret: %w", err)
-		}
-
-		if err := r.Create(ctx, secret); err != nil {
-			return fmt.Errorf("failed to create MySQL credentials secret: %w", err)
-		}
-		log.Info("Successfully created MySQL credentials secret", "secretName", secretName)
-	} else {
-		log.Info("MySQL credentials secret already exists", "secretName", secretName)
-	}
-
-	// Check if InnoDBCluster already exists
-	existingCluster := &unstructured.Unstructured{}
-	existingCluster.SetGroupVersionKind(schema.GroupVersionKind{
-		Group:   "mysql.oracle.com",
-		Version: "v2",
-		Kind:    "InnoDBCluster",
-	})
-	err = r.Get(ctx, types.NamespacedName{
-		Name:      clusterName,
-		Namespace: deployment.Namespace,
-	}, existingCluster)
-
-	if err != nil && !errors.IsNotFound(err) {
-		return fmt.Errorf("failed to check for existing InnoDBCluster: %w", err)
-	}
-
-	// Create InnoDBCluster if it doesn't exist
-	if errors.IsNotFound(err) {
-		log.Info("Creating InnoDBCluster", "clusterName", clusterName)
-		cluster := generateInnoDBCluster(deployment, app, project.Name, projectSlug, appSlug, secretName, deployment.Namespace)
-
-		// Set owner reference to the deployment
-		if err := controllerutil.SetControllerReference(deployment, cluster, r.Scheme); err != nil {
-			return fmt.Errorf("failed to set controller reference on InnoDBCluster: %w", err)
-		}
-
-		if err := r.Create(ctx, cluster); err != nil {
-			return fmt.Errorf("failed to create InnoDBCluster: %w", err)
-		}
-		log.Info("Successfully created InnoDBCluster", "clusterName", clusterName)
-	} else {
-		log.Info("InnoDBCluster already exists", "clusterName", clusterName)
-	}
-
+	log.Info("MySQL deployment handling - TODO: implement new logic")
+	// TODO: Implement new MySQL deployment logic here
 	return nil
 }
 
-// handleMySQLClusterDeployment handles deployments for MySQLCluster applications
+// TODO: handleMySQLClusterDeployment - MySQL cluster deployment handling will be completely reimplemented
 func (r *DeploymentReconciler) handleMySQLClusterDeployment(ctx context.Context, deployment *platformv1alpha1.Deployment, app *platformv1alpha1.Application) error {
 	log := logf.FromContext(ctx).WithValues("deployment", deployment.Name, "application", app.Name)
-
-	// Validate MySQLCluster configuration
-	if err := validateMySQLClusterConfiguration(app); err != nil {
-		return fmt.Errorf("invalid MySQLCluster configuration: %w", err)
-	}
-
-	// Get project for resource metadata
-	var project platformv1alpha1.Project
-	if err := r.Get(ctx, types.NamespacedName{
-		Name: utils.GetProjectResourceName(deployment.GetProjectUUID()),
-	}, &project); err != nil {
-		return fmt.Errorf("failed to get project: %w", err)
-	}
-
-	// Get project and app slugs from labels
-	projectSlug, err := r.getProjectSlug(ctx, deployment.GetProjectUUID())
-	if err != nil {
-		return fmt.Errorf("failed to get project slug: %w", err)
-	}
-	appSlug, err := r.getApplicationSlug(ctx, deployment.GetApplicationUUID(), deployment.Namespace)
-	if err != nil {
-		return fmt.Errorf("failed to get application slug: %w", err)
-	}
-
-	// Generate resource names
-	secretName, clusterName := generateMySQLClusterResourceNames(deployment, app, projectSlug, appSlug)
-
-	// Check if secret already exists
-	existingSecret := &corev1.Secret{}
-	err = r.Get(ctx, types.NamespacedName{
-		Name:      secretName,
-		Namespace: deployment.Namespace,
-	}, existingSecret)
-
-	if err != nil && !errors.IsNotFound(err) {
-		return fmt.Errorf("failed to check for existing secret: %w", err)
-	}
-
-	// Create secret if it doesn't exist
-	if errors.IsNotFound(err) {
-		log.Info("Creating MySQLCluster credentials secret", "secretName", secretName)
-		secret, err := generateMySQLCredentialsSecret(secretName, deployment, project.Name, projectSlug, appSlug, deployment.Namespace)
-		if err != nil {
-			return fmt.Errorf("failed to generate MySQLCluster credentials secret: %w", err)
-		}
-
-		// Set owner reference to the deployment
-		if err := controllerutil.SetControllerReference(deployment, secret, r.Scheme); err != nil {
-			return fmt.Errorf("failed to set controller reference on secret: %w", err)
-		}
-
-		if err := r.Create(ctx, secret); err != nil {
-			return fmt.Errorf("failed to create MySQLCluster credentials secret: %w", err)
-		}
-		log.Info("Successfully created MySQLCluster credentials secret", "secretName", secretName)
-	} else {
-		log.Info("MySQLCluster credentials secret already exists", "secretName", secretName)
-	}
-
-	// Check if MySQLCluster already exists
-	existingCluster := &unstructured.Unstructured{}
-	existingCluster.SetGroupVersionKind(schema.GroupVersionKind{
-		Group:   "mysql.oracle.com",
-		Version: "v2",
-		Kind:    "InnoDBCluster",
-	})
-	err = r.Get(ctx, types.NamespacedName{
-		Name:      clusterName,
-		Namespace: deployment.Namespace,
-	}, existingCluster)
-
-	if err != nil && !errors.IsNotFound(err) {
-		return fmt.Errorf("failed to check for existing MySQLCluster: %w", err)
-	}
-
-	if errors.IsNotFound(err) {
-		// Create new MySQLCluster
-		log.Info("Creating MySQLCluster", "clusterName", clusterName)
-		cluster := generateMySQLCluster(deployment, app, project.Name, projectSlug, appSlug, secretName, deployment.Namespace)
-
-		// Set owner reference to the deployment
-		if err := controllerutil.SetControllerReference(deployment, cluster, r.Scheme); err != nil {
-			return fmt.Errorf("failed to set controller reference on MySQLCluster: %w", err)
-		}
-
-		if err := r.Create(ctx, cluster); err != nil {
-			return fmt.Errorf("failed to create MySQLCluster: %w", err)
-		}
-		log.Info("Successfully created MySQLCluster", "clusterName", clusterName)
-	} else {
-		// Update existing MySQLCluster with new configuration
-		log.Info("Updating existing MySQLCluster", "clusterName", clusterName)
-		updatedCluster := generateMySQLCluster(deployment, app, project.Name, projectSlug, appSlug, secretName, deployment.Namespace)
-
-		// Preserve the existing metadata but update spec
-		existingCluster.Object["spec"] = updatedCluster.Object["spec"]
-
-		if err := r.Update(ctx, existingCluster); err != nil {
-			return fmt.Errorf("failed to update MySQLCluster: %w", err)
-		}
-		log.Info("Successfully updated MySQLCluster", "clusterName", clusterName)
-	}
-
+	log.Info("MySQL cluster deployment handling - TODO: implement new logic")
+	// TODO: Implement new MySQL cluster deployment logic here
 	return nil
 }
 
@@ -1068,22 +851,14 @@ func (r *DeploymentReconciler) getEnvSecretName(app *platformv1alpha1.Applicatio
 		// ImageFromRegistry applications don't have a specific env secret reference
 		// Environment variables are defined directly in the application spec
 		return ""
-	case platformv1alpha1.ApplicationTypeMySQL:
-		if app.Spec.MySQL != nil && app.Spec.MySQL.Env != nil {
-			return app.Spec.MySQL.Env.Name
-		}
-	case platformv1alpha1.ApplicationTypeMySQLCluster:
-		if app.Spec.MySQLCluster != nil && app.Spec.MySQLCluster.Env != nil {
-			return app.Spec.MySQLCluster.Env.Name
-		}
-	case platformv1alpha1.ApplicationTypePostgres:
-		if app.Spec.Postgres != nil && app.Spec.Postgres.Env != nil {
-			return app.Spec.Postgres.Env.Name
-		}
-	case platformv1alpha1.ApplicationTypePostgresCluster:
-		if app.Spec.PostgresCluster != nil && app.Spec.PostgresCluster.Env != nil {
-			return app.Spec.PostgresCluster.Env.Name
-		}
+	case platformv1alpha1.ApplicationTypeMySQL,
+		platformv1alpha1.ApplicationTypeMySQLCluster,
+		platformv1alpha1.ApplicationTypeValkey,
+		platformv1alpha1.ApplicationTypeValkeyCluster,
+		platformv1alpha1.ApplicationTypePostgres,
+		platformv1alpha1.ApplicationTypePostgresCluster:
+		// TODO: Database application environment secret handling will be reimplemented
+		// Current implementation removed
 	}
 	// Fallback: generate from app UUID
 	if appUUID, exists := app.Labels["platform.kibaship.com/uuid"]; exists {
@@ -1432,221 +1207,19 @@ func (r *DeploymentReconciler) createOptimizedWebhookEvent(deployment *platformv
 	return evt
 }
 
-// handleValkeyDeployment handles deployments for Valkey applications
+// TODO: handleValkeyDeployment - Valkey deployment handling will be completely reimplemented
 func (r *DeploymentReconciler) handleValkeyDeployment(ctx context.Context, deployment *platformv1alpha1.Deployment, app *platformv1alpha1.Application) error {
 	log := logf.FromContext(ctx).WithValues("deployment", deployment.Name, "application", app.Name)
-
-	// Validate Valkey configuration
-	if err := validateValkeyConfiguration(app); err != nil {
-		return fmt.Errorf("invalid Valkey configuration: %w", err)
-	}
-
-	// Get project for resource metadata
-	var project platformv1alpha1.Project
-	if err := r.Get(ctx, types.NamespacedName{
-		Name: utils.GetProjectResourceName(deployment.GetProjectUUID()),
-	}, &project); err != nil {
-		return fmt.Errorf("failed to get project: %w", err)
-	}
-
-	// Get project and app slugs from labels
-	projectSlug, err := r.getProjectSlug(ctx, deployment.GetProjectUUID())
-	if err != nil {
-		return fmt.Errorf("failed to get project slug: %w", err)
-	}
-	appSlug, err := r.getApplicationSlug(ctx, deployment.GetApplicationUUID(), deployment.Namespace)
-	if err != nil {
-		return fmt.Errorf("failed to get application slug: %w", err)
-	}
-
-	// Generate resource names
-	secretName, instanceName := generateValkeyResourceNames(deployment, projectSlug, appSlug)
-
-	// Check if secret already exists
-	existingSecret := &corev1.Secret{}
-	err = r.Get(ctx, types.NamespacedName{
-		Name:      secretName,
-		Namespace: deployment.Namespace,
-	}, existingSecret)
-
-	if err != nil && !errors.IsNotFound(err) {
-		return fmt.Errorf("failed to check for existing secret: %w", err)
-	}
-
-	// Create secret if it doesn't exist
-	if errors.IsNotFound(err) {
-		log.Info("Creating Valkey credentials secret", "secretName", secretName)
-		secret, err := generateValkeyCredentialsSecret(deployment, project.Name, projectSlug, appSlug, deployment.Namespace)
-		if err != nil {
-			return fmt.Errorf("failed to generate Valkey credentials secret: %w", err)
-		}
-
-		// Set owner reference to the deployment
-		if err := controllerutil.SetControllerReference(deployment, secret, r.Scheme); err != nil {
-			return fmt.Errorf("failed to set controller reference on secret: %w", err)
-		}
-
-		if err := r.Create(ctx, secret); err != nil {
-			return fmt.Errorf("failed to create Valkey credentials secret: %w", err)
-		}
-		log.Info("Successfully created Valkey credentials secret", "secretName", secretName)
-	} else {
-		log.Info("Valkey credentials secret already exists", "secretName", secretName)
-	}
-
-	// Check if Valkey instance already exists
-	existingInstance := &unstructured.Unstructured{}
-	existingInstance.SetGroupVersionKind(schema.GroupVersionKind{
-		Group:   "hyperspike.io",
-		Version: "v1",
-		Kind:    "Valkey",
-	})
-	err = r.Get(ctx, types.NamespacedName{
-		Name:      instanceName,
-		Namespace: deployment.Namespace,
-	}, existingInstance)
-
-	if err != nil && !errors.IsNotFound(err) {
-		return fmt.Errorf("failed to check for existing Valkey instance: %w", err)
-	}
-
-	if errors.IsNotFound(err) {
-		// Create new Valkey instance
-		log.Info("Creating Valkey instance", "instanceName", instanceName)
-		instance := generateValkeyInstance(deployment, app, project.Name, projectSlug, appSlug, secretName, deployment.Namespace)
-
-		// Set owner reference to the deployment
-		if err := controllerutil.SetControllerReference(deployment, instance, r.Scheme); err != nil {
-			return fmt.Errorf("failed to set controller reference on Valkey instance: %w", err)
-		}
-
-		if err := r.Create(ctx, instance); err != nil {
-			return fmt.Errorf("failed to create Valkey instance: %w", err)
-		}
-		log.Info("Successfully created Valkey instance", "instanceName", instanceName)
-	} else {
-		// Update existing Valkey instance with new configuration
-		log.Info("Updating existing Valkey instance", "instanceName", instanceName)
-		updatedInstance := generateValkeyInstance(deployment, app, project.Name, projectSlug, appSlug, secretName, deployment.Namespace)
-
-		// Preserve the existing metadata but update spec
-		existingInstance.Object["spec"] = updatedInstance.Object["spec"]
-
-		if err := r.Update(ctx, existingInstance); err != nil {
-			return fmt.Errorf("failed to update Valkey instance: %w", err)
-		}
-		log.Info("Successfully updated Valkey instance", "instanceName", instanceName)
-	}
-
+	log.Info("Valkey deployment handling - TODO: implement new logic")
+	// TODO: Implement new Valkey deployment logic here
 	return nil
 }
 
-// handleValkeyClusterDeployment handles deployments for ValkeyCluster applications
+// TODO: handleValkeyClusterDeployment - Valkey cluster deployment handling will be completely reimplemented
 func (r *DeploymentReconciler) handleValkeyClusterDeployment(ctx context.Context, deployment *platformv1alpha1.Deployment, app *platformv1alpha1.Application) error {
 	log := logf.FromContext(ctx).WithValues("deployment", deployment.Name, "application", app.Name)
-
-	// Validate ValkeyCluster configuration
-	if err := validateValkeyClusterConfiguration(app); err != nil {
-		return fmt.Errorf("invalid ValkeyCluster configuration: %w", err)
-	}
-
-	// Get project for resource metadata
-	var project platformv1alpha1.Project
-	if err := r.Get(ctx, types.NamespacedName{
-		Name: utils.GetProjectResourceName(deployment.GetProjectUUID()),
-	}, &project); err != nil {
-		return fmt.Errorf("failed to get project: %w", err)
-	}
-
-	// Get project and app slugs from labels
-	projectSlug, err := r.getProjectSlug(ctx, deployment.GetProjectUUID())
-	if err != nil {
-		return fmt.Errorf("failed to get project slug: %w", err)
-	}
-	appSlug, err := r.getApplicationSlug(ctx, deployment.GetApplicationUUID(), deployment.Namespace)
-	if err != nil {
-		return fmt.Errorf("failed to get application slug: %w", err)
-	}
-
-	// Generate resource names
-	secretName, clusterName := generateValkeyClusterResourceNames(deployment, projectSlug, appSlug)
-
-	// Check if secret already exists
-	existingSecret := &corev1.Secret{}
-	err = r.Get(ctx, types.NamespacedName{
-		Name:      secretName,
-		Namespace: deployment.Namespace,
-	}, existingSecret)
-
-	if err != nil && !errors.IsNotFound(err) {
-		return fmt.Errorf("failed to check for existing secret: %w", err)
-	}
-
-	// Create secret if it doesn't exist
-	if errors.IsNotFound(err) {
-		log.Info("Creating ValkeyCluster credentials secret", "secretName", secretName)
-		secret, err := generateValkeyCredentialsSecret(deployment, project.Name, projectSlug, appSlug, deployment.Namespace)
-		if err != nil {
-			return fmt.Errorf("failed to generate ValkeyCluster credentials secret: %w", err)
-		}
-
-		// Set owner reference to the deployment
-		if err := controllerutil.SetControllerReference(deployment, secret, r.Scheme); err != nil {
-			return fmt.Errorf("failed to set controller reference on secret: %w", err)
-		}
-
-		if err := r.Create(ctx, secret); err != nil {
-			return fmt.Errorf("failed to create ValkeyCluster credentials secret: %w", err)
-		}
-		log.Info("Successfully created ValkeyCluster credentials secret", "secretName", secretName)
-	} else {
-		log.Info("ValkeyCluster credentials secret already exists", "secretName", secretName)
-	}
-
-	// Check if ValkeyCluster already exists
-	existingCluster := &unstructured.Unstructured{}
-	existingCluster.SetGroupVersionKind(schema.GroupVersionKind{
-		Group:   "hyperspike.io",
-		Version: "v1",
-		Kind:    "Valkey",
-	})
-	err = r.Get(ctx, types.NamespacedName{
-		Name:      clusterName,
-		Namespace: deployment.Namespace,
-	}, existingCluster)
-
-	if err != nil && !errors.IsNotFound(err) {
-		return fmt.Errorf("failed to check for existing ValkeyCluster: %w", err)
-	}
-
-	if errors.IsNotFound(err) {
-		// Create new ValkeyCluster
-		log.Info("Creating ValkeyCluster", "clusterName", clusterName)
-		cluster := generateValkeyCluster(deployment, app, project.Name, projectSlug, appSlug, secretName, deployment.Namespace)
-
-		// Set owner reference to the deployment
-		if err := controllerutil.SetControllerReference(deployment, cluster, r.Scheme); err != nil {
-			return fmt.Errorf("failed to set controller reference on ValkeyCluster: %w", err)
-		}
-
-		if err := r.Create(ctx, cluster); err != nil {
-			return fmt.Errorf("failed to create ValkeyCluster: %w", err)
-		}
-		log.Info("Successfully created ValkeyCluster", "clusterName", clusterName)
-	} else {
-		// Update existing ValkeyCluster with new configuration
-		log.Info("Updating existing ValkeyCluster", "clusterName", clusterName)
-		updatedCluster := generateValkeyCluster(deployment, app, project.Name, projectSlug, appSlug, secretName, deployment.Namespace)
-
-		// Preserve the existing metadata but update spec
-		existingCluster.Object["spec"] = updatedCluster.Object["spec"]
-
-		if err := r.Update(ctx, existingCluster); err != nil {
-			return fmt.Errorf("failed to update ValkeyCluster: %w", err)
-		}
-		log.Info("Successfully updated ValkeyCluster", "clusterName", clusterName)
-	}
-
+	log.Info("Valkey cluster deployment handling - TODO: implement new logic")
+	// TODO: Implement new Valkey cluster deployment logic here
 	return nil
 }
 

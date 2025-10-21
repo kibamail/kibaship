@@ -562,6 +562,61 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/deployments/{uuid}/promote": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Promote a deployment by updating the application's currentDeploymentRef to point to this deployment",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "deployments"
+                ],
+                "summary": "Promote a deployment",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Deployment UUID or slug",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Deployment promoted successfully",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Deployment not found",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/auth.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/domains/{uuid}": {
             "get": {
                 "security": [
@@ -569,7 +624,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Retrieve an application domain by its unique UUID or slug identifier",
+                "description": "Retrieve an application domain by its unique UUID identifier",
                 "produces": [
                     "application/json"
                 ],
@@ -580,7 +635,7 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Application domain UUID or slug (8-character identifier)",
+                        "description": "Application domain UUID",
                         "name": "uuid",
                         "in": "path",
                         "required": true
@@ -619,7 +674,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Delete an application domain by its unique UUID or slug identifier",
+                "description": "Delete an application domain by its unique UUID identifier",
                 "tags": [
                     "application-domains"
                 ],
@@ -627,7 +682,7 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Application domain UUID or slug (8-character identifier)",
+                        "description": "Application domain UUID",
                         "name": "uuid",
                         "in": "path",
                         "required": true
@@ -1390,6 +1445,9 @@ const docTemplate = `{
                 "gitRepository": {
                     "$ref": "#/definitions/models.GitRepositoryConfig"
                 },
+                "imageFromRegistry": {
+                    "$ref": "#/definitions/models.ImageFromRegistryConfig"
+                },
                 "mysql": {
                     "$ref": "#/definitions/models.MySQLConfig"
                 },
@@ -1413,6 +1471,12 @@ const docTemplate = `{
                         }
                     ],
                     "example": "DockerImage"
+                },
+                "valkey": {
+                    "$ref": "#/definitions/models.ValkeyConfig"
+                },
+                "valkeyCluster": {
+                    "$ref": "#/definitions/models.ValkeyClusterConfig"
                 }
             }
         },
@@ -1591,6 +1655,9 @@ const docTemplate = `{
                 "gitRepository": {
                     "$ref": "#/definitions/models.GitRepositoryConfig"
                 },
+                "imageFromRegistry": {
+                    "$ref": "#/definitions/models.ImageFromRegistryConfig"
+                },
                 "latestDeployment": {
                     "$ref": "#/definitions/models.DeploymentResponse"
                 },
@@ -1641,6 +1708,12 @@ const docTemplate = `{
                 "uuid": {
                     "type": "string",
                     "example": "123e4567-e89b-12d3-a456-426614174000"
+                },
+                "valkey": {
+                    "$ref": "#/definitions/models.ValkeyConfig"
+                },
+                "valkeyCluster": {
+                    "$ref": "#/definitions/models.ValkeyClusterConfig"
                 }
             }
         },
@@ -1651,16 +1724,22 @@ const docTemplate = `{
                 "MySQLCluster",
                 "Postgres",
                 "PostgresCluster",
+                "Valkey",
+                "ValkeyCluster",
                 "DockerImage",
-                "GitRepository"
+                "GitRepository",
+                "ImageFromRegistry"
             ],
             "x-enum-varnames": [
                 "ApplicationTypeMySQL",
                 "ApplicationTypeMySQLCluster",
                 "ApplicationTypePostgres",
                 "ApplicationTypePostgresCluster",
+                "ApplicationTypeValkey",
+                "ApplicationTypeValkeyCluster",
                 "ApplicationTypeDockerImage",
-                "ApplicationTypeGitRepository"
+                "ApplicationTypeGitRepository",
+                "ApplicationTypeImageFromRegistry"
             ]
         },
         "models.ApplicationTypeResourceConfig": {
@@ -1682,6 +1761,10 @@ const docTemplate = `{
                     "example": true
                 },
                 "gitRepository": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "imageFromRegistry": {
                     "type": "boolean",
                     "example": true
                 },
@@ -1712,6 +1795,9 @@ const docTemplate = `{
                 "gitRepository": {
                     "$ref": "#/definitions/models.GitRepositoryConfig"
                 },
+                "imageFromRegistry": {
+                    "$ref": "#/definitions/models.ImageFromRegistryConfig"
+                },
                 "mysql": {
                     "$ref": "#/definitions/models.MySQLConfig"
                 },
@@ -1727,8 +1813,25 @@ const docTemplate = `{
                 },
                 "postgresCluster": {
                     "$ref": "#/definitions/models.PostgresClusterConfig"
+                },
+                "valkey": {
+                    "$ref": "#/definitions/models.ValkeyConfig"
+                },
+                "valkeyCluster": {
+                    "$ref": "#/definitions/models.ValkeyClusterConfig"
                 }
             }
+        },
+        "models.BuildType": {
+            "type": "string",
+            "enum": [
+                "Railpack",
+                "Dockerfile"
+            ],
+            "x-enum-varnames": [
+                "BuildTypeRailpack",
+                "BuildTypeDockerfile"
+            ]
         },
         "models.CustomResourceLimits": {
             "type": "object",
@@ -1737,6 +1840,9 @@ const docTemplate = `{
                     "$ref": "#/definitions/models.ApplicationTypeResourceConfig"
                 },
                 "gitRepository": {
+                    "$ref": "#/definitions/models.ApplicationTypeResourceConfig"
+                },
+                "imageFromRegistry": {
                     "$ref": "#/definitions/models.ApplicationTypeResourceConfig"
                 },
                 "mysql": {
@@ -1759,6 +1865,13 @@ const docTemplate = `{
                 },
                 "gitRepository": {
                     "$ref": "#/definitions/models.GitRepositoryDeploymentConfig"
+                },
+                "imageFromRegistry": {
+                    "$ref": "#/definitions/models.ImageFromRegistryDeploymentConfig"
+                },
+                "promote": {
+                    "type": "boolean",
+                    "example": false
                 }
             }
         },
@@ -1796,6 +1909,9 @@ const docTemplate = `{
                 },
                 "gitRepository": {
                     "$ref": "#/definitions/models.GitRepositoryDeploymentConfig"
+                },
+                "imageFromRegistry": {
+                    "$ref": "#/definitions/models.ImageFromRegistryDeploymentConfig"
                 },
                 "phase": {
                     "allOf": [
@@ -1840,6 +1956,19 @@ const docTemplate = `{
                 "tag": {
                     "type": "string",
                     "example": "v1.0.0"
+                }
+            }
+        },
+        "models.DockerfileBuildConfig": {
+            "type": "object",
+            "properties": {
+                "buildContext": {
+                    "type": "string",
+                    "example": "."
+                },
+                "dockerfilePath": {
+                    "type": "string",
+                    "example": "Dockerfile"
                 }
             }
         },
@@ -1928,6 +2057,37 @@ const docTemplate = `{
                 }
             }
         },
+        "models.EnvironmentVariable": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "example": "DATABASE_URL"
+                },
+                "value": {
+                    "type": "string",
+                    "example": "postgres://localhost:5432/mydb"
+                },
+                "valueFrom": {
+                    "type": "object",
+                    "properties": {
+                        "secretKeyRef": {
+                            "type": "object",
+                            "properties": {
+                                "key": {
+                                    "type": "string",
+                                    "example": "url"
+                                },
+                                "name": {
+                                    "type": "string",
+                                    "example": "db-secret"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "models.GitProvider": {
             "type": "string",
             "enum": [
@@ -1951,6 +2111,17 @@ const docTemplate = `{
                 "buildCommand": {
                     "type": "string",
                     "example": "npm run build"
+                },
+                "buildType": {
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.BuildType"
+                        }
+                    ],
+                    "example": "Railpack"
+                },
+                "dockerfileBuild": {
+                    "$ref": "#/definitions/models.DockerfileBuildConfig"
                 },
                 "healthCheck": {
                     "$ref": "#/definitions/models.HealthCheckConfig"
@@ -2039,6 +2210,60 @@ const docTemplate = `{
                 "timeoutSeconds": {
                     "type": "integer",
                     "example": 5
+                }
+            }
+        },
+        "models.ImageFromRegistryConfig": {
+            "type": "object",
+            "properties": {
+                "defaultTag": {
+                    "type": "string",
+                    "example": "latest"
+                },
+                "env": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.EnvironmentVariable"
+                    }
+                },
+                "healthCheck": {
+                    "$ref": "#/definitions/models.HealthCheckConfig"
+                },
+                "port": {
+                    "type": "integer",
+                    "example": 3000
+                },
+                "registry": {
+                    "type": "string",
+                    "example": "dockerhub"
+                },
+                "repository": {
+                    "type": "string",
+                    "example": "nginx/nginx"
+                },
+                "resources": {
+                    "$ref": "#/definitions/models.ResourceRequirements"
+                }
+            }
+        },
+        "models.ImageFromRegistryDeploymentConfig": {
+            "type": "object",
+            "required": [
+                "tag"
+            ],
+            "properties": {
+                "env": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.EnvironmentVariable"
+                    }
+                },
+                "resources": {
+                    "$ref": "#/definitions/models.ResourceRequirements"
+                },
+                "tag": {
+                    "type": "string",
+                    "example": "1.22"
                 }
             }
         },
@@ -2278,6 +2503,31 @@ const docTemplate = `{
                 "ResourceProfileCustom"
             ]
         },
+        "models.ResourceRequirements": {
+            "type": "object",
+            "properties": {
+                "limits": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    },
+                    "example": {
+                        "cpu": "500m",
+                        "memory": "512Mi"
+                    }
+                },
+                "requests": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    },
+                    "example": {
+                        "cpu": "100m",
+                        "memory": "128Mi"
+                    }
+                }
+            }
+        },
         "models.ValidationError": {
             "type": "object",
             "properties": {
@@ -2297,6 +2547,44 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/models.ValidationError"
                     }
+                }
+            }
+        },
+        "models.ValkeyClusterConfig": {
+            "type": "object",
+            "properties": {
+                "database": {
+                    "type": "integer",
+                    "example": 0
+                },
+                "replicas": {
+                    "type": "integer",
+                    "example": 6
+                },
+                "secretRef": {
+                    "type": "string",
+                    "example": "valkey-cluster-credentials"
+                },
+                "version": {
+                    "type": "string",
+                    "example": "7.2"
+                }
+            }
+        },
+        "models.ValkeyConfig": {
+            "type": "object",
+            "properties": {
+                "database": {
+                    "type": "integer",
+                    "example": 0
+                },
+                "secretRef": {
+                    "type": "string",
+                    "example": "valkey-credentials"
+                },
+                "version": {
+                    "type": "string",
+                    "example": "7.2"
                 }
             }
         },

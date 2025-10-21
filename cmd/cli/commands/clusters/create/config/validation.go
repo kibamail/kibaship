@@ -461,4 +461,3 @@ func getFieldErrorMessage(fe validator.FieldError) string {
 		return fmt.Sprintf("%s validation failed: %s", field, fe.Tag())
 	}
 }
-

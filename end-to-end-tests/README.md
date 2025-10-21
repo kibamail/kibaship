@@ -84,8 +84,8 @@ cp /path/to/your/cluster-config.yaml ./kubeconfig
    - Creates:
      - 1 Project
      - 3 Environments (dev, staging, production)
-     - 7 Applications (MySQL, MySQLCluster, Valkey, ValkeyCluster, DockerImage, GitRepository, ImageFromRegistry)
-     - 7 Deployments (one for each application)
+     - 3 Applications (DockerImage, GitRepository, ImageFromRegistry) # TODO: Database applications removed - will be reimplemented
+     - 3 Deployments (one for each application)
 
 5. **Automatic Cleanup**
    - On failure/abort: Deletes all pushed Docker Hub tags

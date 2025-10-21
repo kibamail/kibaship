@@ -66,63 +66,8 @@ spec:
     imagePullSecretRef:
       name: docker-registry-secret
 ---
-apiVersion: platform.operator.kibaship.com/v1alpha1
-kind: Application
-metadata:
-  labels:
-    app.kubernetes.io/name: kibaship
-    app.kubernetes.io/managed-by: kustomize
-    platform.kibaship.com/uuid: "550e8400-e29b-41d4-a716-446655440004"
-  name: application-sample-mysql
-  namespace: default
-spec:
-  projectRef:
-    name: my-project
-  type: MySQL
-  mysql:
-    version: "8.0"
-    database: myapp
-    secretRef:
-      name: mysql-credentials
----
-apiVersion: platform.operator.kibaship.com/v1alpha1
-kind: Application
-metadata:
-  labels:
-    app.kubernetes.io/name: kibaship
-    app.kubernetes.io/managed-by: kustomize
-    platform.kibaship.com/uuid: "550e8400-e29b-41d4-a716-446655440005"
-  name: application-sample-mysql-cluster
-  namespace: default
-spec:
-  projectRef:
-    name: my-project
-  type: MySQLCluster
-  mysqlCluster:
-    version: "8.0"
-    replicas: 3
-    database: myapp
-    secretRef:
-      name: mysql-cluster-credentials
----
-apiVersion: platform.operator.kibaship.com/v1alpha1
-kind: Application
-metadata:
-  labels:
-    app.kubernetes.io/name: kibaship
-    app.kubernetes.io/managed-by: kustomize
-    platform.kibaship.com/uuid: "550e8400-e29b-41d4-a716-446655440006"
-  name: application-sample-postgres
-  namespace: default
-spec:
-  projectRef:
-    name: my-project
-  type: Postgres
-  postgres:
-    version: "14"
-    database: myapp
-    secretRef:
-      name: postgres-credentials
+# TODO: Database application samples removed - will be reimplemented
+# MySQL, MySQLCluster, Postgres, PostgresCluster, Valkey, ValkeyCluster samples removed
 ---
 apiVersion: platform.operator.kibaship.com/v1alpha1
 kind: Application

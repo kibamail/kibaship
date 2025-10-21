@@ -174,21 +174,8 @@ func (r *ApplicationReconciler) handleApplicationReconcile(ctx context.Context, 
 
 	log.Info("Reconciling Application")
 
-	// Ensure MySQL slug is generated for MySQL/MySQLCluster applications
-	slugUpdated, err := r.ensureMySQLSlug(ctx, app)
-	if err != nil {
-		log.Error(err, "Failed to ensure MySQL slug")
-		return ctrl.Result{}, err
-	}
-	if slugUpdated {
-		// Update the Application spec with the slug
-		if err := r.Update(ctx, app); err != nil {
-			log.Error(err, "Failed to update Application with MySQL slug")
-			return ctrl.Result{}, err
-		}
-		log.Info("Updated Application with MySQL slug")
-		return ctrl.Result{Requeue: true}, nil
-	}
+	// TODO: Database application slug generation will be reimplemented
+	// Current MySQL slug generation removed
 
 	// Ensure environment variables secret exists for all applications
 	secretRefUpdated, err := r.ensureApplicationEnvSecret(ctx, app)
@@ -313,22 +300,15 @@ func (r *ApplicationReconciler) getCurrentEnvRef(app *platformv1alpha1.Applicati
 		if app.Spec.DockerImage != nil {
 			return app.Spec.DockerImage.Env
 		}
-	case platformv1alpha1.ApplicationTypeMySQL:
-		if app.Spec.MySQL != nil {
-			return app.Spec.MySQL.Env
-		}
-	case platformv1alpha1.ApplicationTypeMySQLCluster:
-		if app.Spec.MySQLCluster != nil {
-			return app.Spec.MySQLCluster.Env
-		}
-	case platformv1alpha1.ApplicationTypePostgres:
-		if app.Spec.Postgres != nil {
-			return app.Spec.Postgres.Env
-		}
-	case platformv1alpha1.ApplicationTypePostgresCluster:
-		if app.Spec.PostgresCluster != nil {
-			return app.Spec.PostgresCluster.Env
-		}
+	case platformv1alpha1.ApplicationTypeMySQL,
+		platformv1alpha1.ApplicationTypeMySQLCluster,
+		platformv1alpha1.ApplicationTypeValkey,
+		platformv1alpha1.ApplicationTypeValkeyCluster,
+		platformv1alpha1.ApplicationTypePostgres,
+		platformv1alpha1.ApplicationTypePostgresCluster:
+		// TODO: Database application environment handling will be reimplemented
+		// Current implementation removed
+		return nil
 	}
 	return nil
 }
@@ -352,38 +332,15 @@ func (r *ApplicationReconciler) setEnvRefOnApplication(app *platformv1alpha1.App
 			app.Spec.DockerImage.Env = secretRef
 			return true, nil
 		}
-	case platformv1alpha1.ApplicationTypeMySQL:
-		if app.Spec.MySQL == nil {
-			return false, fmt.Errorf("mysql config is nil")
-		}
-		if app.Spec.MySQL.Env == nil || app.Spec.MySQL.Env.Name != secretName {
-			app.Spec.MySQL.Env = secretRef
-			return true, nil
-		}
-	case platformv1alpha1.ApplicationTypeMySQLCluster:
-		if app.Spec.MySQLCluster == nil {
-			return false, fmt.Errorf("mysql cluster config is nil")
-		}
-		if app.Spec.MySQLCluster.Env == nil || app.Spec.MySQLCluster.Env.Name != secretName {
-			app.Spec.MySQLCluster.Env = secretRef
-			return true, nil
-		}
-	case platformv1alpha1.ApplicationTypePostgres:
-		if app.Spec.Postgres == nil {
-			return false, fmt.Errorf("postgres config is nil")
-		}
-		if app.Spec.Postgres.Env == nil || app.Spec.Postgres.Env.Name != secretName {
-			app.Spec.Postgres.Env = secretRef
-			return true, nil
-		}
-	case platformv1alpha1.ApplicationTypePostgresCluster:
-		if app.Spec.PostgresCluster == nil {
-			return false, fmt.Errorf("postgres cluster config is nil")
-		}
-		if app.Spec.PostgresCluster.Env == nil || app.Spec.PostgresCluster.Env.Name != secretName {
-			app.Spec.PostgresCluster.Env = secretRef
-			return true, nil
-		}
+	case platformv1alpha1.ApplicationTypeMySQL,
+		platformv1alpha1.ApplicationTypeMySQLCluster,
+		platformv1alpha1.ApplicationTypeValkey,
+		platformv1alpha1.ApplicationTypeValkeyCluster,
+		platformv1alpha1.ApplicationTypePostgres,
+		platformv1alpha1.ApplicationTypePostgresCluster:
+		// TODO: Database application environment secret setting will be reimplemented
+		// Current implementation removed
+		return false, nil
 	}
 	return false, nil
 }
@@ -637,46 +594,10 @@ func (r *ApplicationReconciler) deleteAssociatedDomains(ctx context.Context, app
 	return nil
 }
 
-// ensureMySQLSlug ensures that MySQL and MySQLCluster applications have a slug generated
+// TODO: ensureMySQLSlug - Database application slug generation will be reimplemented
 func (r *ApplicationReconciler) ensureMySQLSlug(_ context.Context, app *platformv1alpha1.Application) (bool, error) {
-	// Only generate slug for MySQL and MySQLCluster applications
-	if app.Spec.Type != platformv1alpha1.ApplicationTypeMySQL && app.Spec.Type != platformv1alpha1.ApplicationTypeMySQLCluster {
-		return false, nil
-	}
-
-	var currentSlug string
-	var needsUpdate bool
-
-	switch app.Spec.Type {
-	case platformv1alpha1.ApplicationTypeMySQL:
-		if app.Spec.MySQL == nil {
-			app.Spec.MySQL = &platformv1alpha1.MySQLConfig{}
-		}
-		currentSlug = app.Spec.MySQL.Slug
-		if currentSlug == "" {
-			slug, err := generateMySQLSlug()
-			if err != nil {
-				return false, fmt.Errorf("failed to generate MySQL slug: %w", err)
-			}
-			app.Spec.MySQL.Slug = slug
-			needsUpdate = true
-		}
-	case platformv1alpha1.ApplicationTypeMySQLCluster:
-		if app.Spec.MySQLCluster == nil {
-			app.Spec.MySQLCluster = &platformv1alpha1.MySQLClusterConfig{}
-		}
-		currentSlug = app.Spec.MySQLCluster.Slug
-		if currentSlug == "" {
-			slug, err := generateMySQLSlug()
-			if err != nil {
-				return false, fmt.Errorf("failed to generate MySQL cluster slug: %w", err)
-			}
-			app.Spec.MySQLCluster.Slug = slug
-			needsUpdate = true
-		}
-	}
-
-	return needsUpdate, nil
+	// TODO: Implement new database application slug generation logic here
+	return false, nil
 }
 
 // emitApplicationPhaseChange sends a webhook if Notifier is configured and the phase actually changed.

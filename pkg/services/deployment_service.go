@@ -348,7 +348,8 @@ func (s *DeploymentService) convertToDeploymentCRD(deployment *models.Deployment
 
 		// Convert resource requirements
 		if deployment.ImageFromRegistry.Resources != nil {
-			crd.Spec.ImageFromRegistry.Resources = deployment.ImageFromRegistry.Resources.DeepCopy()
+			k8sReq := deployment.ImageFromRegistry.Resources.ToKubernetesResourceRequirements()
+			crd.Spec.ImageFromRegistry.Resources = &k8sReq
 		}
 	}
 

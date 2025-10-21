@@ -149,14 +149,15 @@ func (r *DeploymentProgressController) computeTargetPhase(
 		return r.computeTargetPhaseForGitRepository(deployment)
 	case platformv1alpha1.ApplicationTypeImageFromRegistry:
 		return r.computeTargetPhaseForImageFromRegistry(deployment)
-	case platformv1alpha1.ApplicationTypeMySQL:
-		return r.computeTargetPhaseForMySQL(deployment)
-	case platformv1alpha1.ApplicationTypeMySQLCluster:
-		return r.computeTargetPhaseForMySQLCluster(deployment)
-	case platformv1alpha1.ApplicationTypeValkey:
-		return r.computeTargetPhaseForValkey(deployment)
-	case platformv1alpha1.ApplicationTypeValkeyCluster:
-		return r.computeTargetPhaseForValkeyCluster(deployment)
+	case platformv1alpha1.ApplicationTypeMySQL,
+		platformv1alpha1.ApplicationTypeMySQLCluster,
+		platformv1alpha1.ApplicationTypeValkey,
+		platformv1alpha1.ApplicationTypeValkeyCluster,
+		platformv1alpha1.ApplicationTypePostgres,
+		platformv1alpha1.ApplicationTypePostgresCluster:
+		// TODO: Database application type progress tracking will be reimplemented
+		// Current implementation removed
+		return platformv1alpha1.DeploymentPhaseDeploying
 	default:
 		// Unknown application type - stay in initializing
 		return platformv1alpha1.DeploymentPhaseInitializing
@@ -242,136 +243,36 @@ func (r *DeploymentProgressController) computeTargetPhaseForImageFromRegistry(
 	}
 }
 
-// computeTargetPhaseForMySQL handles MySQL applications by checking MySQLReady condition
+// TODO: computeTargetPhaseForMySQL - MySQL progress tracking will be reimplemented
 func (r *DeploymentProgressController) computeTargetPhaseForMySQL(
 	deployment *platformv1alpha1.Deployment,
 ) platformv1alpha1.DeploymentPhase {
-	// Check MySQLReady condition set by MySQLStatusWatcherReconciler
-	mysqlCondition := meta.FindStatusCondition(deployment.Status.Conditions, "MySQLReady")
-
-	if mysqlCondition == nil {
-		// No condition set yet - still deploying
-		return platformv1alpha1.DeploymentPhaseDeploying
-	}
-
-	// Determine phase based on MySQL condition
-	switch mysqlCondition.Status {
-	case metav1.ConditionTrue:
-		// MySQL is ready - deployment succeeded
-		return platformv1alpha1.DeploymentPhaseSucceeded
-
-	case metav1.ConditionFalse:
-		// Check if this is a permanent failure or just deploying
-		if mysqlCondition.Reason == "MySQLNotReady" {
-			// Still deploying - MySQL not ready yet
-			return platformv1alpha1.DeploymentPhaseDeploying
-		}
-		// Other false conditions might indicate failure
-		return platformv1alpha1.DeploymentPhaseFailed
-
-	default:
-		// Unknown status - still deploying
-		return platformv1alpha1.DeploymentPhaseDeploying
-	}
+	// TODO: Implement new MySQL progress tracking logic here
+	return platformv1alpha1.DeploymentPhaseDeploying
 }
 
-// computeTargetPhaseForMySQLCluster handles MySQLCluster applications by checking MySQLReady condition
+// TODO: computeTargetPhaseForMySQLCluster - MySQL cluster progress tracking will be reimplemented
 func (r *DeploymentProgressController) computeTargetPhaseForMySQLCluster(
 	deployment *platformv1alpha1.Deployment,
 ) platformv1alpha1.DeploymentPhase {
-	// Check MySQLReady condition set by MySQLStatusWatcherReconciler
-	mysqlCondition := meta.FindStatusCondition(deployment.Status.Conditions, "MySQLReady")
-
-	if mysqlCondition == nil {
-		// No condition set yet - still deploying
-		return platformv1alpha1.DeploymentPhaseDeploying
-	}
-
-	// Determine phase based on MySQL condition
-	switch mysqlCondition.Status {
-	case metav1.ConditionTrue:
-		// MySQL cluster is ready - deployment succeeded
-		return platformv1alpha1.DeploymentPhaseSucceeded
-
-	case metav1.ConditionFalse:
-		// Check if this is a permanent failure or just deploying
-		if mysqlCondition.Reason == "MySQLNotReady" {
-			// Still deploying - MySQL cluster not ready yet
-			return platformv1alpha1.DeploymentPhaseDeploying
-		}
-		// Other false conditions might indicate failure
-		return platformv1alpha1.DeploymentPhaseFailed
-
-	default:
-		// Unknown status - still deploying
-		return platformv1alpha1.DeploymentPhaseDeploying
-	}
+	// TODO: Implement new MySQL cluster progress tracking logic here
+	return platformv1alpha1.DeploymentPhaseDeploying
 }
 
-// computeTargetPhaseForValkey handles Valkey applications by checking ValkeyReady condition
+// TODO: computeTargetPhaseForValkey - Valkey progress tracking will be reimplemented
 func (r *DeploymentProgressController) computeTargetPhaseForValkey(
 	deployment *platformv1alpha1.Deployment,
 ) platformv1alpha1.DeploymentPhase {
-	// Check ValkeyReady condition set by ValkeyStatusWatcherReconciler
-	valkeyCondition := meta.FindStatusCondition(deployment.Status.Conditions, "ValkeyReady")
-
-	if valkeyCondition == nil {
-		// No condition set yet - still deploying
-		return platformv1alpha1.DeploymentPhaseDeploying
-	}
-
-	// Determine phase based on Valkey condition
-	switch valkeyCondition.Status {
-	case metav1.ConditionTrue:
-		// Valkey is ready - deployment succeeded
-		return platformv1alpha1.DeploymentPhaseSucceeded
-
-	case metav1.ConditionFalse:
-		// Check if this is a permanent failure or just deploying
-		if valkeyCondition.Reason == "ValkeyNotReady" {
-			// Still deploying - Valkey not ready yet
-			return platformv1alpha1.DeploymentPhaseDeploying
-		}
-		// Other false conditions might indicate failure
-		return platformv1alpha1.DeploymentPhaseFailed
-
-	default:
-		// Unknown status - still deploying
-		return platformv1alpha1.DeploymentPhaseDeploying
-	}
+	// TODO: Implement new Valkey progress tracking logic here
+	return platformv1alpha1.DeploymentPhaseDeploying
 }
 
-// computeTargetPhaseForValkeyCluster handles ValkeyCluster applications by checking ValkeyReady condition
+// TODO: computeTargetPhaseForValkeyCluster - Valkey cluster progress tracking will be reimplemented
 func (r *DeploymentProgressController) computeTargetPhaseForValkeyCluster(
 	deployment *platformv1alpha1.Deployment,
 ) platformv1alpha1.DeploymentPhase {
-	// Check ValkeyReady condition set by ValkeyStatusWatcherReconciler
-	valkeyCondition := meta.FindStatusCondition(deployment.Status.Conditions, "ValkeyReady")
-
-	if valkeyCondition == nil {
-		// No condition set yet - still deploying
-		return platformv1alpha1.DeploymentPhaseDeploying
-	}
-
-	// Determine phase based on Valkey condition
-	switch valkeyCondition.Status {
-	case metav1.ConditionTrue:
-		// Valkey cluster is ready - deployment succeeded
-		return platformv1alpha1.DeploymentPhaseSucceeded
-
-	case metav1.ConditionFalse:
-		// Check if this is a permanent failure or just deploying
-		if valkeyCondition.Reason == "ValkeyNotReady" {
-			// Still deploying - Valkey cluster not ready yet
-			return platformv1alpha1.DeploymentPhaseDeploying
-		}
-		// Other false conditions might indicate failure
-		return platformv1alpha1.DeploymentPhaseFailed
-
-	default:
-		// Unknown status - still deploying
-		return platformv1alpha1.DeploymentPhaseDeploying
-	}
+	// TODO: Implement new Valkey cluster progress tracking logic here
+	return platformv1alpha1.DeploymentPhaseDeploying
 }
 
 // promoteDeployment updates the Application's CurrentDeploymentRef to point to this deployment

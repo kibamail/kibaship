@@ -2470,7 +2470,7 @@ spec:
           value: "3000"
         - name: KIBASHIP_ACME_EMAIL
           value: test@kibaship.com
-        image: kibamail/kibaship:v1.0.0
+        image: kibamail/kibaship:e2e
         livenessProbe:
           httpGet:
             path: /healthz
