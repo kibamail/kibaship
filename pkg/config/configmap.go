@@ -20,9 +20,10 @@ const (
 	OperatorNamespace = "kibaship"
 
 	// ConfigMap keys
-	ConfigKeyDomain     = "KIBASHIP_OPERATOR_DOMAIN"
-	ConfigKeyACMEEmail  = "KIBASHIP_ACME_EMAIL"
-	ConfigKeyWebhookURL = "WEBHOOK_TARGET_URL"
+	ConfigKeyDomain           = "KIBASHIP_OPERATOR_DOMAIN"
+	ConfigKeyACMEEmail        = "KIBASHIP_ACME_EMAIL"
+	ConfigKeyWebhookURL       = "WEBHOOK_TARGET_URL"
+	ConfigKeyGatewayClassName = "KIBASHIP_GATEWAY_CLASS_NAME"
 
 	// WebhookSecretName is the name of the Secret created in the operator namespace
 	// that holds the HMAC signing key for webhook payloads.
@@ -38,9 +39,10 @@ const (
 
 // OperatorConfiguration holds the operator configuration loaded from ConfigMap
 type OperatorConfiguration struct {
-	Domain     string
-	ACMEEmail  string
-	WebhookURL string
+	Domain           string
+	ACMEEmail        string
+	WebhookURL       string
+	GatewayClassName string
 }
 
 // LoadConfigFromConfigMap loads the operator configuration from a ConfigMap
@@ -96,12 +98,19 @@ func LoadConfigFromConfigMap(ctx context.Context, kubeConfig *rest.Config) (*Ope
 			OperatorNamespace, OperatorConfigMapName, ConfigKeyWebhookURL)
 	}
 
+	gatewayClassName, ok := configMap.Data[ConfigKeyGatewayClassName]
+	if !ok || gatewayClassName == "" {
+		return nil, fmt.Errorf("ConfigMap %s/%s is missing required key %s",
+			OperatorNamespace, OperatorConfigMapName, ConfigKeyGatewayClassName)
+	}
+
 	// ACMEEmail is optional
 	acmeEmail := configMap.Data[ConfigKeyACMEEmail]
 
 	return &OperatorConfiguration{
-		Domain:     domain,
-		ACMEEmail:  acmeEmail,
-		WebhookURL: webhookURL,
+		Domain:           domain,
+		ACMEEmail:        acmeEmail,
+		WebhookURL:       webhookURL,
+		GatewayClassName: gatewayClassName,
 	}, nil
 }

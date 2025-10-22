@@ -46,7 +46,7 @@ const (
 	ApplicationDomainLabelDomainType = "platform.operator.kibaship.com/domain-type"
 )
 const (
-	certificatesNamespace   = "certificates"
+	certificatesNamespace   = "kibaship"
 	clusterIssuerName       = "certmanager-acme-issuer"
 	ingressWildcardCertName = "ingress-kibaship-certificate"
 )

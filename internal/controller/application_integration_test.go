@@ -30,7 +30,7 @@ import (
 
 func TestApplicationDomainCreation(t *testing.T) {
 	// Set up operator configuration
-	err := SetOperatorConfig("test.kibaship.com")
+	err := SetOperatorConfig("test.kibaship.com", "test-gateway-class")
 	if err != nil {
 		t.Fatalf("Failed to set operator config: %v", err)
 	}

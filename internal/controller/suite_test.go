@@ -97,7 +97,7 @@ var _ = BeforeSuite(func() {
 	Expect(k8sClient).NotTo(BeNil())
 
 	// Set operator configuration for tests
-	err = SetOperatorConfig("kibaship.com")
+	err = SetOperatorConfig("kibaship.com", "test-gateway-class")
 	Expect(err).NotTo(HaveOccurred())
 
 	// Seed required bootstrap resources used by controllers (registry TLS, namespaces)

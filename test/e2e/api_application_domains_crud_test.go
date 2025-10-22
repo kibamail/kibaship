@@ -148,10 +148,10 @@ var _ = Describe("API Server Application Domain CRUD", func() {
 
 		By("verifying Certificate is created and status.certificateRef is set")
 		domainCRName = utils.GetApplicationDomainResourceName(domResp.UUID)
-		// Certificate should be named ad-<applicationdomain-name> in the certificates namespace
+		// Certificate should be named ad-<applicationdomain-name> in the kibaship namespace
 		certName := fmt.Sprintf("ad-%s", domainCRName)
 		Eventually(func() bool {
-			cmd := exec.Command("kubectl", "-n", "certificates", "get", "certificate", certName)
+			cmd := exec.Command("kubectl", "-n", "kibaship", "get", "certificate", certName)
 			out, err := cmd.CombinedOutput()
 			_ = out
 			return err == nil
@@ -163,17 +163,17 @@ var _ = Describe("API Server Application Domain CRUD", func() {
 				"-o", "jsonpath={.status.certificateRef.name}:{.status.certificateRef.namespace}")
 			out, err := cmd.CombinedOutput()
 			return string(out), err
-		}, "2m", "5s").Should(Equal(certName + ":certificates"))
+		}, "2m", "5s").Should(Equal(certName + ":kibaship"))
 
 		// Certificate should carry key labels propagated from the ApplicationDomain
 		Eventually(func() (string, error) {
-			cmd := exec.Command("kubectl", "-n", "certificates", "get", "certificate", certName,
+			cmd := exec.Command("kubectl", "-n", "kibaship", "get", "certificate", certName,
 				"-o", "jsonpath={.metadata.labels.platform\\.kibaship\\.com/uuid}")
 			out, err := cmd.CombinedOutput()
 			return strings.TrimSpace(string(out)), err
 		}, "2m", "5s").ShouldNot(BeEmpty())
 		Eventually(func() (string, error) {
-			cmd := exec.Command("kubectl", "-n", "certificates", "get", "certificate", certName,
+			cmd := exec.Command("kubectl", "-n", "kibaship", "get", "certificate", certName,
 				"-o", "jsonpath={.metadata.labels.platform\\.kibaship\\.com/project-uuid}")
 			out, err := cmd.CombinedOutput()
 			return strings.TrimSpace(string(out)), err

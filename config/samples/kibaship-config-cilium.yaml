@@ -1,0 +1,27 @@
+# Sample ConfigMap for Kibaship operator with Cilium Gateway API
+# This configuration enables external routing via Cilium's Gateway API implementation
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kibaship-config
+  namespace: kibaship
+  labels:
+    app.kubernetes.io/name: kibaship
+    app.kubernetes.io/managed-by: kustomize
+data:
+  # Required: Base domain for all application subdomains
+  # Applications will get domains like: app-slug.apps.example.com
+  KIBASHIP_OPERATOR_DOMAIN: "example.com"
+  
+  # Required: Gateway API gateway class name
+  # For Cilium: "cilium"
+  # For Istio: "istio" 
+  # For other implementations: check your Gateway API provider documentation
+  KIBASHIP_GATEWAY_CLASS_NAME: "cilium"
+  
+  # Required: Webhook URL for notifications
+  WEBHOOK_TARGET_URL: "https://webhook.example.com/kibaship"
+  
+  # Optional: ACME email for Let's Encrypt certificates
+  # If not provided, certificates will not be automatically provisioned
+  KIBASHIP_ACME_EMAIL: "admin@example.com"

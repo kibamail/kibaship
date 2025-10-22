@@ -28,6 +28,8 @@ type OperatorConfig struct {
 	Domain string
 	// DefaultPort is the default port for applications (hardcoded to 3000)
 	DefaultPort int32
+	// GatewayClassName is the Gateway API gateway class to use for routing
+	GatewayClassName string
 }
 
 var (
@@ -37,17 +39,23 @@ var (
 
 // SetOperatorConfig sets the global operator configuration
 // This should be called once at startup after loading from ConfigMap
-func SetOperatorConfig(domain string) error {
+func SetOperatorConfig(domain, gatewayClassName string) error {
 	// Validate domain format - must be a valid DNS name
 	domainRegex := regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$`)
 	if !domainRegex.MatchString(domain) {
 		return fmt.Errorf("invalid domain format: %s - domain must be a valid DNS name (lowercase, alphanumeric, hyphens, dots)", domain)
 	}
 
+	// Validate gateway class name - must be non-empty
+	if gatewayClassName == "" {
+		return fmt.Errorf("gateway class name cannot be empty")
+	}
+
 	configOnce.Do(func() {
 		operatorConfig = &OperatorConfig{
-			Domain:      domain,
-			DefaultPort: 3000, // Hardcoded to 3000
+			Domain:           domain,
+			DefaultPort:      3000, // Hardcoded to 3000
+			GatewayClassName: gatewayClassName,
 		}
 	})
 

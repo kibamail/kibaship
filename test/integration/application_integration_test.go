@@ -263,11 +263,6 @@ var _ = Describe("Application Integration", func() {
 		}
 	})
 
-	// TODO: MySQL application integration test removed - will be reimplemented
-	It("creates MySQL application successfully", NodeTimeout(30*time.Second), func(ctx SpecContext) {
-		Skip("MySQL application integration test removed - TODO: implement new test")
-	})
-
 	It("retrieves application by slug", NodeTimeout(30*time.Second), func(ctx SpecContext) {
 		apiKey := generateTestAPIKey()
 		router := setupIntegrationTestRouter(apiKey)

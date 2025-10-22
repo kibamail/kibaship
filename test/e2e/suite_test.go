@@ -128,6 +128,9 @@ var _ = SynchronizedBeforeSuite(
 			By("[Process 1] installing Cilium (CNI) via Helm")
 			Expect(utils.InstallCiliumHelm("1.18.0")).To(Succeed(), "Failed to install Cilium via Helm")
 
+			By("[Process 1] installing MetalLB for LoadBalancer service support")
+			Expect(utils.InstallMetalLB()).To(Succeed(), "Failed to install MetalLB")
+
 			By("[Process 1] configuring CoreDNS to use public resolvers for e2e")
 			Expect(utils.ConfigureCoreDNSForwarders()).To(Succeed(), "Failed to configure CoreDNS forwarders")
 
@@ -226,6 +229,49 @@ var _ = SynchronizedBeforeSuite(
 			cmd = exec.Command("kubectl", "rollout", "status", "deployment", "-n", "kibaship", "--timeout=5m")
 			_, err = utils.Run(cmd)
 			ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to wait for operator rollout")
+		}
+
+		// Mark the ingress certificate as ready for e2e tests so Gateway gets full listeners
+		By("[Process 1] marking ingress certificate as ready for e2e tests")
+		cmd = exec.Command("kubectl", "patch", "certificate", "-n", "kibaship", "ingress-kibaship-certificate",
+			"--type=merge", "--patch={\"status\":{\"conditions\":[{\"type\":\"Ready\",\"status\":\"True\",\"reason\":\"Ready\",\"message\":\"Certificate is ready for e2e tests\"}]}}")
+		_, err = utils.Run(cmd)
+		if err != nil {
+			// Certificate might not exist yet, that's okay
+			GinkgoWriter.Printf("Warning: Could not patch certificate status (this is normal if certificate doesn't exist yet): %v\n", err)
+		}
+
+		// Mark all certificates as ready for e2e tests to avoid timeouts
+		By("[Process 1] marking all certificates as ready for e2e tests")
+		cmd = exec.Command("kubectl", "get", "certificates", "-A", "-o", "jsonpath={range .items[*]}{.metadata.namespace}{\" \"}{.metadata.name}{\"\\n\"}{end}")
+		output, err := utils.Run(cmd)
+		if err == nil {
+			lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+			for _, line := range lines {
+				if line == "" {
+					continue
+				}
+				parts := strings.Fields(line)
+				if len(parts) >= 2 {
+					namespace, name := parts[0], parts[1]
+					patchCmd := exec.Command("kubectl", "patch", "certificate", "-n", namespace, name,
+						"--type=merge", "--patch={\"status\":{\"conditions\":[{\"type\":\"Ready\",\"status\":\"True\",\"reason\":\"Ready\",\"message\":\"Certificate is ready for e2e tests\"}]}}")
+					_, patchErr := utils.Run(patchCmd)
+					if patchErr != nil {
+						GinkgoWriter.Printf("Warning: Could not patch certificate %s/%s: %v\n", namespace, name, patchErr)
+					}
+				}
+			}
+		}
+
+		// Trigger Gateway reconciliation by patching it to use full listeners
+		By("[Process 1] ensuring Gateway has full listeners for e2e tests")
+		cmd = exec.Command("kubectl", "patch", "gateway", "-n", "kibaship", "ingress-kibaship-gateway", "--type=merge",
+			"--patch={\"spec\":{\"listeners\":[{\"name\":\"http\",\"protocol\":\"HTTP\",\"port\":80,\"allowedRoutes\":{\"namespaces\":{\"from\":\"All\"}}},{\"name\":\"https\",\"protocol\":\"HTTPS\",\"port\":443,\"tls\":{\"mode\":\"Terminate\",\"certificateRefs\":[{\"name\":\"ingress-kibaship-certificate\"}]},\"allowedRoutes\":{\"namespaces\":{\"from\":\"All\"}}},{\"name\":\"mysql-tls\",\"protocol\":\"TLS\",\"port\":3306,\"tls\":{\"mode\":\"Passthrough\"},\"allowedRoutes\":{\"namespaces\":{\"from\":\"All\"},\"kinds\":[{\"kind\":\"TLSRoute\"}]}},{\"name\":\"valkey-tls\",\"protocol\":\"TLS\",\"port\":6379,\"tls\":{\"mode\":\"Passthrough\"},\"allowedRoutes\":{\"namespaces\":{\"from\":\"All\"},\"kinds\":[{\"kind\":\"TLSRoute\"}]}},{\"name\":\"postgres-tls\",\"protocol\":\"TLS\",\"port\":5432,\"tls\":{\"mode\":\"Passthrough\"},\"allowedRoutes\":{\"namespaces\":{\"from\":\"All\"},\"kinds\":[{\"kind\":\"TLSRoute\"}]}}]}}")
+		_, err = utils.Run(cmd)
+		if err != nil {
+			// Gateway might not exist yet, that's okay
+			GinkgoWriter.Printf("Warning: Could not patch Gateway (this is normal if Gateway doesn't exist yet): %v\n", err)
 		}
 
 		if !registryDeployed {

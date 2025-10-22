@@ -217,11 +217,6 @@ var _ = Describe("Application Controller", func() {
 			}()
 		})
 
-		// TODO: MySQL application validation test removed - will be reimplemented
-		It("should validate MySQL application type", func() {
-			Skip("MySQL application validation test removed - TODO: implement new test")
-		})
-
 		It("should reject invalid repository format", func() {
 			By("Creating a GitRepository application with invalid repo format")
 			invalidGitApp := &platformv1alpha1.Application{

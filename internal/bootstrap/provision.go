@@ -86,23 +86,29 @@ func ensureStorageClass(ctx context.Context, c client.Client, name, replicas str
 // It is idempotent and safe to call on every manager start.
 //
 // This function orchestrates the provisioning of:
+//   - ACME-DNS server for DNS-01 challenges
 //   - ClusterIssuer for ACME certificates
 //   - Ingress resources (Gateway, certificates, routes) via ProvisionIngress
-func ProvisionIngressAndCertificates(ctx context.Context, c client.Client, baseDomain, acmeEmail string) error {
+func ProvisionIngressAndCertificates(ctx context.Context, c client.Client, baseDomain, acmeEmail, gatewayClassName string) error {
 	if baseDomain == "" {
 		return nil // nothing to do without a domain
 	}
 
-	// 1) ClusterIssuer (requires cert-manager CRDs to exist)
+	// 1) ACME-DNS server (required for DNS-01 challenges and Gateway DNS listener)
+	if err := ProvisionAcmeDNS(ctx, c, baseDomain); err != nil {
+		return fmt.Errorf("provision ACME-DNS: %w", err)
+	}
+
+	// 2) ClusterIssuer (requires cert-manager CRDs to exist)
 	if acmeEmail != "" {
 		if err := ensureClusterIssuer(ctx, c, acmeEmail); err != nil {
 			return fmt.Errorf("ensure ClusterIssuer: %w", err)
 		}
 	}
 
-	// 2) Ingress provisioning (wildcard certificate, Gateway, ReferenceGrant)
+	// 3) Ingress provisioning (wildcard certificate, Gateway, ReferenceGrant)
 	// This is handled in provision-ingress.go
-	if err := ProvisionIngress(ctx, c, baseDomain, acmeEmail); err != nil {
+	if err := ProvisionIngress(ctx, c, baseDomain, acmeEmail, gatewayClassName); err != nil {
 		return fmt.Errorf("provision ingress: %w", err)
 	}
 

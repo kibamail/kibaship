@@ -40,6 +40,7 @@ func InstallGatewayAPI() error {
 		"https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.2.0/config/crd/standard/gateway.networking.k8s.io_referencegrants.yaml",
 		"https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.2.0/config/crd/standard/gateway.networking.k8s.io_grpcroutes.yaml",
 		"https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.2.0/config/crd/experimental/gateway.networking.k8s.io_tlsroutes.yaml",
+		"https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.2.0/config/crd/experimental/gateway.networking.k8s.io_udproutes.yaml",
 	}
 
 	for _, url := range urls {
@@ -56,6 +57,7 @@ func InstallGatewayAPI() error {
 		"referencegrants.gateway.networking.k8s.io",
 		"grpcroutes.gateway.networking.k8s.io",
 		"tlsroutes.gateway.networking.k8s.io",
+		"udproutes.gateway.networking.k8s.io",
 	}
 
 	for _, crd := range crds {
@@ -64,6 +66,78 @@ func InstallGatewayAPI() error {
 			return err
 		}
 	}
+	return nil
+}
+
+// InstallMetalLB installs MetalLB for LoadBalancer service support in Kind clusters
+func InstallMetalLB() error {
+	// Install MetalLB
+	cmd := exec.Command("kubectl", "apply", "-f", "https://raw.githubusercontent.com/metallb/metallb/v0.14.8/config/manifests/metallb-native.yaml")
+	if _, err := Run(cmd); err != nil {
+		return fmt.Errorf("failed to install MetalLB: %w", err)
+	}
+
+	// Wait for MetalLB to be ready
+	cmd = exec.Command("kubectl", "wait", "--namespace", "metallb-system", "--for=condition=ready", "pod", "--selector=app=metallb", "--timeout=300s")
+	if _, err := Run(cmd); err != nil {
+		return fmt.Errorf("failed to wait for MetalLB to be ready: %w", err)
+	}
+
+	// Wait for MetalLB webhook to be ready
+	cmd = exec.Command("kubectl", "wait", "--namespace", "metallb-system", "--for=condition=available", "deployment", "controller", "--timeout=300s")
+	if _, err := Run(cmd); err != nil {
+		return fmt.Errorf("failed to wait for MetalLB controller to be available: %w", err)
+	}
+
+	// Give the webhook a bit more time to be fully ready
+	time.Sleep(10 * time.Second)
+
+	// Get the Kind cluster's Docker network subnet for IP pool configuration
+	clusterName := os.Getenv("KIND_CLUSTER")
+	if clusterName == "" {
+		clusterName = "kibaship"
+	}
+
+	// Get the Docker network used by Kind
+	cmd = exec.Command("docker", "network", "inspect", "kind", "-f", "{{range .IPAM.Config}}{{.Subnet}}{{end}}")
+	output, err := cmd.Output()
+	if err != nil {
+		return fmt.Errorf("failed to get Kind network subnet: %w", err)
+	}
+
+	subnet := strings.TrimSpace(string(output))
+	if subnet == "" {
+		// Fallback to default Kind subnet
+		subnet = "172.18.0.0/16"
+	}
+
+	// Configure IP address pool for MetalLB
+	// Use a range within the Kind network that doesn't conflict with existing IPs
+	ipPoolConfig := fmt.Sprintf(`apiVersion: metallb.io/v1beta1
+kind: IPAddressPool
+metadata:
+  name: kind-pool
+  namespace: metallb-system
+spec:
+  addresses:
+  - 172.18.200.1-172.18.200.250
+---
+apiVersion: metallb.io/v1beta1
+kind: L2Advertisement
+metadata:
+  name: kind-advertisement
+  namespace: metallb-system
+spec:
+  ipAddressPools:
+  - kind-pool`)
+
+	// Apply the IP pool configuration
+	cmd = exec.Command("kubectl", "apply", "-f", "-")
+	cmd.Stdin = strings.NewReader(ipPoolConfig)
+	if _, err := Run(cmd); err != nil {
+		return fmt.Errorf("failed to configure MetalLB IP pool: %w", err)
+	}
+
 	return nil
 }
 
@@ -120,9 +194,8 @@ func InstallCiliumHelm(version string) error {
 		"--set", "kubeProxyReplacement=true",
 		"--set", "tunnelProtocol=vxlan",
 		"--set", "gatewayAPI.enabled=true",
-		"--set", "gatewayAPI.hostNetwork.enabled=true",
+		"--set", "gatewayAPI.hostNetwork.enabled=false",
 		"--set", "gatewayAPI.enableAlpn=true",
-		"--set", "gatewayAPI.hostNetwork.nodeLabelSelector=ingress.kibaship.com/ready=true",
 		"--set", "gatewayAPI.enableProxyProtocol=true",
 		"--set", "gatewayAPI.enableAppProtocol=true",
 		"--set", "ipam.mode=kubernetes",
@@ -737,6 +810,7 @@ metadata:
 data:
   KIBASHIP_OPERATOR_DOMAIN: "myapps.kibaship.com"
   KIBASHIP_ACME_EMAIL: "acme@kibaship.com"
+  KIBASHIP_GATEWAY_CLASS_NAME: "cilium"
   WEBHOOK_TARGET_URL: "%s"
 `, webhookURL)
 

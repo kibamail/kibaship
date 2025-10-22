@@ -965,20 +965,6 @@ var _ = Describe("Deployment Controller", func() {
 		})
 	})
 
-	// TODO: MySQL Deployment tests removed - will be reimplemented
-	Describe("MySQL Deployment", func() {
-		It("should be reimplemented", func() {
-			Skip("MySQL deployment tests removed - TODO: implement new tests")
-		})
-	})
-
-	// TODO: MySQL Utility Functions tests removed - will be reimplemented
-	Describe("MySQL Utility Functions", func() {
-		It("should be reimplemented", func() {
-			Skip("MySQL utility function tests removed - TODO: implement new tests")
-		})
-	})
-
 })
 
 // Helper function to reconcile deployment twice (finalizer + actual logic)

@@ -1,0 +1,41 @@
+# Kind cluster configuration for testing external routing
+# This configuration enables external access to LoadBalancer services
+# by forwarding ports from the host to the cluster
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: kibaship-external-test
+nodes:
+- role: control-plane
+  kubeadmConfigPatches:
+  - |
+    kind: InitConfiguration
+    nodeRegistration:
+      kubeletExtraArgs:
+        node-labels: "ingress-ready=true"
+  extraPortMappings:
+  # HTTP traffic (port 80)
+  - containerPort: 80
+    hostPort: 8080
+    protocol: TCP
+  # HTTPS traffic (port 443)
+  - containerPort: 443
+    hostPort: 8443
+    protocol: TCP
+  # MySQL TLS traffic (port 3306) - for database applications
+  - containerPort: 3306
+    hostPort: 3306
+    protocol: TCP
+  # Valkey/Redis TLS traffic (port 6379) - for cache applications
+  - containerPort: 6379
+    hostPort: 6379
+    protocol: TCP
+  # PostgreSQL TLS traffic (port 5432) - for database applications
+  - containerPort: 5432
+    hostPort: 5432
+    protocol: TCP
+networking:
+  # Disable default CNI to allow custom CNI installation
+  disableDefaultCNI: false
+  # Use a custom pod subnet to avoid conflicts
+  podSubnet: "10.244.0.0/16"
+  serviceSubnet: "10.96.0.0/16"

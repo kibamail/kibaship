@@ -127,10 +127,11 @@ func main() {
 	setupLog.Info("Operator configuration loaded successfully",
 		"domain", opConfig.Domain,
 		"webhookURL", opConfig.WebhookURL,
-		"acmeEmail", opConfig.ACMEEmail)
+		"acmeEmail", opConfig.ACMEEmail,
+		"gatewayClassName", opConfig.GatewayClassName)
 
 	// Set the global operator configuration
-	if err := controller.SetOperatorConfig(opConfig.Domain); err != nil {
+	if err := controller.SetOperatorConfig(opConfig.Domain, opConfig.GatewayClassName); err != nil {
 		setupLog.Error(err, "failed to set operator configuration")
 		os.Exit(1)
 	}
@@ -152,6 +153,7 @@ func main() {
 		uncachedClient,
 		baseDomain,
 		acmeEmail,
+		opConfig.GatewayClassName,
 	); err != nil {
 		setupLog.Error(err, "bootstrap provisioning failed (continuing)")
 	} else {
