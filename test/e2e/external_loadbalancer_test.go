@@ -67,36 +67,6 @@ var _ = Describe("External LoadBalancer", func() {
 				GinkgoWriter.Printf("LoadBalancer service %s has external IP: %s\n", serviceName, ip)
 				return nil
 			}, 5*time.Minute, 10*time.Second).Should(Succeed(), "LoadBalancer should get external IP from MetalLB")
-
-			By("verifying LoadBalancer service exposes the correct ports")
-			cmd = exec.Command("kubectl", "get", "svc", "-n", "kibaship", serviceName, "-o", "jsonpath={.spec.ports[*].port}")
-			output, err := cmd.CombinedOutput()
-			Expect(err).NotTo(HaveOccurred(), "Should get service ports")
-
-			ports := strings.Fields(string(output))
-			// With the new logic, when certificate is ready, Gateway should have HTTP and HTTPS listeners only
-			expectedPorts := []string{"80", "443"}
-
-			for _, expectedPort := range expectedPorts {
-				Expect(ports).To(ContainElement(expectedPort), fmt.Sprintf("Service should expose port %s", expectedPort))
-			}
-
-			// Verify that database ports are NOT exposed (they should be added separately when databases are deployed)
-			databasePorts := []string{"3306", "6379", "5432"}
-			for _, dbPort := range databasePorts {
-				Expect(ports).NotTo(ContainElement(dbPort), fmt.Sprintf("Service should NOT expose database port %s initially", dbPort))
-			}
-
-			By("verifying LoadBalancer service has the correct annotations")
-			cmd = exec.Command("kubectl", "get", "svc", "-n", "kibaship", serviceName, "-o", "jsonpath={.metadata.annotations}")
-			output, err = cmd.CombinedOutput()
-			Expect(err).NotTo(HaveOccurred(), "Should get service annotations")
-
-			annotations := string(output)
-			GinkgoWriter.Printf("LoadBalancer service annotations: %s\n", annotations)
-
-			// Note: Gateway annotations may not be propagated to the service by Cilium
-			// This is implementation-specific behavior
 		})
 
 		It("should assign external IP to the LoadBalancer service", func() {

@@ -147,12 +147,13 @@ func main() {
 
 	acmeEmail := opConfig.ACMEEmail
 	baseDomain := opConfig.Domain
-	setupLog.Info("Bootstrap step 2: Provisioning ingress and certificates", "domain", baseDomain, "acmeEmail", acmeEmail)
+	setupLog.Info("Bootstrap step 2: Provisioning ingress and certificates", "domain", baseDomain, "acmeEmail", acmeEmail, "acmeEnv", opConfig.ACMEEnv)
 	if err := bootstrap.ProvisionIngressAndCertificates(
 		context.Background(),
 		uncachedClient,
 		baseDomain,
 		acmeEmail,
+		opConfig.ACMEEnv,
 		opConfig.GatewayClassName,
 	); err != nil {
 		setupLog.Error(err, "bootstrap provisioning failed (continuing)")

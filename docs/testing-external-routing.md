@@ -22,7 +22,8 @@ data:
   ingress.domain: "example.com"
   ingress.gateway_classname: "cilium" # Required: Gateway API class
   webhooks.url: "https://webhook.example.com/kibaship"
-  webhooks.url: "admin@example.com" # Optional
+  certs.email: "admin@example.com" # Required: ACME email for Let's Encrypt
+  certs.env: "staging" # Optional: Use staging for testing (defaults to production)
 ```
 
 ### 2. Sample Configurations

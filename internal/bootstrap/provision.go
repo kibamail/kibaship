@@ -89,7 +89,7 @@ func ensureStorageClass(ctx context.Context, c client.Client, name, replicas str
 //   - ACME-DNS server for DNS-01 challenges
 //   - ClusterIssuer for ACME certificates
 //   - Ingress resources (Gateway, certificates, routes) via ProvisionIngress
-func ProvisionIngressAndCertificates(ctx context.Context, c client.Client, baseDomain, acmeEmail, gatewayClassName string) error {
+func ProvisionIngressAndCertificates(ctx context.Context, c client.Client, baseDomain, acmeEmail, acmeEnv, gatewayClassName string) error {
 	if baseDomain == "" {
 		return nil // nothing to do without a domain
 	}
@@ -101,7 +101,7 @@ func ProvisionIngressAndCertificates(ctx context.Context, c client.Client, baseD
 
 	// 2) ClusterIssuer (requires cert-manager CRDs to exist)
 	if acmeEmail != "" {
-		if err := ensureClusterIssuer(ctx, c, acmeEmail); err != nil {
+		if err := ensureClusterIssuer(ctx, c, acmeEmail, acmeEnv); err != nil {
 			return fmt.Errorf("ensure ClusterIssuer: %w", err)
 		}
 	}
@@ -126,7 +126,7 @@ func ensureNamespace(ctx context.Context, c client.Client, name string) error {
 	return nil
 }
 
-func ensureClusterIssuer(ctx context.Context, c client.Client, email string) error {
+func ensureClusterIssuer(ctx context.Context, c client.Client, email, acmeEnv string) error {
 	obj := &unstructured.Unstructured{}
 	obj.SetGroupVersionKind(schema.GroupVersionKind{Group: "cert-manager.io", Version: "v1", Kind: "ClusterIssuer"})
 	obj.SetName(issuerName)
@@ -135,10 +135,19 @@ func ensureClusterIssuer(ctx context.Context, c client.Client, email string) err
 		if !errors.IsNotFound(err) {
 			return err
 		}
+
+		// Determine ACME server URL based on environment
+		var acmeServerURL string
+		if acmeEnv == "staging" {
+			acmeServerURL = "https://acme-staging-v02.api.letsencrypt.org/directory"
+		} else {
+			acmeServerURL = "https://acme-v02.api.letsencrypt.org/directory"
+		}
+
 		obj.Object["spec"] = map[string]any{
 			"acme": map[string]any{
 				"email":               email,
-				"server":              "https://acme-v02.api.letsencrypt.org/directory",
+				"server":              acmeServerURL,
 				"privateKeySecretRef": map[string]any{"name": "acme-certificates-private-key"},
 				"solvers": []any{
 					map[string]any{

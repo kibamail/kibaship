@@ -22,6 +22,9 @@ data:
   # Required: Webhook URL for notifications
   webhooks.url: "https://webhook.example.com/kibaship"
 
-  # Optional: ACME email for Let's Encrypt certificates
-  # If not provided, certificates will not be automatically provisioned
+  # Required: ACME email for Let's Encrypt certificates
   certs.email: "admin@example.com"
+
+  # Optional: ACME environment (staging or production, defaults to production)
+  # Use "staging" for testing to avoid Let's Encrypt rate limits
+  certs.env: "production"

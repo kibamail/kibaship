@@ -9,8 +9,19 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+	typedcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/rest"
 )
+
+// kubernetesInterface allows for dependency injection in tests
+type kubernetesInterface interface {
+	CoreV1() typedcorev1.CoreV1Interface
+}
+
+// newForConfigFunc allows for dependency injection in tests
+var newForConfigFunc = func(config *rest.Config) (kubernetesInterface, error) {
+	return kubernetes.NewForConfig(config)
+}
 
 const (
 	// OperatorConfigMapName is the name of the ConfigMap in the operator namespace
@@ -23,6 +34,7 @@ const (
 	ConfigKeyDomain           = "ingress.domain"
 	ConfigKeyGatewayClassName = "ingress.gateway_classname"
 	ConfigKeyACMEEmail        = "certs.email"
+	ConfigKeyACMEEnv          = "certs.env"
 	ConfigKeyWebhookURL       = "webhooks.url"
 
 	// WebhookSecretName is the name of the Secret created in the operator namespace
@@ -41,6 +53,7 @@ const (
 type OperatorConfiguration struct {
 	Domain           string
 	ACMEEmail        string
+	ACMEEnv          string
 	WebhookURL       string
 	GatewayClassName string
 }
@@ -48,7 +61,7 @@ type OperatorConfiguration struct {
 // LoadConfigFromConfigMap loads the operator configuration from a ConfigMap
 // It will retry up to maxRetries times with retryInterval between attempts
 func LoadConfigFromConfigMap(ctx context.Context, kubeConfig *rest.Config) (*OperatorConfiguration, error) {
-	clientset, err := kubernetes.NewForConfig(kubeConfig)
+	clientset, err := newForConfigFunc(kubeConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create kubernetes clientset: %w", err)
 	}
@@ -104,12 +117,29 @@ func LoadConfigFromConfigMap(ctx context.Context, kubeConfig *rest.Config) (*Ope
 			OperatorNamespace, OperatorConfigMapName, ConfigKeyGatewayClassName)
 	}
 
-	// ACMEEmail is optional
-	acmeEmail := configMap.Data[ConfigKeyACMEEmail]
+	// ACMEEmail is now required
+	acmeEmail, ok := configMap.Data[ConfigKeyACMEEmail]
+	if !ok || acmeEmail == "" {
+		return nil, fmt.Errorf("ConfigMap %s/%s is missing required key %s",
+			OperatorNamespace, OperatorConfigMapName, ConfigKeyACMEEmail)
+	}
+
+	// ACMEEnv is optional, defaults to "production"
+	acmeEnv := configMap.Data[ConfigKeyACMEEnv]
+	if acmeEnv == "" {
+		acmeEnv = "production"
+	}
+
+	// Validate ACMEEnv value
+	if acmeEnv != "production" && acmeEnv != "staging" {
+		return nil, fmt.Errorf("ConfigMap %s/%s has invalid value for %s: %s (must be 'production' or 'staging')",
+			OperatorNamespace, OperatorConfigMapName, ConfigKeyACMEEnv, acmeEnv)
+	}
 
 	return &OperatorConfiguration{
 		Domain:           domain,
 		ACMEEmail:        acmeEmail,
+		ACMEEnv:          acmeEnv,
 		WebhookURL:       webhookURL,
 		GatewayClassName: gatewayClassName,
 	}, nil

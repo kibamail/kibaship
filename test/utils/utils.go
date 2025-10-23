@@ -391,16 +391,6 @@ func InstallCertManager() error {
 		}
 	}
 
-	// // Disable cert-manager webhook validation in test environment
-	// // This prevents cert-manager validation webhook from interfering with test deployment
-	// cmd = exec.Command("kubectl", "delete",
-	// 	"validatingwebhookconfigurations.admissionregistration.k8s.io",
-	// 	"cert-manager-webhook")
-	// if _, err := Run(cmd); err != nil {
-	// 	// Ignore errors if webhook doesn't exist
-	// 	warnError(err)
-	// }
-
 	return nil
 }
 

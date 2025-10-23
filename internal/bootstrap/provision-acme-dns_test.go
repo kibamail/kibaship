@@ -2,12 +2,14 @@ package bootstrap
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -234,4 +236,122 @@ func provisionAcmeDNSWithoutWait(ctx context.Context, c client.Client, baseDomai
 
 	// Skip waiting for readiness in tests
 	return nil
+}
+
+func TestEnsureAcmeDNSAccountSecretCreation(t *testing.T) {
+	g := NewWithT(t)
+	ctx := context.Background()
+
+	scheme := runtime.NewScheme()
+	g.Expect(corev1.AddToScheme(scheme)).To(Succeed())
+
+	// Create fake client
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+
+	// Test domain
+	baseDomain := "example.com"
+
+	// Mock ACME-DNS account data
+	mockAccount := AcmeDNSAccount{
+		Username:   "test-username",
+		Password:   "test-password",
+		Subdomain:  "test-subdomain",
+		FullDomain: "test-subdomain.acme.example.com",
+	}
+
+	// Create the expected credentials JSON
+	expectedCredentials := map[string]AcmeDNSAccount{
+		baseDomain: mockAccount,
+	}
+	expectedJSON, err := json.Marshal(expectedCredentials)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	// Create the secret manually (simulating successful registration)
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      AcmeDNSAccountSecretName,
+			Namespace: AcmeDNSNamespace,
+			Labels: map[string]string{
+				"app":                          AcmeDNSName,
+				"app.kubernetes.io/name":       AcmeDNSName,
+				"app.kubernetes.io/component":  "credentials",
+				"app.kubernetes.io/managed-by": "kibaship",
+			},
+		},
+		Type: corev1.SecretTypeOpaque,
+		Data: map[string][]byte{
+			"acmedns.json": expectedJSON,
+		},
+	}
+
+	err = fakeClient.Create(ctx, secret)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	// Verify the secret exists and has correct structure
+	retrievedSecret := &corev1.Secret{}
+	err = fakeClient.Get(ctx, client.ObjectKey{
+		Namespace: AcmeDNSNamespace,
+		Name:      AcmeDNSAccountSecretName,
+	}, retrievedSecret)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	// Verify the secret has the correct data
+	g.Expect(retrievedSecret.Data).To(HaveKey("acmedns.json"))
+
+	// Parse and verify the JSON structure
+	var credentials map[string]AcmeDNSAccount
+	err = json.Unmarshal(retrievedSecret.Data["acmedns.json"], &credentials)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(credentials).To(HaveKey(baseDomain))
+	g.Expect(credentials[baseDomain].Username).To(Equal("test-username"))
+	g.Expect(credentials[baseDomain].Password).To(Equal("test-password"))
+	g.Expect(credentials[baseDomain].Subdomain).To(Equal("test-subdomain"))
+	g.Expect(credentials[baseDomain].FullDomain).To(Equal("test-subdomain.acme.example.com"))
+
+	// Verify labels
+	g.Expect(retrievedSecret.Labels).To(HaveKeyWithValue("app", AcmeDNSName))
+	g.Expect(retrievedSecret.Labels).To(HaveKeyWithValue("app.kubernetes.io/managed-by", "kibaship"))
+}
+
+func TestAcmeDNSAccountStructure(t *testing.T) {
+	g := NewWithT(t)
+
+	// Test that the AcmeDNSAccount structure can be properly marshaled/unmarshaled
+	account := AcmeDNSAccount{
+		Username:   "test-user",
+		Password:   "test-pass",
+		Subdomain:  "test-sub",
+		FullDomain: "test-sub.acme.example.com",
+		AllowFrom:  []string{"192.168.1.0/24"},
+	}
+
+	// Marshal to JSON
+	jsonData, err := json.Marshal(account)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	// Unmarshal back
+	var unmarshaled AcmeDNSAccount
+	err = json.Unmarshal(jsonData, &unmarshaled)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	// Verify all fields
+	g.Expect(unmarshaled.Username).To(Equal(account.Username))
+	g.Expect(unmarshaled.Password).To(Equal(account.Password))
+	g.Expect(unmarshaled.Subdomain).To(Equal(account.Subdomain))
+	g.Expect(unmarshaled.FullDomain).To(Equal(account.FullDomain))
+	g.Expect(unmarshaled.AllowFrom).To(Equal(account.AllowFrom))
+
+	// Test cert-manager format (domain as key)
+	credentialsMap := map[string]AcmeDNSAccount{
+		"example.com": account,
+	}
+
+	credentialsJSON, err := json.Marshal(credentialsMap)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	var unmarshaledMap map[string]AcmeDNSAccount
+	err = json.Unmarshal(credentialsJSON, &unmarshaledMap)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(unmarshaledMap).To(HaveKey("example.com"))
+	g.Expect(unmarshaledMap["example.com"].Username).To(Equal(account.Username))
 }

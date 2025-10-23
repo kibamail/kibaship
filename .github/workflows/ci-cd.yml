@@ -555,7 +555,9 @@ jobs:
             kubectl create configmap kibaship-config \
               -n kibaship \
               --from-literal=ingress.domain=your-domain.com \
+              --from-literal=ingress.gateway_classname=cilium \
               --from-literal=certs.email=acme@your-domain.com \
+              --from-literal=certs.env=staging \
               --from-literal=webhooks.url=https://webhook.your-domain.com
             ```
 

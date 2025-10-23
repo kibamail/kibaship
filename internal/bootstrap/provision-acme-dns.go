@@ -1,8 +1,12 @@
 package bootstrap
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -21,7 +25,22 @@ const (
 	AcmeDNSNamespace = "kibaship"
 	AcmeDNSName      = "acme-dns"
 	AcmeDNSVersion   = "v1.0"
+	AcmeDNSAccountSecretName = "acme-dns-account"
 )
+
+// AcmeDNSAccount represents the ACME-DNS account registration response
+type AcmeDNSAccount struct {
+	AllowFrom   []string `json:"allowfrom,omitempty"`
+	FullDomain  string   `json:"fulldomain"`
+	Password    string   `json:"password"`
+	Subdomain   string   `json:"subdomain"`
+	Username    string   `json:"username"`
+}
+
+// AcmeDNSRegistrationRequest represents the ACME-DNS account registration request
+type AcmeDNSRegistrationRequest struct {
+	AllowFrom []string `json:"allowfrom,omitempty"`
+}
 
 // ProvisionAcmeDNS ensures ACME-DNS resources are present and ready.
 // It is idempotent and safe to call on every manager start.
@@ -80,6 +99,12 @@ func ProvisionAcmeDNS(ctx context.Context, c client.Client, baseDomain string) e
 	log.Info("Step 6: Waiting for ACME-DNS to be ready")
 	if err := waitForAcmeDNSReady(ctx, c); err != nil {
 		return fmt.Errorf("wait for ACME-DNS ready: %w", err)
+	}
+
+	// 7. Register ACME-DNS account and save credentials
+	log.Info("Step 7: Ensuring ACME-DNS account registration")
+	if err := ensureAcmeDNSAccount(ctx, c, baseDomain); err != nil {
+		return fmt.Errorf("ensure ACME-DNS account: %w", err)
 	}
 
 	log.Info("ACME-DNS provisioning completed successfully")
@@ -681,4 +706,177 @@ func waitForAcmeDNSReady(ctx context.Context, c client.Client) error {
 	}
 
 	return nil
+}
+
+// ensureAcmeDNSAccount ensures an ACME-DNS account is registered and credentials are stored in a secret.
+// This creates the "acme-dns-account" secret with "acmedns.json" key that cert-manager's ClusterIssuer expects.
+// The secret format follows cert-manager's ACME-DNS integration requirements:
+// {
+//   "example.com": {
+//     "username": "...",
+//     "password": "...",
+//     "fulldomain": "...",
+//     "subdomain": "..."
+//   }
+// }
+func ensureAcmeDNSAccount(ctx context.Context, c client.Client, baseDomain string) error {
+	log := ctrl.Log.WithName("bootstrap").WithName("acme-dns-account")
+
+	// Check if account secret already exists
+	log.Info("Checking if ACME-DNS account secret already exists", "secret", AcmeDNSAccountSecretName, "namespace", AcmeDNSNamespace)
+	secret := &corev1.Secret{}
+	secretKey := client.ObjectKey{
+		Namespace: AcmeDNSNamespace,
+		Name:      AcmeDNSAccountSecretName,
+	}
+
+	if err := c.Get(ctx, secretKey, secret); err == nil {
+		// Secret already exists, verify it has the required key
+		if _, ok := secret.Data["acmedns.json"]; ok {
+			log.Info("ACME-DNS account secret already exists with valid credentials", "secret", AcmeDNSAccountSecretName)
+			return nil
+		}
+		log.Info("ACME-DNS account secret exists but missing acmedns.json key, will recreate", "secret", AcmeDNSAccountSecretName)
+	} else if !errors.IsNotFound(err) {
+		log.Error(err, "Failed to check ACME-DNS account secret", "secret", AcmeDNSAccountSecretName)
+		return fmt.Errorf("failed to check ACME-DNS account secret: %w", err)
+	}
+
+	// Register new ACME-DNS account
+	log.Info("Registering new ACME-DNS account", "domain", baseDomain)
+	account, err := registerAcmeDNSAccount(ctx, baseDomain)
+	if err != nil {
+		log.Error(err, "Failed to register ACME-DNS account")
+		return fmt.Errorf("failed to register ACME-DNS account: %w", err)
+	}
+
+	log.Info("ACME-DNS account registered successfully",
+		"username", account.Username,
+		"subdomain", account.Subdomain,
+		"fulldomain", account.FullDomain)
+
+	// Create the credentials JSON for cert-manager
+	credentialsJSON, err := json.Marshal(map[string]AcmeDNSAccount{
+		baseDomain: *account,
+	})
+	if err != nil {
+		log.Error(err, "Failed to marshal ACME-DNS credentials")
+		return fmt.Errorf("failed to marshal ACME-DNS credentials: %w", err)
+	}
+
+	// Create or update the secret
+	log.Info("Creating ACME-DNS account secret", "secret", AcmeDNSAccountSecretName, "namespace", AcmeDNSNamespace)
+	secret = &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      AcmeDNSAccountSecretName,
+			Namespace: AcmeDNSNamespace,
+			Labels: map[string]string{
+				"app":                          AcmeDNSName,
+				"app.kubernetes.io/name":       AcmeDNSName,
+				"app.kubernetes.io/component":  "credentials",
+				"app.kubernetes.io/managed-by": "kibaship",
+			},
+		},
+		Type: corev1.SecretTypeOpaque,
+		Data: map[string][]byte{
+			"acmedns.json": credentialsJSON,
+		},
+	}
+
+	// Try to create the secret, if it exists, update it
+	if err := c.Create(ctx, secret); err != nil {
+		if errors.IsAlreadyExists(err) {
+			log.Info("ACME-DNS account secret already exists, updating", "secret", AcmeDNSAccountSecretName)
+			if err := c.Update(ctx, secret); err != nil {
+				log.Error(err, "Failed to update ACME-DNS account secret", "secret", AcmeDNSAccountSecretName)
+				return fmt.Errorf("failed to update ACME-DNS account secret: %w", err)
+			}
+		} else {
+			log.Error(err, "Failed to create ACME-DNS account secret", "secret", AcmeDNSAccountSecretName)
+			return fmt.Errorf("failed to create ACME-DNS account secret: %w", err)
+		}
+	}
+
+	log.Info("ACME-DNS account secret created/updated successfully", "secret", AcmeDNSAccountSecretName, "namespace", AcmeDNSNamespace)
+	return nil
+}
+
+// registerAcmeDNSAccount registers a new account with the ACME-DNS service
+func registerAcmeDNSAccount(ctx context.Context, baseDomain string) (*AcmeDNSAccount, error) {
+	log := ctrl.Log.WithName("bootstrap").WithName("acme-dns-register")
+
+	// ACME-DNS service URL (internal cluster service)
+	acmeDNSURL := "http://acme-dns.kibaship.svc.cluster.local/register"
+
+	// Create registration request (no allowfrom restrictions since it's internal)
+	reqBody := AcmeDNSRegistrationRequest{}
+
+	reqJSON, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal registration request: %w", err)
+	}
+
+	log.Info("Sending registration request to ACME-DNS", "url", acmeDNSURL)
+
+	// Create HTTP request with timeout
+	req, err := http.NewRequestWithContext(ctx, "POST", acmeDNSURL, bytes.NewBuffer(reqJSON))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create HTTP request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	// Create HTTP client with timeout
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+
+	// Send the request with retries
+	var resp *http.Response
+	maxRetries := 5
+	for i := 0; i < maxRetries; i++ {
+		resp, err = client.Do(req)
+		if err == nil {
+			break
+		}
+
+		log.Info("ACME-DNS registration request failed, retrying", "attempt", i+1, "maxRetries", maxRetries, "error", err.Error())
+		if i < maxRetries-1 {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(time.Duration(i+1) * 2 * time.Second):
+				// Exponential backoff: 2s, 4s, 6s, 8s
+			}
+		}
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to send registration request after %d retries: %w", maxRetries, err)
+	}
+	defer resp.Body.Close()
+
+	// Read response body
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	// Check response status
+	if resp.StatusCode != http.StatusCreated {
+		log.Error(nil, "ACME-DNS registration failed", "statusCode", resp.StatusCode, "response", string(respBody))
+		return nil, fmt.Errorf("ACME-DNS registration failed with status %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	// Parse response
+	var account AcmeDNSAccount
+	if err := json.Unmarshal(respBody, &account); err != nil {
+		return nil, fmt.Errorf("failed to parse registration response: %w", err)
+	}
+
+	log.Info("ACME-DNS account registration successful",
+		"username", account.Username,
+		"subdomain", account.Subdomain,
+		"fulldomain", account.FullDomain)
+
+	return &account, nil
 }
