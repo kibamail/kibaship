@@ -1,7 +1,7 @@
 package clusters
 
 import (
-    "github.com/spf13/cobra"
+	"github.com/spf13/cobra"
 )
 
 // NewCommand creates and returns the clusters command with all subcommands

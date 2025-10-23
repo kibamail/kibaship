@@ -109,13 +109,6 @@ type ImageFromRegistryConfig struct {
 	// +optional
 	DefaultTag string `json:"defaultTag,omitempty"`
 
-	// Port specifies the container port the application listens on
-	// +kubebuilder:validation:Minimum=1
-	// +kubebuilder:validation:Maximum=65535
-	// +kubebuilder:default=3000
-	// +optional
-	Port int32 `json:"port,omitempty"`
-
 	// Resources defines resource requirements for the container
 	// +optional
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
@@ -427,6 +420,13 @@ type ApplicationSpec struct {
 	// Type defines the type of application
 	// +kubebuilder:validation:Required
 	Type ApplicationType `json:"type"`
+
+	// Port specifies the container port the application listens on
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=65535
+	// +kubebuilder:default=3000
+	// +optional
+	Port int32 `json:"port,omitempty"`
 
 	// CurrentDeploymentRef references the currently promoted deployment for this application
 	// This field is automatically updated when a deployment with promote=true succeeds
@@ -795,11 +795,6 @@ func (r *Application) validateImageFromRegistry() error {
 	}
 	if !r.isValidRepositoryFormat(config.Repository) {
 		return fmt.Errorf("repository must be in format 'org/repo' with valid characters")
-	}
-
-	// Validate port if specified
-	if config.Port != 0 && (config.Port < 1 || config.Port > 65535) {
-		return fmt.Errorf("port must be between 1 and 65535")
 	}
 
 	// Validate default tag if specified

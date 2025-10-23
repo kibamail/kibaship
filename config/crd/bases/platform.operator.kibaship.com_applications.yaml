@@ -416,14 +416,6 @@ spec:
                         minimum: 1
                         type: integer
                     type: object
-                  port:
-                    default: 3000
-                    description: Port specifies the container port the application
-                      listens on
-                    format: int32
-                    maximum: 65535
-                    minimum: 1
-                    type: integer
                   registry:
                     description: Registry specifies the container registry (dockerhub,
                       ghcr)
@@ -595,6 +587,14 @@ spec:
                     description: Version is the MySQL version to deploy
                     type: string
                 type: object
+              port:
+                default: 3000
+                description: Port specifies the container port the application listens
+                  on
+                format: int32
+                maximum: 65535
+                minimum: 1
+                type: integer
               postgres:
                 description: Postgres contains configuration for Postgres applications
                 properties:

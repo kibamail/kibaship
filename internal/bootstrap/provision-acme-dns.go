@@ -22,19 +22,19 @@ import (
 )
 
 const (
-	AcmeDNSNamespace = "kibaship"
-	AcmeDNSName      = "acme-dns"
-	AcmeDNSVersion   = "v1.0"
+	AcmeDNSNamespace         = "kibaship"
+	AcmeDNSName              = "acme-dns"
+	AcmeDNSVersion           = "v1.0"
 	AcmeDNSAccountSecretName = "acme-dns-account"
 )
 
 // AcmeDNSAccount represents the ACME-DNS account registration response
 type AcmeDNSAccount struct {
-	AllowFrom   []string `json:"allowfrom,omitempty"`
-	FullDomain  string   `json:"fulldomain"`
-	Password    string   `json:"password"`
-	Subdomain   string   `json:"subdomain"`
-	Username    string   `json:"username"`
+	AllowFrom  []string `json:"allowfrom,omitempty"`
+	FullDomain string   `json:"fulldomain"`
+	Password   string   `json:"password"`
+	Subdomain  string   `json:"subdomain"`
+	Username   string   `json:"username"`
 }
 
 // AcmeDNSRegistrationRequest represents the ACME-DNS account registration request
@@ -711,14 +711,15 @@ func waitForAcmeDNSReady(ctx context.Context, c client.Client) error {
 // ensureAcmeDNSAccount ensures an ACME-DNS account is registered and credentials are stored in a secret.
 // This creates the "acme-dns-account" secret with "acmedns.json" key that cert-manager's ClusterIssuer expects.
 // The secret format follows cert-manager's ACME-DNS integration requirements:
-// {
-//   "example.com": {
-//     "username": "...",
-//     "password": "...",
-//     "fulldomain": "...",
-//     "subdomain": "..."
-//   }
-// }
+//
+//	{
+//	  "example.com": {
+//	    "username": "...",
+//	    "password": "...",
+//	    "fulldomain": "...",
+//	    "subdomain": "..."
+//	  }
+//	}
 func ensureAcmeDNSAccount(ctx context.Context, c client.Client, baseDomain string) error {
 	log := ctrl.Log.WithName("bootstrap").WithName("acme-dns-account")
 

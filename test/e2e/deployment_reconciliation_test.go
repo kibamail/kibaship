@@ -923,13 +923,13 @@ metadata:
     platform.kibaship.com/environment-uuid: "%s"
 spec:
   type: ImageFromRegistry
+  port: 80
   environmentRef:
     name: %s
   imageFromRegistry:
     registry: dockerhub
     repository: library/nginx
     defaultTag: "1.29.2"
-    port: 80
 `, applicationName, projectNS, applicationUUID, applicationName, projectUUID, workspaceUUIDConst, envUUID, envName)
 
 			cmd = exec.Command("kubectl", "apply", "-f", "-")

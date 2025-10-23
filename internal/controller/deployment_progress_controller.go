@@ -26,7 +26,9 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -117,11 +119,10 @@ func (r *DeploymentProgressController) Reconcile(ctx context.Context, req ctrl.R
 	case platformv1alpha1.DeploymentPhaseSucceeded:
 		// K8s resources created and ready
 		// Check if this deployment should be promoted
-		if deployment.Spec.Promote {
-			if err := r.promoteDeployment(ctx, &deployment); err != nil {
-				log.Error(err, "Failed to promote deployment")
-				return ctrl.Result{}, err
-			}
+		// Promote if: deployment.Spec.Promote is true OR no current deployment exists
+		if err := r.checkAndPromoteDeployment(ctx, &deployment); err != nil {
+			log.Error(err, "Failed to check and promote deployment")
+			return ctrl.Result{}, err
 		}
 
 	case platformv1alpha1.DeploymentPhaseFailed:
@@ -275,8 +276,11 @@ func (r *DeploymentProgressController) computeTargetPhaseForValkeyCluster(
 	return platformv1alpha1.DeploymentPhaseDeploying
 }
 
-// promoteDeployment updates the Application's CurrentDeploymentRef to point to this deployment
-func (r *DeploymentProgressController) promoteDeployment(
+// checkAndPromoteDeployment checks if a deployment should be promoted and promotes it if needed
+// Promotion happens if:
+// 1. deployment.Spec.Promote is true, OR
+// 2. application has no CurrentDeploymentRef (first successful deployment)
+func (r *DeploymentProgressController) checkAndPromoteDeployment(
 	ctx context.Context,
 	deployment *platformv1alpha1.Deployment,
 ) error {
@@ -297,6 +301,25 @@ func (r *DeploymentProgressController) promoteDeployment(
 		return nil
 	}
 
+	// Determine if promotion should happen
+	shouldPromote := false
+	reason := ""
+
+	if deployment.Spec.Promote {
+		shouldPromote = true
+		reason = "deployment has promote=true"
+	} else if app.Spec.CurrentDeploymentRef == nil {
+		shouldPromote = true
+		reason = "no current deployment exists (first successful deployment)"
+	}
+
+	if !shouldPromote {
+		log.V(1).Info("Deployment not promoted",
+			"promote", deployment.Spec.Promote,
+			"hasCurrentDeployment", app.Spec.CurrentDeploymentRef != nil)
+		return nil
+	}
+
 	// Update CurrentDeploymentRef
 	app.Spec.CurrentDeploymentRef = &corev1.LocalObjectReference{
 		Name: deployment.Name,
@@ -306,7 +329,10 @@ func (r *DeploymentProgressController) promoteDeployment(
 		return fmt.Errorf("failed to update application currentDeploymentRef: %w", err)
 	}
 
-	log.Info("Successfully promoted deployment", "deployment", deployment.Name, "application", app.Name)
+	log.Info("Successfully promoted deployment",
+		"deployment", deployment.Name,
+		"application", app.Name,
+		"reason", reason)
 	return nil
 }
 
@@ -325,8 +351,23 @@ func (r *DeploymentProgressController) createKubernetesResources(
 		return err
 	}
 
-	// Only create resources for GitRepository apps
-	if app.Spec.Type != platformv1alpha1.ApplicationTypeGitRepository {
+	// Support GitRepository, ImageFromRegistry, and Dockerfile applications
+	supportedTypes := []platformv1alpha1.ApplicationType{
+		platformv1alpha1.ApplicationTypeGitRepository,
+		platformv1alpha1.ApplicationTypeImageFromRegistry,
+		platformv1alpha1.ApplicationTypeDockerImage, // Dockerfile applications
+	}
+
+	isSupported := false
+	for _, supportedType := range supportedTypes {
+		if app.Spec.Type == supportedType {
+			isSupported = true
+			break
+		}
+	}
+
+	if !isSupported {
+		log.Info("Skipping K8s resource creation for unsupported application type", "type", app.Spec.Type)
 		return nil
 	}
 
@@ -343,6 +384,16 @@ func (r *DeploymentProgressController) createKubernetesResources(
 	// Create ApplicationDomain (idempotent)
 	if err := r.ensureApplicationDomain(ctx, deployment, &app); err != nil {
 		return fmt.Errorf("failed to create ApplicationDomain: %w", err)
+	}
+
+	// Create HTTPRoute for this specific deployment (idempotent)
+	if err := r.ensureDeploymentHTTPRoute(ctx, deployment, &app); err != nil {
+		return fmt.Errorf("failed to create deployment HTTPRoute: %w", err)
+	}
+
+	// Create/Update HTTPRoute for the main application using currentDeploymentRef (idempotent)
+	if err := r.ensureApplicationHTTPRoute(ctx, deployment, &app); err != nil {
+		return fmt.Errorf("failed to create/update application HTTPRoute: %w", err)
 	}
 
 	log.Info("Kubernetes resources created")
@@ -381,14 +432,33 @@ func (r *DeploymentProgressController) ensureKubernetesDeployment(
 		return fmt.Errorf("failed to get project: %w", err)
 	}
 
-	// Derive image name
-	imageName := fmt.Sprintf("registry.registry.svc.cluster.local/%s/%s:%s",
-		deployment.Namespace,
-		deployment.GetApplicationUUID(),
-		deployment.GetUUID())
+	// Derive image name based on application type
+	var imageName string
+	switch app.Spec.Type {
+	case platformv1alpha1.ApplicationTypeGitRepository, platformv1alpha1.ApplicationTypeDockerImage:
+		// For GitRepository and Dockerfile apps, use built image from registry
+		imageName = fmt.Sprintf("registry.registry.svc.cluster.local/%s/%s:%s",
+			deployment.Namespace,
+			deployment.GetApplicationUUID(),
+			deployment.GetUUID())
+	case platformv1alpha1.ApplicationTypeImageFromRegistry:
+		// For ImageFromRegistry apps, use the specified image
+		if deployment.Spec.ImageFromRegistry == nil {
+			return fmt.Errorf("ImageFromRegistry deployment missing image configuration")
+		}
+		imageName = fmt.Sprintf("%s/%s:%s",
+			app.Spec.ImageFromRegistry.Registry,
+			app.Spec.ImageFromRegistry.Repository,
+			deployment.Spec.ImageFromRegistry.Tag)
+	default:
+		return fmt.Errorf("unsupported application type for K8s Deployment creation: %s", app.Spec.Type)
+	}
 
-	// Determine container port (default 3000)
-	containerPort := int32(3000)
+	// Determine container port from application spec (default 3000)
+	containerPort := r.getApplicationPort(app)
+	if containerPort == 0 {
+		containerPort = 3000
+	}
 
 	// Resource profile (default to standard)
 	resourceProfile := ResourceProfileStandard
@@ -692,6 +762,129 @@ func (r *DeploymentProgressController) ensureApplicationDomain(ctx context.Conte
 	return nil
 }
 
+// ensureDeploymentHTTPRoute creates an HTTPRoute for this specific deployment
+func (r *DeploymentProgressController) ensureDeploymentHTTPRoute(
+	ctx context.Context,
+	deployment *platformv1alpha1.Deployment,
+	app *platformv1alpha1.Application,
+) error {
+	log := ctrl.LoggerFrom(ctx)
+
+	// Get operator configuration for domain
+	opConfig, err := GetOperatorConfig()
+	if err != nil {
+		return fmt.Errorf("failed to get operator config: %w", err)
+	}
+
+	if opConfig.Domain == "" {
+		log.Info("No base domain configured, skipping HTTPRoute creation")
+		return nil
+	}
+
+	deploymentUUID := deployment.GetUUID()
+	appUUID := app.GetUUID()
+
+	// Generate deployment-specific domain: <deployment-uuid>.apps.<baseDomain>
+	deploymentDomain := fmt.Sprintf("%s.apps.%s", deploymentUUID, opConfig.Domain)
+
+	// Determine service name and port
+	serviceName := utils.GetServiceName(appUUID)
+	servicePort := r.getApplicationPort(app)
+	if servicePort == 0 {
+		servicePort = 3000 // Default port
+	}
+
+	// Create HTTPRoute for HTTPS traffic
+	httpsRouteName := fmt.Sprintf("httproute-%s", deploymentUUID)
+	if err := r.createHTTPRoute(ctx, deployment.Namespace, httpsRouteName, deploymentDomain, serviceName, servicePort, "https", deployment); err != nil {
+		return fmt.Errorf("failed to create HTTPS HTTPRoute: %w", err)
+	}
+
+	// Create HTTPRoute for HTTP->HTTPS redirect
+	httpRouteName := fmt.Sprintf("httproute-%s-redirect", deploymentUUID)
+	if err := r.createHTTPRedirectRoute(ctx, deployment.Namespace, httpRouteName, deploymentDomain, deployment); err != nil {
+		return fmt.Errorf("failed to create HTTP redirect HTTPRoute: %w", err)
+	}
+
+	log.Info("Created HTTPRoutes for deployment", "domain", deploymentDomain, "service", serviceName, "port", servicePort)
+	return nil
+}
+
+// ensureApplicationHTTPRoute creates/updates HTTPRoute for the main application using currentDeploymentRef
+func (r *DeploymentProgressController) ensureApplicationHTTPRoute(
+	ctx context.Context,
+	deployment *platformv1alpha1.Deployment,
+	app *platformv1alpha1.Application,
+) error {
+	log := ctrl.LoggerFrom(ctx)
+
+	// Check if this deployment is the current one
+	if app.Spec.CurrentDeploymentRef == nil {
+		log.Error(nil, "Application has no currentDeploymentRef set, cannot create application HTTPRoute",
+			"application", app.Name, "deployment", deployment.Name)
+		return nil // Gracefully degrade - don't fail the deployment
+	}
+
+	if app.Spec.CurrentDeploymentRef.Name != deployment.Name {
+		log.Info("This deployment is not the current deployment, skipping application HTTPRoute creation",
+			"deployment", deployment.Name, "currentDeployment", app.Spec.CurrentDeploymentRef.Name)
+		return nil // This is not the current deployment
+	}
+
+	// Get operator configuration for domain
+	opConfig, err := GetOperatorConfig()
+	if err != nil {
+		return fmt.Errorf("failed to get operator config: %w", err)
+	}
+
+	if opConfig.Domain == "" {
+		log.Info("No base domain configured, skipping application HTTPRoute creation")
+		return nil
+	}
+
+	// Find the default ApplicationDomain for this application
+	var domains platformv1alpha1.ApplicationDomainList
+	if err := r.List(ctx, &domains,
+		client.InNamespace(app.Namespace),
+		client.MatchingLabels{"platform.kibaship.com/application-uuid": app.GetUUID()},
+	); err != nil {
+		return fmt.Errorf("failed to list ApplicationDomains: %w", err)
+	}
+
+	var defaultDomain *platformv1alpha1.ApplicationDomain
+	for _, domain := range domains.Items {
+		if domain.Spec.Default {
+			defaultDomain = &domain
+			break
+		}
+	}
+
+	if defaultDomain == nil {
+		log.Info("No default ApplicationDomain found for application, skipping application HTTPRoute creation",
+			"application", app.Name)
+		return nil // Gracefully degrade
+	}
+
+	// Determine service name and port for the current deployment
+	serviceName := utils.GetServiceName(app.GetUUID())
+	servicePort := defaultDomain.Spec.Port
+
+	// Create HTTPRoute for HTTPS traffic
+	httpsRouteName := fmt.Sprintf("httproute-app-%s", app.GetUUID())
+	if err := r.createHTTPRoute(ctx, app.Namespace, httpsRouteName, defaultDomain.Spec.Domain, serviceName, servicePort, "https", deployment); err != nil {
+		return fmt.Errorf("failed to create application HTTPS HTTPRoute: %w", err)
+	}
+
+	// Create HTTPRoute for HTTP->HTTPS redirect
+	httpRouteName := fmt.Sprintf("httproute-app-%s-redirect", app.GetUUID())
+	if err := r.createHTTPRedirectRoute(ctx, app.Namespace, httpRouteName, defaultDomain.Spec.Domain, deployment); err != nil {
+		return fmt.Errorf("failed to create application HTTP redirect HTTPRoute: %w", err)
+	}
+
+	log.Info("Created/updated application HTTPRoutes", "domain", defaultDomain.Spec.Domain, "service", serviceName, "port", servicePort)
+	return nil
+}
+
 // Custom predicate to detect condition changes
 type conditionChangedPredicate struct{}
 
@@ -733,4 +926,171 @@ func conditionsEqual(a, b []metav1.Condition) bool {
 		}
 	}
 	return true
+}
+
+// createHTTPRoute creates an HTTPRoute for HTTPS traffic
+func (r *DeploymentProgressController) createHTTPRoute(
+	ctx context.Context,
+	namespace, routeName, hostname, serviceName string,
+	servicePort int32,
+	listenerName string,
+	owner metav1.Object,
+) error {
+	log := ctrl.LoggerFrom(ctx)
+
+	// Check if HTTPRoute already exists
+	obj := &unstructured.Unstructured{}
+	obj.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   "gateway.networking.k8s.io",
+		Version: "v1",
+		Kind:    "HTTPRoute",
+	})
+
+	if err := r.Get(ctx, client.ObjectKey{
+		Namespace: namespace,
+		Name:      routeName,
+	}, obj); err == nil {
+		log.V(1).Info("HTTPRoute already exists", "name", routeName)
+		return nil // Already exists
+	} else if !errors.IsNotFound(err) {
+		return err
+	}
+
+	// Create new HTTPRoute
+	obj.SetNamespace(namespace)
+	obj.SetName(routeName)
+
+	// Set labels
+	labels := map[string]string{
+		"app.kubernetes.io/managed-by": "kibaship",
+		"platform.kibaship.com/type":   "httproute",
+	}
+	obj.SetLabels(labels)
+
+	// Set owner reference for cleanup
+	if err := ctrl.SetControllerReference(owner, obj, r.Scheme); err != nil {
+		return fmt.Errorf("failed to set controller reference: %w", err)
+	}
+
+	obj.Object["spec"] = map[string]any{
+		"parentRefs": []any{
+			map[string]any{
+				"name":        "kibaship-gateway",
+				"namespace":   "kibaship",
+				"sectionName": listenerName,
+			},
+		},
+		"hostnames": []any{hostname},
+		"rules": []any{
+			map[string]any{
+				"matches": []any{
+					map[string]any{
+						"path": map[string]any{
+							"type":  "PathPrefix",
+							"value": "/",
+						},
+					},
+				},
+				"backendRefs": []any{
+					map[string]any{
+						"name": serviceName,
+						"port": int64(servicePort),
+					},
+				},
+			},
+		},
+	}
+
+	if err := r.Create(ctx, obj); err != nil {
+		return fmt.Errorf("failed to create HTTPRoute: %w", err)
+	}
+
+	log.Info("Created HTTPRoute", "name", routeName, "hostname", hostname, "service", serviceName, "port", servicePort)
+	return nil
+}
+
+// createHTTPRedirectRoute creates an HTTPRoute for HTTP->HTTPS redirect
+func (r *DeploymentProgressController) createHTTPRedirectRoute(
+	ctx context.Context,
+	namespace, routeName, hostname string,
+	owner metav1.Object,
+) error {
+	log := ctrl.LoggerFrom(ctx)
+
+	// Check if HTTPRoute already exists
+	obj := &unstructured.Unstructured{}
+	obj.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   "gateway.networking.k8s.io",
+		Version: "v1",
+		Kind:    "HTTPRoute",
+	})
+
+	if err := r.Get(ctx, client.ObjectKey{
+		Namespace: namespace,
+		Name:      routeName,
+	}, obj); err == nil {
+		log.V(1).Info("HTTP redirect HTTPRoute already exists", "name", routeName)
+		return nil // Already exists
+	} else if !errors.IsNotFound(err) {
+		return err
+	}
+
+	// Create new HTTPRoute for redirect
+	obj.SetNamespace(namespace)
+	obj.SetName(routeName)
+
+	// Set labels
+	labels := map[string]string{
+		"app.kubernetes.io/managed-by": "kibaship",
+		"platform.kibaship.com/type":   "httproute-redirect",
+	}
+	obj.SetLabels(labels)
+
+	// Set owner reference for cleanup
+	if err := ctrl.SetControllerReference(owner, obj, r.Scheme); err != nil {
+		return fmt.Errorf("failed to set controller reference: %w", err)
+	}
+
+	obj.Object["spec"] = map[string]any{
+		"parentRefs": []any{
+			map[string]any{
+				"name":        "kibaship-gateway",
+				"namespace":   "kibaship",
+				"sectionName": "http",
+			},
+		},
+		"hostnames": []any{hostname},
+		"rules": []any{
+			map[string]any{
+				"matches": []any{
+					map[string]any{
+						"path": map[string]any{
+							"type":  "PathPrefix",
+							"value": "/",
+						},
+					},
+				},
+				"filters": []any{
+					map[string]any{
+						"type": "RequestRedirect",
+						"requestRedirect": map[string]any{
+							"scheme": "https",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	if err := r.Create(ctx, obj); err != nil {
+		return fmt.Errorf("failed to create HTTP redirect HTTPRoute: %w", err)
+	}
+
+	log.Info("Created HTTP redirect HTTPRoute", "name", routeName, "hostname", hostname)
+	return nil
+}
+
+// getApplicationPort returns the port for the application from app.Spec.Port
+func (r *DeploymentProgressController) getApplicationPort(app *platformv1alpha1.Application) int32 {
+	return app.Spec.Port
 }

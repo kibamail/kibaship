@@ -125,7 +125,6 @@ type ImageFromRegistryConfig struct {
 	Registry    string                `json:"registry" example:"dockerhub"`
 	Repository  string                `json:"repository" example:"nginx/nginx"`
 	DefaultTag  string                `json:"defaultTag,omitempty" example:"latest"`
-	Port        int32                 `json:"port,omitempty" example:"3000"`
 	Env         []EnvironmentVariable `json:"env,omitempty"`
 	Resources   *ResourceRequirements `json:"resources,omitempty"`
 	HealthCheck *HealthCheckConfig    `json:"healthCheck,omitempty"`
@@ -181,6 +180,7 @@ type ApplicationCreateRequest struct {
 	Name              string                   `json:"name" example:"my-web-app"`
 	EnvironmentUUID   string                   `json:"environmentUuid" example:"123e4567-e89b-12d3-a456-426614174000"`
 	Type              ApplicationType          `json:"type" example:"DockerImage"`
+	Port              int32                    `json:"port,omitempty" example:"3000"`
 	GitRepository     *GitRepositoryConfig     `json:"gitRepository,omitempty"`
 	DockerImage       *DockerImageConfig       `json:"dockerImage,omitempty"`
 	ImageFromRegistry *ImageFromRegistryConfig `json:"imageFromRegistry,omitempty"`
@@ -220,6 +220,7 @@ type Application struct {
 	ProjectSlug       string                   `json:"projectSlug"`
 	EnvironmentUUID   string                   `json:"environmentUuid"`
 	Type              ApplicationType          `json:"type"`
+	Port              int32                    `json:"port,omitempty" example:"3000"`
 	GitRepository     *GitRepositoryConfig     `json:"gitRepository,omitempty"`
 	DockerImage       *DockerImageConfig       `json:"dockerImage,omitempty"`
 	ImageFromRegistry *ImageFromRegistryConfig `json:"imageFromRegistry,omitempty"`
@@ -244,6 +245,7 @@ type ApplicationResponse struct {
 	ProjectUUID       string                      `json:"projectUuid" example:"123e4567-e89b-12d3-a456-426614174001"`
 	ProjectSlug       string                      `json:"projectSlug" example:"xyz789ab"`
 	Type              ApplicationType             `json:"type" example:"DockerImage"`
+	Port              int32                       `json:"port,omitempty" example:"3000"`
 	GitRepository     *GitRepositoryConfig        `json:"gitRepository,omitempty"`
 	DockerImage       *DockerImageConfig          `json:"dockerImage,omitempty"`
 	ImageFromRegistry *ImageFromRegistryConfig    `json:"imageFromRegistry,omitempty"`
@@ -592,14 +594,6 @@ func validateImageFromRegistry(config *ImageFromRegistryConfig) []ValidationErro
 				Message: "Repository must be in format 'org/repo' with lowercase alphanumeric characters, dots, hyphens, and underscores only",
 			})
 		}
-	}
-
-	// Validate port if specified
-	if config.Port != 0 && (config.Port < 1 || config.Port > 65535) {
-		errors = append(errors, ValidationError{
-			Field:   "imageFromRegistry.port",
-			Message: "Port must be between 1 and 65535",
-		})
 	}
 
 	// Validate default tag if specified

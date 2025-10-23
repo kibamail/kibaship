@@ -15,6 +15,7 @@ metadata:
     platform.kibaship.com/environment-uuid: "prod-env-uuid"
 spec:
   type: DockerImage
+  port: 80
   environmentRef:
     name: environment-production
   dockerImage:
@@ -22,7 +23,6 @@ spec:
       FROM nginx:alpine
       COPY index.html /usr/share/nginx/html/
       EXPOSE 80
-    port: 80
     env:
       name: application-docker-image
 ---
@@ -40,6 +40,7 @@ metadata:
     platform.kibaship.com/environment-uuid: "prod-env-uuid"
 spec:
   type: GitRepository
+  port: 3000
   environmentRef:
     name: environment-production
   gitRepository:
@@ -53,7 +54,6 @@ spec:
       COPY . .
       EXPOSE 3000
       CMD ["node", "server.js"]
-    port: 3000
     env:
       name: application-git-repo
 ---
@@ -71,8 +71,8 @@ metadata:
     platform.kibaship.com/environment-uuid: "prod-env-uuid"
 spec:
   type: ImageFromRegistry
+  port: 80
   environmentRef:
     name: environment-production
   imageFromRegistry:
     image: "nginx:latest"
-    port: 80

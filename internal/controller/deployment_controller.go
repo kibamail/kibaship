@@ -454,7 +454,7 @@ func (r *DeploymentReconciler) createKubernetesDeployment(ctx context.Context, d
 	imageName := r.buildImageName(app.Spec.ImageFromRegistry, deployment.Spec.ImageFromRegistry)
 
 	// Determine port
-	port := app.Spec.ImageFromRegistry.Port
+	port := app.Spec.Port
 	if port == 0 {
 		port = 3000 // Default port
 	}
@@ -647,7 +647,7 @@ func (r *DeploymentReconciler) createKubernetesService(ctx context.Context, depl
 	}
 
 	// Determine port
-	port := app.Spec.ImageFromRegistry.Port
+	port := app.Spec.Port
 	if port == 0 {
 		port = 3000 // Default port
 	}
@@ -736,7 +736,7 @@ func (r *DeploymentReconciler) ensureApplicationDomain(ctx context.Context, depl
 	domain := fmt.Sprintf("%s.apps.%s", deploymentUUID, opConfig.Domain)
 
 	// Determine port
-	port := app.Spec.ImageFromRegistry.Port
+	port := app.Spec.Port
 	if port == 0 {
 		port = 3000 // Default port
 	}

@@ -179,6 +179,7 @@ func (s *DeploymentService) GetDeploymentsByApplication(ctx context.Context, app
 }
 
 // PromoteDeployment promotes a deployment by updating the application's currentDeploymentRef
+// This function is for explicit promotion via API calls
 func (s *DeploymentService) PromoteDeployment(ctx context.Context, deploymentUUID string) error {
 	// Get the deployment
 	deployment, err := s.GetDeployment(ctx, deploymentUUID)

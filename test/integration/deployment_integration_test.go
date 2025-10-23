@@ -337,11 +337,11 @@ var _ = Describe("Deployment Integration", func() {
 		applicationPayload := models.ApplicationCreateRequest{
 			Name: "My Nginx App",
 			Type: models.ApplicationTypeImageFromRegistry,
+			Port: 80,
 			ImageFromRegistry: &models.ImageFromRegistryConfig{
 				Registry:   "dockerhub",
 				Repository: "library/nginx",
 				DefaultTag: "1.21",
-				Port:       80,
 			},
 		}
 
