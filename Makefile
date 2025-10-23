@@ -341,7 +341,6 @@ build-installer: manifests generate kustomize ## Generate a consolidated YAML wi
 	echo "---" >> dist/install.yaml
 	$(KUSTOMIZE) build config/registry/base >> dist/install.yaml
 	echo "---" >> dist/install.yaml
-	$(KUSTOMIZE) build config/longhorn >> dist/install.yaml
 
 ##@ Deployment
 
@@ -549,14 +548,6 @@ build-separate-installers: manifests generate kustomize ## Generate separate YAM
 	# Registry
 	@echo "Building registry.yaml..."
 	$(KUSTOMIZE) build config/registry/base > dist/manifests/registry.yaml
-	
-	# Longhorn
-	@echo "Building longhorn.yaml..."
-	$(KUSTOMIZE) build config/longhorn > dist/manifests/longhorn.yaml
-
-	# acme-dns
-	@echo "Building acme-dns.yaml..."
-	$(KUSTOMIZE) build config/acme-dns > dist/manifests/acme-dns.yaml
 
 	@echo "✓ All manifests built successfully in dist/manifests/"
 	@echo ""
@@ -595,10 +586,6 @@ build-e2e-installers: manifests generate kustomize ## Generate e2e YAML files fo
 	# Registry
 	@echo "Building registry.yaml..."
 	$(KUSTOMIZE) build config/registry/overlays/e2e > dist/e2e/manifests/registry.yaml
-
-	# acme-dns
-	@echo "Building acme-dns.yaml..."
-	$(KUSTOMIZE) build config/acme-dns > dist/e2e/manifests/acme-dns.yaml
 
 	@echo "✓ All e2e manifests built successfully in dist/e2e/manifests/"
 	@echo ""

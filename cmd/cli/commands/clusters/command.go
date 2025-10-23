@@ -1,11 +1,7 @@
 package clusters
 
 import (
-	"github.com/spf13/cobra"
-
-	"github.com/kibamail/kibaship/cmd/cli/commands/clusters/create"
-	"github.com/kibamail/kibaship/cmd/cli/commands/clusters/credentials"
-	"github.com/kibamail/kibaship/cmd/cli/commands/clusters/destroy"
+    "github.com/spf13/cobra"
 )
 
 // NewCommand creates and returns the clusters command with all subcommands
@@ -19,11 +15,6 @@ func NewCommand() *cobra.Command {
 			PrintHelp()
 		},
 	}
-
-	// Add subcommands
-	cmd.AddCommand(create.NewCommand())
-	cmd.AddCommand(credentials.NewCommand())
-	cmd.AddCommand(destroy.NewCommand())
 
 	// Override help command behavior
 	cmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {

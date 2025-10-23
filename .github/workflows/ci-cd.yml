@@ -554,9 +554,9 @@ jobs:
             ```bash
             kubectl create configmap kibaship-config \
               -n kibaship \
-              --from-literal=KIBASHIP_OPERATOR_DOMAIN=your-domain.com \
-              --from-literal=KIBASHIP_ACME_EMAIL=acme@your-domain.com \
-              --from-literal=WEBHOOK_TARGET_URL=https://webhook.your-domain.com
+              --from-literal=ingress.domain=your-domain.com \
+              --from-literal=certs.email=acme@your-domain.com \
+              --from-literal=webhooks.url=https://webhook.your-domain.com
             ```
 
             ### Container Images

@@ -20,10 +20,10 @@ const (
 	OperatorNamespace = "kibaship"
 
 	// ConfigMap keys
-	ConfigKeyDomain           = "KIBASHIP_OPERATOR_DOMAIN"
-	ConfigKeyACMEEmail        = "KIBASHIP_ACME_EMAIL"
-	ConfigKeyWebhookURL       = "WEBHOOK_TARGET_URL"
-	ConfigKeyGatewayClassName = "KIBASHIP_GATEWAY_CLASS_NAME"
+	ConfigKeyDomain           = "ingress.domain"
+	ConfigKeyGatewayClassName = "ingress.gateway_classname"
+	ConfigKeyACMEEmail        = "certs.email"
+	ConfigKeyWebhookURL       = "webhooks.url"
 
 	// WebhookSecretName is the name of the Secret created in the operator namespace
 	// that holds the HMAC signing key for webhook payloads.

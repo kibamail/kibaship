@@ -74,10 +74,17 @@ var _ = Describe("External LoadBalancer", func() {
 			Expect(err).NotTo(HaveOccurred(), "Should get service ports")
 
 			ports := strings.Fields(string(output))
-			expectedPorts := []string{"80", "443", "3306", "6379", "5432"}
+			// With the new logic, when certificate is ready, Gateway should have HTTP and HTTPS listeners only
+			expectedPorts := []string{"80", "443"}
 
 			for _, expectedPort := range expectedPorts {
 				Expect(ports).To(ContainElement(expectedPort), fmt.Sprintf("Service should expose port %s", expectedPort))
+			}
+
+			// Verify that database ports are NOT exposed (they should be added separately when databases are deployed)
+			databasePorts := []string{"3306", "6379", "5432"}
+			for _, dbPort := range databasePorts {
+				Expect(ports).NotTo(ContainElement(dbPort), fmt.Sprintf("Service should NOT expose database port %s initially", dbPort))
 			}
 
 			By("verifying LoadBalancer service has the correct annotations")
@@ -121,13 +128,11 @@ var _ = Describe("External LoadBalancer", func() {
 
 			GinkgoWriter.Printf("✅ External LoadBalancer is working! IP: %s\n", externalIP)
 			GinkgoWriter.Printf("🌐 LoadBalancer service '%s' has been assigned external IP: %s\n", serviceName, externalIP)
-			GinkgoWriter.Printf("📋 Service exposes ports: 80 (HTTP), 443 (HTTPS), 3306 (MySQL), 5432 (PostgreSQL), 6379 (Valkey)\n")
+			GinkgoWriter.Printf("📋 Service exposes ports: 80 (HTTP), 443 (HTTPS)\n")
 			GinkgoWriter.Printf("💡 You can test external access from your local machine using:\n")
 			GinkgoWriter.Printf("   curl -v http://%s:80\n", externalIP)
 			GinkgoWriter.Printf("   curl -v https://%s:443 -k\n", externalIP)
-			GinkgoWriter.Printf("   telnet %s 3306  # MySQL\n", externalIP)
-			GinkgoWriter.Printf("   telnet %s 6379  # Valkey/Redis\n", externalIP)
-			GinkgoWriter.Printf("   telnet %s 5432  # PostgreSQL\n", externalIP)
+			GinkgoWriter.Printf("📝 Note: Database ports (3306, 5432, 6379) will be added when database services are deployed\n")
 		})
 	})
 })

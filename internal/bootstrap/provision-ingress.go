@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -248,13 +247,13 @@ func ensureIngressGateway(ctx context.Context, c client.Client, gatewayClassName
 
 		var listeners []any
 		if certReady {
-			// Certificate is ready, create gateway with all listeners
-			listeners = createAllListeners()
-			log.Info("Creating Gateway with all listeners (certificate ready)")
+			// Certificate is ready, create gateway with HTTP and HTTPS listeners
+			listeners = createHTTPAndHTTPSListeners()
+			log.Info("Creating Gateway with HTTP and HTTPS listeners (certificate ready)")
 		} else {
-			// Certificate not ready, create gateway with minimal listeners for ACME challenge
-			listeners = createMinimalListeners()
-			log.Info("Creating Gateway with minimal listeners (certificate not ready)")
+			// Certificate not ready, create gateway with HTTP listener only
+			listeners = createHTTPOnlyListeners()
+			log.Info("Creating Gateway with HTTP listener only (certificate not ready)")
 		}
 
 		obj.Object["spec"] = map[string]any{
@@ -281,9 +280,9 @@ func ensureIngressGateway(ctx context.Context, c client.Client, gatewayClassName
 		log.Info("Gateway resource already exists", "name", IngressGatewayName, "namespace", KibashipNamespace)
 
 		if certReady {
-			// Certificate is ready, ensure gateway has all listeners
-			if err := ensureGatewayHasAllListeners(ctx, c, existingGateway); err != nil {
-				return fmt.Errorf("ensure gateway has all listeners: %w", err)
+			// Certificate is ready, ensure gateway has HTTPS listener
+			if err := ensureGatewayHasHTTPSListener(ctx, c, existingGateway); err != nil {
+				return fmt.Errorf("ensure gateway has HTTPS listener: %w", err)
 			}
 		}
 	}
@@ -291,10 +290,10 @@ func ensureIngressGateway(ctx context.Context, c client.Client, gatewayClassName
 	return nil
 }
 
-// createMinimalListeners creates listeners for ACME challenge (HTTP only)
-func createMinimalListeners() []any {
+// createHTTPOnlyListeners creates listeners for when certificate is not ready (HTTP only)
+func createHTTPOnlyListeners() []any {
 	return []any{
-		// HTTP listener (port 80) - for ACME HTTP-01 challenges and ACME-DNS API
+		// HTTP listener (port 80) - for ACME HTTP-01 challenges and web applications
 		map[string]any{
 			"name":     "http",
 			"protocol": "HTTP",
@@ -306,8 +305,8 @@ func createMinimalListeners() []any {
 	}
 }
 
-// createAllListeners creates all listeners for production use (HTTP, HTTPS, MySQL, Valkey, PostgreSQL, DNS)
-func createAllListeners() []any {
+// createHTTPAndHTTPSListeners creates listeners for when certificate is ready (HTTP + HTTPS)
+func createHTTPAndHTTPSListeners() []any {
 	return []any{
 		// HTTP listener (port 80)
 		map[string]any{
@@ -318,63 +317,28 @@ func createAllListeners() []any {
 				"namespaces": map[string]any{"from": "All"},
 			},
 		},
-		// HTTPS listener (port 443) with TLS passthrough
+		// HTTPS listener (port 443) with TLS termination
 		map[string]any{
 			"name":     "https",
-			"protocol": "TLS",
+			"protocol": "HTTPS",
 			"port":     int64(443),
-			"tls":      map[string]any{"mode": "Passthrough"},
-			"allowedRoutes": map[string]any{
-				"namespaces": map[string]any{"from": "All"},
-				"kinds": []any{
-					map[string]any{"kind": "TLSRoute"},
+			"tls": map[string]any{
+				"mode": "Terminate",
+				"certificateRefs": []any{
+					map[string]any{
+						"name": IngressWildcardCertName,
+					},
 				},
 			},
-		},
-		// MySQL TLS listener (port 3306) with TLS passthrough
-		map[string]any{
-			"name":     "mysql-tls",
-			"protocol": "TLS",
-			"port":     int64(3306),
-			"tls":      map[string]any{"mode": "Passthrough"},
 			"allowedRoutes": map[string]any{
 				"namespaces": map[string]any{"from": "All"},
-				"kinds": []any{
-					map[string]any{"kind": "TLSRoute"},
-				},
-			},
-		},
-		// Valkey TLS listener (port 6379) with TLS passthrough
-		map[string]any{
-			"name":     "valkey-tls",
-			"protocol": "TLS",
-			"port":     int64(6379),
-			"tls":      map[string]any{"mode": "Passthrough"},
-			"allowedRoutes": map[string]any{
-				"namespaces": map[string]any{"from": "All"},
-				"kinds": []any{
-					map[string]any{"kind": "TLSRoute"},
-				},
-			},
-		},
-		// PostgreSQL TLS listener (port 5432) with TLS passthrough
-		map[string]any{
-			"name":     "postgres-tls",
-			"protocol": "TLS",
-			"port":     int64(5432),
-			"tls":      map[string]any{"mode": "Passthrough"},
-			"allowedRoutes": map[string]any{
-				"namespaces": map[string]any{"from": "All"},
-				"kinds": []any{
-					map[string]any{"kind": "TLSRoute"},
-				},
 			},
 		},
 	}
 }
 
-// ensureGatewayHasAllListeners checks if the gateway has all required listeners and patches it if needed
-func ensureGatewayHasAllListeners(ctx context.Context, c client.Client, gateway *unstructured.Unstructured) error {
+// ensureGatewayHasHTTPSListener checks if the gateway has HTTPS listener and patches it if needed
+func ensureGatewayHasHTTPSListener(ctx context.Context, c client.Client, gateway *unstructured.Unstructured) error {
 	log := ctrl.Log.WithName("bootstrap").WithName("gateway-patch")
 
 	// Get current listeners
@@ -388,51 +352,36 @@ func ensureGatewayHasAllListeners(ctx context.Context, c client.Client, gateway 
 		return fmt.Errorf("failed to get current listeners: %w", err)
 	}
 
-	// Check if we have all required listeners
-	requiredListeners := createAllListeners()
-	hasAllListeners := true
-
-	// Create a map of current listener names for quick lookup
-	currentListenerNames := make(map[string]bool)
+	// Check if we have HTTPS listener
+	hasHTTPSListener := false
 	for _, listener := range currentListeners {
 		if listenerMap, ok := listener.(map[string]any); ok {
-			if name, ok := listenerMap["name"].(string); ok {
-				currentListenerNames[name] = true
+			if name, ok := listenerMap["name"].(string); ok && name == "https" {
+				hasHTTPSListener = true
+				break
 			}
 		}
 	}
 
-	// Check if all required listeners exist
-	for _, requiredListener := range requiredListeners {
-		if listenerMap, ok := requiredListener.(map[string]any); ok {
-			if name, ok := listenerMap["name"].(string); ok {
-				if !currentListenerNames[name] {
-					hasAllListeners = false
-					log.Info("Missing listener", "name", name)
-					break
-				}
-			}
-		}
-	}
-
-	if hasAllListeners {
-		log.Info("Gateway already has all required listeners")
+	if hasHTTPSListener {
+		log.Info("Gateway already has HTTPS listener")
 		return nil
 	}
 
-	// Patch gateway with all listeners
-	log.Info("Patching Gateway to add missing listeners")
+	// Patch gateway with HTTP and HTTPS listeners
+	log.Info("Patching Gateway to add HTTPS listener")
+	requiredListeners := createHTTPAndHTTPSListeners()
 
 	if err := unstructured.SetNestedSlice(gateway.Object, requiredListeners, "spec", "listeners"); err != nil {
 		return fmt.Errorf("failed to set listeners: %w", err)
 	}
 
 	if err := c.Update(ctx, gateway); err != nil {
-		log.Error(err, "Failed to update Gateway with all listeners")
+		log.Error(err, "Failed to update Gateway with HTTPS listener")
 		return err
 	}
 
-	log.Info("Gateway patched successfully with all listeners")
+	log.Info("Gateway patched successfully with HTTPS listener")
 	return nil
 }
 
@@ -516,5 +465,3 @@ func ensureAcmeDNSHTTPRoute(ctx context.Context, c client.Client, acmeDomain str
 
 	return nil
 }
-
-

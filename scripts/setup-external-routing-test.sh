@@ -124,10 +124,10 @@ metadata:
   name: kibaship-config
   namespace: kibaship
 data:
-  KIBASHIP_OPERATOR_DOMAIN: "test.local"
-  KIBASHIP_GATEWAY_CLASS_NAME: "cilium"
-  WEBHOOK_TARGET_URL: "http://webhook.test.local/kibaship"
-  KIBASHIP_ACME_EMAIL: "admin@test.local"
+  ingress.domain: "test.local"
+  ingress.gateway_classname: "cilium"
+  webhooks.url: "http://webhook.test.local/kibaship"
+  certs.email: "admin@test.local"
 EOF
 
 echo "✅ Kibaship configuration created"

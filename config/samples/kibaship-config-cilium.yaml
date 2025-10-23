@@ -11,17 +11,17 @@ metadata:
 data:
   # Required: Base domain for all application subdomains
   # Applications will get domains like: app-slug.apps.example.com
-  KIBASHIP_OPERATOR_DOMAIN: "example.com"
-  
+  ingress.domain: "example.com"
+
   # Required: Gateway API gateway class name
   # For Cilium: "cilium"
-  # For Istio: "istio" 
+  # For Istio: "istio"
   # For other implementations: check your Gateway API provider documentation
-  KIBASHIP_GATEWAY_CLASS_NAME: "cilium"
-  
+  ingress.gateway_classname: "cilium"
+
   # Required: Webhook URL for notifications
-  WEBHOOK_TARGET_URL: "https://webhook.example.com/kibaship"
-  
+  webhooks.url: "https://webhook.example.com/kibaship"
+
   # Optional: ACME email for Let's Encrypt certificates
   # If not provided, certificates will not be automatically provisioned
-  KIBASHIP_ACME_EMAIL: "admin@example.com"
+  certs.email: "admin@example.com"

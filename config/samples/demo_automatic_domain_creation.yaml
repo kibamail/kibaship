@@ -4,8 +4,8 @@
 # will automatically create a default ApplicationDomain for it.
 #
 # Prerequisites:
-# 1. Set KIBASHIP_OPERATOR_DOMAIN environment variable (e.g., "myapps.kibaship.com")
-# 2. Set KIBASHIP_OPERATOR_DEFAULT_PORT environment variable (e.g., "3000")
+# 1. Set ingress.domain environment variable (e.g., "myapps.kibaship.com")
+# 2. Set operator.port environment variable (e.g., "3000")
 #
 # Steps to demonstrate:
 # 1. Apply this Project and Application
@@ -58,8 +58,8 @@ spec:
 ---
 # Expected Result: An ApplicationDomain will be automatically created with:
 # - metadata.name: project-demo-project-app-frontend-kibaship-com-default
-# - spec.domain: frontend-<random8chars>.myapps.kibaship.com (where myapps.kibaship.com is from KIBASHIP_OPERATOR_DOMAIN)
-# - spec.port: 3000 (from KIBASHIP_OPERATOR_DEFAULT_PORT)
+# - spec.domain: frontend-<random8chars>.myapps.kibaship.com (where myapps.kibaship.com is from ingress.domain)
+# - spec.port: 3000 (from operator.port)
 # - spec.type: default
 # - spec.default: true
 # - spec.tlsEnabled: true

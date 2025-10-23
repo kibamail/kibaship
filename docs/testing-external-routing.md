@@ -4,13 +4,13 @@ This document explains how to test SNI-based routing and external access for the
 
 ## Overview
 
-The Kibaship operator now supports configurable Gateway API implementations through the `KIBASHIP_GATEWAY_CLASS_NAME` configuration. This enables testing with different Gateway API providers like Cilium, Istio, or others.
+The Kibaship operator now supports configurable Gateway API implementations through the `ingress.gateway_classname` configuration. This enables testing with different Gateway API providers like Cilium, Istio, or others.
 
 ## Configuration Changes
 
 ### 1. Gateway Class Name Configuration
 
-The operator now requires a `KIBASHIP_GATEWAY_CLASS_NAME` configuration:
+The operator now requires a `ingress.gateway_classname` configuration:
 
 ```yaml
 apiVersion: v1
@@ -19,10 +19,10 @@ metadata:
   name: kibaship-config
   namespace: kibaship
 data:
-  KIBASHIP_OPERATOR_DOMAIN: "example.com"
-  KIBASHIP_GATEWAY_CLASS_NAME: "cilium"  # Required: Gateway API class
-  WEBHOOK_TARGET_URL: "https://webhook.example.com/kibaship"
-  KIBASHIP_ACME_EMAIL: "admin@example.com"  # Optional
+  ingress.domain: "example.com"
+  ingress.gateway_classname: "cilium" # Required: Gateway API class
+  webhooks.url: "https://webhook.example.com/kibaship"
+  webhooks.url: "admin@example.com" # Optional
 ```
 
 ### 2. Sample Configurations
@@ -41,37 +41,38 @@ Create a Kind cluster with port forwarding for LoadBalancer services:
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
 nodes:
-- role: control-plane
-  kubeadmConfigPatches:
-  - |
-    kind: InitConfiguration
-    nodeRegistration:
-      kubeletExtraArgs:
-        node-labels: "ingress-ready=true"
-  extraPortMappings:
-  # HTTP traffic
-  - containerPort: 80
-    hostPort: 80
-    protocol: TCP
-  # HTTPS traffic  
-  - containerPort: 443
-    hostPort: 443
-    protocol: TCP
-  # MySQL TLS (for database applications)
-  - containerPort: 3306
-    hostPort: 3306
-    protocol: TCP
-  # Valkey/Redis TLS
-  - containerPort: 6379
-    hostPort: 6379
-    protocol: TCP
-  # PostgreSQL TLS
-  - containerPort: 5432
-    hostPort: 5432
-    protocol: TCP
+  - role: control-plane
+    kubeadmConfigPatches:
+      - |
+        kind: InitConfiguration
+        nodeRegistration:
+          kubeletExtraArgs:
+            node-labels: "ingress-ready=true"
+    extraPortMappings:
+      # HTTP traffic
+      - containerPort: 80
+        hostPort: 80
+        protocol: TCP
+      # HTTPS traffic
+      - containerPort: 443
+        hostPort: 443
+        protocol: TCP
+      # MySQL TLS (for database applications)
+      - containerPort: 3306
+        hostPort: 3306
+        protocol: TCP
+      # Valkey/Redis TLS
+      - containerPort: 6379
+        hostPort: 6379
+        protocol: TCP
+      # PostgreSQL TLS
+      - containerPort: 5432
+        hostPort: 5432
+        protocol: TCP
 ```
 
 Create the cluster:
+
 ```bash
 kind create cluster --config kind-config.yaml --name kibaship-external-test
 ```
@@ -182,6 +183,7 @@ kubectl get applicationdomains -A
 ### 3. Test External Access
 
 #### With extraPortMapping:
+
 ```bash
 # Add entries to /etc/hosts
 echo "127.0.0.1 app1-slug.apps.example.com" >> /etc/hosts
@@ -197,6 +199,7 @@ curl -H "Host: app2-slug.apps.example.com" https://localhost -k
 ```
 
 #### With MetalLB:
+
 ```bash
 # Get LoadBalancer IP
 LB_IP=$(kubectl get svc -n kibaship kibaship-gateway -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
@@ -244,6 +247,7 @@ Client (HTTPS) → Cloud LoadBalancer (TLS Passthrough) → Gateway (TLS Termina
 ```
 
 **Benefits:**
+
 - **🔒 End-to-end encryption** until Gateway termination
 - **🎯 cert-manager integration** for automatic certificate management
 - **⚡ Cloud LoadBalancer efficiency** (no decrypt/re-encrypt overhead)
@@ -252,6 +256,7 @@ Client (HTTPS) → Cloud LoadBalancer (TLS Passthrough) → Gateway (TLS Termina
 ## Current Implementation Status
 
 ### ✅ Completed
+
 - Gateway class name configuration system
 - Dynamic Gateway creation with configurable class
 - **LoadBalancer TLS passthrough annotations** for all major cloud providers
@@ -259,6 +264,7 @@ Client (HTTPS) → Cloud LoadBalancer (TLS Passthrough) → Gateway (TLS Termina
 - ApplicationDomain CR creation
 
 ### 🚧 Next Steps (HTTPRoute Implementation)
+
 - HTTPRoute creation in ApplicationDomainReconciler
 - ReferenceGrant for cross-namespace service access
 - HTTP→HTTPS redirect routes
@@ -276,6 +282,7 @@ make test-e2e
 ```
 
 The tests will verify:
+
 - Gateway creation with correct gateway class
 - **MetalLB installation and configuration**
 - **LoadBalancer service creation by Cilium**
@@ -295,6 +302,7 @@ After running the e2e tests, you can manually test external access:
 ```
 
 This script will:
+
 1. **Find the LoadBalancer service** created by Cilium
 2. **Get the external IP** assigned by MetalLB
 3. **Test connectivity** to all ports (HTTP, HTTPS, MySQL, Valkey, PostgreSQL)
@@ -323,6 +331,7 @@ telnet $EXTERNAL_IP 5432  # PostgreSQL
 ### 📋 What You'll See
 
 #### **✅ Successful LoadBalancer Setup:**
+
 ```bash
 $ ./scripts/test-external-access.sh
 🔍 Testing external LoadBalancer access for Kibaship Gateway...
@@ -349,6 +358,7 @@ $ ./scripts/test-external-access.sh
 ```
 
 #### **🎯 Key Benefits:**
+
 - **✅ Real LoadBalancer IPs** - MetalLB provides actual external IPs
 - **✅ Multi-protocol support** - HTTP, HTTPS, and database protocols
 - **✅ Local testing** - Easy to test from your development machine

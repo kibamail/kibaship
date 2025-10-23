@@ -66,11 +66,11 @@ spec:
           image: controller:latest
           name: manager
           env:
-            - name: KIBASHIP_OPERATOR_DOMAIN
+            - name: ingress.domain
               value: "myapps.kibaship.com"
-            - name: KIBASHIP_OPERATOR_DEFAULT_PORT
+            - name: operator.port
               value: "3000"
-            - name: KIBASHIP_ACME_EMAIL
+            - name: certs.email
               value: "test@kibaship.com"
           ports: []
           securityContext:

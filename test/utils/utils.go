@@ -797,7 +797,7 @@ func ProvisionKibashipOperator() error {
 	}
 
 	// Create the operator ConfigMap with configuration
-	webhookURL := os.Getenv("WEBHOOK_TARGET_URL")
+	webhookURL := os.Getenv("webhooks.url")
 	if webhookURL == "" {
 		webhookURL = "http://webhook-receiver.kibaship.svc.cluster.local:8080/webhook"
 	}
@@ -808,10 +808,10 @@ metadata:
   name: kibaship-config
   namespace: kibaship
 data:
-  KIBASHIP_OPERATOR_DOMAIN: "myapps.kibaship.com"
-  KIBASHIP_ACME_EMAIL: "acme@kibaship.com"
-  KIBASHIP_GATEWAY_CLASS_NAME: "cilium"
-  WEBHOOK_TARGET_URL: "%s"
+  ingress.domain: "myapps.kibaship.com"
+  certs.email: "acme@kibaship.com"
+  ingress.gateway_classname: "cilium"
+  webhooks.url: "%s"
 `, webhookURL)
 
 	createConfigMap := exec.Command("kubectl", "apply", "-f", "-")
@@ -1022,9 +1022,9 @@ func DeployWebhookReceiver() error {
 	return nil
 }
 
-// ConfigureOperatorWebhookEnv sets the operator's WEBHOOK_TARGET_URL env and waits for rollout.
+// ConfigureOperatorWebhookEnv sets the operator's webhooks.url env and waits for rollout.
 func ConfigureOperatorWebhookEnv(targetURL string) error {
-	cmd := exec.Command("kubectl", "-n", "kibaship", "set", "env", "deployment/kibaship-controller-manager", "WEBHOOK_TARGET_URL="+targetURL)
+	cmd := exec.Command("kubectl", "-n", "kibaship", "set", "env", "deployment/kibaship-controller-manager", "webhooks.url="+targetURL)
 	if _, err := Run(cmd); err != nil {
 		return err
 	}

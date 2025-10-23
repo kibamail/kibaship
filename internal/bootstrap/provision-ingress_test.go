@@ -6,7 +6,6 @@ import (
 
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -79,7 +78,6 @@ func TestEnsureIngressGatewayWithoutCertificate(t *testing.T) {
 	}, httpRoute)
 	g.Expect(err).NotTo(HaveOccurred())
 
-
 }
 
 func TestEnsureIngressGatewayWithCertificate(t *testing.T) {
@@ -89,25 +87,34 @@ func TestEnsureIngressGatewayWithCertificate(t *testing.T) {
 	scheme := runtime.NewScheme()
 	g.Expect(corev1.AddToScheme(scheme)).To(Succeed())
 
-	// Create fake client with certificate secret
-	certificateSecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      IngressWildcardCertName,
-			Namespace: KibashipNamespace,
+	// Create fake client with ready certificate resource
+	certificate := &unstructured.Unstructured{}
+	certificate.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   "cert-manager.io",
+		Version: "v1",
+		Kind:    "Certificate",
+	})
+	certificate.SetName(IngressWildcardCertName)
+	certificate.SetNamespace(KibashipNamespace)
+
+	// Set certificate status to Ready=True
+	err := unstructured.SetNestedSlice(certificate.Object, []interface{}{
+		map[string]interface{}{
+			"type":   "Ready",
+			"status": "True",
+			"reason": "Ready",
 		},
-		Data: map[string][]byte{
-			"tls.crt": []byte("fake-cert"),
-			"tls.key": []byte("fake-key"),
-		},
-	}
-	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(certificateSecret).Build()
+	}, "status", "conditions")
+	g.Expect(err).NotTo(HaveOccurred())
+
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(certificate).Build()
 
 	// Test parameters
 	gatewayClassName := "cilium"
 	baseDomain := "example.com"
 
-	// Call ensureIngressGateway (certificate exists, so should create full gateway)
-	err := ensureIngressGateway(ctx, fakeClient, gatewayClassName, baseDomain)
+	// Call ensureIngressGateway (certificate is ready, so should create HTTP and HTTPS listeners)
+	err = ensureIngressGateway(ctx, fakeClient, gatewayClassName, baseDomain)
 	g.Expect(err).NotTo(HaveOccurred())
 
 	// Verify Gateway was created
@@ -123,7 +130,7 @@ func TestEnsureIngressGatewayWithCertificate(t *testing.T) {
 	}, gateway)
 	g.Expect(err).NotTo(HaveOccurred())
 
-	// Verify gateway has all listeners
+	// Verify gateway has HTTP and HTTPS listeners
 	spec, found, err := unstructured.NestedMap(gateway.Object, "spec")
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(found).To(BeTrue())
@@ -131,7 +138,7 @@ func TestEnsureIngressGatewayWithCertificate(t *testing.T) {
 	listeners, found, err := unstructured.NestedSlice(spec, "listeners")
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(found).To(BeTrue())
-	g.Expect(listeners).To(HaveLen(5)) // All listeners: HTTP, HTTPS, MySQL, Valkey, PostgreSQL
+	g.Expect(listeners).To(HaveLen(2)) // HTTP and HTTPS listeners only
 
 	// Verify listener names
 	listenerNames := make([]string, 0, len(listeners))
@@ -142,7 +149,7 @@ func TestEnsureIngressGatewayWithCertificate(t *testing.T) {
 			}
 		}
 	}
-	g.Expect(listenerNames).To(ContainElements("http", "https", "mysql-tls", "valkey-tls", "postgres-tls"))
+	g.Expect(listenerNames).To(ContainElements("http", "https"))
 }
 
 func TestEnsureIngressGatewayPatchesExistingGateway(t *testing.T) {
@@ -172,26 +179,34 @@ func TestEnsureIngressGatewayPatchesExistingGateway(t *testing.T) {
 		},
 	}
 
-	// Create certificate secret
-	certificateSecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      IngressWildcardCertName,
-			Namespace: KibashipNamespace,
-		},
-		Data: map[string][]byte{
-			"tls.crt": []byte("fake-cert"),
-			"tls.key": []byte("fake-key"),
-		},
-	}
+	// Create ready certificate resource
+	certificate := &unstructured.Unstructured{}
+	certificate.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   "cert-manager.io",
+		Version: "v1",
+		Kind:    "Certificate",
+	})
+	certificate.SetName(IngressWildcardCertName)
+	certificate.SetNamespace(KibashipNamespace)
 
-	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existingGateway, certificateSecret).Build()
+	// Set certificate status to Ready=True
+	err := unstructured.SetNestedSlice(certificate.Object, []interface{}{
+		map[string]interface{}{
+			"type":   "Ready",
+			"status": "True",
+			"reason": "Ready",
+		},
+	}, "status", "conditions")
+	g.Expect(err).NotTo(HaveOccurred())
+
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existingGateway, certificate).Build()
 
 	// Test parameters
 	gatewayClassName := "cilium"
 	baseDomain := "example.com"
 
-	// Call ensureIngressGateway (should patch existing gateway)
-	err := ensureIngressGateway(ctx, fakeClient, gatewayClassName, baseDomain)
+	// Call ensureIngressGateway (should patch existing gateway to add HTTPS listener)
+	err = ensureIngressGateway(ctx, fakeClient, gatewayClassName, baseDomain)
 	g.Expect(err).NotTo(HaveOccurred())
 
 	// Verify Gateway was patched
@@ -207,7 +222,7 @@ func TestEnsureIngressGatewayPatchesExistingGateway(t *testing.T) {
 	}, gateway)
 	g.Expect(err).NotTo(HaveOccurred())
 
-	// Verify gateway now has all listeners
+	// Verify gateway now has HTTP and HTTPS listeners
 	spec, found, err := unstructured.NestedMap(gateway.Object, "spec")
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(found).To(BeTrue())
@@ -215,7 +230,7 @@ func TestEnsureIngressGatewayPatchesExistingGateway(t *testing.T) {
 	listeners, found, err := unstructured.NestedSlice(spec, "listeners")
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(found).To(BeTrue())
-	g.Expect(listeners).To(HaveLen(5)) // All listeners after patching
+	g.Expect(listeners).To(HaveLen(2)) // HTTP and HTTPS listeners after patching
 
 	// Verify listener names
 	listenerNames := make([]string, 0, len(listeners))
@@ -226,7 +241,7 @@ func TestEnsureIngressGatewayPatchesExistingGateway(t *testing.T) {
 			}
 		}
 	}
-	g.Expect(listenerNames).To(ContainElements("http", "https", "mysql-tls", "valkey-tls", "postgres-tls"))
+	g.Expect(listenerNames).To(ContainElements("http", "https"))
 }
 
 func TestProvisionIngressIdempotent(t *testing.T) {

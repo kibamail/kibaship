@@ -209,10 +209,10 @@ var _ = SynchronizedBeforeSuite(
 			By("[Process 1] deploying test webhook receiver in-cluster")
 			Expect(utils.DeployWebhookReceiver()).To(Succeed(), "Failed to deploy test webhook receiver")
 
-			By("[Process 1] setting WEBHOOK_TARGET_URL for operator deploy")
+			By("[Process 1] setting webhooks.url for operator deploy")
 			target := "http://webhook-receiver.kibaship.svc.cluster.local:8080/webhook"
-			err = os.Setenv("WEBHOOK_TARGET_URL", target)
-			Expect(err).NotTo(HaveOccurred(), "failed to set WEBHOOK_TARGET_URL")
+			err = os.Setenv("webhooks.url", target)
+			Expect(err).NotTo(HaveOccurred(), "failed to set webhooks.url")
 
 			By("[Process 1] provisioning kibaship")
 			Expect(utils.ProvisionKibashipOperator()).To(Succeed(), "Failed to provision kibaship")
@@ -264,15 +264,8 @@ var _ = SynchronizedBeforeSuite(
 			}
 		}
 
-		// Trigger Gateway reconciliation by patching it to use full listeners
-		By("[Process 1] ensuring Gateway has full listeners for e2e tests")
-		cmd = exec.Command("kubectl", "patch", "gateway", "-n", "kibaship", "ingress-kibaship-gateway", "--type=merge",
-			"--patch={\"spec\":{\"listeners\":[{\"name\":\"http\",\"protocol\":\"HTTP\",\"port\":80,\"allowedRoutes\":{\"namespaces\":{\"from\":\"All\"}}},{\"name\":\"https\",\"protocol\":\"HTTPS\",\"port\":443,\"tls\":{\"mode\":\"Terminate\",\"certificateRefs\":[{\"name\":\"ingress-kibaship-certificate\"}]},\"allowedRoutes\":{\"namespaces\":{\"from\":\"All\"}}},{\"name\":\"mysql-tls\",\"protocol\":\"TLS\",\"port\":3306,\"tls\":{\"mode\":\"Passthrough\"},\"allowedRoutes\":{\"namespaces\":{\"from\":\"All\"},\"kinds\":[{\"kind\":\"TLSRoute\"}]}},{\"name\":\"valkey-tls\",\"protocol\":\"TLS\",\"port\":6379,\"tls\":{\"mode\":\"Passthrough\"},\"allowedRoutes\":{\"namespaces\":{\"from\":\"All\"},\"kinds\":[{\"kind\":\"TLSRoute\"}]}},{\"name\":\"postgres-tls\",\"protocol\":\"TLS\",\"port\":5432,\"tls\":{\"mode\":\"Passthrough\"},\"allowedRoutes\":{\"namespaces\":{\"from\":\"All\"},\"kinds\":[{\"kind\":\"TLSRoute\"}]}}]}}")
-		_, err = utils.Run(cmd)
-		if err != nil {
-			// Gateway might not exist yet, that's okay
-			GinkgoWriter.Printf("Warning: Could not patch Gateway (this is normal if Gateway doesn't exist yet): %v\n", err)
-		}
+		// The operator will automatically configure Gateway listeners based on certificate readiness
+		// No manual Gateway patching needed - the new logic handles this automatically
 
 		if !registryDeployed {
 			By("[Process 1] provisioning Docker Registry v3.0.0")
